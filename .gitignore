@@ -1,0 +1,7 @@
+cmake-build-debug
+resources
+libs
+Models
+.DS_Store
+.idea
+README.md
