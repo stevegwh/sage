@@ -16,13 +16,16 @@
 
 static std::unique_ptr<sage::Scene> spyroSceneInit(sage::Renderer& renderer)
 {
-    sage::Model model = ObjParser::LoadModel("resources/level.obj");
-    
-    
-//    mesh.atlas = true;
-//    mesh.atlasTileSize = 32;
+    sage::Model model = ObjParser::LoadModel("resources/spyrolevel.obj");
+
+    for (auto& mesh : model.meshes) 
+    {
+        mesh.atlas = true;
+        mesh.atlasTileSize = 32;
+    }
+
     auto renderable = std::make_unique<sage::Renderable>(sage::Renderable(model, {0, 0, -25},
-                                      {0, 250, 0}, {1, 1, 1},
+                                      {0, 250, 0}, {.05, .05, .05},
                                       {200, 100, 200}));
     auto sceneData = std::make_unique<sage::SceneData>();
     sceneData->renderables.push_back(std::move(renderable));
@@ -33,22 +36,22 @@ static std::unique_ptr<sage::Scene> spyroSceneInit(sage::Renderer& renderer)
     return std::make_unique<sage::Scene>(renderer, std::move(sceneData));
 }
 
-//static std::unique_ptr<sage::Scene> isometricGameLevel(sage::Renderer& renderer)
-//{
-//    sage::Mesh mesh = ObjParser::ParseObj("resources/Isometric_Game_Level_Low_Poly.obj");
+static std::unique_ptr<sage::Scene> isometricGameLevel(sage::Renderer& renderer)
+{
+    sage::Model model = ObjParser::LoadModel("resources/Isometric_Game_Level_Low_Poly.obj");
 //    mesh.atlas = true;
 //    mesh.atlasTileSize = 32;
-//    auto renderable = std::make_unique<sage::Renderable>(sage::Renderable(mesh, {0, 0, -25},
-//                                                                              {0, 250, 0}, {5, 5, 5},
-//                                                                              {200, 100, 200}));
-//    auto sceneData = std::make_unique<sage::SceneData>();
-//    sceneData->renderables.push_back(std::move(renderable));
-//    sceneData->cameraStartPosition = {150, 150, 200};
-//    sceneData->cameraStartRotation = { -28, 32, 0 };
-//    sceneData->fragmentShader = sage::GOURAUD;
-//    sceneData->textureFilter = sage::NEIGHBOUR;
-//    return std::make_unique<sage::Scene>(renderer, std::move(sceneData));
-//}
+    auto renderable = std::make_unique<sage::Renderable>(sage::Renderable(model, {0, 0, -25},
+                                                                              {0, 250, 0}, {5, 5, 5},
+                                                                              {200, 100, 200}));
+    auto sceneData = std::make_unique<sage::SceneData>();
+    sceneData->renderables.push_back(std::move(renderable));
+    sceneData->cameraStartPosition = {150, 150, 200};
+    sceneData->cameraStartRotation = { -28, 32, 0 };
+    sceneData->fragmentShader = sage::GOURAUD;
+    sceneData->textureFilter = sage::NEIGHBOUR;
+    return std::make_unique<sage::Scene>(renderer, std::move(sceneData));
+}
 
 static std::unique_ptr<sage::Scene> concreteCatInit(sage::Renderer& renderer)
 {
@@ -113,7 +116,7 @@ namespace sage
     
     inline void Application::initGui()
     {
-        std::unique_ptr<sage::Scene> scene1 = spyroSceneInit(*renderer);
+        std::unique_ptr<sage::Scene> scene1 = isometricGameLevel(*renderer);
         std::unique_ptr<sage::Scene> scene2 = vikingRoomSceneInit(*renderer);
         std::unique_ptr<sage::Scene> scene3 = concreteCatInit(*renderer);
         scenes.push_back(std::move(scene1));

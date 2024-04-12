@@ -163,7 +163,7 @@ inline void Rasterizer::drawPixel(float x, float y, const glm::vec3& coords, flo
     uvy = uvy < 0 ? 1.0f + uvy : uvy;
 
     // Flip Y texture coordinate to account screen coordinates
-    // (Textures start from bottom left corner. Our screen starts from the top left.)
+    // (Depends on texture order)
     //uvy = 1 - uvy;
 
     if (textureFilter == NEIGHBOUR) texNearestNeighbour(material.map_Kd, lum, uvx, uvy, r, g, b);

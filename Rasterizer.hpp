@@ -49,7 +49,7 @@ class Rasterizer
 
     const slib::material& material;
     
-    // Depth from view space stage at each vertex (used for perspecitve-correct texturing)
+    // Depth from view space stage at each vertex (used for perspective-correct texturing)
     const float viewW1;
     const float viewW2;
     const float viewW3;

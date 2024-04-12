@@ -1,2 +1,3 @@
--[ ] Assimp model loading.
--[ ] Make a `Model` class with multiple meshes.
+-[x] Assimp model loading.
+-[x] Make a `Model` class with multiple meshes.
+-[ ] Change to stb_image instead of lodepng

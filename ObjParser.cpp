@@ -400,7 +400,12 @@ sage::Mesh processMesh(aiMesh *mesh, const aiScene *scene)
             {
                 materials[faceMaterial].map_Ks = tx;
             }
-
+            aiColor3D kd(0.f,0.f,0.f);
+            material->Get(AI_MATKEY_COLOR_DIFFUSE, kd);
+            materials[faceMaterial].Kd = { kd.r, kd.g, kd.b };
+            aiColor3D ks(0.f,0.f,0.f);
+            material->Get(AI_MATKEY_COLOR_SPECULAR, ks);
+            materials[faceMaterial].Ks = { ks.r, ks.g, ks.b };
             //textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
         }
     }
