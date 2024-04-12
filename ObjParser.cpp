@@ -10,10 +10,41 @@
 #include <algorithm>
 #include <regex>
 #include <utility>
-#include <glm/glm.hpp>
 #include "constants.hpp"
 #include "vendor/lodepng.h"
+#define STB_IMAGE_IMPLEMENTATION
+#include "vendor/stb_image.h"
 #include <unordered_map>
+
+slib::texture DecodeImage(const char* filename)
+{
+    slib::texture texture;
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(filename, &width, &height, &nrComponents, 0);
+
+    if (data)
+    {
+        int dataCount = width * height * nrComponents;;
+
+        for (int i = 0; i < dataCount; ++i) 
+        {
+            texture.data.push_back(data[i]);
+        }
+        
+        texture.w = width;
+        texture.h = height;
+        texture.bpp = nrComponents;
+        texture.path = filename;
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << filename << std::endl;
+        stbi_image_free(data);
+    }
+    return texture;
+}
 
 slib::texture DecodePng(const char* filename)
 {
@@ -363,7 +394,7 @@ std::vector<slib::texture> loadMaterialTextures(aiMaterial *mat, aiTextureType t
         aiString str;
         mat->GetTexture(type, i, &str);
         std::string path(RES_PATH);
-        slib::texture texture = DecodePng((path + str.C_Str()).c_str());
+        slib::texture texture = DecodeImage((path + str.C_Str()).c_str());
         //texture.id = TextureFromFile(str.C_Str(), directory);
         texture.type = typeName;
         texture.path = str.C_Str();

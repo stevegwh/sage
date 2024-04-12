@@ -15,6 +15,7 @@ set(SOURCE_FILES
         Renderable.hpp
         vendor/lodepng.cpp
         vendor/lodepng.h
+        vendor/stb_image.h
         vendor/imgui/imgui.cpp
         vendor/imgui/imgui.h
         vendor/imgui/imgui_internal.h
