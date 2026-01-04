@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/slib.hpp"
 #include "engine/components/NavigationGridSquare.hpp"
+#include "engine/slib.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -154,6 +154,8 @@ namespace sage
         [[nodiscard]] entt::entity CheckSquareAreaOccupant(Vector3 worldPos, const BoundingBox& bb) const;
         //---------------------------------------------------------
         [[nodiscard]] entt::entity CheckSquareAreaOccupant(GridSquare square, const BoundingBox& bb) const;
+        //---------------------------------------------------------
+        [[nodiscard]] bool IsValidMove(Vector3 point, entt::entity actor) const;
         //---------------------------------------------------------
         [[nodiscard]] bool CompareSquareAreaOccupant(entt::entity entity, const BoundingBox& bb) const;
         //---------------------------------------------------------

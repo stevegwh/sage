@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "engine/components/Collideable.hpp"
 #include "engine/Event.hpp"
+#include "systems/CollisionSystem.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -25,24 +25,18 @@ namespace sage
 
     class Cursor
     {
+        // Need to know if object is clickable, hoverable, etc.
         float leftClickTimer = 0;
         entt::registry* registry;
         EngineSystems* sys;
 
         entt::entity selectedActor = entt::null;
 
-        sage::CollisionInfo m_mouseHitInfo{};
-        sage::CollisionInfo m_naviHitInfo{};
+        CollisionInfo m_mouseHitInfo{};
+        CollisionInfo m_naviHitInfo{};
         std::optional<HoverInfo> m_hoverInfo{};
 
-        Texture2D* currentTex;
-        Texture2D regulartex{};
-        Texture2D talktex{};
-        Texture2D movetex{};
-        Texture2D invalidmovetex{};
-        Texture2D combattex{};
-        Texture2D pickuptex{};
-        Texture2D interacttex{};
+        Texture2D currentTex{};
 
         Ray ray{};
         Color defaultColor = WHITE;
@@ -61,34 +55,25 @@ namespace sage
         void onMouseRightClick() const;
         void onMouseLeftDown();
         void onMouseRightDown() const;
-        void changeCursors(sage::CollisionLayer collisionLayer);
-        static void resetHitInfo(sage::CollisionInfo& hitInfo);
+        void changeCursors(CollisionLayer collisionLayer);
+        static void resetHitInfo(CollisionInfo& hitInfo);
         [[nodiscard]] bool findMeshCollision(sage::CollisionInfo& hitInfo) const;
 
       public:
         std::string hitObjectName{};
-        [[nodiscard]] const sage::CollisionInfo& getMouseHitInfo() const;
+        [[nodiscard]] const CollisionInfo& getMouseHitInfo() const;
         [[nodiscard]] const RayCollision& getFirstNaviCollision() const;
         [[nodiscard]] const RayCollision& getFirstCollision() const;
         [[nodiscard]] entt::entity GetSelectedActor() const;
         void SetSelectedActor(entt::entity actor);
 
-        sage::Event<entt::entity, entt::entity> onSelectedActorChange{}; // prev, current
-        sage::Event<entt::entity> onCollisionHit{};                      // Returns the hit entity (all layers)
-        sage::Event<entt::entity> onNPCClick{};
-        sage::Event<entt::entity> onInteractableClick{};
-        sage::Event<entt::entity> onItemClick{};
-        sage::Event<entt::entity> onFloorClick{};
-        sage::Event<entt::entity> onAnyLeftClick{};
-        sage::Event<entt::entity> onAnyRightClick{};
-        sage::Event<entt::entity> onEnemyLeftClick{};
-        sage::Event<entt::entity> onEnemyRightClick{};
-        sage::Event<entt::entity> onChestClick{};
-
-        sage::Event<entt::entity> onCombatableHover{};
-        sage::Event<entt::entity> onNPCHover{};
-        sage::Event<entt::entity> onItemHover{};
-        sage::Event<> onStopHover{};
+        Event<entt::entity, entt::entity> onSelectedActorChange{}; // prev, current
+        Event<entt::entity> onCollisionHit{};
+        Event<entt::entity> onFloorClick{};
+        Event<entt::entity> onLeftClick{};
+        Event<entt::entity> onRightClick{};
+        Event<entt::entity> onHover{};
+        Event<> onStopHover{};
 
         void Update();
         void DrawDebug() const;
@@ -101,7 +86,6 @@ namespace sage
         void Hide();
         void Show();
         [[nodiscard]] bool OutOfRange() const;
-        [[nodiscard]] bool IsValidMove() const;
 
         Cursor(entt::registry* registry, EngineSystems* _sys);
     };

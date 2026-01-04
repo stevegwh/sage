@@ -226,7 +226,7 @@ namespace sage
     CollisionMatrix CollisionSystem::CreateCollisionMatrix()
     {
         int numLayers = static_cast<int>(CollisionLayer::COUNT);
-        std::vector<std::vector<bool>> matrix(numLayers, std::vector<bool>(numLayers, false));
+        std::vector matrix(numLayers, std::vector<bool>(numLayers, false));
 
         matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::PLAYER)] = true;
         matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::ENEMY)] = true;

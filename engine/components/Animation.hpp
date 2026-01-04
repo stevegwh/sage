@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "../engine_config.hpp"
 #include "../Event.hpp"
 #include "../ResourceManager.hpp"
 
@@ -16,21 +17,6 @@
 
 namespace sage
 {
-    enum class AnimationEnum
-    {
-        IDLE,
-        IDLE2,
-        DEATH,
-        AUTOATTACK,
-        WALK,
-        TALK,
-        SPIN,
-        SLASH,
-        RUN,
-        SPELLCAST_FWD,
-        SPELLCAST_UP,
-        ROLL
-    };
 
     struct AnimationParams
     {

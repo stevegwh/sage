@@ -4,43 +4,16 @@
 
 #pragma once
 
+#include "../engine_config.hpp"
+
 #include "cereal/cereal.hpp"
 #include "entt/entt.hpp"
-
-#include "../Event.hpp"
 
 #include "raylib.h"
 #include "raymath.h"
 
 namespace sage
 {
-    enum class CollisionLayer
-    {
-        DEFAULT,
-        GEOMETRY_SIMPLE, // Uses bounding box as foundation for collision
-        BUILDING,
-        NAVIGATION, // Unsure.
-        PLAYER,
-        NPC,
-        ENEMY,
-        BOYD,
-        GEOMETRY_COMPLEX, // Uses mesh as basis for collision
-        BACKGROUND,       // Collides with nothing
-        STAIRS,
-        ITEM,
-        INTERACTABLE,
-        CHEST,
-        COUNT // Must always be last
-    };
-
-    struct CollisionInfo
-    {
-        entt::entity collidedEntityId{};
-        BoundingBox collidedBB{};
-        RayCollision rlCollision{};
-        CollisionLayer collisionLayer{};
-    };
-
     class Collideable
     {
         entt::registry* registry{};

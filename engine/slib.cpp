@@ -185,17 +185,17 @@ namespace sage
     RayCollision ModelSafe::GetRayMeshCollision(Ray ray, int meshNum, Matrix transform) const
     {
         assert(meshNum < GetMeshCount());
-        Matrix mat = MatrixMultiply(rlmodel.transform, transform);
+        const Matrix mat = MatrixMultiply(rlmodel.transform, transform);
         return GetRayCollisionMesh(ray, rlmodel.meshes[meshNum], mat);
     }
 
-    void ModelSafe::UpdateAnimation(ModelAnimation anim, int frame) const
+    void ModelSafe::UpdateAnimation(ModelAnimation anim, unsigned int frame) const
     {
         // UpdateModelAnimation(rlmodel, anim, frame);
-        UpdateModelAnimationBones(rlmodel, anim, frame);
+        UpdateModelAnimationBones(rlmodel, anim, static_cast<int>(frame));
     }
 
-    void ModelSafe::Draw(Vector3 position, float scale, Color tint) const
+    void ModelSafe::Draw(const Vector3 position, float scale, const Color tint) const
     {
         Draw(position, {0, 1, 0}, 0, {scale, scale, scale}, tint);
     }

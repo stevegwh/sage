@@ -71,7 +71,7 @@ namespace sage
         [[nodiscard]] BoundingBox CalcLocalMeshBoundingBox(const Mesh& mesh, bool& success) const;
         [[nodiscard]] BoundingBox CalcLocalBoundingBox() const;
         [[nodiscard]] RayCollision GetRayMeshCollision(Ray ray, int meshNum, Matrix transform) const;
-        void UpdateAnimation(ModelAnimation anim, int frame) const;
+        void UpdateAnimation(ModelAnimation anim, unsigned int frame) const;
         void Draw(Vector3 position, float scale, Color tint) const;
         void Draw(Vector3 position, Vector3 rotationAxis, float rotationAngle, Vector3 scale, Color tint) const;
         void DrawUber(

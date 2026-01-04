@@ -15,6 +15,14 @@ namespace sage
 {
     using CollisionMatrix = std::vector<std::vector<bool>>;
 
+    struct CollisionInfo
+    {
+        entt::entity collidedEntityId{};
+        BoundingBox collidedBB{};
+        RayCollision rlCollision{};
+        CollisionLayer collisionLayer{};
+    };
+
     class CollisionSystem
     {
         entt::registry* registry;

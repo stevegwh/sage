@@ -2,6 +2,7 @@
 
 #include "../../game/src/components/ControllableActor.hpp"
 #include "CollisionSystem.hpp"
+#include "components/MoveableActor.hpp"
 #include "components/NavigationGridSquare.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
@@ -312,6 +313,34 @@ namespace sage
             return gridSquares[square.row + extents.row][square.col - extents.col]->occupant;
         }
         return entt::null;
+    }
+
+    bool NavigationGridSystem::IsValidMove(Vector3 point, entt::entity actor) const
+    {
+        if (CheckWithinGridBounds(point))
+        {
+            const auto& moveable = registry->get<MoveableActor>(actor);
+            GridSquare minRange{};
+            GridSquare maxRange{};
+            GetPathfindRange(actor, moveable.pathfindingBounds, minRange, maxRange);
+
+            if (!CheckWithinBounds(point, minRange, maxRange))
+            {
+                // Out of player's movement range
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+        GridSquare dest{};
+        WorldToGridSpace(point, dest);
+        if (GetGridSquare(dest.row, dest.col)->occupied)
+        {
+            return false;
+        }
+        return true;
     }
 
     bool NavigationGridSystem::CompareSquareAreaOccupant(entt::entity entity, const BoundingBox& bb) const

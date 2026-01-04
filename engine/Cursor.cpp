@@ -22,18 +22,17 @@
                                                // pattern 01111111011111111111111111111111
 #endif
 
-// TODO: Decouple this from LeverQuest
+#include <ranges>
 
 namespace sage
 {
     void Cursor::checkMouseHover()
     {
-        if (!registry->any_of<sage::Collideable>(m_mouseHitInfo.collidedEntityId)) return;
-        const auto& layer = registry->get<sage::Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        if (!registry->any_of<Collideable>(m_mouseHitInfo.collidedEntityId)) return;
+        const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
 
         if (!m_mouseHitInfo.rlCollision.hit ||
-            (layer != sage::CollisionLayer::NPC && layer != sage::CollisionLayer::ENEMY &&
-             layer != sage::CollisionLayer::ITEM && layer != sage::CollisionLayer::INTERACTABLE))
+            std::ranges::find(cursorHoverLayers, layer) == cursorHoverLayers.end())
         {
             if (m_hoverInfo.has_value())
             {
@@ -55,67 +54,26 @@ namespace sage
     {
         if (!enabled) return;
 
-        const auto& layer = registry->get<sage::Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        if (layer == sage::CollisionLayer::NPC || layer == sage::CollisionLayer::INTERACTABLE)
-        {
-            onNPCHover.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (layer == sage::CollisionLayer::ITEM)
-        {
-            onItemHover.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (layer == sage::CollisionLayer::ENEMY || layer == sage::CollisionLayer::PLAYER)
-        {
-            onCombatableHover.Publish(m_mouseHitInfo.collidedEntityId);
-        }
+        onHover.Publish(m_mouseHitInfo.collidedEntityId);
     }
 
     void Cursor::onMouseLeftClick() const
     {
         if (!enabled) return;
 
-        const auto& layer = registry->get<sage::Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        if (layer == sage::CollisionLayer::NPC)
-        {
-            onNPCClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (layer == sage::CollisionLayer::ITEM)
-        {
-            onItemClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (layer == sage::CollisionLayer::INTERACTABLE)
-        {
-            // Interactables are just NPCs without a portrait etc., at this point.
-            // When you click on the item, it starts a conversation.
-            onNPCClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (
-            layer == sage::CollisionLayer::GEOMETRY_SIMPLE || layer == sage::CollisionLayer::GEOMETRY_COMPLEX ||
-            layer == sage::CollisionLayer::STAIRS)
+        const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        if (layer == CollisionLayer::GEOMETRY_SIMPLE || layer == CollisionLayer::GEOMETRY_COMPLEX ||
+            layer == CollisionLayer::STAIRS)
         {
             onFloorClick.Publish(m_mouseHitInfo.collidedEntityId);
         }
-        else if (layer == sage::CollisionLayer::ENEMY)
-        {
-            onEnemyLeftClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (layer == sage::CollisionLayer::CHEST)
-        {
-            onChestClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        onAnyLeftClick.Publish(m_mouseHitInfo.collidedEntityId);
+        onLeftClick.Publish(m_mouseHitInfo.collidedEntityId);
     }
 
     void Cursor::onMouseRightClick() const
     {
         if (!enabled) return;
-
-        const auto& layer = registry->get<sage::Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        if (layer == sage::CollisionLayer::ENEMY)
-        {
-            onEnemyRightClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        onAnyRightClick.Publish(m_mouseHitInfo.collidedEntityId);
+        onRightClick.Publish(m_mouseHitInfo.collidedEntityId);
     }
 
     void Cursor::onMouseLeftDown()
@@ -126,15 +84,11 @@ namespace sage
         if (leftClickTimer < 0.25) return;
         leftClickTimer = 0;
 
-        const auto& layer = registry->get<sage::Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        if (layer == sage::CollisionLayer::GEOMETRY_SIMPLE || layer == sage::CollisionLayer::GEOMETRY_COMPLEX ||
-            layer == sage::CollisionLayer::STAIRS)
+        const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        if (layer == CollisionLayer::GEOMETRY_SIMPLE || layer == CollisionLayer::GEOMETRY_COMPLEX ||
+            layer == CollisionLayer::STAIRS)
         {
             onFloorClick.Publish(m_mouseHitInfo.collidedEntityId);
-        }
-        else if (layer == sage::CollisionLayer::ENEMY)
-        {
-            onEnemyLeftClick.Publish(m_mouseHitInfo.collidedEntityId);
         }
     }
 
@@ -177,112 +131,33 @@ namespace sage
     bool Cursor::OutOfRange() const
     {
         auto mouseHit = m_naviHitInfo.rlCollision.point;
-        const auto& moveable = registry->get<sage::MoveableActor>(selectedActor);
-        sage::GridSquare minRange{};
-        sage::GridSquare maxRange{};
+        const auto& moveable = registry->get<MoveableActor>(selectedActor);
+        GridSquare minRange{};
+        GridSquare maxRange{};
         sys->navigationGridSystem->GetPathfindRange(selectedActor, moveable.pathfindingBounds, minRange, maxRange);
 
         return !sys->navigationGridSystem->CheckWithinBounds(mouseHit, minRange, maxRange);
     }
 
-    bool Cursor::IsValidMove() const
-    {
-        auto mouseHit = m_naviHitInfo.rlCollision.point;
-        if (sys->navigationGridSystem->CheckWithinGridBounds(mouseHit))
-        {
-            const auto& moveable = registry->get<sage::MoveableActor>(selectedActor);
-            sage::GridSquare minRange{};
-            sage::GridSquare maxRange{};
-            sys->navigationGridSystem->GetPathfindRange(
-                selectedActor, moveable.pathfindingBounds, minRange, maxRange);
-
-            if (!sys->navigationGridSystem->CheckWithinBounds(mouseHit, minRange, maxRange))
-            {
-                // Out of player's movement range
-                return false;
-            }
-        }
-        else
-        {
-            return false;
-        }
-        sage::GridSquare dest{};
-        sys->navigationGridSystem->WorldToGridSpace(mouseHit, dest);
-        if (sys->navigationGridSystem->GetGridSquare(dest.row, dest.col)->occupied)
-        {
-            return false;
-        }
-        return true;
-    }
-
-    void Cursor::changeCursors(sage::CollisionLayer collisionLayer)
+    void Cursor::changeCursors(CollisionLayer collisionLayer)
     {
         if (contextLocked) return;
-
-        if (OutOfRange())
+        if (OutOfRange() ||
+            ((collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
+              collisionLayer == CollisionLayer::GEOMETRY_COMPLEX || collisionLayer == CollisionLayer::STAIRS) &&
+             !sys->navigationGridSystem->IsValidMove(m_naviHitInfo.rlCollision.point, selectedActor)))
         {
-            currentTex = &invalidmovetex;
+            currentTex = ResourceManager::GetInstance().TextureLoad("cursor_denied");
             currentColor = invalidColor;
             return;
         }
-
-        if (collisionLayer == sage::CollisionLayer::GEOMETRY_SIMPLE ||
-            collisionLayer == sage::CollisionLayer::GEOMETRY_COMPLEX ||
-            collisionLayer == sage::CollisionLayer::STAIRS)
+        if (cursorTextureMap.contains(collisionLayer))
         {
-            if (!IsValidMove())
-            {
-                currentTex = &invalidmovetex;
-                currentColor = invalidColor;
-                return;
-            }
-
-            currentTex = &movetex;
-            currentColor = GREEN;
-
-            if (registry->all_of<sage::Renderable>(m_mouseHitInfo.collidedEntityId))
-            {
-                hitObjectName = registry->get<sage::Renderable>(m_mouseHitInfo.collidedEntityId).GetName();
-            }
+            currentTex = ResourceManager::GetInstance().TextureLoad(cursorTextureMap.at(collisionLayer));
         }
-        else if (collisionLayer == sage::CollisionLayer::BUILDING)
+        else
         {
-            currentTex = &regulartex;
-            currentColor = invalidColor;
-            if (registry->all_of<sage::Renderable>(m_mouseHitInfo.collidedEntityId))
-            {
-                hitObjectName = registry->get<sage::Renderable>(m_mouseHitInfo.collidedEntityId).GetName();
-            }
-        }
-        else if (collisionLayer == sage::CollisionLayer::ITEM)
-        {
-            currentTex = &pickuptex;
-            hitObjectName = "Item";
-        }
-        else if (collisionLayer == sage::CollisionLayer::CHEST)
-        {
-            currentTex = &pickuptex;
-            hitObjectName = "Chest";
-        }
-        else if (collisionLayer == sage::CollisionLayer::PLAYER)
-        {
-            currentTex = &regulartex;
-            hitObjectName = "Player";
-        }
-        else if (collisionLayer == sage::CollisionLayer::NPC)
-        {
-            currentTex = &talktex;
-            hitObjectName = "NPC";
-        }
-        else if (collisionLayer == sage::CollisionLayer::INTERACTABLE)
-        {
-            currentTex = &interacttex;
-            hitObjectName = "Interactable";
-        }
-        else if (collisionLayer == sage::CollisionLayer::ENEMY)
-        {
-            currentTex = &combattex;
-            hitObjectName = "Enemy";
+            currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
         }
     }
 
@@ -292,7 +167,7 @@ namespace sage
         resetHitInfo(m_mouseHitInfo);
         resetHitInfo(m_naviHitInfo);
         hitObjectName = "None";
-        currentTex = &regulartex;
+        currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
         currentColor = defaultColor;
 
         auto viewport = sys->settings->GetViewPort();
@@ -304,8 +179,8 @@ namespace sage
         // Discards hits with a BB that do not have a collision with mesh
         for (auto it = collisions.begin(); it != collisions.end();)
         {
-            if (it->collisionLayer == sage::CollisionLayer::GEOMETRY_COMPLEX ||
-                it->collisionLayer == sage::CollisionLayer::STAIRS)
+            if (it->collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
+                it->collisionLayer == CollisionLayer::STAIRS)
             {
                 if (!findMeshCollision(*it))
                 {
@@ -322,25 +197,24 @@ namespace sage
             return;
         }
 
-        sage::CollisionSystem::SortCollisionsByDistance(collisions);
+        CollisionSystem::SortCollisionsByDistance(collisions);
 
         m_mouseHitInfo = collisions[0];
 
-        if (m_mouseHitInfo.collisionLayer == sage::CollisionLayer::GEOMETRY_SIMPLE ||
-            m_mouseHitInfo.collisionLayer == sage::CollisionLayer::GEOMETRY_COMPLEX ||
-            m_mouseHitInfo.collisionLayer == sage::CollisionLayer::STAIRS)
+        if (m_mouseHitInfo.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
+            m_mouseHitInfo.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
+            m_mouseHitInfo.collisionLayer == CollisionLayer::STAIRS)
         {
             m_naviHitInfo = m_mouseHitInfo;
         }
         else
         {
             // Find first navigation collision (if any)
-            const auto navIt =
-                std::find_if(collisions.begin(), collisions.end(), [](const sage::CollisionInfo& coll) {
-                    return coll.collisionLayer == sage::CollisionLayer::GEOMETRY_SIMPLE ||
-                           coll.collisionLayer == sage::CollisionLayer::GEOMETRY_COMPLEX ||
-                           coll.collisionLayer == sage::CollisionLayer::STAIRS;
-                });
+            const auto navIt = std::find_if(collisions.begin(), collisions.end(), [](const CollisionInfo& coll) {
+                return coll.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
+                       coll.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
+                       coll.collisionLayer == CollisionLayer::STAIRS;
+            });
 
             if (navIt != collisions.end())
             {
@@ -350,11 +224,11 @@ namespace sage
 
         onCollisionHit.Publish(m_mouseHitInfo.collidedEntityId);
 
-        const auto layer = registry->get<sage::Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        const auto layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
         changeCursors(layer);
     }
 
-    void Cursor::resetHitInfo(sage::CollisionInfo& hitInfo)
+    void Cursor::resetHitInfo(CollisionInfo& hitInfo)
     {
         hitInfo.rlCollision = {};
         hitInfo.rlCollision.distance = FLT_MAX;
@@ -362,12 +236,12 @@ namespace sage
     }
 
     // Find the model's mesh collision (instead of using its bounding box)
-    bool Cursor::findMeshCollision(sage::CollisionInfo& hitInfo) const
+    bool Cursor::findMeshCollision(CollisionInfo& hitInfo) const
     {
-        if (registry->any_of<sage::Renderable>(hitInfo.collidedEntityId))
+        if (registry->any_of<Renderable>(hitInfo.collidedEntityId))
         {
-            const auto& renderable = registry->get<sage::Renderable>(hitInfo.collidedEntityId);
-            const auto& transform = registry->get<sage::sgTransform>(hitInfo.collidedEntityId);
+            const auto& renderable = registry->get<Renderable>(hitInfo.collidedEntityId);
+            const auto& transform = registry->get<sgTransform>(hitInfo.collidedEntityId);
 
             for (int i = 0; i < renderable.GetModel()->GetMeshCount(); ++i)
             {
@@ -383,7 +257,7 @@ namespace sage
         return false;
     }
 
-    const sage::CollisionInfo& Cursor::getMouseHitInfo() const
+    const CollisionInfo& Cursor::getMouseHitInfo() const
     {
         return m_mouseHitInfo;
     }
@@ -461,24 +335,18 @@ namespace sage
     {
         if (hideCursor) return;
         Vector2 pos = GetMousePosition();
-        if (currentTex != &regulartex)
+        // TODO: Awful hack below
+        if (currentTex.id != ResourceManager::GetInstance().TextureLoad("cursor_regular").id)
         {
             pos = Vector2Subtract(
-                pos, {static_cast<float>(currentTex->width / 2), static_cast<float>(currentTex->height / 2)});
+                pos, {static_cast<float>(currentTex.width / 2), static_cast<float>(currentTex.height / 2)});
         }
-        DrawTextureEx(*currentTex, pos, 0.0, 1.0f, WHITE);
+        DrawTextureEx(currentTex, pos, 0.0, 1.0f, WHITE);
     }
 
     Cursor::Cursor(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
     {
-        regulartex = sage::ResourceManager::GetInstance().TextureLoad("cursor_regular");
-        talktex = sage::ResourceManager::GetInstance().TextureLoad("cursor_talk");
-        movetex = sage::ResourceManager::GetInstance().TextureLoad("cursor_move");
-        invalidmovetex = sage::ResourceManager::GetInstance().TextureLoad("cursor_denied");
-        combattex = sage::ResourceManager::GetInstance().TextureLoad("cursor_attack");
-        pickuptex = sage::ResourceManager::GetInstance().TextureLoad("cursor_pickup");
-        interacttex = sage::ResourceManager::GetInstance().TextureLoad("cursor_interact");
-        currentTex = &regulartex;
+        currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
         EnableContextSwitching();
     }
 } // namespace sage
