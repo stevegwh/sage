@@ -27,7 +27,7 @@ namespace sage
         GridSquare square{};
         if (!sys->navigationGridSystem->WorldToGridSpace(rlCamera.target, square)) return;
 
-        float floorHeight = sys->navigationGridSystem->GetGridSquare(square.row, square.col)->GetTerrainHeight();
+        float floorHeight = sys->navigationGridSystem->GetGridSquare(square.row, square.col)->heightMap.GetHeight();
         const float targetOffsetY = 8.0f; // Offset from the floor
 
         float idealTargetY = floorHeight + targetOffsetY;
@@ -253,7 +253,7 @@ namespace sage
         GridSquare square{};
         if (!sys->navigationGridSystem->WorldToGridSpace(rlCamera.target, square)) return;
         const float floorHeight =
-            sys->navigationGridSystem->GetGridSquare(square.row, square.col)->GetTerrainHeight();
+            sys->navigationGridSystem->GetGridSquare(square.row, square.col)->heightMap.GetHeight();
         constexpr float targetOffsetY = 8.0f; // Offset from the floor
         const float idealTargetY = floorHeight + targetOffsetY;
         const float idealPositionY = idealTargetY + (rlCamera.position.y - rlCamera.target.y);

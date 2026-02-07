@@ -38,7 +38,7 @@ namespace sage
         //---------------------------------------------------------
         bool getExtents(Vector3 worldPos, GridSquare& extents) const;
         //---------------------------------------------------------
-        void calculateTerrainHeightAndNormals(const entt::entity& entity);
+        void calculateTerrainHeightAndNormals(const entt::entity& entity) const;
         //---------------------------------------------------------
         std::pair<float, float> getHeightBounds(float slices);
         //---------------------------------------------------------
