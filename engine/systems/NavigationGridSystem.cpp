@@ -373,7 +373,7 @@ namespace sage
         return 1.0f + (angle / maxSlopeAngle);
     }
 
-    void NavigationGridSystem::calculateTerrainHeightAndNormals(const entt::entity& entity)
+    void NavigationGridSystem::calculateTerrainHeightAndNormals(const entt::entity& entity) const
     {
         const auto& area = registry->get<Collideable>(entity).worldBoundingBox;
 

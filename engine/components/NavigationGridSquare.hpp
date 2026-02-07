@@ -7,7 +7,6 @@
 #include "raylib.h"
 #include "raymath.h"
 #include "entt/entt.hpp"
-#include <optional>
 
 namespace sage
 {
@@ -59,10 +58,51 @@ namespace sage
         }
     };
 
+    struct TerrainHeight
+    {
+        float height = -1;
+        
+        [[nodiscard]] bool has_value() const
+        {
+            return height != -1;
+        }
+
+        float operator*() const
+        {
+            return height;
+        }
+        
+        bool operator>(const float& other) const
+        {
+            return height > other;
+        }
+
+        bool operator<(const float& other) const
+        {
+            return height < other;
+        }
+
+        TerrainHeight& operator=(float other)
+        {
+            height = other;
+            return *this;
+        }
+
+        bool operator==(const float& other) const
+        {
+            return height == other;
+        }
+
+        bool operator!=(const float& other) const
+        {
+            return height != other;
+        }
+    };
+
     struct NavigationGridSquare
     {
       private:
-        std::optional<float> terrainHeight;
+        TerrainHeight terrainHeight;
 
       public:
         int pathfindingCost = 1;
@@ -80,18 +120,17 @@ namespace sage
 
         void SetTerrainHeight(float _terrainHeight)
         {
-            terrainHeight = _terrainHeight;
+            terrainHeight.height = _terrainHeight;
         }
 
         [[nodiscard]] float GetTerrainHeight() const
         {
-            assert(terrainHeight.has_value());
             return *terrainHeight;
         }
 
         NavigationGridSquare(
             GridSquare _gridSquareIndex, Vector3 _worldPosMin, Vector3 _worldPosMax, Vector3 _worldPosCentre)
-            : gridSquareIndex(_gridSquareIndex),
+            : terrainHeight(-1), gridSquareIndex(_gridSquareIndex),
               worldPosMin(_worldPosMin),
               worldPosMax(_worldPosMax),
               worldPosCentre(_worldPosCentre),

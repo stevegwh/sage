@@ -50,7 +50,7 @@ namespace sage
         const auto& gridSquares = navigationGridSystem->GetGridSquares();
         mesh.vertices[vertexIndex * 3] = gridSquares[gridRow][gridCol]->worldPosMin.x;
         mesh.vertices[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->GetTerrainHeight() +
-                                             0.3; // Little buffer so the overlay doesnt blend into terrain
+                                             0.3; // Little buffer so the overlay doesn't blend into terrain
         mesh.vertices[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol]->worldPosMin.z;
     }
 
