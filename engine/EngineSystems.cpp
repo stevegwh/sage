@@ -8,6 +8,7 @@
 
 #include "Camera.hpp"
 #include "Cursor.hpp"
+#include "CursorClickIndicator.hpp"
 #include "FullscreenTextOverlayManager.hpp"
 #include "GameUiEngine.hpp"
 #include "LightManager.hpp"
@@ -43,7 +44,8 @@ namespace sage
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayFactory(std::make_unique<FullscreenTextOverlayManager>(this)),
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
-          doorSystem(std::make_unique<DoorSystem>(_registry, this))
+          doorSystem(std::make_unique<DoorSystem>(_registry, this)),
+          cursorClickIndicator(std::make_unique<CursorClickIndicator>(_registry, this))
     {
     }
 } // namespace sage

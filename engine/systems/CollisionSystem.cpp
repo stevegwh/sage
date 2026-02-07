@@ -223,47 +223,6 @@ namespace sage
         return false;
     }
 
-    CollisionMatrix CollisionSystem::CreateCollisionMatrix()
-    {
-        int numLayers = static_cast<int>(CollisionLayer::COUNT);
-        std::vector matrix(numLayers, std::vector<bool>(numLayers, false));
-
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::PLAYER)] = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::ENEMY)] = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::NPC)] = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::ITEM)] = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::INTERACTABLE)] = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::CHEST)] = true;
-        // matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::NAVIGATION)]
-        // = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::BUILDING)] = true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::GEOMETRY_SIMPLE)] =
-            true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::GEOMETRY_COMPLEX)] =
-            true;
-        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::STAIRS)] = true;
-
-        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::ENEMY)] = true;
-        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::BUILDING)] = true;
-        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::INTERACTABLE)] = true;
-        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::CHEST)] = true;
-
-        matrix[static_cast<int>(CollisionLayer::ENEMY)][static_cast<int>(CollisionLayer::PLAYER)] = true;
-        matrix[static_cast<int>(CollisionLayer::ENEMY)][static_cast<int>(CollisionLayer::BUILDING)] = true;
-
-        matrix[static_cast<int>(CollisionLayer::BOYD)][static_cast<int>(CollisionLayer::PLAYER)] = true;
-        matrix[static_cast<int>(CollisionLayer::BOYD)][static_cast<int>(CollisionLayer::NPC)] = true;
-        matrix[static_cast<int>(CollisionLayer::BOYD)][static_cast<int>(CollisionLayer::ENEMY)] = true;
-
-        matrix[static_cast<int>(CollisionLayer::NAVIGATION)][static_cast<int>(CollisionLayer::GEOMETRY_SIMPLE)] =
-            true;
-        matrix[static_cast<int>(CollisionLayer::NAVIGATION)][static_cast<int>(CollisionLayer::GEOMETRY_COMPLEX)] =
-            true;
-        matrix[static_cast<int>(CollisionLayer::NAVIGATION)][static_cast<int>(CollisionLayer::STAIRS)] = true;
-
-        return matrix;
-    }
-
     CollisionSystem::CollisionSystem(entt::registry* _registry)
         : registry(_registry), collisionMatrix(CreateCollisionMatrix())
     {

@@ -13,8 +13,6 @@
 
 namespace sage
 {
-    using CollisionMatrix = std::vector<std::vector<bool>>;
-
     struct CollisionInfo
     {
         entt::entity collidedEntityId{};
@@ -29,7 +27,6 @@ namespace sage
         CollisionMatrix collisionMatrix;
 
       public:
-        [[nodiscard]] static CollisionMatrix CreateCollisionMatrix();
         static void SortCollisionsByDistance(std::vector<CollisionInfo>& collisions);
         [[nodiscard]] std::vector<CollisionInfo> GetMeshCollisionsWithRay(
             const entt::entity& caster, const Ray& ray, CollisionLayer layer);

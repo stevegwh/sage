@@ -48,6 +48,7 @@ namespace sage
         void Disable();
 
         Renderable() = default;
+        Renderable(Renderable& other) noexcept;
         Renderable(const Renderable&) = delete;
         Renderable& operator=(const Renderable&) = delete;
         Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform);

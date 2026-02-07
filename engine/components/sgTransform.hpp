@@ -13,6 +13,7 @@
 
 namespace sage
 {
+    // TODO: This should be more ECS-like
     class sgTransform
     {
         entt::entity self;
@@ -69,7 +70,7 @@ namespace sage
         const std::vector<sgTransform*>& GetChildren();
 
         explicit sgTransform(entt::entity _self);
-        sgTransform(const sgTransform&) = delete;
-        sgTransform& operator=(const sgTransform&) = delete;
+        // sgTransform(const sgTransform&) = delete;
+        // sgTransform& operator=(const sgTransform&) = delete;
     };
 } // namespace sage

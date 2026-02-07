@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "engine/Event.hpp"
+#include "Event.hpp"
 #include "systems/CollisionSystem.hpp"
 
 #include "entt/entt.hpp"
@@ -25,7 +25,6 @@ namespace sage
 
     class Cursor
     {
-        // Need to know if object is clickable, hoverable, etc.
         float leftClickTimer = 0;
         entt::registry* registry;
         EngineSystems* sys;
@@ -57,7 +56,7 @@ namespace sage
         void onMouseRightDown() const;
         void changeCursors(CollisionLayer collisionLayer);
         static void resetHitInfo(CollisionInfo& hitInfo);
-        [[nodiscard]] bool findMeshCollision(sage::CollisionInfo& hitInfo) const;
+        [[nodiscard]] bool findMeshCollision(CollisionInfo& hitInfo) const;
 
       public:
         std::string hitObjectName{};
@@ -69,7 +68,7 @@ namespace sage
 
         Event<entt::entity, entt::entity> onSelectedActorChange{}; // prev, current
         Event<entt::entity> onCollisionHit{};
-        Event<entt::entity> onFloorClick{};
+        Event<entt::entity> onNavigationClick{};
         Event<entt::entity> onLeftClick{};
         Event<entt::entity> onRightClick{};
         Event<entt::entity> onHover{};

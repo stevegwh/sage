@@ -3,28 +3,35 @@
 //
 
 #pragma once
+
 #include <array>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+using CollisionMatrix = std::vector<std::vector<bool>>;
 
 namespace sage
 {
+    // Collision config
     enum class CollisionLayer
     {
+        // Reserved start
         DEFAULT,
-        GEOMETRY_SIMPLE, // Uses bounding box as foundation for collision
+        GEOMETRY_SIMPLE,  // Uses bounding box as foundation for collision
+        GEOMETRY_COMPLEX, // Uses mesh as basis for collision
         BUILDING,
-        NAVIGATION, // Unsure.
         PLAYER,
+        BACKGROUND, // Collides with nothing
+        STAIRS,
+        // Reserved end
+        // User defined start
         NPC,
         ENEMY,
-        BOYD,
-        GEOMETRY_COMPLEX, // Uses mesh as basis for collision
-        BACKGROUND,       // Collides with nothing
-        STAIRS,
         ITEM,
         INTERACTABLE,
         CHEST,
+        // User defined end
         COUNT // Must always be last
     };
 
@@ -33,7 +40,6 @@ namespace sage
         {CollisionLayer::NPC, "cursor_talk"},
         {CollisionLayer::GEOMETRY_SIMPLE, "cursor_move"},
         {CollisionLayer::GEOMETRY_COMPLEX, "cursor_move"},
-        {CollisionLayer::NAVIGATION, "cursor_move"},
         {CollisionLayer::ENEMY, "cursor_attack"},
         {CollisionLayer::ITEM, "cursor_pickup"},
         {CollisionLayer::CHEST, "cursor_pickup"},
@@ -47,6 +53,35 @@ namespace sage
         CollisionLayer::INTERACTABLE,
         CollisionLayer::CHEST};
 
+    CollisionMatrix static CreateCollisionMatrix()
+    {
+        int numLayers = static_cast<int>(CollisionLayer::COUNT);
+        std::vector matrix(numLayers, std::vector<bool>(numLayers, false));
+
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::PLAYER)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::ENEMY)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::NPC)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::ITEM)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::INTERACTABLE)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::CHEST)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::BUILDING)] = true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::GEOMETRY_SIMPLE)] =
+            true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::GEOMETRY_COMPLEX)] =
+            true;
+        matrix[static_cast<int>(CollisionLayer::DEFAULT)][static_cast<int>(CollisionLayer::STAIRS)] = true;
+
+        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::ENEMY)] = true;
+        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::BUILDING)] = true;
+        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::INTERACTABLE)] = true;
+        matrix[static_cast<int>(CollisionLayer::PLAYER)][static_cast<int>(CollisionLayer::CHEST)] = true;
+
+        matrix[static_cast<int>(CollisionLayer::ENEMY)][static_cast<int>(CollisionLayer::PLAYER)] = true;
+        matrix[static_cast<int>(CollisionLayer::ENEMY)][static_cast<int>(CollisionLayer::BUILDING)] = true;
+
+        return matrix;
+    }
+    // Animation config
     enum class AnimationEnum
     {
         IDLE,

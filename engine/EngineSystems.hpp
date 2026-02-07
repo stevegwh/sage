@@ -34,6 +34,7 @@ namespace sage
     class FullscreenTextOverlayManager;
     class SpatialAudioSystem;
     class DoorSystem;
+    class CursorClickIndicator;
 
     class EngineSystems
     {
@@ -59,6 +60,7 @@ namespace sage
         std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayFactory;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;
         std::unique_ptr<DoorSystem> doorSystem;
+        std::unique_ptr<CursorClickIndicator> cursorClickIndicator;
 
         EngineSystems(
             entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager);

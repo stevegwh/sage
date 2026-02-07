@@ -2,17 +2,17 @@
 // Created by Steve Wheeler on 04/05/2024.
 //
 
-#include "engine/Cursor.hpp"
+#include "Cursor.hpp"
 
-#include "engine/Camera.hpp"
-#include "engine/components/MoveableActor.hpp"
-#include "engine/components/NavigationGridSquare.hpp"
-#include "engine/components/Renderable.hpp"
-#include "engine/components/sgTransform.hpp"
-#include "engine/EngineSystems.hpp"
-#include "engine/Settings.hpp"
-#include "engine/systems/CollisionSystem.hpp"
-#include "engine/systems/NavigationGridSystem.hpp"
+#include "Camera.hpp"
+#include "components/MoveableActor.hpp"
+#include "components/NavigationGridSquare.hpp"
+#include "components/Renderable.hpp"
+#include "components/sgTransform.hpp"
+#include "EngineSystems.hpp"
+#include "Settings.hpp"
+#include "systems/CollisionSystem.hpp"
+#include "systems/NavigationGridSystem.hpp"
 
 #include <algorithm>
 
@@ -65,7 +65,7 @@ namespace sage
         if (layer == CollisionLayer::GEOMETRY_SIMPLE || layer == CollisionLayer::GEOMETRY_COMPLEX ||
             layer == CollisionLayer::STAIRS)
         {
-            onFloorClick.Publish(m_mouseHitInfo.collidedEntityId);
+            onNavigationClick.Publish(m_mouseHitInfo.collidedEntityId);
         }
         onLeftClick.Publish(m_mouseHitInfo.collidedEntityId);
     }
@@ -88,7 +88,7 @@ namespace sage
         if (layer == CollisionLayer::GEOMETRY_SIMPLE || layer == CollisionLayer::GEOMETRY_COMPLEX ||
             layer == CollisionLayer::STAIRS)
         {
-            onFloorClick.Publish(m_mouseHitInfo.collidedEntityId);
+            onNavigationClick.Publish(m_mouseHitInfo.collidedEntityId);
         }
     }
 

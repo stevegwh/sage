@@ -88,6 +88,19 @@ namespace sage
         active = false;
     }
 
+    Renderable::Renderable(Renderable& other) noexcept
+        : model(std::move(other.model)),
+          name(other.name),
+          vanityName(other.vanityName),
+          hint(other.hint),
+          active(other.active),
+          initialTransform(other.initialTransform),
+          reqShaderUpdate(other.reqShaderUpdate),
+          serializable(other.serializable)
+    {
+        other.model.reset(); // Explicitly reset (though std::move already does this)
+    }
+
     Renderable::Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform)
         : model(std::move(_model)), initialTransform(_localTransform)
     {
