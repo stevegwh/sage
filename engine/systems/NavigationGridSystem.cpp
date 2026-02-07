@@ -137,7 +137,7 @@ namespace sage
         {
             for (int col = min_col; col <= max_col; ++col)
             {
-                auto normal = gridSquares[row][col]->terrainNormal;
+                auto normal = gridSquares[row][col]->heightMap.GetNormal();
                 // Calculate the angle between the normal and the up vector
                 float dotProduct = normal.x * up.x + normal.y * up.y + normal.z * up.z;
                 float angle = std::acos(dotProduct) * RAD2DEG; // Convert to degrees
@@ -407,28 +407,11 @@ namespace sage
                     Vector3 stairDirection = Vector3Normalize(Vector3Subtract(area.max, area.min));
                     float relativePosition = relativeX * stairDirection.x + relativeZ * stairDirection.z;
                     float interpolatedHeight = area.min.y + (area.max.y - area.min.y) * relativePosition;
-
-                    if (!gridSquares[row][col]->terrainHeight.has_value() ||
-                        gridSquares[row][col]->terrainHeight < interpolatedHeight)
-                    {
-                        gridSquares[row][col]->terrainHeight = interpolatedHeight;
-                        gridSquares[row][col]->terrainNormal =
-                            Vector3Normalize(Vector3{-stairDirection.x, 1, -stairDirection.z});
-
-                        // float stairSlope = (area.max.y - area.min.y) / (area.max - area.min).Length();
-                        // gridSquares[row][col]->pathfindingCost = calculateStairsCost(stairSlope);
-                    }
+                    gridSquares[row][col]->heightMap.Set(interpolatedHeight, Vector3Normalize(Vector3{-stairDirection.x, 1, -stairDirection.z}));
                 }
                 else if (collideable.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE)
                 {
-                    if (!gridSquares[row][col]->terrainHeight.has_value() ||
-                        gridSquares[row][col]->terrainHeight < area.max.y)
-                    {
-                        gridSquares[row][col]->terrainHeight = area.max.y;
-                        gridSquares[row][col]->terrainNormal = {0, 1, 0};
-                        // gridSquares[row][col]->pathfindingCost =
-                        // calculateTerrainCost(getFirstCollision.normal, 45.0f);
-                    }
+                    gridSquares[row][col]->heightMap.Set(area.max.y, {0, 1, 0});
                 }
                 else if (collideable.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX)
                 {
@@ -444,14 +427,7 @@ namespace sage
 
                     if (getFirstCollision.hit)
                     {
-                        if (!gridSquares[row][col]->terrainHeight.has_value() ||
-                            gridSquares[row][col]->terrainHeight < getFirstCollision.point.y)
-                        {
-                            gridSquares[row][col]->terrainHeight = getFirstCollision.point.y;
-                            gridSquares[row][col]->terrainNormal = getFirstCollision.normal;
-                            // gridSquares[row][col]->pathfindingCost =
-                            // calculateTerrainCost(getFirstCollision.normal, 45.0f);
-                        }
+                        gridSquares[row][col]->heightMap.Set(getFirstCollision.point.y, getFirstCollision.normal);
                     }
                 }
             }
@@ -468,7 +444,7 @@ namespace sage
         {
             for (int x = 0; x < slices; ++x)
             {
-                auto normal = gridSquares[y][x]->terrainNormal;
+                auto normal = gridSquares[y][x]->heightMap.GetNormal();
 
                 // Map the normal components from [-1, 1] to [0, 255]
                 auto r = static_cast<unsigned char>((normal.x + 1.0f) * 127.5f);
@@ -536,7 +512,7 @@ namespace sage
         {
             for (int x = 0; x < slices; ++x)
             {
-                float height = *gridSquares[y][x]->terrainHeight;
+                float height = gridSquares[y][x]->heightMap.GetHeight();
 
                 auto heightValue = static_cast<unsigned char>(((height - minHeight) / heightRange) * 255.0f);
 
@@ -572,7 +548,7 @@ namespace sage
                 // Assign the normal to the corresponding grid square
                 if (i >= 0 && i < slices && j >= 0 && j < slices)
                 {
-                    gridSquares[j][i]->terrainNormal = normal;
+                    gridSquares[j][i]->heightMap.GetNormal() = normal;
                 }
             }
         }
@@ -605,7 +581,7 @@ namespace sage
 
                 if (gridX >= 0 && gridX < slices && gridY >= 0 && gridY < slices)
                 {
-                    gridSquares[gridY][gridX]->terrainHeight = height;
+                    gridSquares[gridY][gridX]->heightMap.height = height;
                 }
             }
         }
@@ -766,7 +742,7 @@ namespace sage
     {
         auto combineWorldPosTerrainHeight = [this](auto gridPos) {
             Vector3 worldPos = gridSquares[gridPos.row][gridPos.col]->worldPosMin;
-            worldPos.y = *gridSquares[gridPos.row][gridPos.col]->terrainHeight;
+            worldPos.y = gridSquares[gridPos.row][gridPos.col]->heightMap.GetHeight();
             return worldPos;
         };
         std::vector<Vector3> path;

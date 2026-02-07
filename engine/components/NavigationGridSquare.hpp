@@ -57,54 +57,35 @@ namespace sage
             col += other.col;
         }
     };
-
-    struct TerrainHeight
+    
+    class TerrainTile
     {
         float height = -1;
-        
-        [[nodiscard]] bool has_value() const
+        Vector3 normal = Vector3{0, 1, 0};
+    public:
+        void Set(const float _height, const Vector3& _normal)
         {
-            return height != -1;
+            if (height == -1 || height < _height)
+            {
+                height = _height;
+                normal = _normal;
+            }
         }
-
-        float operator*() const
+        [[nodiscard]] Vector3 GetNormal() const
+        {
+            return normal;
+        }
+        [[nodiscard]] float GetHeight() const
         {
             return height;
         }
-        
-        bool operator>(const float& other) const
-        {
-            return height > other;
-        }
 
-        bool operator<(const float& other) const
-        {
-            return height < other;
-        }
-
-        TerrainHeight& operator=(float other)
-        {
-            height = other;
-            return *this;
-        }
-
-        bool operator==(const float& other) const
-        {
-            return height == other;
-        }
-
-        bool operator!=(const float& other) const
-        {
-            return height != other;
-        }
+        // Allow navigation grid system to set the inner height without a check.
+        friend class NavigationGridSystem;
     };
-
     struct NavigationGridSquare
     {
-      private:
-        TerrainHeight terrainHeight;
-
-      public:
+        TerrainTile heightMap {};
         int pathfindingCost = 1;
         bool drawDebug = false;
         Color debugColor = RED;
@@ -116,28 +97,14 @@ namespace sage
         entt::entity occupant = entt::null;
         bool occupied = false;
 
-        Vector3 terrainNormal = {0, 1, 0};
-
-        void SetTerrainHeight(float _terrainHeight)
-        {
-            terrainHeight.height = _terrainHeight;
-        }
-
-        [[nodiscard]] float GetTerrainHeight() const
-        {
-            return *terrainHeight;
-        }
-
         NavigationGridSquare(
             GridSquare _gridSquareIndex, Vector3 _worldPosMin, Vector3 _worldPosMax, Vector3 _worldPosCentre)
-            : terrainHeight(-1), gridSquareIndex(_gridSquareIndex),
+            : gridSquareIndex(_gridSquareIndex),
               worldPosMin(_worldPosMin),
               worldPosMax(_worldPosMax),
               worldPosCentre(_worldPosCentre),
               debugBox({fabsf(worldPosMax.x - worldPosMin.x), 0.1f, fabsf(worldPosMax.z - worldPosMin.z)})
         {
         }
-
-        friend class NavigationGridSystem;
     };
 } // namespace sage

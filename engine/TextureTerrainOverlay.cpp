@@ -49,7 +49,7 @@ namespace sage
     {
         const auto& gridSquares = navigationGridSystem->GetGridSquares();
         mesh.vertices[vertexIndex * 3] = gridSquares[gridRow][gridCol]->worldPosMin.x;
-        mesh.vertices[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->GetTerrainHeight() +
+        mesh.vertices[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->heightMap.GetHeight() +
                                              0.3; // Little buffer so the overlay doesn't blend into terrain
         mesh.vertices[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol]->worldPosMin.z;
     }
@@ -57,9 +57,9 @@ namespace sage
     void TextureTerrainOverlay::updateNormalData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const
     {
         const auto& gridSquares = navigationGridSystem->GetGridSquares();
-        mesh.normals[vertexIndex * 3] = gridSquares[gridRow][gridCol]->terrainNormal.x;
-        mesh.normals[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->terrainNormal.y;
-        mesh.normals[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol]->terrainNormal.z;
+        mesh.normals[vertexIndex * 3] = gridSquares[gridRow][gridCol]->heightMap.GetNormal().x;
+        mesh.normals[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->heightMap.GetNormal().y;
+        mesh.normals[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol]->heightMap.GetNormal().z;
     }
 
     void TextureTerrainOverlay::updateTexCoordData(
@@ -155,11 +155,11 @@ namespace sage
         const auto& gridSquares = navigationGridSystem->GetGridSquares();
         const Vector3 meshMin = {
             gridSquares[minRange.row][minRange.col]->worldPosMin.x,
-            gridSquares[minRange.row][minRange.col]->GetTerrainHeight(),
+            gridSquares[minRange.row][minRange.col]->heightMap.GetHeight(),
             gridSquares[minRange.row][minRange.col]->worldPosMin.z};
         const Vector3 meshMax = {
             gridSquares[maxRange.row - 1][maxRange.col - 1]->worldPosMax.x,
-            gridSquares[maxRange.row - 1][maxRange.col - 1]->GetTerrainHeight(),
+            gridSquares[maxRange.row - 1][maxRange.col - 1]->heightMap.GetHeight(),
             gridSquares[maxRange.row - 1][maxRange.col - 1]->worldPosMax.z};
         const Vector3 meshCenter = {(meshMin.x + meshMax.x) * 0.5f, 0, (meshMin.z + meshMax.z) * 0.5f};
 

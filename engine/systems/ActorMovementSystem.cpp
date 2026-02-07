@@ -225,7 +225,7 @@ namespace sage
         GridSquare targetGridPos{};
         sys->navigationGridSystem->WorldToGridSpace(moveableActor.path.front(), targetGridPos);
         const auto square = sys->navigationGridSystem->GetGridSquare(targetGridPos.row, targetGridPos.col);
-        transform.SetPosition({square->worldPosMin.x, square->GetTerrainHeight(), square->worldPosMin.z});
+        transform.SetPosition({square->worldPosMin.x, square->heightMap.GetHeight(), square->worldPosMin.z});
     }
 
     void ActorMovementSystem::handleDestinationReached(
@@ -312,7 +312,7 @@ namespace sage
         auto& moveable = registry->get<MoveableActor>(entity);
         Vector3 newPos = {
             transform.GetWorldPos().x + transform.direction.x * moveable.movementSpeed,
-            gridSquare->GetTerrainHeight(),
+            gridSquare->heightMap.GetHeight(),
             transform.GetWorldPos().z + transform.direction.z * moveable.movementSpeed};
 
         transform.SetPosition(newPos);
