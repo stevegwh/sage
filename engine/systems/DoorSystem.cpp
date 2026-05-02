@@ -5,6 +5,7 @@
 #include "DoorSystem.hpp"
 
 #include "EngineSystems.hpp"
+#include "TransformSystem.hpp"
 
 #include "components/Collideable.hpp"
 #include "components/DoorBehaviorComponent.hpp"
@@ -41,12 +42,12 @@ namespace sage
             col.collisionLayer = CollisionLayer::BACKGROUND;
             sys->navigationGridSystem->MarkSquareAreaOccupied(col.worldBoundingBox, false);
             float targetRotation = (transform.forward().z > 0) ? door.openYRotation : -door.openYRotation;
-            transform.SetLocalRot(Vector3{rotx, targetRotation, rotz});
+            sys->transformSystem->SetLocalRot(entity, Vector3{rotx, targetRotation, rotz});
             door.open = true;
         }
         else
         {
-            transform.SetLocalRot(Vector3{rotx, closedRotation, rotz});
+            sys->transformSystem->SetLocalRot(entity, Vector3{rotx, closedRotation, rotz});
             door.open = false;
             auto& col = registry->get<Collideable>(entity);
             col.collisionLayer = CollisionLayer::BUILDING;

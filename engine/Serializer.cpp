@@ -16,7 +16,7 @@ namespace sage::serializer
     {
         assert(destination != nullptr);
 
-        std::cout << "START: Loading resource data from file." << std::endl;
+        std::cout << "START: Loading asset bin." << std::endl;
 
         using namespace entt::literals;
         std::ifstream storage(path, std::ios::binary);
@@ -36,7 +36,7 @@ namespace sage::serializer
             {
                 entity entityId{}; // ignore this
                 auto entt = destination->create();
-                auto& transform = destination->emplace<sgTransform>(entt, entt);
+                auto& transform = destination->emplace<sgTransform>(entt);
                 auto& collideable = destination->emplace<Collideable>(entt);
                 auto& renderable = destination->emplace<Renderable>(entt);
 
@@ -53,6 +53,6 @@ namespace sage::serializer
         }
 
         storage.close();
-        std::cout << "FINISH: Loading resource data from file." << std::endl;
+        std::cout << "FINISH: Loading asset bin." << std::endl;
     }
 } // namespace sage::serializer

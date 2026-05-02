@@ -57,150 +57,60 @@ namespace sage
         return m_scale;
     }
 
-    void sgTransform::updateChildrenPos()
-    {
-        for (auto* child : m_children)
-        {
-            child->SetPosition(Vector3Add(m_positionWorld, child->GetLocalPos()));
-        }
-    }
-
-    void sgTransform::updateChildrenRot()
-    {
-        for (auto* child : m_children)
-        {
-            child->SetRotation(Vector3Add(m_rotationWorld, child->GetLocalRot()));
-            // TODO: Scale
-        }
-    }
-
-    void sgTransform::SetLocalPos(const Vector3& position)
-    {
-        m_positionLocal = position;
-        if (!m_parent) return;
-        SetPosition(Vector3Add(m_parent->m_positionWorld, m_positionLocal));
-    }
-
-    void sgTransform::SetLocalRot(const Quaternion& rotation)
-    {
-        Vector3 rot = QuaternionToEuler(rotation);
-        rot = Vector3MultiplyByValue(rot, RAD2DEG); // raylib gives this back in rad
-        SetLocalRot(rot);
-    }
-
-    void sgTransform::SetLocalRot(const Vector3& rotation)
-    {
-        m_rotationLocal = rotation;
-        if (!m_parent)
-        {
-            SetRotation(m_rotationLocal);
-        }
-        else
-        {
-            SetRotation(Vector3Add(m_parent->m_rotationWorld, m_rotationLocal));
-        }
-    }
-
-    void sgTransform::SetPosition(const Vector3& position)
-    {
-        if (m_parent)
-        {
-            m_positionWorld = position;
-        }
-        else
-        {
-            m_positionLocal = position;
-            m_positionWorld = position;
-        }
-        updateChildrenPos();
-
-        onPositionUpdate.Publish(self);
-    }
-
-    void sgTransform::SetRotation(const Vector3& rotation)
-    {
-        if (m_parent)
-        {
-            m_rotationWorld = rotation;
-        }
-        else
-        {
-            m_rotationLocal = rotation;
-            m_rotationWorld = rotation;
-        }
-        updateChildrenRot();
-    }
-
-    void sgTransform::SetScale(const Vector3& scale)
-    {
-        m_scale = scale;
-    }
-
-    void sgTransform::SetScale(float scale)
-    {
-        m_scale = {scale, scale, scale};
-    }
-
-    void sgTransform::SetViaMatrix(Matrix mat)
-    {
-        Matrix newMat{};
-        Vector3 trans{};
-        Quaternion rotQ{};
-        Vector3 scale{};
-        MatrixDecompose(newMat, &trans, &rotQ, &scale);
-        Vector3 rot = QuaternionToEuler(rotQ);
-        SetScale(scale);
-        SetRotation(rot);
-        SetPosition(trans);
-    }
-
-    sgTransform* sgTransform::GetParent()
+    entt::entity sgTransform::GetParent() const
     {
         return m_parent;
     }
 
-    const std::vector<sgTransform*>& sgTransform::GetChildren()
+    const std::vector<entt::entity>& sgTransform::GetChildren() const
     {
         return m_children;
     }
 
-    void sgTransform::SetParent(sgTransform* newParent)
+    sgTransform::sgTransform(const sgTransform& rhs)
     {
-        if (m_parent)
-        {
-            // Remove this from old parent's children list
-            auto it = std::find(m_parent->m_children.begin(), m_parent->m_children.end(), this);
-            if (it != m_parent->m_children.end()) m_parent->m_children.erase(it);
-        }
-
-        m_parent = newParent;
-
-        if (m_parent)
-        {
-            m_parent->m_children.push_back(this);
-            // Recalculate local position based on current world position and new parent
-            m_positionLocal = Vector3Subtract(m_positionWorld, m_parent->GetWorldPos());
-            m_rotationLocal = Vector3Subtract(m_rotationWorld, m_parent->GetWorldRot());
-        }
-        else
-        {
-            // If no parent, local = world
-            m_positionLocal = m_positionWorld;
-            m_rotationLocal = m_rotationWorld;
-        }
+        m_positionLocal = rhs.m_positionLocal;
+        m_rotationLocal = rhs.m_rotationLocal;
+        m_positionWorld = rhs.m_positionWorld;
+        m_rotationWorld = rhs.m_rotationWorld; // FIXED: was rhs.m_positionWorld
+        m_scale = rhs.m_scale;
+        m_parent = rhs.m_parent;
+        m_children = rhs.m_children;
     }
 
-    void sgTransform::AddChild(sgTransform* newChild)
+    sgTransform& sgTransform::operator=(const sgTransform& rhs)
     {
-        newChild->SetParent(this);
+        m_positionLocal = rhs.m_positionLocal;
+        m_rotationLocal = rhs.m_rotationLocal;
+        m_positionWorld = rhs.m_positionWorld;
+        m_rotationWorld = rhs.m_rotationWorld;
+        m_scale = rhs.m_scale;
+        m_parent = rhs.m_parent;
+        m_children = rhs.m_children;
+        return *this; // ADDED: missing return statement
     }
 
-    sgTransform::sgTransform(entt::entity _self) : self(_self)
+    sgTransform::sgTransform(sgTransform&& rhs) noexcept
     {
-        m_positionLocal = Vector3Zero();
-        m_positionWorld = Vector3Zero();
-        m_rotationWorld = Vector3Zero();
-        m_rotationLocal = Vector3Zero();
-        m_scale = Vector3{1, 1, 1};
+        m_positionLocal = rhs.m_positionLocal;
+        m_rotationLocal = rhs.m_rotationLocal;
+        m_positionWorld = rhs.m_positionWorld;
+        m_rotationWorld = rhs.m_rotationWorld;
+        m_scale = rhs.m_scale;
+        m_parent = rhs.m_parent;
+        m_children = std::move(rhs.m_children);
+    }
+
+    // ADDED: Missing move assignment operator
+    sgTransform& sgTransform::operator=(sgTransform&& rhs) noexcept
+    {
+        m_positionLocal = rhs.m_positionLocal;
+        m_rotationLocal = rhs.m_rotationLocal;
+        m_positionWorld = rhs.m_positionWorld;
+        m_rotationWorld = rhs.m_rotationWorld;
+        m_scale = rhs.m_scale;
+        m_parent = rhs.m_parent;
+        m_children = std::move(rhs.m_children);
+        return *this;
     }
 } // namespace sage

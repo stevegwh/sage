@@ -27,19 +27,16 @@ namespace sage
 
         void clearDebugData();
         void updateActor(
-            entt::entity entity,
-            MoveableActor& moveableActor,
-            sgTransform& transform,
-            Collideable& collideable) const;
-        void updateActor(entt::entity entity, MoveableActor& moveableActor, sgTransform& transform) const;
+            entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable& collideable);
+        void updateActor(entt::entity entity, MoveableActor& moveableActor, sgTransform& transform);
         [[nodiscard]] bool isNextPointOccupied(
             const MoveableActor& moveableActor, const Collideable& collideable) const;
         void recalculatePath(
             entt::entity entity, const MoveableActor& moveableActor, const Collideable& collideable) const;
-        static bool hasReachedNextPoint(const sgTransform& transform, const MoveableActor& moveableActor);
-        void handlePointReached(entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const;
-        void setPositionToGridCenter(sgTransform& transform, const MoveableActor& moveableActor) const;
-        static void handleDestinationReached(entt::entity entity, const MoveableActor& moveableActor);
+        bool hasReachedNextPoint(entt::entity entity, const MoveableActor& moveableActor) const;
+        void handlePointReached(entt::entity entity, MoveableActor& moveableActor);
+        void setPositionToGridCenter(entt::entity, const MoveableActor& moveableActor) const;
+        static void handleDestinationReached(entt::entity entity, MoveableActor& moveableActor);
         NavigationGridSquare* castCollisionRay(
             const GridSquare& actorIndex,
             const Vector3& direction,
@@ -47,8 +44,8 @@ namespace sage
             MoveableActor& moveableActor) const;
         void updateActorTransform(entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const;
         static void updateActorDirection(sgTransform& transform, const MoveableActor& moveableActor);
-        static void updateActorRotation(entt::entity entity, sgTransform& transform);
-        void updateActorWorldPosition(entt::entity entity, sgTransform& transform) const;
+        void updateActorRotation(entt::entity entity, const sgTransform& transform) const;
+        void updateActorWorldPosition(entt::entity entity) const;
 
       public:
         [[nodiscard]] bool CheckCollisionWithOtherMoveable(

@@ -48,9 +48,14 @@ namespace sage
         void Disable();
 
         Renderable() = default;
-        Renderable(Renderable& other) noexcept;
-        Renderable(const Renderable&) = delete;
-        Renderable& operator=(const Renderable&) = delete;
+
+        // Copy operations (deep copy)
+        Renderable(const Renderable& other);
+        Renderable& operator=(const Renderable& other);
+        // Move operations
+        Renderable(Renderable&& other) noexcept;
+        Renderable& operator=(Renderable&& other) noexcept;
+
         Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform);
         Renderable(Model _model, Matrix _localTransform);
         Renderable(ModelSafe _model, Matrix _localTransform);

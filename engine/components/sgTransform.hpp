@@ -13,20 +13,15 @@
 
 namespace sage
 {
-    // TODO: This should be more ECS-like
     class sgTransform
     {
-        entt::entity self;
         Vector3 m_positionWorld{};
         Vector3 m_positionLocal{};
         Vector3 m_rotationWorld{};
         Vector3 m_rotationLocal{};
-        Vector3 m_scale{};
-        sgTransform* m_parent = nullptr;
-        std::vector<sgTransform*> m_children;
-
-        void updateChildrenPos();
-        void updateChildrenRot();
+        Vector3 m_scale{1, 1, 1};
+        entt::entity m_parent = entt::null;
+        std::vector<entt::entity> m_children;
 
       public:
         Vector3 direction{};
@@ -55,22 +50,15 @@ namespace sage
         [[nodiscard]] const Vector3& GetWorldRot() const;
         [[nodiscard]] const Vector3& GetLocalRot() const;
         [[nodiscard]] const Vector3& GetScale() const;
-        void SetLocalPos(const Vector3& position);
-        void SetLocalRot(const Quaternion& rotation);
-        void SetLocalRot(const Vector3& rotation);
-        void SetPosition(const Vector3& position);
-        void SetRotation(const Vector3& rotation);
-        void SetScale(const Vector3& scale);
-        void SetScale(float scale);
-        void SetViaMatrix(Matrix mat);
+        entt::entity GetParent() const;
+        const std::vector<entt::entity>& GetChildren() const;
 
-        void SetParent(sgTransform* newParent);
-        void AddChild(sgTransform* newChild);
-        sgTransform* GetParent();
-        const std::vector<sgTransform*>& GetChildren();
+        sgTransform(const sgTransform& rhs);
+        sgTransform& operator=(const sgTransform& rhs);
+        sgTransform(sgTransform&& rhs) noexcept;
+        sgTransform& operator=(sgTransform&& rhs) noexcept;
+        sgTransform() = default;
 
-        explicit sgTransform(entt::entity _self);
-        // sgTransform(const sgTransform&) = delete;
-        // sgTransform& operator=(const sgTransform&) = delete;
+        friend class TransformSystem;
     };
 } // namespace sage

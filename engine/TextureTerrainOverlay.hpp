@@ -1,19 +1,22 @@
 #pragma once
 
-#include "components/NavigationGridSquare.hpp"
-#include "systems/NavigationGridSystem.hpp"
-
 #include "entt/entt.hpp"
 #include "raylib.h"
+
+#include "components/NavigationGridSquare.hpp"
+#include "systems/NavigationGridSystem.hpp"
 
 #include <string>
 
 namespace sage
 {
+    class EngineSystems;
+
     class TextureTerrainOverlay
     {
         entt::registry* registry;
-        NavigationGridSystem* navigationGridSystem;
+        EngineSystems* sys;
+
         Texture2D texture;
         const entt::entity entity;
         GridSquare lastHit{};
@@ -41,19 +44,19 @@ namespace sage
         ~TextureTerrainOverlay();
         TextureTerrainOverlay(
             entt::registry* _registry,
-            NavigationGridSystem* _navigationGridSystem,
+            EngineSystems* _engineSystems,
             Texture tex,
             Color _hint,
             const char* shaderPath);
         TextureTerrainOverlay(
             entt::registry* _registry,
-            NavigationGridSystem* _navigationGridSystem,
+            EngineSystems* _engineSystems,
             const std::string& assetId,
             Color _hint,
             const char* shaderPath);
         TextureTerrainOverlay(
             entt::registry* _registry,
-            NavigationGridSystem* _navigationGridSystem,
+            EngineSystems* _engineSystems,
             const std::string& assetId,
             Color _hint,
             Shader _shader);

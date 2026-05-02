@@ -24,13 +24,13 @@ namespace sage
         std::vector<std::pair<int, int>> directions = {
             {1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}};
         CollisionSystem* collisionSystem;
-        std::vector<std::vector<std::unique_ptr<NavigationGridSquare>>> gridSquares;
+        std::vector<std::vector<NavigationGridSquare>> gridSquares;
 
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> tracebackPath(
             const std::vector<std::vector<GridSquare>>& came_from,
             const GridSquare& start,
-            const GridSquare& finish) const;
+            const GridSquare& finish);
         //---------------------------------------------------------
         bool getExtents(entt::entity entity, GridSquare& extents) const;
         //---------------------------------------------------------
@@ -38,7 +38,7 @@ namespace sage
         //---------------------------------------------------------
         bool getExtents(Vector3 worldPos, GridSquare& extents) const;
         //---------------------------------------------------------
-        void calculateTerrainHeightAndNormals(const entt::entity& entity) const;
+        void calculateTerrainHeightAndNormals(const entt::entity& entity);
         //---------------------------------------------------------
         std::pair<float, float> getHeightBounds(float slices);
         //---------------------------------------------------------
@@ -90,13 +90,13 @@ namespace sage
             int currentCol,
             Vector2 direction,
             float distance,
-            std::vector<GridSquare>& debugLines) const;
+            std::vector<GridSquare>& debugLines);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> AStarPathfind(
             const entt::entity& entity,
             const Vector3& startPos,
             const Vector3& finishPos,
-            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT) const;
+            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> AStarPathfind(
             const entt::entity& entity,
@@ -104,32 +104,32 @@ namespace sage
             const Vector3& finishPos,
             const GridSquare& minRange,
             const GridSquare& maxRange,
-            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT) const;
+            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> BFSPathfind(
-            const entt::entity& entity, const Vector3& startPos, const Vector3& finishPos) const;
+            const entt::entity& entity, const Vector3& startPos, const Vector3& finishPos);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> BFSPathfind(
             const entt::entity& entity,
             const Vector3& startPos,
             const Vector3& finishPos,
             const GridSquare& minRange,
-            const GridSquare& maxRange) const;
+            const GridSquare& maxRange);
         //---------------------------------------------------------
-        const std::vector<std::vector<std::unique_ptr<NavigationGridSquare>>>& GetGridSquares();
+        const std::vector<std::vector<NavigationGridSquare>>& GetGridSquares();
         //---------------------------------------------------------
         [[nodiscard]] const NavigationGridSquare* GetGridSquare(int row, int col) const;
         //---------------------------------------------------------
-        void DrawDebugPathfinding(const GridSquare& minRange, const GridSquare& maxRange) const;
+        void DrawDebugPathfinding(const GridSquare& minRange, const GridSquare& maxRange);
         //---------------------------------------------------------
         void MarkSquareAreaOccupiedIfSteep(const BoundingBox& occupant, bool occupied);
         //---------------------------------------------------------
         void MarkSquareAreaOccupied(
-            const BoundingBox& occupant, bool occupied, entt::entity occupantEntity = entt::null) const;
+            const BoundingBox& occupant, bool occupied, entt::entity occupantEntity = entt::null);
         //---------------------------------------------------------
-        void MarkSquaresOccupied(const std::vector<GridSquare>& squares, bool occupied = true) const;
+        void MarkSquaresOccupied(const std::vector<GridSquare>& squares, bool occupied = true);
         //---------------------------------------------------------
-        void MarkSquaresDebug(const std::vector<GridSquare>& squares, Color color, bool occupied = true) const;
+        void MarkSquaresDebug(const std::vector<GridSquare>& squares, Color color, bool occupied = true);
         //---------------------------------------------------------
         [[nodiscard]] bool CheckWithinGridBounds(Vector3 worldPos) const;
         //---------------------------------------------------------

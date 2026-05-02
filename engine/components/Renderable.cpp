@@ -1,8 +1,8 @@
-#include "Renderable.hpp"
 //
 // Created by Steve Wheeler on 03/05/2024.
 //
 
+#include "Renderable.hpp"
 #include "engine/slib.hpp"
 
 #include <algorithm>
@@ -88,9 +88,9 @@ namespace sage
         active = false;
     }
 
-    Renderable::Renderable(Renderable& other) noexcept
-        : model(std::move(other.model)),
-          name(other.name),
+    // Copy constructor - manually copy ModelSafe fields
+    Renderable::Renderable(const Renderable& other)
+        : name(other.name),
           vanityName(other.vanityName),
           hint(other.hint),
           active(other.active),
@@ -98,7 +98,76 @@ namespace sage
           reqShaderUpdate(other.reqShaderUpdate),
           serializable(other.serializable)
     {
-        other.model.reset(); // Explicitly reset (though std::move already does this)
+        if (other.model)
+        {
+            // Create new ModelSafe and manually copy fields (as friend class)
+            model = std::make_unique<ModelSafe>();
+            model->rlmodel = other.model->rlmodel;
+            model->modelKey = other.model->modelKey;
+            model->deepCopy = other.model->deepCopy;
+        }
+    }
+
+    // Copy assignment operator - manually copy ModelSafe fields
+    Renderable& Renderable::operator=(const Renderable& other)
+    {
+        if (this != &other)
+        {
+            name = other.name;
+            vanityName = other.vanityName;
+            hint = other.hint;
+            active = other.active;
+            initialTransform = other.initialTransform;
+            reqShaderUpdate = other.reqShaderUpdate;
+            serializable = other.serializable;
+
+            if (other.model)
+            {
+                // Create new ModelSafe and manually copy fields (as friend class)
+                if (!model)
+                {
+                    model = std::make_unique<ModelSafe>();
+                }
+                model->rlmodel = other.model->rlmodel;
+                model->modelKey = other.model->modelKey;
+                model->deepCopy = other.model->deepCopy;
+            }
+            else
+            {
+                model.reset();
+            }
+        }
+        return *this;
+    }
+
+    // Move constructor
+    Renderable::Renderable(Renderable&& other) noexcept
+        : model(std::move(other.model)),
+          name(std::move(other.name)),
+          vanityName(std::move(other.vanityName)),
+          hint(other.hint),
+          active(other.active),
+          initialTransform(other.initialTransform),
+          reqShaderUpdate(std::move(other.reqShaderUpdate)),
+          serializable(other.serializable)
+    {
+    }
+
+    // Move assignment operator
+    Renderable& Renderable::operator=(Renderable&& other) noexcept
+    {
+        if (this != &other)
+        {
+            model = std::move(other.model);
+            name = std::move(other.name);
+            vanityName = std::move(other.vanityName);
+            hint = other.hint;
+            active = other.active;
+            initialTransform = other.initialTransform;
+            reqShaderUpdate = std::move(other.reqShaderUpdate);
+            serializable = other.serializable;
+        }
+        return *this;
     }
 
     Renderable::Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform)

@@ -19,7 +19,7 @@ namespace sage
 {
 
     /**
-     * Convenience class to wrap am entt view into a serializable collection (and back again)
+     * Convenience class to wrap an entt view into a serializable collection (and back again)
      * @tparam ViewName
      */
     template <typename ViewName>
@@ -31,7 +31,6 @@ namespace sage
         template <class Archive>
         void save(Archive& archive) const
         {
-
             std::vector<ViewName> components;
             for (const auto view = registry->view<ViewName>(); auto& entity : view)
             {

@@ -10,6 +10,7 @@
 #include "Cursor.hpp"
 #include "EngineSystems.hpp"
 #include "systems/NavigationGridSystem.hpp"
+#include "systems/TransformSystem.hpp"
 
 namespace sage
 {
@@ -40,8 +41,7 @@ namespace sage
         auto& renderable = registry->get<Renderable>(self);
         renderable.active = true;
         const auto dest = moveable.GetDestination();
-        auto& transform = registry->get<sgTransform>(self);
-        transform.SetPosition(dest);
+        sys->transformSystem->SetPosition(self, dest);
     }
 
     void CursorClickIndicator::onSelectedActorChanged(entt::entity, entt::entity current)
@@ -73,8 +73,7 @@ namespace sage
         float maxScale = 1.0f;
         float scale = minScale + normalizedScale * (maxScale - minScale);
 
-        auto& transform = registry->get<sgTransform>(self);
-        transform.SetScale(scale);
+        sys->transformSystem->SetScale(self, scale);
     }
 
     CursorClickIndicator::CursorClickIndicator(entt::registry* _registry, EngineSystems* _sys)
@@ -85,7 +84,7 @@ namespace sage
             [this](entt::entity prev, entt::entity current) { onSelectedActorChanged(prev, current); });
 
         // Init indicator graphics here
-        _registry->emplace<sgTransform>(self, self);
+        _registry->emplace<sgTransform>(self);
         auto model = LoadModelFromMesh(GenMeshSphere(1, 32, 32));
         ModelSafe sphere(model);
         auto& renderable =

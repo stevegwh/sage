@@ -38,8 +38,13 @@ namespace sage
         // Default constructor required for serialization, should *not* be used outside of this.
         Collideable() = default;
 
-        // Collideable(const Collideable&) = delete;
-        // Collideable& operator=(const Collideable&) = delete;
+        // Copy operations
+        Collideable(const Collideable& other);
+        Collideable& operator=(const Collideable& other);
+
+        // Move operations
+        Collideable(Collideable&& other) noexcept;
+        Collideable& operator=(Collideable&& other) noexcept;
 
         template <class Archive>
         void save(Archive& archive) const

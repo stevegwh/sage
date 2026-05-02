@@ -52,4 +52,63 @@ namespace sage
         transform.onPositionUpdate.Subscribe([this](entt::entity entity) { OnTransformUpdate(entity); });
         SetWorldBoundingBox(transform.GetMatrix());
     }
+
+    // Copy constructor
+    Collideable::Collideable(const Collideable& other)
+        : registry(other.registry),
+          active(other.active),
+          localBoundingBox(other.localBoundingBox),
+          worldBoundingBox(other.worldBoundingBox),
+          collisionLayer(other.collisionLayer),
+          debugDraw(other.debugDraw)
+    {
+        // Note: We don't copy event subscriptions - the new copy starts without subscriptions
+        // If you need to re-subscribe, that should be done explicitly after copying
+    }
+
+    // Copy assignment operator
+    Collideable& Collideable::operator=(const Collideable& other)
+    {
+        if (this != &other)
+        {
+            registry = other.registry;
+            active = other.active;
+            localBoundingBox = other.localBoundingBox;
+            worldBoundingBox = other.worldBoundingBox;
+            collisionLayer = other.collisionLayer;
+            debugDraw = other.debugDraw;
+            // Note: We don't copy event subscriptions
+        }
+        return *this;
+    }
+
+    // Move constructor
+    Collideable::Collideable(Collideable&& other) noexcept
+        : registry(other.registry),
+          active(other.active),
+          localBoundingBox(other.localBoundingBox),
+          worldBoundingBox(other.worldBoundingBox),
+          collisionLayer(other.collisionLayer),
+          debugDraw(other.debugDraw)
+    {
+        // Note: Event subscriptions are not transferred in move
+        other.registry = nullptr;
+    }
+
+    // Move assignment operator
+    Collideable& Collideable::operator=(Collideable&& other) noexcept
+    {
+        if (this != &other)
+        {
+            registry = other.registry;
+            active = other.active;
+            localBoundingBox = other.localBoundingBox;
+            worldBoundingBox = other.worldBoundingBox;
+            collisionLayer = other.collisionLayer;
+            debugDraw = other.debugDraw;
+
+            other.registry = nullptr;
+        }
+        return *this;
+    }
 } // namespace sage

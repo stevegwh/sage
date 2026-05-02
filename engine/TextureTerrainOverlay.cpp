@@ -1,6 +1,9 @@
 #include "TextureTerrainOverlay.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
+#include "EngineSystems.hpp"
+#include "systems/NavigationGridSystem.hpp"
+#include "systems/TransformSystem.hpp"
 
 namespace sage
 {
@@ -47,19 +50,19 @@ namespace sage
 
     void TextureTerrainOverlay::updateVertexData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const
     {
-        const auto& gridSquares = navigationGridSystem->GetGridSquares();
-        mesh.vertices[vertexIndex * 3] = gridSquares[gridRow][gridCol]->worldPosMin.x;
-        mesh.vertices[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->heightMap.GetHeight() +
+        const auto& gridSquares = sys->navigationGridSystem->GetGridSquares();
+        mesh.vertices[vertexIndex * 3] = gridSquares[gridRow][gridCol].worldPosMin.x;
+        mesh.vertices[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol].heightMap.GetHeight() +
                                              0.3; // Little buffer so the overlay doesn't blend into terrain
-        mesh.vertices[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol]->worldPosMin.z;
+        mesh.vertices[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol].worldPosMin.z;
     }
 
     void TextureTerrainOverlay::updateNormalData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const
     {
-        const auto& gridSquares = navigationGridSystem->GetGridSquares();
-        mesh.normals[vertexIndex * 3] = gridSquares[gridRow][gridCol]->heightMap.GetNormal().x;
-        mesh.normals[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol]->heightMap.GetNormal().y;
-        mesh.normals[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol]->heightMap.GetNormal().z;
+        const auto& gridSquares = sys->navigationGridSystem->GetGridSquares();
+        mesh.normals[vertexIndex * 3] = gridSquares[gridRow][gridCol].heightMap.GetNormal().x;
+        mesh.normals[vertexIndex * 3 + 1] = gridSquares[gridRow][gridCol].heightMap.GetNormal().y;
+        mesh.normals[vertexIndex * 3 + 2] = gridSquares[gridRow][gridCol].heightMap.GetNormal().z;
     }
 
     void TextureTerrainOverlay::updateTexCoordData(
@@ -145,29 +148,27 @@ namespace sage
         initialised = true;
         radius = _radius; // Should be in constructor
 
-        navigationGridSystem->WorldToGridSpace(startPos, lastHit);
+        sys->navigationGridSystem->WorldToGridSpace(startPos, lastHit);
         GridSquare minRange{}, maxRange{};
-        navigationGridSystem->GetGridRange(startPos, static_cast<int>(radius), minRange, maxRange);
+        sys->navigationGridSystem->GetGridRange(startPos, static_cast<int>(radius), minRange, maxRange);
         auto& renderable = registry->get<Renderable>(entity);
         renderable.SetModel(generateTerrainPolygon(minRange, maxRange));
 
         // Calculate the center of the mesh in world space
-        const auto& gridSquares = navigationGridSystem->GetGridSquares();
+        const auto& gridSquares = sys->navigationGridSystem->GetGridSquares();
         const Vector3 meshMin = {
-            gridSquares[minRange.row][minRange.col]->worldPosMin.x,
-            gridSquares[minRange.row][minRange.col]->heightMap.GetHeight(),
-            gridSquares[minRange.row][minRange.col]->worldPosMin.z};
+            gridSquares[minRange.row][minRange.col].worldPosMin.x,
+            gridSquares[minRange.row][minRange.col].heightMap.GetHeight(),
+            gridSquares[minRange.row][minRange.col].worldPosMin.z};
         const Vector3 meshMax = {
-            gridSquares[maxRange.row - 1][maxRange.col - 1]->worldPosMax.x,
-            gridSquares[maxRange.row - 1][maxRange.col - 1]->heightMap.GetHeight(),
-            gridSquares[maxRange.row - 1][maxRange.col - 1]->worldPosMax.z};
+            gridSquares[maxRange.row - 1][maxRange.col - 1].worldPosMax.x,
+            gridSquares[maxRange.row - 1][maxRange.col - 1].heightMap.GetHeight(),
+            gridSquares[maxRange.row - 1][maxRange.col - 1].worldPosMax.z};
         const Vector3 meshCenter = {(meshMin.x + meshMax.x) * 0.5f, 0, (meshMin.z + meshMax.z) * 0.5f};
 
         // Calculate the offset to center the mesh on the mouse position
         meshOffset = {startPos.x - meshCenter.x, 0, startPos.z - meshCenter.z};
-
-        auto& trans = registry->get<sgTransform>(entity);
-        trans.SetPosition(meshOffset);
+        sys->transformSystem->SetPosition(entity, meshOffset);
         renderable.GetModel()->SetTransform(MatrixIdentity());
     }
 
@@ -180,17 +181,15 @@ namespace sage
     {
         if (!m_active) return;
         GridSquare gridPos{};
-        navigationGridSystem->WorldToGridSpace(pos, gridPos);
+        sys->navigationGridSystem->WorldToGridSpace(pos, gridPos);
         if (lastHit == gridPos) return;
 
         lastHit = gridPos;
         GridSquare minRange{}, maxRange{};
-        navigationGridSystem->GetGridRange(pos, static_cast<int>(radius), minRange, maxRange);
+        sys->navigationGridSystem->GetGridRange(pos, static_cast<int>(radius), minRange, maxRange);
 
         updateTerrainPolygon(minRange, maxRange);
-
-        auto& trans = registry->get<sgTransform>(entity);
-        trans.SetPosition(meshOffset);
+        sys->transformSystem->SetPosition(entity, meshOffset);
     }
 
     TextureTerrainOverlay::~TextureTerrainOverlay()
@@ -201,15 +200,8 @@ namespace sage
     }
 
     TextureTerrainOverlay::TextureTerrainOverlay(
-        entt::registry* _registry,
-        NavigationGridSystem* _navigationGridSystem,
-        Texture tex,
-        Color _hint,
-        const char* shaderPath)
-        : registry(_registry),
-          navigationGridSystem(_navigationGridSystem),
-          texture(tex),
-          entity(_registry->create())
+        entt::registry* _registry, EngineSystems* _engineSystems, Texture tex, Color _hint, const char* shaderPath)
+        : registry(_registry), sys(_engineSystems), texture(tex), entity(_registry->create())
     {
         assert(shaderPath != nullptr);
 
@@ -220,18 +212,18 @@ namespace sage
         r.active = false;
         r.SetName("TextureTerrainOverlay");
         r.hint = _hint;
-        registry->emplace<sgTransform>(entity, entity);
+        registry->emplace<sgTransform>(entity);
         registry->emplace<RenderableDeferred>(entity);
     }
 
     TextureTerrainOverlay::TextureTerrainOverlay(
         entt::registry* _registry,
-        NavigationGridSystem* _navigationGridSystem,
+        EngineSystems* _engineSystems,
         const std::string& assetId,
         Color _hint,
         const char* shaderPath)
         : registry(_registry),
-          navigationGridSystem(_navigationGridSystem),
+          sys(_engineSystems),
           texture(ResourceManager::GetInstance().TextureLoad(assetId)),
           entity(_registry->create())
     {
@@ -244,18 +236,18 @@ namespace sage
         r.active = false;
         r.SetName("TextureTerrainOverlay");
         r.hint = _hint;
-        registry->emplace<sgTransform>(entity, entity);
+        registry->emplace<sgTransform>(entity);
         registry->emplace<RenderableDeferred>(entity);
     }
 
     TextureTerrainOverlay::TextureTerrainOverlay(
         entt::registry* _registry,
-        NavigationGridSystem* _navigationGridSystem,
+        EngineSystems* _engineSystems,
         const std::string& assetId,
         Color _hint,
         Shader _shader)
         : registry(_registry),
-          navigationGridSystem(_navigationGridSystem),
+          sys(_engineSystems),
           texture(ResourceManager::GetInstance().TextureLoad(assetId)),
           entity(_registry->create())
     {
@@ -267,7 +259,7 @@ namespace sage
         r.GetModel()->SetShader(_shader, 0);
         r.hint = _hint;
 
-        registry->emplace<sgTransform>(entity, entity);
+        registry->emplace<sgTransform>(entity);
         registry->emplace<RenderableDeferred>(entity);
     }
 

@@ -20,6 +20,7 @@
 #include "systems/RenderSystem.hpp"
 #include "systems/SpatialAudioSystem.hpp"
 #include "systems/TimerSystem.hpp"
+#include "systems/TransformSystem.hpp"
 #include "systems/UberShaderSystem.hpp"
 #include "UserInput.hpp"
 
@@ -30,6 +31,7 @@ namespace sage
         : registry(_registry),
           settings(_settings),
           audioManager(_audioManager),
+          transformSystem(std::make_unique<TransformSystem>(_registry)),
           // uiEngine(std::make_unique<GameUIEngine>(_registry, this)),
           userInput(std::make_unique<UserInput>(_keyMapping, _settings)),
           cursor(std::make_unique<Cursor>(_registry, this)),

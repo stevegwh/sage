@@ -10,6 +10,7 @@
 #include "NavigationGridSystem.hpp"
 #include "Serializer.hpp"
 #include "slib.hpp"
+#include "TransformSystem.hpp"
 
 #include <format>
 #include <ranges>
@@ -198,18 +199,18 @@ namespace sage
         PathfindToLocation(entity, moveableActor.GetDestination());
     }
 
-    bool ActorMovementSystem::hasReachedNextPoint(const sgTransform& transform, const MoveableActor& moveableActor)
+    bool ActorMovementSystem::hasReachedNextPoint(entt::entity entity, const MoveableActor& moveableActor) const
     {
+        const auto& transform = registry->get<sgTransform>(entity);
         // I do not believe that height should matter for this (could be very wrong)
         return Vector2Distance(
                    {moveableActor.path.front().x, moveableActor.path.front().z},
                    {transform.GetWorldPos().x, transform.GetWorldPos().z}) < 0.5f;
     }
 
-    void ActorMovementSystem::handlePointReached(
-        entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const
+    void ActorMovementSystem::handlePointReached(entt::entity entity, MoveableActor& moveableActor)
     {
-        setPositionToGridCenter(transform, moveableActor);
+        setPositionToGridCenter(entity, moveableActor);
         moveableActor.path.pop_front();
 
         if (moveableActor.path.empty())
@@ -219,17 +220,17 @@ namespace sage
     }
 
     void ActorMovementSystem::setPositionToGridCenter(
-        sgTransform& transform, const MoveableActor& moveableActor) const
+        entt::entity entity, const MoveableActor& moveableActor) const
     {
         // Set continuous pos to grid/discrete pos
         GridSquare targetGridPos{};
         sys->navigationGridSystem->WorldToGridSpace(moveableActor.path.front(), targetGridPos);
         const auto square = sys->navigationGridSystem->GetGridSquare(targetGridPos.row, targetGridPos.col);
-        transform.SetPosition({square->worldPosMin.x, square->heightMap.GetHeight(), square->worldPosMin.z});
+        sys->transformSystem->SetPosition(
+            entity, {square->worldPosMin.x, square->heightMap.GetHeight(), square->worldPosMin.z});
     }
 
-    void ActorMovementSystem::handleDestinationReached(
-        const entt::entity entity, const MoveableActor& moveableActor)
+    void ActorMovementSystem::handleDestinationReached(const entt::entity entity, MoveableActor& moveableActor)
     {
         moveableActor.onDestinationReached.Publish(entity);
     }
@@ -297,16 +298,17 @@ namespace sage
             Vector3Normalize(Vector3Subtract(moveableActor.path.front(), transform.GetWorldPos()));
     }
 
-    void ActorMovementSystem::updateActorRotation(entt::entity entity, sgTransform& transform)
+    void ActorMovementSystem::updateActorRotation(entt::entity entity, const sgTransform& transform) const
     {
         // Calculate rotation angle based on direction
         float angle = atan2f(transform.direction.x, transform.direction.z) * RAD2DEG;
-        transform.SetRotation({transform.GetWorldRot().x, angle, transform.GetWorldRot().z});
+        sys->transformSystem->SetRotation(entity, {transform.GetWorldRot().x, angle, transform.GetWorldRot().z});
     }
 
-    void ActorMovementSystem::updateActorWorldPosition(entt::entity entity, sgTransform& transform) const
+    void ActorMovementSystem::updateActorWorldPosition(entt::entity entity) const
     {
         GridSquare actorIndex{};
+        const auto& transform = registry->get<sgTransform>(entity);
         sys->navigationGridSystem->WorldToGridSpace(transform.GetWorldPos(), actorIndex);
         auto gridSquare = sys->navigationGridSystem->GetGridSquare(actorIndex.row, actorIndex.col);
         auto& moveable = registry->get<MoveableActor>(entity);
@@ -314,8 +316,7 @@ namespace sage
             transform.GetWorldPos().x + transform.direction.x * moveable.movementSpeed,
             gridSquare->heightMap.GetHeight(),
             transform.GetWorldPos().z + transform.direction.z * moveable.movementSpeed};
-
-        transform.SetPosition(newPos);
+        sys->transformSystem->SetPosition(entity, newPos);
     }
 
     void ActorMovementSystem::updateActorTransform(
@@ -323,11 +324,11 @@ namespace sage
     {
         updateActorDirection(transform, moveableActor);
         updateActorRotation(entity, transform);
-        updateActorWorldPosition(entity, transform);
+        updateActorWorldPosition(entity);
     }
 
     void ActorMovementSystem::updateActor(
-        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable& collideable) const
+        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable& collideable)
     {
         if (moveableActor.path.empty())
         {
@@ -342,9 +343,9 @@ namespace sage
             return;
         }
 
-        if (hasReachedNextPoint(transform, moveableActor))
+        if (hasReachedNextPoint(entity, moveableActor))
         {
-            handlePointReached(entity, transform, moveableActor);
+            handlePointReached(entity, moveableActor);
             return;
         }
 
@@ -356,16 +357,16 @@ namespace sage
     }
 
     void ActorMovementSystem::updateActor(
-        const entt::entity entity, MoveableActor& moveableActor, sgTransform& transform) const
+        const entt::entity entity, MoveableActor& moveableActor, sgTransform& transform)
     {
         if (moveableActor.path.empty())
         {
             return;
         }
 
-        if (hasReachedNextPoint(transform, moveableActor))
+        if (hasReachedNextPoint(entity, moveableActor))
         {
-            handlePointReached(entity, transform, moveableActor);
+            handlePointReached(entity, moveableActor);
             return;
         }
 

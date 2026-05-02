@@ -23,6 +23,7 @@ namespace sage
     class GameUIEngine;
 
     // Systems group
+    class TransformSystem;
     class RenderSystem;
     class CollisionSystem;
     class NavigationGridSystem;
@@ -50,6 +51,7 @@ namespace sage
         std::unique_ptr<Camera> camera;
         std::unique_ptr<LightManager> lightSubSystem;
 
+        std::unique_ptr<TransformSystem> transformSystem;
         std::unique_ptr<RenderSystem> renderSystem;
         std::unique_ptr<CollisionSystem> collisionSystem;
         std::unique_ptr<NavigationGridSystem> navigationGridSystem;

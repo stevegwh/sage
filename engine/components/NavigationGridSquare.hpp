@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "raylib.h"
-#include "raymath.h"
 #include "entt/entt.hpp"
+#include "raylib.h"
+#include <tuple>
 
 namespace sage
 {
@@ -57,12 +57,13 @@ namespace sage
             col += other.col;
         }
     };
-    
+
     class TerrainTile
     {
         float height = -1;
         Vector3 normal = Vector3{0, 1, 0};
-    public:
+
+      public:
         void Set(const float _height, const Vector3& _normal)
         {
             if (height == -1 || height < _height)
@@ -85,7 +86,7 @@ namespace sage
     };
     struct NavigationGridSquare
     {
-        TerrainTile heightMap {};
+        TerrainTile heightMap{};
         int pathfindingCost = 1;
         bool drawDebug = false;
         Color debugColor = RED;
@@ -106,5 +107,7 @@ namespace sage
               debugBox({fabsf(worldPosMax.x - worldPosMin.x), 0.1f, fabsf(worldPosMax.z - worldPosMin.z)})
         {
         }
+ // Used for vector resize
+        NavigationGridSquare() = default;
     };
 } // namespace sage
