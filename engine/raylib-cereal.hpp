@@ -238,23 +238,58 @@ void load(Archive& archive, Mesh& mesh)
     }
 };
 
+// Image is serialized PNG-encoded when its format is an 8-bit uncompressed layout
+// (the formats PNG can express), otherwise as raw pixel bytes. Encoded images are
+// dramatically smaller for typical color/icon textures; raw fallback handles
+// compressed/HDR/empty images. A boolean prefix tells the loader which form to expect.
 template <typename Archive>
 void save(Archive& archive, Image const& image)
 {
-    unsigned char* rlData = static_cast<unsigned char*>(image.data);
-    int len = GetPixelDataSize(image.width, image.height, image.format);
-    std::vector<unsigned char> data(rlData, rlData + len);
-    archive(data, image.format, image.height, image.width, image.mipmaps);
+    const bool canEncode = (image.data != nullptr) && image.width > 0 && image.height > 0 &&
+                           image.format >= PIXELFORMAT_UNCOMPRESSED_GRAYSCALE &&
+                           image.format <= PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+
+    if (canEncode)
+    {
+        int encodedSize = 0;
+        unsigned char* encoded = ExportImageToMemory(image, ".png", &encodedSize);
+        if (encoded != nullptr && encodedSize > 0)
+        {
+            std::vector<unsigned char> data(encoded, encoded + encodedSize);
+            MemFree(encoded);
+            bool isEncoded = true;
+            archive(isEncoded, data);
+            return;
+        }
+        if (encoded != nullptr) MemFree(encoded);
+        // Fall through to raw path on encode failure.
+    }
+
+    bool isEncoded = false;
+    int len = (image.data != nullptr) ? GetPixelDataSize(image.width, image.height, image.format) : 0;
+    std::vector<unsigned char> data(
+        static_cast<unsigned char*>(image.data), static_cast<unsigned char*>(image.data) + len);
+    archive(isEncoded, image.format, image.height, image.width, image.mipmaps, data);
 }
 
 template <typename Archive>
 void load(Archive& archive, Image& image)
 {
+    bool isEncoded = false;
+    archive(isEncoded);
+    if (isEncoded)
+    {
+        std::vector<unsigned char> data;
+        archive(data);
+        image = LoadImageFromMemory(".png", data.data(), static_cast<int>(data.size()));
+        assert(image.data != nullptr && "raylib-cereal: PNG decode failed (corrupt bin?)");
+        return;
+    }
     std::vector<unsigned char> data;
-    archive(data, image.format, image.height, image.width, image.mipmaps);
+    archive(image.format, image.height, image.width, image.mipmaps, data);
     int len = GetPixelDataSize(image.width, image.height, image.format);
     image.data = static_cast<unsigned char*>(RL_MALLOC(len * sizeof(unsigned char)));
-    std::memcpy(image.data, data.data(), len * sizeof(unsigned char));
+    if (len > 0) std::memcpy(image.data, data.data(), len * sizeof(unsigned char));
 }
 
 template <typename Archive>

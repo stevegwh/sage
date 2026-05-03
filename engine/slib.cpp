@@ -348,54 +348,27 @@ namespace sage
     {
         if (this != &other && deepCopy)
         {
-            // Clean up existing resources
-            UnloadModel(rlmodel);
+            // Materials are shared with ResourceManager::materialMap; sgUnloadModel
+            // frees mesh/bone allocations without touching individual materials.
+            sgUnloadModel(rlmodel);
 
-            // Move resources from other
             rlmodel = other.rlmodel;
             deepCopy = other.deepCopy;
             modelKey = other.modelKey;
 
-            // Reset the source object's model
             other.rlmodel = {};
         }
         return *this;
-    }
-
-    // Only needed if deep copying model's shaders
-    void ModelSafe::UnloadShaderLocs() const
-    {
-        // The shader program gets unloaded by the resource manager
-        for (int i = 0; i < rlmodel.materialCount; i++)
-        {
-            RL_FREE(rlmodel.materials[i].shader.locs);
-        }
-    }
-
-    void ModelSafe::UnloadMaterials() const
-    {
-        for (int i = 0; i < rlmodel.materialCount; ++i)
-        {
-            // Unload loaded texture maps (avoid unloading default texture, managed by raylib)
-            if (rlmodel.materials[i].maps != nullptr)
-            {
-                for (int j = 0; j < MAX_MATERIAL_MAPS; j++)
-                {
-                    if (rlmodel.materials[i].maps[j].texture.id != rlGetTextureIdDefault())
-                        rlUnloadTexture(rlmodel.materials[i].maps[j].texture.id);
-                }
-            }
-        }
     }
 
     ModelSafe::~ModelSafe()
     {
         if (deepCopy)
         {
-            // TODO: Surely this leaves a memory leak with materials if they are a deep copy?
-            // NB: Textures are currently shared between model copies (deep copies or not)
-            // this->UnloadMaterials();
-            UnloadModel(rlmodel);
+            // Materials are shared with ResourceManager::materialMap (singleton-owned);
+            // their lifetime is governed by ResourceManager::UnloadAll. sgUnloadModel
+            // frees only the per-instance mesh/bone arrays.
+            sgUnloadModel(rlmodel);
         }
     }
 
@@ -406,10 +379,6 @@ namespace sage
         {
             _model = {};
         }
-    }
-
-    ModelSafe::ModelSafe(const char* path, bool _memorySafe) : rlmodel(LoadModel(path)), deepCopy(_memorySafe)
-    {
     }
 
     std::string TitleCase(const std::string& A)

@@ -27,19 +27,22 @@ namespace sage
     {
         Model model;
         std::vector<std::string>
-            materialNames; // names of this mesh's materials (at the same index in model.materials)
+            materialNames;      // names of this mesh's materials (at the same index in model.materials)
+        std::string sourcePath; // path used by raylib LoadModel; required by GetModelDeepCopy at runtime
 
         template <class Archive>
         void save(Archive& archive) const
         {
-            archive(model, materialNames);
+            archive(model, materialNames, sourcePath);
         }
         template <class Archive>
         void load(Archive& archive)
         {
             std::vector<std::string> _materialNames;
-            archive(model, _materialNames);
-            materialNames = _materialNames;
+            std::string _sourcePath;
+            archive(model, _materialNames, _sourcePath);
+            materialNames = std::move(_materialNames);
+            sourcePath = std::move(_sourcePath);
         }
     };
 
@@ -61,8 +64,7 @@ namespace sage
         std::unordered_map<std::string, Sound> sfx;
 
         Shader gpuShaderLoad(const char* vs, const char* fs);
-        static void deepCopyModel(const Model& oldModel, Model& newModel);
-        static void deepCopyMesh(const Mesh& oldMesh, Mesh& mesh);
+        void dedupeAndShareMaterials(Model& model, std::vector<std::string>& materialNames);
         void init();
         void FontLoadFromFile(const std::string& path);
         void ImageLoadFromFile(const std::string& path);
@@ -88,7 +90,7 @@ namespace sage
         void ImageUnload(const std::string& key);
         [[nodiscard]] ImageSafe GetImage(const std::string& key);
         [[nodiscard]] ModelSafe GetModelCopy(const std::string& key);
-        [[nodiscard]] ModelSafe GetModelDeepCopy(const std::string& key) const;
+        [[nodiscard]] ModelSafe GetModelDeepCopy(const std::string& key);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount);
         void UnloadImages();
         void UnloadShaderFileText();

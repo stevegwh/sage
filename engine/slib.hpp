@@ -60,10 +60,7 @@ namespace sage
     {
         Model rlmodel{};
         std::string modelKey{}; // The key/path of the model in the ResourceManager
-        bool deepCopy = true;
-
-        void UnloadShaderLocs() const;
-        void UnloadMaterials() const;
+        bool deepCopy = true;   // Whether this model has any shared data with other models (materials, etc).
 
       public:
         [[nodiscard]] const Model& GetRlModel() const;
@@ -96,7 +93,6 @@ namespace sage
         ModelSafe& operator=(const ModelSafe&) = delete;
         ModelSafe(ModelSafe&& other) noexcept;
         ModelSafe& operator=(ModelSafe&& other) noexcept;
-        explicit ModelSafe(const char* path, bool _deepCopy = true);
         explicit ModelSafe(Model& _model, bool _deepCopy = true);
         ModelSafe() = default;
         ~ModelSafe();
@@ -109,6 +105,10 @@ namespace sage
         friend class RenderSystem;
         friend class ResourcePacker;
     };
+
+    // Frees model meshes/bones/bindPose without unloading individual materials.
+    // Use when materials are shared (e.g. owned by ResourceManager::materialMap).
+    void sgUnloadModel(Model model);
 
     std::string TitleCase(const std::string& A);
     bool AlmostEquals(Vector3 a, Vector3 b);

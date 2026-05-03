@@ -53,7 +53,6 @@ namespace sage
         SetWorldBoundingBox(transform.GetMatrix());
     }
 
-    // Copy constructor
     Collideable::Collideable(const Collideable& other)
         : registry(other.registry),
           active(other.active),
@@ -65,8 +64,6 @@ namespace sage
         // Note: We don't copy event subscriptions - the new copy starts without subscriptions
         // If you need to re-subscribe, that should be done explicitly after copying
     }
-
-    // Copy assignment operator
     Collideable& Collideable::operator=(const Collideable& other)
     {
         if (this != &other)
@@ -82,7 +79,6 @@ namespace sage
         return *this;
     }
 
-    // Move constructor
     Collideable::Collideable(Collideable&& other) noexcept
         : registry(other.registry),
           active(other.active),
@@ -95,7 +91,6 @@ namespace sage
         other.registry = nullptr;
     }
 
-    // Move assignment operator
     Collideable& Collideable::operator=(Collideable&& other) noexcept
     {
         if (this != &other)

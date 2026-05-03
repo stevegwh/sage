@@ -15,44 +15,33 @@ namespace sage::serializer
     void LoadAssetBinFile(entt::registry* destination, const char* path)
     {
         assert(destination != nullptr);
-
         std::cout << "START: Loading asset bin." << std::endl;
 
-        using namespace entt::literals;
-        std::ifstream storage(path, std::ios::binary);
-        if (!storage.is_open())
-        {
-            std::cerr << "ERROR: Unable to open file for reading." << std::endl;
-            exit(1);
-        }
+        ReadCompressedBinary(
+            path, kAssetBinMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
+                input(ResourceManager::GetInstance());
 
-        {
-            cereal::BinaryInputArchive input(storage);
-
-            input(ResourceManager::GetInstance());
-
-            // Not necessary for asset bin?
-            while (storage.peek() != EOF)
-            {
-                entity entityId{}; // ignore this
-                auto entt = destination->create();
-                auto& transform = destination->emplace<sgTransform>(entt);
-                auto& collideable = destination->emplace<Collideable>(entt);
-                auto& renderable = destination->emplace<Renderable>(entt);
-
-                try
+                // Not necessary for asset bin?
+                while (stream.peek() != EOF)
                 {
-                    input(entityId, transform, collideable, renderable);
-                }
-                catch (const cereal::Exception& e)
-                {
-                    std::cerr << "ERROR: Serialization error: " << e.what() << std::endl;
-                    break;
-                }
-            }
-        }
+                    entity entityId{};
+                    auto entt = destination->create();
+                    auto& transform = destination->emplace<sgTransform>(entt);
+                    auto& collideable = destination->emplace<Collideable>(entt);
+                    auto& renderable = destination->emplace<Renderable>(entt);
 
-        storage.close();
+                    try
+                    {
+                        input(entityId, transform, collideable, renderable);
+                    }
+                    catch (const cereal::Exception& e)
+                    {
+                        std::cerr << "ERROR: Serialization error: " << e.what() << std::endl;
+                        break;
+                    }
+                }
+            });
+
         std::cout << "FINISH: Loading asset bin." << std::endl;
     }
 } // namespace sage::serializer

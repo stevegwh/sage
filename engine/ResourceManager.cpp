@@ -36,170 +36,43 @@ namespace sage
         return shaders[concat];
     }
 
-    void ResourceManager::deepCopyModel(const Model& oldModel, Model& model)
+    // Replaces a freshly-loaded model's materials with shared singletons in materialMap.
+    // raylib-allocated materials that get displaced are released via UnloadMaterial.
+    // Materials whose names are not yet pooled are donated to materialMap (first-write wins).
+    void ResourceManager::dedupeAndShareMaterials(Model& model, std::vector<std::string>& materialNames)
     {
-        model.meshCount = oldModel.meshCount;
-        model.materialCount = oldModel.materialCount;
-        model.boneCount = oldModel.boneCount;
-        model.meshes = static_cast<Mesh*>(RL_CALLOC(model.meshCount, sizeof(Mesh)));
-        model.bones = static_cast<BoneInfo*>(RL_MALLOC(model.boneCount * sizeof(BoneInfo)));
-        model.bindPose = static_cast<Transform*>(RL_MALLOC(model.boneCount * sizeof(Transform)));
-
-        for (size_t i = 0; i < model.meshCount; ++i)
+        if (materialNames.empty())
         {
-            deepCopyMesh(oldModel.meshes[i], model.meshes[i]);
-        }
-
-        if (model.materialCount == 0)
-        {
-            // TRACELOG(LOG_WARNING, "MATERIAL: [%s] Failed to load model material data,
-            // default to white material", fileName);
-
-            model.materialCount = 1;
-            model.materials = static_cast<Material*>(RL_CALLOC(model.materialCount, sizeof(Material)));
-            model.materials[0] = LoadMaterialDefault();
-
-            if (model.meshMaterial == nullptr)
-                model.meshMaterial = static_cast<int*>(RL_CALLOC(model.meshCount, sizeof(int)));
-        }
-        else
-        {
-            model.materials = static_cast<Material*>(RL_CALLOC(model.materialCount, sizeof(Material)));
-            model.meshMaterial = static_cast<int*>(RL_CALLOC(model.meshCount, sizeof(int)));
-
-            for (size_t i = 0; i < model.materialCount; ++i)
+            materialNames.emplace_back("Default");
+            if (!materialMap.contains("Default"))
             {
-                model.materials[i] = oldModel.materials[i];
-                model.materials[i].shader = oldModel.materials[i].shader;
-
-                // // NB: If wanting to deep copy the shader, you MUST deallocate shader.locs in the destructor.
-                // // Deep copy shader locs
-                // model.materials[i].shader.locs = (int*)RL_MALLOC(RL_MAX_SHADER_LOCATIONS * sizeof(int));
-                // memcpy(
-                //     model.materials[i].shader.locs,
-                //     oldModel.materials[i].shader.locs,
-                //     RL_MAX_SHADER_LOCATIONS * sizeof(int));
-
-                // Shallow copy shader locs
-                model.materials[i].shader.locs = oldModel.materials[i].shader.locs;
-
-                // Deep copy maps
-                model.materials[i].maps =
-                    static_cast<MaterialMap*>(RL_MALLOC(MAX_MATERIAL_MAPS * sizeof(MaterialMap)));
-                std::memcpy(
-                    model.materials[i].maps, oldModel.materials[i].maps, MAX_MATERIAL_MAPS * sizeof(MaterialMap));
-
-                // TODO: Does not set a new texture id, causing issues when freeing it in ModelSafe
-                // See "LoadTextureFromImage" and raylib-cereal.
-                // Consider if you really want a new texture per model or if "deep copy" is unnecessary
-                // I think a shallow copy but new animVertices and animNormals would be fine.
-
-                // Copy params
-                std::memcpy(model.materials[i].params, oldModel.materials[i].params, 4 * sizeof(float));
+                materialMap.emplace("Default", LoadMaterialDefault());
             }
-
-            for (size_t i = 0; i < model.meshCount; ++i)
+            // raylib's LoadModel always allocates at least one material slot; release the
+            // freshly-loaded copy before swapping in the shared singleton.
+            if (model.materialCount > 0)
             {
-                model.meshMaterial[i] = oldModel.meshMaterial[i];
+                UnloadMaterial(model.materials[0]);
+            }
+            model.materials[0] = materialMap.at("Default");
+            return;
+        }
+
+        for (unsigned int i = 0; i < materialNames.size(); ++i)
+        {
+            const auto& name = materialNames[i];
+            if (!materialMap.contains(name))
+            {
+                // First sighting of this name: donate the freshly-loaded material to the shared pool.
+                materialMap[name] = model.materials[i];
+            }
+            else
+            {
+                // Already pooled: release raylib's freshly-allocated copy, swap in the shared one.
+                UnloadMaterial(model.materials[i]);
+                model.materials[i] = materialMap.at(name);
             }
         }
-
-        for (size_t i = 0; i < model.boneCount; ++i)
-        {
-            model.bones[i] = oldModel.bones[i];
-        }
-        for (size_t i = 0; i < model.boneCount; ++i)
-        {
-            model.bindPose[i] = oldModel.bindPose[i];
-        }
-
-        // Below taken from raylib's LoadModel().
-        model.transform = MatrixIdentity();
-        if ((model.meshCount != 0) && (model.meshes != nullptr))
-        {
-            // Upload vertex data to GPU (static meshes)
-            for (int i = 0; i < model.meshCount; i++)
-            {
-                UploadMesh(&model.meshes[i], false);
-            }
-        }
-        // else TRACELOG(LOG_WARNING, "MESH: [%s] Failed to load model mesh(es) data",
-        // "Cereal Model Import");
-    }
-
-    void ResourceManager::deepCopyMesh(const Mesh& oldMesh, Mesh& mesh)
-    {
-        mesh.vertexCount = oldMesh.vertexCount;
-        mesh.triangleCount = oldMesh.triangleCount;
-
-        // Copy basic vertex data
-        mesh.vertices = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 3 * sizeof(float)));
-        memcpy(mesh.vertices, oldMesh.vertices, mesh.vertexCount * 3 * sizeof(float));
-
-        if (oldMesh.texcoords)
-        {
-            mesh.texcoords = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 2 * sizeof(float)));
-            memcpy(mesh.texcoords, oldMesh.texcoords, mesh.vertexCount * 2 * sizeof(float));
-        }
-        if (oldMesh.texcoords2)
-        {
-            mesh.texcoords2 = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 2 * sizeof(float)));
-            memcpy(mesh.texcoords2, oldMesh.texcoords2, mesh.vertexCount * 2 * sizeof(float));
-        }
-        if (oldMesh.normals)
-        {
-            mesh.normals = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 3 * sizeof(float)));
-            memcpy(mesh.normals, oldMesh.normals, mesh.vertexCount * 3 * sizeof(float));
-        }
-        if (oldMesh.tangents)
-        {
-            mesh.tangents = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 4 * sizeof(float)));
-            memcpy(mesh.tangents, oldMesh.tangents, mesh.vertexCount * 4 * sizeof(float));
-        }
-        if (oldMesh.colors)
-        {
-            mesh.colors = static_cast<unsigned char*>(RL_MALLOC(mesh.vertexCount * 4 * sizeof(unsigned char)));
-            memcpy(mesh.colors, oldMesh.colors, mesh.vertexCount * 4 * sizeof(unsigned char));
-        }
-        if (oldMesh.indices)
-        {
-            mesh.indices =
-                static_cast<unsigned short*>(RL_MALLOC(mesh.triangleCount * 3 * sizeof(unsigned short)));
-            memcpy(mesh.indices, oldMesh.indices, mesh.triangleCount * 3 * sizeof(unsigned short));
-        }
-
-        if (oldMesh.animVertices)
-        {
-            mesh.animVertices = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 3 * sizeof(float)));
-            memcpy(mesh.animVertices, oldMesh.vertices, mesh.vertexCount * 3 * sizeof(float));
-        }
-        if (oldMesh.animNormals)
-        {
-            mesh.animNormals = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 3 * sizeof(float)));
-            memcpy(mesh.animNormals, oldMesh.normals, mesh.vertexCount * 3 * sizeof(float));
-        }
-        if (oldMesh.boneIds)
-        {
-            mesh.boneIds = static_cast<unsigned char*>(RL_MALLOC(mesh.vertexCount * 4 * sizeof(unsigned char)));
-            memcpy(mesh.boneIds, oldMesh.boneIds, mesh.vertexCount * 4 * sizeof(unsigned char));
-        }
-        if (oldMesh.boneWeights)
-        {
-            mesh.boneWeights = static_cast<float*>(RL_MALLOC(mesh.vertexCount * 4 * sizeof(float)));
-            memcpy(mesh.boneWeights, oldMesh.boneWeights, mesh.vertexCount * 4 * sizeof(float));
-        }
-        mesh.boneCount = oldMesh.boneCount;
-        if (oldMesh.boneMatrices)
-        {
-            mesh.boneMatrices = static_cast<Matrix*>(RL_CALLOC(mesh.boneCount, sizeof(Matrix)));
-            for (int j = 0; j < mesh.boneCount; j++)
-            {
-                mesh.boneMatrices[j] = MatrixIdentity();
-                // Gets updated per animation, no need to copy info over.
-            }
-        }
-
-        mesh.vaoId = 0; // Default value (ensures it gets uploaded to gpu)
     }
 
     Music ResourceManager::GetMusic(const std::string& path)
@@ -374,42 +247,13 @@ namespace sage
     void ResourceManager::ModelLoadFromFile(const std::string& path, const std::string& key)
     {
         assert(!key.empty());
-        if (!modelCopies.contains(key))
-        {
-            assert(FileExists(path.c_str()));
+        if (modelCopies.contains(key)) return;
+        assert(FileExists(path.c_str()));
 
-            auto materialNames = GetMaterialNames(path.c_str());
-            Model model = LoadModel(path.c_str());
-
-            if (materialNames.empty())
-            {
-                // If no materials loaded, link the default one.
-                materialNames.emplace_back("Default");
-                if (!materialMap.contains("Default"))
-                {
-                    materialMap.emplace("Default", LoadMaterialDefault());
-                }
-                model.materials[0] = materialMap.at("Default");
-            }
-            else
-            {
-                for (unsigned int i = 0; i < materialNames.size(); ++i)
-                {
-                    const auto& mat = materialNames[i];
-
-                    if (!materialMap.contains(mat))
-                    {
-                        materialMap[mat] = model.materials[i];
-                    }
-                    else
-                    {
-                        UnloadMaterial(model.materials[i]);
-                        model.materials[i] = materialMap.at(mat);
-                    }
-                }
-            }
-            modelCopies.emplace(key, std::move(ModelInfo{model, materialNames}));
-        }
+        auto materialNames = GetMaterialNames(path.c_str());
+        Model model = LoadModel(path.c_str());
+        dedupeAndShareMaterials(model, materialNames);
+        modelCopies.emplace(key, ModelInfo{model, std::move(materialNames), path});
     }
 
     void ResourceManager::StoreModel(const ModelInfo& modelInfo, const std::string& key)
@@ -433,22 +277,27 @@ namespace sage
     }
 
     /**
-     * @brief Creates a deep copy of the loaded model. Cuts down model loading times as
-     * it's faster copying buffers rather than reading/parsing model files.
-     * @param key the *key* of the model, not its path. This is either an alias defined in the JSON file, or the
-     * mesh name in Blender minus its format extension
-     * @return
+     * @brief Returns a per-instance Model by re-loading from disk via raylib's public API.
+     * Used by animated entities (each needs its own animVertices/animNormals/boneMatrices).
+     * Materials are swapped to shared singletons in materialMap so the new instance does
+     * not own its materials. The returned ModelSafe's destructor frees only mesh/bone data.
+     * @param key the *key* of the model, not its path. Must have been registered via
+     * ModelLoadFromFile (which records sourcePath).
      */
-    ModelSafe ResourceManager::GetModelDeepCopy(const std::string& key) const
+    ModelSafe ResourceManager::GetModelDeepCopy(const std::string& key)
     {
-        // TODO: Unsure if deep copy is ever really necessary.
-        // For animated models, I believe all that's needed is to shallow copy the mesh minus
-        // animVertices/animNormals. So, allocate memory for new meshes, shallow copy the majority of its data, but
-        // allocate and point to new animVertices/animNormals arrays
         assert(modelCopies.contains(key));
-        Model model = modelCopies.at(key).model;
-        deepCopyModel(modelCopies.at(key).model, model);
-        return ModelSafe(model);
+        const auto& info = modelCopies.at(key);
+        assert(!info.sourcePath.empty() && "GetModelDeepCopy: sourcePath missing (re-pack assets)");
+        assert(FileExists(info.sourcePath.c_str()) && "GetModelDeepCopy: source file missing at runtime");
+
+        Model model = LoadModel(info.sourcePath.c_str());
+        auto materialNames = info.materialNames;
+        dedupeAndShareMaterials(model, materialNames);
+
+        ModelSafe safe(model, /*deepCopy=*/true);
+        safe.SetKey(key);
+        return safe;
     }
 
     void ResourceManager::ModelAnimationLoadFromFile(const std::string& path)
@@ -471,8 +320,13 @@ namespace sage
 
     ModelAnimation* ResourceManager::GetModelAnimation(const std::string& key, int* animsCount)
     {
-        assert(modelAnimations.contains(key));
-        const auto& pair = modelAnimations[key];
+        if (!modelAnimations.contains(key))
+        {
+            TraceLog(
+                LOG_FATAL, "ResourceManager::GetModelAnimation: animation '%s' was not pre-loaded.", key.c_str());
+            assert(false && "missing model animation");
+        }
+        const auto& pair = modelAnimations.at(key);
         *animsCount = pair.second;
         return pair.first;
     }

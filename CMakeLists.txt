@@ -14,6 +14,10 @@ FetchContent_MakeAvailable(entt)
 
 set(PLATFORM "Desktop" CACHE STRING "" FORCE)
 add_subdirectory(vendor/raylib)
+# raylib's DecompressData() default-caps output at 64 MiB (rcore.c). Our packed assets
+# (LoadAssetBinFile) decompress well above that. Bumping the cap; the buffer is
+# transient — raylib realloc()s it down to the actual size right after sinflate returns.
+target_compile_definitions(raylib PRIVATE MAX_DECOMPRESSION_SIZE=512)
 include_directories(vendor)
 include_directories(vendor/magic_enum)
 include_directories(vendor/imgui)
