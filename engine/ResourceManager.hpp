@@ -29,6 +29,9 @@ namespace sage
         std::vector<std::string>
             materialNames;      // names of this mesh's materials (at the same index in model.materials)
         std::string sourcePath; // path used by raylib LoadModel; required by GetModelDeepCopy at runtime
+        // True when this entry's materials are NOT shared with materialMap (i.e. it's a deep-copy
+        // entry created by GetModelDeepCopy). UnloadAll / ReleaseDeepCopy must UnloadMaterial them.
+        bool privateMaterials = false;
 
         template <class Archive>
         void save(Archive& archive) const
@@ -90,7 +93,13 @@ namespace sage
         void ImageUnload(const std::string& key);
         [[nodiscard]] ImageSafe GetImage(const std::string& key);
         [[nodiscard]] ModelSafe GetModelCopy(const std::string& key);
-        [[nodiscard]] ModelSafe GetModelDeepCopy(const std::string& key);
+        // Creates a unique entry under dstKey by re-loading the model from disk via the
+        // src entry's sourcePath. Materials are NOT shared with materialMap — the deep
+        // copy owns them privately, so mutations on the returned ModelSafeUnique are
+        // isolated. The entry is released automatically when the returned handle is
+        // destroyed (or via ReleaseDeepCopy).
+        [[nodiscard]] ModelSafeUnique GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey);
+        void ReleaseDeepCopy(const std::string& dstKey);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount);
         void UnloadImages();
         void UnloadShaderFileText();

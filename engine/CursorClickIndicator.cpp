@@ -86,7 +86,7 @@ namespace sage
         // Init indicator graphics here
         _registry->emplace<sgTransform>(self);
         auto model = LoadModelFromMesh(GenMeshSphere(1, 32, 32));
-        ModelSafe sphere(model);
+        ModelSafeUnique sphere(model);
         auto& renderable =
             _registry->emplace<Renderable>(self, std::move(sphere), MatrixIdentity()); // requires model etc.
         renderable.hint = GREEN;

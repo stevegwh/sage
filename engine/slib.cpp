@@ -292,22 +292,8 @@ namespace sage
         rlmodel.transform = trans;
     }
 
-    void ModelSafe::SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const
-    {
-        // TODO: Probably should have a ModelSafeCopy and ModelSafeDeep class.
-        assert(deepCopy);
-        rlmodel.materials[materialIdx].maps[mapIdx].texture = texture;
-    }
-
-    void ModelSafe::SetMaterial(unsigned int idx, Material mat) const
-    {
-        assert(deepCopy);
-        rlmodel.materials[idx] = mat;
-    }
-
     Shader ModelSafe::GetShader(int materialIdx) const
     {
-        assert(deepCopy);
         assert(materialIdx < rlmodel.materialCount);
         return rlmodel.materials[materialIdx].shader;
     }
@@ -315,6 +301,9 @@ namespace sage
     void ModelSafe::SetShader(Shader shader, int materialIdx) const
     {
         assert(materialIdx < rlmodel.materialCount);
+        // Material is a struct copy in materials[i]; assigning .shader (a value-typed
+        // Shader sub-struct) only mutates this entry, not anything else sharing the
+        // material name in ResourceManager::materialMap.
         rlmodel.materials[materialIdx].shader = shader;
     }
 
@@ -336,48 +325,82 @@ namespace sage
         return modelKey;
     }
 
-    ModelSafe::ModelSafe(ModelSafe&& other) noexcept : rlmodel(other.rlmodel)
+    ModelSafe::ModelSafe(ModelSafe&& other) noexcept : rlmodel(other.rlmodel), modelKey(std::move(other.modelKey))
     {
-        // Reset the source object's model to prevent double deletion
-        deepCopy = other.deepCopy;
-        modelKey = other.modelKey;
         other.rlmodel = {};
     }
 
     ModelSafe& ModelSafe::operator=(ModelSafe&& other) noexcept
     {
-        if (this != &other && deepCopy)
+        if (this != &other)
         {
-            // Materials are shared with ResourceManager::materialMap; sgUnloadModel
-            // frees mesh/bone allocations without touching individual materials.
-            sgUnloadModel(rlmodel);
-
             rlmodel = other.rlmodel;
-            deepCopy = other.deepCopy;
-            modelKey = other.modelKey;
-
+            modelKey = std::move(other.modelKey);
             other.rlmodel = {};
         }
         return *this;
     }
 
-    ModelSafe::~ModelSafe()
+    void ModelSafeUnique::SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const
     {
-        if (deepCopy)
-        {
-            // Materials are shared with ResourceManager::materialMap (singleton-owned);
-            // their lifetime is governed by ResourceManager::UnloadAll. sgUnloadModel
-            // frees only the per-instance mesh/bone arrays.
-            sgUnloadModel(rlmodel);
-        }
+        rlmodel.materials[materialIdx].maps[mapIdx].texture = texture;
     }
 
-    ModelSafe::ModelSafe(Model& _model, bool _memorySafe) : rlmodel(_model)
+    void ModelSafeUnique::SetMaterial(unsigned int idx, Material mat) const
     {
-        deepCopy = _memorySafe;
-        if (_memorySafe)
+        rlmodel.materials[idx] = mat;
+    }
+
+    ModelSafeUnique::ModelSafeUnique(ModelSafeUnique&& other) noexcept : ModelSafe(std::move(other))
+    {
+        rmTracked = other.rmTracked;
+        other.rmTracked = false;
+    }
+
+    ModelSafeUnique& ModelSafeUnique::operator=(ModelSafeUnique&& other) noexcept
+    {
+        if (this != &other)
         {
-            _model = {};
+            // Release whatever we currently hold first.
+            this->~ModelSafeUnique();
+            new (this) ModelSafeUnique(std::move(other));
+        }
+        return *this;
+    }
+
+    ModelSafeUnique::ModelSafeUnique(Model& rawModel)
+    {
+        rlmodel = rawModel;
+        rmTracked = false;
+        rawModel = {};
+    }
+
+    ModelSafeUnique::~ModelSafeUnique()
+    {
+        if (rlmodel.meshCount == 0 && rlmodel.materialCount == 0) return;
+
+        if (rmTracked)
+        {
+            ResourceManager::GetInstance().ReleaseDeepCopy(modelKey);
+        }
+        else
+        {
+            // Procedural Model: free the per-material maps allocations made by raylib's
+            // LoadModelFromMesh / LoadMaterialDefault, but don't UnloadMaterial — the
+            // textures and shaders inside are typically cached via ResourceManager
+            // (TextureLoad / ShaderLoad) and unloading them here would free GPU handles
+            // still in use by other entries.
+            for (int i = 0; i < rlmodel.materialCount; ++i)
+            {
+                RL_FREE(rlmodel.materials[i].maps);
+            }
+            for (int i = 0; i < rlmodel.meshCount; i++)
+                UnloadMesh(rlmodel.meshes[i]);
+            RL_FREE(rlmodel.meshes);
+            RL_FREE(rlmodel.materials);
+            RL_FREE(rlmodel.meshMaterial);
+            RL_FREE(rlmodel.bones);
+            RL_FREE(rlmodel.bindPose);
         }
     }
 

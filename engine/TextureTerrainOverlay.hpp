@@ -26,7 +26,7 @@ namespace sage
         float radius{};
 
         void updateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
-        ModelSafe generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
+        ModelSafeUnique generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
         void updateMeshData(Mesh& mesh, const GridSquare& minRange, const GridSquare& maxRange) const;
         Mesh createInitialMesh(const GridSquare& minRange, const GridSquare& maxRange) const;
         void updateVertexData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const;

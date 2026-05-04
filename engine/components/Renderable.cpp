@@ -62,20 +62,17 @@ namespace sage
 
     void Renderable::SetModel(Model _model)
     {
-        if (model)
-        {
-            model.reset();
-        }
-        model = std::make_unique<ModelSafe>(_model);
+        model = std::make_unique<ModelSafeUnique>(_model);
     }
 
     void Renderable::SetModel(ModelSafe _model)
     {
-        if (model)
-        {
-            model.reset();
-        }
         model = std::make_unique<ModelSafe>(std::move(_model));
+    }
+
+    void Renderable::SetModel(ModelSafeUnique _model)
+    {
+        model = std::make_unique<ModelSafeUnique>(std::move(_model));
     }
 
     void Renderable::Enable()
@@ -88,7 +85,9 @@ namespace sage
         active = false;
     }
 
-    // Copy constructor - manually copy ModelSafe fields
+    // Copy constructor — only meaningful when the source holds a shared ModelSafe.
+    // Copying a Renderable that holds a ModelSafeUnique would either double-release
+    // the deep-copy entry or duplicate procedural ownership, neither of which is sound.
     Renderable::Renderable(const Renderable& other)
         : name(other.name),
           vanityName(other.vanityName),
@@ -100,15 +99,15 @@ namespace sage
     {
         if (other.model)
         {
-            // Create new ModelSafe and manually copy fields (as friend class)
+            assert(
+                dynamic_cast<ModelSafeUnique*>(other.model.get()) == nullptr &&
+                "Renderable copy is only valid for shared (non-unique) models");
             model = std::make_unique<ModelSafe>();
             model->rlmodel = other.model->rlmodel;
             model->modelKey = other.model->modelKey;
-            model->deepCopy = other.model->deepCopy;
         }
     }
 
-    // Copy assignment operator - manually copy ModelSafe fields
     Renderable& Renderable::operator=(const Renderable& other)
     {
         if (this != &other)
@@ -123,14 +122,12 @@ namespace sage
 
             if (other.model)
             {
-                // Create new ModelSafe and manually copy fields (as friend class)
-                if (!model)
-                {
-                    model = std::make_unique<ModelSafe>();
-                }
+                assert(
+                    dynamic_cast<ModelSafeUnique*>(other.model.get()) == nullptr &&
+                    "Renderable copy is only valid for shared (non-unique) models");
+                model = std::make_unique<ModelSafe>();
                 model->rlmodel = other.model->rlmodel;
                 model->modelKey = other.model->modelKey;
-                model->deepCopy = other.model->deepCopy;
             }
             else
             {
@@ -177,13 +174,19 @@ namespace sage
     }
 
     Renderable::Renderable(Model _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafe>(_model)), initialTransform(_localTransform)
+        : model(std::make_unique<ModelSafeUnique>(_model)), initialTransform(_localTransform)
     {
         model->SetTransform(_localTransform);
     }
 
     Renderable::Renderable(ModelSafe _model, Matrix _localTransform)
         : model(std::make_unique<ModelSafe>(std::move(_model))), initialTransform(_localTransform)
+    {
+        model->SetTransform(_localTransform);
+    }
+
+    Renderable::Renderable(ModelSafeUnique _model, Matrix _localTransform)
+        : model(std::make_unique<ModelSafeUnique>(std::move(_model))), initialTransform(_localTransform)
     {
         model->SetTransform(_localTransform);
     }

@@ -47,20 +47,30 @@ namespace sage
         };
     };
 
-    // Allowed unsafe access to model
-    class Renderable;            // Forward dec for friend (Needed for serialisation)
-    class ResourceManager;       // Forward dec for friend (Needs friend due to deep copy (could move that here))
-    class TextureTerrainOverlay; // Forward dec for friend (Changes mesh data on the fly)
+    class Renderable;
+    class ResourceManager;
+    class TextureTerrainOverlay;
+    class LightManager;
+    class UberShaderSystem;
+    class RenderSystem;
+    class ResourcePacker;
 
     /**
-     * Defines a memory safe wrapper for raylib model.
-     * Set "deepCopy" to false to disable memory management.
+     * Non-owning view of a Model whose storage lives in ResourceManager.
+     * Read-only public API. SetShader is private (struct-copy-local on shared
+     * material entries, but gated behind friend access so random callers cannot
+     * reach for it). SetTexture / SetMaterial do not exist here at all — they
+     * write through the shared materials[i].maps pointer and only make sense on
+     * a unique entry; see ModelSafeUnique.
      */
     class ModelSafe
     {
+      protected:
         Model rlmodel{};
-        std::string modelKey{}; // The key/path of the model in the ResourceManager
-        bool deepCopy = true;   // Whether this model has any shared data with other models (materials, etc).
+        std::string modelKey{};
+
+        void SetShader(Shader shader, int materialIdx) const;
+        void SetShader(Shader shader) const;
 
       public:
         [[nodiscard]] const Model& GetRlModel() const;
@@ -82,28 +92,57 @@ namespace sage
         [[nodiscard]] int GetMaterialCount() const;
         [[nodiscard]] Matrix GetTransform() const;
         void SetTransform(Matrix trans);
-        void SetMaterial(unsigned int idx, Material mat) const;
-        void SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const;
         [[nodiscard]] Shader GetShader(int materialIdx) const;
-        void SetShader(Shader shader, int materialIdx) const;
-        void SetShader(Shader shader) const;
         void SetKey(const std::string& newKey);
         [[nodiscard]] const std::string& GetKey() const;
+
         ModelSafe(const ModelSafe&) = delete;
         ModelSafe& operator=(const ModelSafe&) = delete;
         ModelSafe(ModelSafe&& other) noexcept;
         ModelSafe& operator=(ModelSafe&& other) noexcept;
-        explicit ModelSafe(Model& _model, bool _deepCopy = true);
         ModelSafe() = default;
-        ~ModelSafe();
+        virtual ~ModelSafe() = default;
 
         friend class Renderable;
         friend class ResourceManager;
         friend class TextureTerrainOverlay;
-        friend struct UberShaderComponent;
+        friend class LightManager;
         friend class UberShaderSystem;
         friend class RenderSystem;
         friend class ResourcePacker;
+        friend struct UberShaderComponent;
+    };
+
+    /**
+     * A unique Model — either an entry in ResourceManager registered under a
+     * deep-copy key (rmTracked = true), or a procedurally-created Model whose
+     * storage is owned by this object directly (rmTracked = false).
+     *
+     * Public mutators are sound here because the underlying entry is not shared
+     * with other consumers. Move-only: copying would break the "unique" invariant.
+     */
+    class ModelSafeUnique : public ModelSafe
+    {
+        bool rmTracked = false;
+
+      public:
+        using ModelSafe::SetShader;
+
+        void SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const;
+        void SetMaterial(unsigned int idx, Material mat) const;
+
+        ModelSafeUnique(const ModelSafeUnique&) = delete;
+        ModelSafeUnique& operator=(const ModelSafeUnique&) = delete;
+        ModelSafeUnique(ModelSafeUnique&& other) noexcept;
+        ModelSafeUnique& operator=(ModelSafeUnique&& other) noexcept;
+
+        // Procedural construction: this object takes ownership of the Model and
+        // unloads it (meshes + materials) on destruction.
+        explicit ModelSafeUnique(Model& rawModel);
+        ModelSafeUnique() = default;
+        ~ModelSafeUnique() override;
+
+        friend class ResourceManager;
     };
 
     // Frees model meshes/bones/bindPose without unloading individual materials.

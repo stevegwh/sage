@@ -271,33 +271,62 @@ namespace sage
     ModelSafe ResourceManager::GetModelCopy(const std::string& key)
     {
         assert(modelCopies.contains(key));
-        ModelSafe modelsafe(modelCopies.at(key).model, false);
+        ModelSafe modelsafe;
+        modelsafe.rlmodel = modelCopies.at(key).model;
         modelsafe.SetKey(key);
-        return std::move(modelsafe);
+        return modelsafe;
     }
 
-    /**
-     * @brief Returns a per-instance Model by re-loading from disk via raylib's public API.
-     * Used by animated entities (each needs its own animVertices/animNormals/boneMatrices).
-     * Materials are swapped to shared singletons in materialMap so the new instance does
-     * not own its materials. The returned ModelSafe's destructor frees only mesh/bone data.
-     * @param key the *key* of the model, not its path. Must have been registered via
-     * ModelLoadFromFile (which records sourcePath).
-     */
-    ModelSafe ResourceManager::GetModelDeepCopy(const std::string& key)
+    ModelSafeUnique ResourceManager::GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey)
     {
-        assert(modelCopies.contains(key));
-        const auto& info = modelCopies.at(key);
+        assert(modelCopies.contains(srcKey));
+        assert(!modelCopies.contains(dstKey) && "GetModelDeepCopy: dstKey already registered");
+        const auto& info = modelCopies.at(srcKey);
         assert(!info.sourcePath.empty() && "GetModelDeepCopy: sourcePath missing (re-pack assets)");
         assert(FileExists(info.sourcePath.c_str()) && "GetModelDeepCopy: source file missing at runtime");
 
+        // Fresh load: the resulting Model has its own private mesh data AND its own
+        // private material allocations (raylib LoadModel allocates materials per call).
+        // We deliberately skip dedupeAndShareMaterials so mutations on this entry
+        // (SetTexture, SetMaterial, SetShader) stay local to this dstKey.
         Model model = LoadModel(info.sourcePath.c_str());
-        auto materialNames = info.materialNames;
-        dedupeAndShareMaterials(model, materialNames);
 
-        ModelSafe safe(model, /*deepCopy=*/true);
-        safe.SetKey(key);
+        modelCopies.emplace(
+            dstKey, ModelInfo{model, info.materialNames, info.sourcePath, /*privateMaterials=*/true});
+
+        ModelSafeUnique safe;
+        safe.rlmodel = modelCopies.at(dstKey).model;
+        safe.SetKey(dstKey);
+        safe.rmTracked = true;
         return safe;
+    }
+
+    void ResourceManager::ReleaseDeepCopy(const std::string& dstKey)
+    {
+        auto it = modelCopies.find(dstKey);
+        if (it == modelCopies.end()) return;
+        assert(it->second.privateMaterials && "ReleaseDeepCopy: cannot release a shared-material entry");
+
+        Model& m = it->second.model;
+        // Free the per-material maps allocations made by raylib's LoadModel, but DO NOT
+        // call UnloadMaterial — that would UnloadShader / rlUnloadTexture the textures
+        // and shaders inside, which are shared/cached via ResourceManager (TextureLoad,
+        // ShaderLoad) and still in use by other entries.
+        for (int i = 0; i < m.materialCount; ++i)
+        {
+            RL_FREE(m.materials[i].maps);
+        }
+        for (int i = 0; i < m.meshCount; ++i)
+        {
+            UnloadMesh(m.meshes[i]);
+        }
+        RL_FREE(m.meshes);
+        RL_FREE(m.materials);
+        RL_FREE(m.meshMaterial);
+        RL_FREE(m.bones);
+        RL_FREE(m.bindPose);
+
+        modelCopies.erase(it);
     }
 
     void ResourceManager::ModelAnimationLoadFromFile(const std::string& path)
@@ -393,9 +422,32 @@ namespace sage
             RL_FREE(mat.maps);
         }
         std::cout << "Unloading models" << std::endl;
-        for (auto& [path, model] : modelCopies)
+        for (auto& [path, info] : modelCopies)
         {
-            sgUnloadModel(model.model);
+            if (info.privateMaterials)
+            {
+                // Deep-copy entry: free the per-material maps allocations, but don't
+                // UnloadMaterial — textures and shaders inside are RM-cached and still
+                // in use by other entries.
+                Model& m = info.model;
+                for (int i = 0; i < m.materialCount; ++i)
+                {
+                    RL_FREE(m.materials[i].maps);
+                }
+                for (int i = 0; i < m.meshCount; ++i)
+                {
+                    UnloadMesh(m.meshes[i]);
+                }
+                RL_FREE(m.meshes);
+                RL_FREE(m.materials);
+                RL_FREE(m.meshMaterial);
+                RL_FREE(m.bones);
+                RL_FREE(m.bindPose);
+            }
+            else
+            {
+                sgUnloadModel(info.model);
+            }
         }
         for (const auto& [key, tex] : nonModelTextures)
         {

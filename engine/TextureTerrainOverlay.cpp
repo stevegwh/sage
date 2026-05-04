@@ -106,7 +106,7 @@ namespace sage
         UpdateMeshBuffer(mesh, 2, mesh.texcoords, vertexCount * 2 * sizeof(float), 0);
     }
 
-    ModelSafe TextureTerrainOverlay::generateTerrainPolygon(
+    ModelSafeUnique TextureTerrainOverlay::generateTerrainPolygon(
         const GridSquare& minRange, const GridSquare& maxRange) const
     {
         Mesh mesh = createInitialMesh(minRange, maxRange);
@@ -115,7 +115,7 @@ namespace sage
         Model model = LoadModelFromMesh(mesh);
         model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
-        return ModelSafe(model);
+        return ModelSafeUnique(model);
     }
 
     void TextureTerrainOverlay::SetHint(Color col) const
