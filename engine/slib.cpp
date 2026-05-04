@@ -341,67 +341,85 @@ namespace sage
         return *this;
     }
 
-    void ModelSafeUnique::SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const
+    void ModelSafeOwned::SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const
     {
         rlmodel.materials[materialIdx].maps[mapIdx].texture = texture;
     }
 
-    void ModelSafeUnique::SetMaterial(unsigned int idx, Material mat) const
+    void ModelSafeOwned::SetMaterial(unsigned int idx, Material mat) const
     {
         rlmodel.materials[idx] = mat;
     }
 
-    ModelSafeUnique::ModelSafeUnique(ModelSafeUnique&& other) noexcept : ModelSafe(std::move(other))
+    ModelSafeOwned::ModelSafeOwned(ModelSafeOwned&& other) noexcept : ModelSafe(std::move(other))
     {
-        rmTracked = other.rmTracked;
-        other.rmTracked = false;
     }
 
-    ModelSafeUnique& ModelSafeUnique::operator=(ModelSafeUnique&& other) noexcept
+    ModelSafeOwned& ModelSafeOwned::operator=(ModelSafeOwned&& other) noexcept
     {
         if (this != &other)
         {
-            // Release whatever we currently hold first.
-            this->~ModelSafeUnique();
-            new (this) ModelSafeUnique(std::move(other));
+            this->~ModelSafeOwned();
+            new (this) ModelSafeOwned(std::move(other));
         }
         return *this;
     }
 
-    ModelSafeUnique::ModelSafeUnique(Model& rawModel)
+    ModelSafeOwned::ModelSafeOwned(Model& rawModel)
     {
         rlmodel = rawModel;
-        rmTracked = false;
         rawModel = {};
     }
 
-    ModelSafeUnique::~ModelSafeUnique()
+    ModelSafeOwned::~ModelSafeOwned()
     {
         if (rlmodel.meshCount == 0 && rlmodel.materialCount == 0) return;
 
-        if (rmTracked)
+        // Free the per-material maps allocations made by raylib's LoadModelFromMesh /
+        // LoadMaterialDefault, but don't UnloadMaterial — the textures and shaders
+        // inside are typically cached via ResourceManager and unloading them would
+        // free GPU handles still in use by other entries.
+        for (int i = 0; i < rlmodel.materialCount; ++i)
         {
-            ResourceManager::GetInstance().ReleaseDeepCopy(modelKey);
+            RL_FREE(rlmodel.materials[i].maps);
         }
-        else
+        for (int i = 0; i < rlmodel.meshCount; i++)
+            UnloadMesh(rlmodel.meshes[i]);
+        RL_FREE(rlmodel.meshes);
+        RL_FREE(rlmodel.materials);
+        RL_FREE(rlmodel.meshMaterial);
+        RL_FREE(rlmodel.bones);
+        RL_FREE(rlmodel.bindPose);
+    }
+
+    void ModelSafeManaged::SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const
+    {
+        rlmodel.materials[materialIdx].maps[mapIdx].texture = texture;
+    }
+
+    void ModelSafeManaged::SetMaterial(unsigned int idx, Material mat) const
+    {
+        rlmodel.materials[idx] = mat;
+    }
+
+    ModelSafeManaged::ModelSafeManaged(ModelSafeManaged&& other) noexcept : ModelSafe(std::move(other))
+    {
+    }
+
+    ModelSafeManaged& ModelSafeManaged::operator=(ModelSafeManaged&& other) noexcept
+    {
+        if (this != &other)
         {
-            // Procedural Model: free the per-material maps allocations made by raylib's
-            // LoadModelFromMesh / LoadMaterialDefault, but don't UnloadMaterial — the
-            // textures and shaders inside are typically cached via ResourceManager
-            // (TextureLoad / ShaderLoad) and unloading them here would free GPU handles
-            // still in use by other entries.
-            for (int i = 0; i < rlmodel.materialCount; ++i)
-            {
-                RL_FREE(rlmodel.materials[i].maps);
-            }
-            for (int i = 0; i < rlmodel.meshCount; i++)
-                UnloadMesh(rlmodel.meshes[i]);
-            RL_FREE(rlmodel.meshes);
-            RL_FREE(rlmodel.materials);
-            RL_FREE(rlmodel.meshMaterial);
-            RL_FREE(rlmodel.bones);
-            RL_FREE(rlmodel.bindPose);
+            this->~ModelSafeManaged();
+            new (this) ModelSafeManaged(std::move(other));
         }
+        return *this;
+    }
+
+    ModelSafeManaged::~ModelSafeManaged()
+    {
+        if (modelKey.empty()) return;
+        ResourceManager::GetInstance().ReleaseDeepCopy(modelKey);
     }
 
     std::string TitleCase(const std::string& A)

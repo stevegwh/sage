@@ -61,7 +61,7 @@ namespace sage
      * material entries, but gated behind friend access so random callers cannot
      * reach for it). SetTexture / SetMaterial do not exist here at all — they
      * write through the shared materials[i].maps pointer and only make sense on
-     * a unique entry; see ModelSafeUnique.
+     * a unique entry; see ModelSafeOwned and ModelSafeManaged.
      */
     class ModelSafe
     {
@@ -114,33 +114,51 @@ namespace sage
     };
 
     /**
-     * A unique Model — either an entry in ResourceManager registered under a
-     * deep-copy key (rmTracked = true), or a procedurally-created Model whose
-     * storage is owned by this object directly (rmTracked = false).
-     *
-     * Public mutators are sound here because the underlying entry is not shared
-     * with other consumers. Move-only: copying would break the "unique" invariant.
+     * A procedurally-created Model whose storage (meshes + per-material maps allocations)
+     * is owned by this object directly. The destructor frees those allocations locally
+     * but does NOT UnloadMaterial — textures and shaders inside the maps are typically
+     * RM-cached and shared. Public mutators are sound because the Model is not shared.
+     * Move-only.
      */
-    class ModelSafeUnique : public ModelSafe
+    class ModelSafeOwned : public ModelSafe
     {
-        bool rmTracked = false;
-
       public:
         using ModelSafe::SetShader;
 
         void SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const;
         void SetMaterial(unsigned int idx, Material mat) const;
 
-        ModelSafeUnique(const ModelSafeUnique&) = delete;
-        ModelSafeUnique& operator=(const ModelSafeUnique&) = delete;
-        ModelSafeUnique(ModelSafeUnique&& other) noexcept;
-        ModelSafeUnique& operator=(ModelSafeUnique&& other) noexcept;
+        ModelSafeOwned(const ModelSafeOwned&) = delete;
+        ModelSafeOwned& operator=(const ModelSafeOwned&) = delete;
+        ModelSafeOwned(ModelSafeOwned&& other) noexcept;
+        ModelSafeOwned& operator=(ModelSafeOwned&& other) noexcept;
 
-        // Procedural construction: this object takes ownership of the Model and
-        // unloads it (meshes + materials) on destruction.
-        explicit ModelSafeUnique(Model& rawModel);
-        ModelSafeUnique() = default;
-        ~ModelSafeUnique() override;
+        explicit ModelSafeOwned(Model& rawModel);
+        ModelSafeOwned() = default;
+        ~ModelSafeOwned() override;
+    };
+
+    /**
+     * Handle to a ResourceManager-managed deep-copy entry. ResourceManager owns the
+     * storage (registered under modelKey); the destructor releases the entry via
+     * ResourceManager::ReleaseDeepCopy. Public mutators are sound because the entry
+     * is unique to this handle. Move-only.
+     */
+    class ModelSafeManaged : public ModelSafe
+    {
+      public:
+        using ModelSafe::SetShader;
+
+        void SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const;
+        void SetMaterial(unsigned int idx, Material mat) const;
+
+        ModelSafeManaged(const ModelSafeManaged&) = delete;
+        ModelSafeManaged& operator=(const ModelSafeManaged&) = delete;
+        ModelSafeManaged(ModelSafeManaged&& other) noexcept;
+        ModelSafeManaged& operator=(ModelSafeManaged&& other) noexcept;
+
+        ModelSafeManaged() = default;
+        ~ModelSafeManaged() override;
 
         friend class ResourceManager;
     };

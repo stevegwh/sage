@@ -43,7 +43,8 @@ namespace sage
         [[nodiscard]] ModelSafe* GetModel() const;
         void SetModel(Model _model);
         void SetModel(ModelSafe _model);
-        void SetModel(ModelSafeUnique _model);
+        void SetModel(ModelSafeOwned _model);
+        void SetModel(ModelSafeManaged _model);
 
         void Enable();
         void Disable();
@@ -60,7 +61,8 @@ namespace sage
         Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform);
         Renderable(Model _model, Matrix _localTransform);
         Renderable(ModelSafe _model, Matrix _localTransform);
-        Renderable(ModelSafeUnique _model, Matrix _localTransform);
+        Renderable(ModelSafeOwned _model, Matrix _localTransform);
+        Renderable(ModelSafeManaged _model, Matrix _localTransform);
 
         template <class Archive>
         void save(Archive& archive) const

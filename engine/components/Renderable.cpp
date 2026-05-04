@@ -62,7 +62,7 @@ namespace sage
 
     void Renderable::SetModel(Model _model)
     {
-        model = std::make_unique<ModelSafeUnique>(_model);
+        model = std::make_unique<ModelSafeOwned>(_model);
     }
 
     void Renderable::SetModel(ModelSafe _model)
@@ -70,9 +70,14 @@ namespace sage
         model = std::make_unique<ModelSafe>(std::move(_model));
     }
 
-    void Renderable::SetModel(ModelSafeUnique _model)
+    void Renderable::SetModel(ModelSafeOwned _model)
     {
-        model = std::make_unique<ModelSafeUnique>(std::move(_model));
+        model = std::make_unique<ModelSafeOwned>(std::move(_model));
+    }
+
+    void Renderable::SetModel(ModelSafeManaged _model)
+    {
+        model = std::make_unique<ModelSafeManaged>(std::move(_model));
     }
 
     void Renderable::Enable()
@@ -86,8 +91,9 @@ namespace sage
     }
 
     // Copy constructor — only meaningful when the source holds a shared ModelSafe.
-    // Copying a Renderable that holds a ModelSafeUnique would either double-release
-    // the deep-copy entry or duplicate procedural ownership, neither of which is sound.
+    // Copying a Renderable that holds a ModelSafeOwned/ModelSafeManaged would either
+    // duplicate procedural ownership or double-release the RM entry, neither of which
+    // is sound.
     Renderable::Renderable(const Renderable& other)
         : name(other.name),
           vanityName(other.vanityName),
@@ -100,7 +106,8 @@ namespace sage
         if (other.model)
         {
             assert(
-                dynamic_cast<ModelSafeUnique*>(other.model.get()) == nullptr &&
+                dynamic_cast<ModelSafeOwned*>(other.model.get()) == nullptr &&
+                dynamic_cast<ModelSafeManaged*>(other.model.get()) == nullptr &&
                 "Renderable copy is only valid for shared (non-unique) models");
             model = std::make_unique<ModelSafe>();
             model->rlmodel = other.model->rlmodel;
@@ -123,7 +130,8 @@ namespace sage
             if (other.model)
             {
                 assert(
-                    dynamic_cast<ModelSafeUnique*>(other.model.get()) == nullptr &&
+                    dynamic_cast<ModelSafeOwned*>(other.model.get()) == nullptr &&
+                    dynamic_cast<ModelSafeManaged*>(other.model.get()) == nullptr &&
                     "Renderable copy is only valid for shared (non-unique) models");
                 model = std::make_unique<ModelSafe>();
                 model->rlmodel = other.model->rlmodel;
@@ -174,7 +182,7 @@ namespace sage
     }
 
     Renderable::Renderable(Model _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafeUnique>(_model)), initialTransform(_localTransform)
+        : model(std::make_unique<ModelSafeOwned>(_model)), initialTransform(_localTransform)
     {
         model->SetTransform(_localTransform);
     }
@@ -185,8 +193,14 @@ namespace sage
         model->SetTransform(_localTransform);
     }
 
-    Renderable::Renderable(ModelSafeUnique _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafeUnique>(std::move(_model))), initialTransform(_localTransform)
+    Renderable::Renderable(ModelSafeOwned _model, Matrix _localTransform)
+        : model(std::make_unique<ModelSafeOwned>(std::move(_model))), initialTransform(_localTransform)
+    {
+        model->SetTransform(_localTransform);
+    }
+
+    Renderable::Renderable(ModelSafeManaged _model, Matrix _localTransform)
+        : model(std::make_unique<ModelSafeManaged>(std::move(_model))), initialTransform(_localTransform)
     {
         model->SetTransform(_localTransform);
     }

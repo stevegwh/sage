@@ -277,7 +277,7 @@ namespace sage
         return modelsafe;
     }
 
-    ModelSafeUnique ResourceManager::GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey)
+    ModelSafeManaged ResourceManager::GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey)
     {
         assert(modelCopies.contains(srcKey));
         assert(!modelCopies.contains(dstKey) && "GetModelDeepCopy: dstKey already registered");
@@ -294,10 +294,9 @@ namespace sage
         modelCopies.emplace(
             dstKey, ModelInfo{model, info.materialNames, info.sourcePath, /*privateMaterials=*/true});
 
-        ModelSafeUnique safe;
+        ModelSafeManaged safe;
         safe.rlmodel = modelCopies.at(dstKey).model;
         safe.SetKey(dstKey);
-        safe.rmTracked = true;
         return safe;
     }
 

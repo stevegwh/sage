@@ -95,10 +95,10 @@ namespace sage
         [[nodiscard]] ModelSafe GetModelCopy(const std::string& key);
         // Creates a unique entry under dstKey by re-loading the model from disk via the
         // src entry's sourcePath. Materials are NOT shared with materialMap — the deep
-        // copy owns them privately, so mutations on the returned ModelSafeUnique are
+        // copy owns them privately, so mutations on the returned ModelSafeManaged are
         // isolated. The entry is released automatically when the returned handle is
         // destroyed (or via ReleaseDeepCopy).
-        [[nodiscard]] ModelSafeUnique GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey);
+        [[nodiscard]] ModelSafeManaged GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey);
         void ReleaseDeepCopy(const std::string& dstKey);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount);
         void UnloadImages();
