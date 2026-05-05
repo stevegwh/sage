@@ -382,6 +382,10 @@ namespace sage
         {
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false);
             updateActor(entity, moveableActor, transform, collideable);
+            // updateActor mutated the transform; refresh the world bbox so the re-mark
+            // uses the post-move position (CollisionSystem::Update only runs once per frame).
+            collideable.worldBoundingBox =
+                TransformBoundingBox(collideable.localBoundingBox, transform.GetMatrixNoRot());
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true);
         }
 

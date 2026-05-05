@@ -1,6 +1,5 @@
 #include "NavigationGridSystem.hpp"
 
-#include "../../game/src/components/ControllableActor.hpp"
 #include "CollisionSystem.hpp"
 #include "components/MoveableActor.hpp"
 #include "components/NavigationGridSquare.hpp"

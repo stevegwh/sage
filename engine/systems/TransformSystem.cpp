@@ -73,8 +73,6 @@ namespace sage
             transform.m_positionWorld = position;
         }
         updateChildrenPos(entity);
-
-        transform.onPositionUpdate.Publish(entity);
     }
 
     void TransformSystem::SetRotation(entt::entity entity, const Vector3& rotation)

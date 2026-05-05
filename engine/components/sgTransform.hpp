@@ -8,7 +8,6 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
-#include "engine/Event.hpp"
 #include <vector>
 
 namespace sage
@@ -39,8 +38,6 @@ namespace sage
         {
             archive(m_positionWorld, m_rotationWorld, m_scale);
         }
-
-        Event<entt::entity> onPositionUpdate{};
 
         [[nodiscard]] Matrix GetMatrixNoRot() const;
         [[nodiscard]] Matrix GetMatrix() const;

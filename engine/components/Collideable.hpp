@@ -14,37 +14,16 @@
 
 namespace sage
 {
-    class Collideable
+    struct Collideable
     {
-        entt::registry* registry{};
-
-      public:
-        bool active = true;
-        void OnTransformUpdate(entt::entity entity);
-        BoundingBox localBoundingBox{}; // BoundingBox in local space
-        BoundingBox worldBoundingBox{}; // BoundingBox in world space (bb * world mat)
-
+        BoundingBox localBoundingBox{};
+        BoundingBox worldBoundingBox{};
         CollisionLayer collisionLayer = CollisionLayer::DEFAULT;
+        bool active = true;
         bool debugDraw = false;
 
-        void SetWorldBoundingBox(Matrix mat);
-        void Enable();
-        void Disable();
-
-        // Static, non-moveable object
-        explicit Collideable(const BoundingBox& _localBoundingBox, const Matrix& worldMatrix);
-        // Moveable object
-        Collideable(entt::registry* _registry, entt::entity _self, BoundingBox _localBoundingBox);
-        // Default constructor required for serialization, should *not* be used outside of this.
         Collideable() = default;
-
-        // Copy operations
-        Collideable(const Collideable& other);
-        Collideable& operator=(const Collideable& other);
-
-        // Move operations
-        Collideable(Collideable&& other) noexcept;
-        Collideable& operator=(Collideable&& other) noexcept;
+        Collideable(BoundingBox local, Matrix worldMat);
 
         template <class Archive>
         void save(Archive& archive) const
@@ -58,4 +37,14 @@ namespace sage
             archive(localBoundingBox, worldBoundingBox, collisionLayer);
         }
     };
+
+    // Empty tag. Attach alongside Collideable to opt out of CollisionSystem::Update —
+    // the entity's worldBoundingBox is baked at construction (or load) and never
+    // recomputed. Matches the RenderableDeferred convention.
+    struct StaticCollideable
+    {
+    };
+
+    // Transforms a bounding box by a world matrix.
+    BoundingBox TransformBoundingBox(BoundingBox local, Matrix worldMat);
 } // namespace sage

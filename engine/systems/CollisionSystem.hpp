@@ -27,6 +27,11 @@ namespace sage
         CollisionMatrix collisionMatrix;
 
       public:
+        // Recomputes worldBoundingBox for every dynamic Collideable from its sgTransform.
+        // Static collideables are not visited (their world bbox is baked at construction).
+        // Call once per frame, after positions have been mutated and before any queries.
+        void Update();
+
         static void SortCollisionsByDistance(std::vector<CollisionInfo>& collisions);
         [[nodiscard]] std::vector<CollisionInfo> GetMeshCollisionsWithRay(
             const entt::entity& caster, const Ray& ray, CollisionLayer layer);

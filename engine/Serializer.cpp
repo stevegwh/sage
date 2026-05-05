@@ -28,6 +28,7 @@ namespace sage::serializer
                     auto entt = destination->create();
                     auto& transform = destination->emplace<sgTransform>(entt);
                     auto& collideable = destination->emplace<Collideable>(entt);
+                    destination->emplace<StaticCollideable>(entt);
                     auto& renderable = destination->emplace<Renderable>(entt);
 
                     try

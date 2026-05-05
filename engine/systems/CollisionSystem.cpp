@@ -14,6 +14,15 @@
 
 namespace sage
 {
+    void CollisionSystem::Update()
+    {
+        // Static collideables opt out via the StaticCollideable tag — their worldBoundingBox
+        // was baked at construction and never needs recomputing.
+        auto view = registry->view<sgTransform, Collideable>(entt::exclude<StaticCollideable>);
+        view.each([](const sgTransform& t, Collideable& c) {
+            c.worldBoundingBox = TransformBoundingBox(c.localBoundingBox, t.GetMatrixNoRot());
+        });
+    }
 
     void CollisionSystem::SortCollisionsByDistance(std::vector<CollisionInfo>& collisions)
     {
@@ -89,7 +98,7 @@ namespace sage
         for (auto view = registry->view<Collideable>(); const auto& entity : view)
         {
             const auto& c = registry->get<Collideable>(entity);
-            if (!c.active) return false;
+            if (!c.active) continue;
             if (collisionMatrix[static_cast<int>(layer)][static_cast<int>(c.collisionLayer)])
             {
                 auto col = GetRayCollisionBox(ray, c.worldBoundingBox);
