@@ -55,6 +55,7 @@ namespace sage
 
     CollisionMatrix static CreateCollisionMatrix()
     {
+        // TODO: Add touhou-raylib changes for collision matrix
         int numLayers = static_cast<int>(CollisionLayer::COUNT);
         std::vector matrix(numLayers, std::vector<bool>(numLayers, false));
 

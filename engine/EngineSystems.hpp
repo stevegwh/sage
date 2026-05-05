@@ -30,7 +30,6 @@ namespace sage
     class ActorMovementSystem;
     class ControllableActorSystem;
     class AnimationSystem;
-    class TimerSystem;
     class UberShaderSystem;
     class FullscreenTextOverlayManager;
     class SpatialAudioSystem;
@@ -57,7 +56,6 @@ namespace sage
         std::unique_ptr<NavigationGridSystem> navigationGridSystem;
         std::unique_ptr<ActorMovementSystem> actorMovementSystem;
         std::unique_ptr<AnimationSystem> animationSystem;
-        std::unique_ptr<TimerSystem> timerSystem;
         std::unique_ptr<UberShaderSystem> uberShaderSystem;
         std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayFactory;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;

@@ -19,7 +19,6 @@
 #include "systems/NavigationGridSystem.hpp"
 #include "systems/RenderSystem.hpp"
 #include "systems/SpatialAudioSystem.hpp"
-#include "systems/TimerSystem.hpp"
 #include "systems/TransformSystem.hpp"
 #include "systems/UberShaderSystem.hpp"
 #include "UserInput.hpp"
@@ -42,7 +41,6 @@ namespace sage
           navigationGridSystem(std::make_unique<NavigationGridSystem>(_registry, collisionSystem.get())),
           actorMovementSystem(std::make_unique<ActorMovementSystem>(_registry, this)),
           animationSystem(std::make_unique<AnimationSystem>(_registry)),
-          timerSystem(std::make_unique<TimerSystem>(_registry)),
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayFactory(std::make_unique<FullscreenTextOverlayManager>(this)),
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),

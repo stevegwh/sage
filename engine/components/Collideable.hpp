@@ -23,7 +23,7 @@ namespace sage
         bool debugDraw = false;
 
         Collideable() = default;
-        Collideable(BoundingBox local, Matrix worldMat);
+        Collideable(const BoundingBox& local, const Matrix& worldMat);
 
         template <class Archive>
         void save(Archive& archive) const
@@ -46,5 +46,5 @@ namespace sage
     };
 
     // Transforms a bounding box by a world matrix.
-    BoundingBox TransformBoundingBox(BoundingBox local, Matrix worldMat);
+    BoundingBox TransformBoundingBox(const BoundingBox& local, const Matrix& worldMat);
 } // namespace sage

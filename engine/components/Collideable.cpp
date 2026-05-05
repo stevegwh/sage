@@ -8,12 +8,12 @@
 
 namespace sage
 {
-    BoundingBox TransformBoundingBox(BoundingBox local, Matrix worldMat)
+    BoundingBox TransformBoundingBox(const BoundingBox& local, const Matrix& worldMat)
     {
         return {Vector3Transform(local.min, worldMat), Vector3Transform(local.max, worldMat)};
     }
 
-    Collideable::Collideable(BoundingBox local, Matrix worldMat)
+    Collideable::Collideable(const BoundingBox& local, const Matrix& worldMat)
     {
         localBoundingBox = local;
         worldBoundingBox = TransformBoundingBox(local, worldMat);
