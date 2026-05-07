@@ -158,7 +158,7 @@ namespace sage
 
         if (draggedObject.has_value())
         {
-            draggedObject.value()->state->Draw();
+            drawUIState(*draggedObject.value());
         }
 
         if (errorMessage.has_value())
@@ -226,9 +226,13 @@ namespace sage
 
     void GameUIEngine::Update()
     {
+        // Snapshot raylib input once per frame so the state machine doesn't pull
+        // from globals; everyone reads via Input() for the rest of the pass.
+        currentInput = InputSnapshot::Capture();
+
         if (draggedObject.has_value())
         {
-            draggedObject.value()->state->Update();
+            updateUIState(*draggedObject.value(), *this, currentInput);
         }
         else
         {

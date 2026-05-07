@@ -32,6 +32,7 @@ namespace sage
         std::unique_ptr<TooltipWindow> tooltipWindow;
         std::optional<CellElement*> draggedObject;
         std::optional<CellElement*> hoveredDraggableCellElement;
+        InputSnapshot currentInput;
 
         void pruneWindows();
         void processWindows();
@@ -58,9 +59,18 @@ namespace sage
         void Draw2D() const;
         void Update();
 
-        friend class UIState;
-        friend class DragDelayState;
-        friend class DragState;
-        friend class HoverState;
+        // The current frame's input snapshot. Captured at the top of Update().
+        [[nodiscard]] const InputSnapshot& Input() const { return currentInput; }
+
+        // Drag/hover-lock accessors used by the state machine. Replaces the friend
+        // declarations the state classes used to need to mutate the protected fields.
+        void SetDraggedObject(CellElement* el) { draggedObject = el; }
+        void ClearDraggedObject() { draggedObject.reset(); }
+        void ClaimHoveredDraggableLock(CellElement* el) { hoveredDraggableCellElement = el; }
+        void ReleaseHoveredDraggableLock() { hoveredDraggableCellElement.reset(); }
+        [[nodiscard]] std::optional<CellElement*> GetHoveredDraggableLock() const
+        {
+            return hoveredDraggableCellElement;
+        }
     };
 } // namespace sage

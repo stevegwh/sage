@@ -47,15 +47,6 @@ namespace sage
         if (!canReceiveDragDrops) return;
     }
 
-    void CellElement::ChangeState(std::unique_ptr<UIState> newState)
-    {
-        if (newState == state || stateLocked) return;
-
-        state->Exit();
-        state = std::move(newState);
-        state->Enter();
-    }
-
     void CellElement::UpdateDimensions()
     {
         tex.width = parent->GetRec().width;
@@ -70,8 +61,8 @@ namespace sage
         : vertAlignment(_vertAlignment),
           horiAlignment(_horiAlignment),
           parent(_parent),
-          engine(_engine),
-          state(std::make_unique<IdleState>(this, engine))
+          engine(_engine)
     {
+        // state is default-initialised to IdleState (the variant's first alternative).
     }
 } // namespace sage

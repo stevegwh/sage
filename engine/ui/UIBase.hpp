@@ -85,7 +85,7 @@ namespace sage
         TableCell* parent{};
         GameUIEngine* engine{};
 
-        std::unique_ptr<UIState> state;
+        UIState state{IdleState{}};
         Texture tex{};
         bool canReceiveDragDrops = false;
         bool draggable = false;
@@ -101,7 +101,6 @@ namespace sage
         virtual void DragDraw() {};
         virtual void OnDrop(CellElement* receiver);
         virtual void ReceiveDrop(CellElement* droppedElement);
-        void ChangeState(std::unique_ptr<UIState> newState);
         virtual void UpdateDimensions();
         virtual void Draw2D() = 0;
         explicit CellElement(

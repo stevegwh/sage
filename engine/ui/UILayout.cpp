@@ -296,7 +296,8 @@ namespace sage
         assert(!(element.has_value() && !children.empty()));
         if (element.has_value())
         {
-            element.value()->state->Update();
+            auto* el = element.value().get();
+            updateUIState(*el, *el->engine, el->engine->Input());
             return;
         }
         for (const auto& child : children)
@@ -311,8 +312,8 @@ namespace sage
         {
             if (!element.value()) return;
             if (element.value()->beingDragged) return;
-            element.value()->ChangeState(
-                std::make_unique<IdleState>(element.value().get(), element.value()->engine));
+            auto* el = element.value().get();
+            transitionTo(*el, *el->engine, IdleState{});
         }
         else
         {
