@@ -283,24 +283,18 @@ namespace sage
 
     void TooltipWindow::ScaleContents(Settings* _settings)
     {
-        // Tooltip's original position is scaled to the screen already
+        // Tooltips are constructed in viewport-coord by their factories (see
+        // GameUiFactory's createTextTooltip / CreateWorldTooltip), so the rec and
+        // padding are already at the correct viewport scale and no scaling is
+        // applied here. Children of a tooltip are also laid out in viewport-coord
+        // by per-Create InitLayouts (since they read their viewport-coord parent
+        // rect at construction time), so we don't need to recurse either.
+        //
+        // Note: this means a tooltip won't re-fit if the OS window is resized
+        // while it's visible. That's an accepted trade-off — tooltips are
+        // transient and get recreated on the next hover at the new scale factor.
         if (markForRemoval) return;
-
-        rec = {
-            rec.x,
-            rec.y,
-            settings->ScaleValueMaintainRatio(rec.width),
-            settings->ScaleValueMaintainRatio(rec.height)};
-
-        padding = {
-            settings->ScaleValueMaintainRatio(padding.up),
-            settings->ScaleValueMaintainRatio(padding.down),
-            settings->ScaleValueMaintainRatio(padding.left),
-            settings->ScaleValueMaintainRatio(padding.right)};
-
         UpdateTextureDimensions();
-
-        // Update children?
     }
 
     TooltipWindow::~TooltipWindow()

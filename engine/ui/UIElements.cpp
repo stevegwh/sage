@@ -30,6 +30,42 @@ namespace sage
         return fontInfo.font;
     }
 
+    float TextBox::WrappedHeight(const FontInfo& info, const std::string& text, float availableWidth)
+    {
+        // Mirrors the WORD_WRAP branch of TextBox::UpdateDimensions so callers
+        // measure the same number of lines that UpdateDimensions will produce.
+        std::string wrappedText;
+        std::string currentLine;
+        std::istringstream words(text);
+        std::string word;
+        while (words >> word)
+        {
+            std::string testLine = currentLine;
+            if (!testLine.empty()) testLine += " ";
+            testLine += word;
+
+            const Vector2 lineSize =
+                MeasureTextEx(info.font, testLine.c_str(), info.fontSize, info.fontSpacing);
+
+            if (lineSize.x <= availableWidth)
+            {
+                currentLine = testLine;
+            }
+            else
+            {
+                if (!wrappedText.empty()) wrappedText += "\n";
+                wrappedText += currentLine;
+                currentLine = word;
+            }
+        }
+        if (!currentLine.empty())
+        {
+            if (!wrappedText.empty()) wrappedText += "\n";
+            wrappedText += currentLine;
+        }
+        return MeasureTextEx(info.font, wrappedText.c_str(), info.fontSize, info.fontSpacing).y;
+    }
+
     void TextBox::UpdateFontScaling()
     {
         const float scaleFactor = engine->settings->GetCurrentScaleFactor();

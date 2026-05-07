@@ -55,6 +55,13 @@ namespace sage
         void Draw2D() override;
         ~TextBox() override = default;
 
+        // Returns the rendered height (in viewport pixels) of `text` wrapped at
+        // `availableWidth`, using the same algorithm as UpdateDimensions's
+        // WORD_WRAP path. Used by tooltip factories to size containers to fit
+        // their text.
+        [[nodiscard]] static float WrappedHeight(
+            const FontInfo& info, const std::string& text, float availableWidth);
+
         TextBox(
             GameUIEngine* _engine,
             TableCell* _parent,
