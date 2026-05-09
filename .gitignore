@@ -16,3 +16,4 @@ resources/*
 !resources/items.json
 !resources/loot-table.json
 CLAUDE.md
+AGENTS.md
