@@ -11,21 +11,21 @@ namespace sage
     {
         if (params.oneShot)
         {
-            PlayOneShot(params.animEnum, params.animSpeed);
+            PlayOneShot(params.animationId, params.animSpeed);
             return;
         }
-        ChangeAnimationByEnum(params.animEnum, params.animSpeed);
+        ChangeAnimationById(params.animationId, params.animSpeed);
     }
 
-    void Animation::ChangeAnimationByEnum(AnimationEnum animEnum, int _animSpeed)
+    void Animation::ChangeAnimationById(AnimationId animationId, int _animSpeed)
     {
-        assert(animationMap.contains(animEnum));
-        ChangeAnimation(animationMap.at(animEnum), _animSpeed);
+        assert(animationMap.contains(animationId));
+        ChangeAnimation(animationMap.at(animationId), _animSpeed);
     }
 
-    void Animation::ChangeAnimationByEnum(AnimationEnum animEnum)
+    void Animation::ChangeAnimationById(AnimationId animationId)
     {
-        ChangeAnimationByEnum(animEnum, 1);
+        ChangeAnimationById(animationId, 1);
     }
 
     void Animation::ChangeAnimation(int index)
@@ -43,9 +43,9 @@ namespace sage
         a.currentFrame = 0;
     }
 
-    void Animation::PlayOneShot(AnimationEnum animEnum, int _animSpeed)
+    void Animation::PlayOneShot(AnimationId animationId, int _animSpeed)
     {
-        PlayOneShot(animationMap.at(animEnum), _animSpeed);
+        PlayOneShot(animationMap.at(animationId), _animSpeed);
     }
 
     void Animation::PlayOneShot(int index, int _animSpeed)

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../engine_config.hpp"
+#include "../AnimationId.hpp"
 #include "../Event.hpp"
 #include "../ResourceManager.hpp"
 
@@ -20,7 +20,7 @@ namespace sage
 
     struct AnimationParams
     {
-        AnimationEnum animEnum = AnimationEnum::IDLE;
+        AnimationId animationId{};
         int animSpeed = 1;
         bool oneShot = false;
         float animationDelay = 0;
@@ -37,7 +37,7 @@ namespace sage
             int speed = 1;
         };
 
-        std::unordered_map<AnimationEnum, int> animationMap;
+        std::unordered_map<AnimationId, int> animationMap;
         ModelAnimation* animations;
         int animsCount;
 
@@ -49,12 +49,12 @@ namespace sage
         Event<entt::entity> onAnimationUpdated{};
 
         void ChangeAnimationByParams(AnimationParams params);
-        void ChangeAnimationByEnum(AnimationEnum animEnum, int _animSpeed);
-        void ChangeAnimationByEnum(AnimationEnum animEnum);
+        void ChangeAnimationById(AnimationId animationId, int _animSpeed);
+        void ChangeAnimationById(AnimationId animationId);
         void ChangeAnimation(int index);
         void ChangeAnimation(int index, int _animSpeed);
 
-        void PlayOneShot(AnimationEnum animEnum, int _animSpeed);
+        void PlayOneShot(AnimationId animationId, int _animSpeed);
         void PlayOneShot(int index, int _animSpeed);
         void RestoreAfterOneShot();
 
