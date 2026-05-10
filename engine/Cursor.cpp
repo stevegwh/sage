@@ -15,6 +15,7 @@
 #include "systems/NavigationGridSystem.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #ifndef FLT_MAX
 #define FLT_MAX                                                                                                   \
@@ -31,8 +32,7 @@ namespace sage
         if (!registry->any_of<Collideable>(m_mouseHitInfo.collidedEntityId)) return;
         const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
 
-        if (!m_mouseHitInfo.rlCollision.hit ||
-            std::ranges::find(cursorHoverLayers, layer) == cursorHoverLayers.end())
+        if (!m_mouseHitInfo.rlCollision.hit || !cursorHoverMask.Contains(layer))
         {
             if (m_hoverInfo.has_value())
             {
@@ -62,8 +62,7 @@ namespace sage
         if (!enabled) return;
 
         const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        if (layer == CollisionLayer::GEOMETRY_SIMPLE || layer == CollisionLayer::GEOMETRY_COMPLEX ||
-            layer == CollisionLayer::STAIRS)
+        if (IsNavigationLayer(layer))
         {
             onNavigationClick.Publish(m_mouseHitInfo.collidedEntityId);
         }
@@ -85,8 +84,7 @@ namespace sage
         leftClickTimer = 0;
 
         const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        if (layer == CollisionLayer::GEOMETRY_SIMPLE || layer == CollisionLayer::GEOMETRY_COMPLEX ||
-            layer == CollisionLayer::STAIRS)
+        if (IsNavigationLayer(layer))
         {
             onNavigationClick.Publish(m_mouseHitInfo.collidedEntityId);
         }
@@ -128,6 +126,16 @@ namespace sage
         hideCursor = false;
     }
 
+    void Cursor::SetCursorTexture(const CollisionLayer layer, std::string textureKey)
+    {
+        cursorTextureMap[layer] = std::move(textureKey);
+    }
+
+    void Cursor::SetCursorHoverMask(const CollisionMask mask)
+    {
+        cursorHoverMask = mask;
+    }
+
     bool Cursor::OutOfRange() const
     {
         auto mouseHit = m_naviHitInfo.rlCollision.point;
@@ -143,8 +151,7 @@ namespace sage
     {
         if (contextLocked) return;
         if (OutOfRange() ||
-            ((collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
-              collisionLayer == CollisionLayer::GEOMETRY_COMPLEX || collisionLayer == CollisionLayer::STAIRS) &&
+            (IsNavigationLayer(collisionLayer) &&
              !sys->navigationGridSystem->IsValidMove(m_naviHitInfo.rlCollision.point, selectedActor)))
         {
             currentTex = ResourceManager::GetInstance().TextureLoad("cursor_denied");
@@ -179,8 +186,7 @@ namespace sage
         // Discards hits with a BB that do not have a collision with mesh
         for (auto it = collisions.begin(); it != collisions.end();)
         {
-            if (it->collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
-                it->collisionLayer == CollisionLayer::STAIRS)
+            if (RequiresMeshCollision(it->collisionLayer))
             {
                 if (!findMeshCollision(*it))
                 {
@@ -201,9 +207,7 @@ namespace sage
 
         m_mouseHitInfo = collisions[0];
 
-        if (m_mouseHitInfo.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
-            m_mouseHitInfo.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
-            m_mouseHitInfo.collisionLayer == CollisionLayer::STAIRS)
+        if (IsNavigationLayer(m_mouseHitInfo.collisionLayer))
         {
             m_naviHitInfo = m_mouseHitInfo;
         }
@@ -211,9 +215,7 @@ namespace sage
         {
             // Find first navigation collision (if any)
             const auto navIt = std::find_if(collisions.begin(), collisions.end(), [](const CollisionInfo& coll) {
-                return coll.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
-                       coll.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
-                       coll.collisionLayer == CollisionLayer::STAIRS;
+                return IsNavigationLayer(coll.collisionLayer);
             });
 
             if (navIt != collisions.end())
@@ -347,6 +349,11 @@ namespace sage
     Cursor::Cursor(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
     {
         currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
+        SetCursorTexture(collision_layers::Default, "cursor_regular");
+        SetCursorTexture(collision_layers::GeometrySimple, "cursor_move");
+        SetCursorTexture(collision_layers::GeometryComplex, "cursor_move");
+        SetCursorTexture(collision_layers::Stairs, "cursor_move");
+        SetCursorTexture(collision_layers::Obstacle, "cursor_denied");
         EnableContextSwitching();
     }
 } // namespace sage

@@ -14,6 +14,12 @@
 
 namespace sage
 {
+    CollisionMask CollisionSystem::ResolveQueryMask(const CollisionLayer layer) const
+    {
+        if (layer == collision_layers::Default) return defaultQueryMask;
+        return GetDefaultCollisionMask(layer);
+    }
+
     void CollisionSystem::Update()
     {
         // Static collideables opt out via the StaticCollideable tag — their worldBoundingBox
@@ -26,7 +32,7 @@ namespace sage
 
     void CollisionSystem::SortCollisionsByDistance(std::vector<CollisionInfo>& collisions)
     {
-        std::sort(collisions.begin(), collisions.end(), [](const CollisionInfo& a, const CollisionInfo& b) {
+        std::ranges::sort(collisions, [](const CollisionInfo& a, const CollisionInfo& b) {
             return a.rlCollision.distance < b.rlCollision.distance;
         });
     }
@@ -34,17 +40,21 @@ namespace sage
     std::vector<CollisionInfo> CollisionSystem::GetCollisionsWithBoundingBox(
         const BoundingBox& bb, CollisionLayer layer)
     {
+        return GetCollisionsWithBoundingBox(bb, ResolveQueryMask(layer));
+    }
+
+    std::vector<CollisionInfo> CollisionSystem::GetCollisionsWithBoundingBox(
+        const BoundingBox& bb, CollisionMask mask)
+    {
         std::vector<CollisionInfo> collisions;
-
-        auto view = registry->view<Collideable>();
-
+        const auto view = registry->view<Collideable>();
         view.each([&](auto entity, const auto& c) {
             if (!c.active) return;
-            if (collisionMatrix[static_cast<int>(layer)][static_cast<int>(c.collisionLayer)])
+            if (mask.Contains(c.collisionLayer))
             {
                 if (CheckCollisionBoxes(bb, c.worldBoundingBox))
                 {
-                    CollisionInfo info = {
+                    const CollisionInfo info = {
                         .collidedEntityId = entity,
                         .collidedBB = c.worldBoundingBox,
                         .rlCollision = {},
@@ -53,9 +63,7 @@ namespace sage
                 }
             }
         });
-
         SortCollisionsByDistance(collisions);
-
         return collisions;
     }
 
@@ -64,8 +72,19 @@ namespace sage
         return GetCollisionsWithRay(entt::null, ray, layer);
     }
 
+    std::vector<CollisionInfo> CollisionSystem::GetCollisionsWithRay(const Ray& ray, CollisionMask mask)
+    {
+        return GetCollisionsWithRay(entt::null, ray, mask);
+    }
+
     std::vector<CollisionInfo> CollisionSystem::GetCollisionsWithRay(
         const entt::entity& caster, const Ray& ray, CollisionLayer layer)
+    {
+        return GetCollisionsWithRay(caster, ray, ResolveQueryMask(layer));
+    }
+
+    std::vector<CollisionInfo> CollisionSystem::GetCollisionsWithRay(
+        const entt::entity& caster, const Ray& ray, CollisionMask mask)
     {
         std::vector<CollisionInfo> collisions;
 
@@ -73,12 +92,12 @@ namespace sage
 
         view.each([&](auto entity, const auto& c) {
             if (!c.active || entity == caster) return;
-            if (collisionMatrix[static_cast<int>(layer)][static_cast<int>(c.collisionLayer)])
+            if (mask.Contains(c.collisionLayer))
             {
                 auto col = GetRayCollisionBox(ray, c.worldBoundingBox);
                 if (col.hit)
                 {
-                    CollisionInfo info = {
+                    const CollisionInfo info = {
                         .collidedEntityId = entity,
                         .collidedBB = c.worldBoundingBox,
                         .rlCollision = col,
@@ -87,21 +106,24 @@ namespace sage
                 }
             }
         });
-
         SortCollisionsByDistance(collisions);
-
         return collisions;
     }
 
-    bool CollisionSystem::GetFirstCollisionWithRay(const Ray& ray, CollisionInfo& info, CollisionLayer layer)
+    bool CollisionSystem::GetFirstCollisionWithRay(const Ray& ray, CollisionInfo& info, CollisionLayer layer) const
     {
-        for (auto view = registry->view<Collideable>(); const auto& entity : view)
+        return GetFirstCollisionWithRay(ray, info, ResolveQueryMask(layer));
+    }
+
+    bool CollisionSystem::GetFirstCollisionWithRay(const Ray& ray, CollisionInfo& info, CollisionMask mask) const
+    {
+        for (const auto view = registry->view<Collideable>(); const auto& entity : view)
         {
             const auto& c = registry->get<Collideable>(entity);
             if (!c.active) continue;
-            if (collisionMatrix[static_cast<int>(layer)][static_cast<int>(c.collisionLayer)])
+            if (mask.Contains(c.collisionLayer))
             {
-                auto col = GetRayCollisionBox(ray, c.worldBoundingBox);
+                const auto col = GetRayCollisionBox(ray, c.worldBoundingBox);
                 if (col.hit)
                 {
                     const CollisionInfo _info = {
@@ -120,13 +142,17 @@ namespace sage
     std::vector<CollisionInfo> CollisionSystem::GetMeshCollisionsWithRay(
         const entt::entity& caster, const Ray& ray, CollisionLayer layer)
     {
+        return GetMeshCollisionsWithRay(caster, ray, ResolveQueryMask(layer));
+    }
+
+    std::vector<CollisionInfo> CollisionSystem::GetMeshCollisionsWithRay(
+        const entt::entity& caster, const Ray& ray, CollisionMask mask)
+    {
         std::vector<CollisionInfo> collisions;
-
         const auto view = registry->view<Collideable>();
-
         view.each([&](auto entity, const auto& c) {
             if (!c.active || entity == caster) return;
-            if (collisionMatrix[static_cast<int>(layer)][static_cast<int>(c.collisionLayer)])
+            if (mask.Contains(c.collisionLayer))
             {
                 if (registry->any_of<Renderable>(entity))
                 {
@@ -145,34 +171,24 @@ namespace sage
                 }
             }
         });
-
         SortCollisionsByDistance(collisions);
-
         return collisions;
     }
 
     void CollisionSystem::DrawDebug() const
     {
-        auto view = registry->view<Collideable>();
-        for (auto entity : view)
+        const auto view = registry->view<Collideable>();
+        for (const auto entity : view)
         {
-            auto& c = registry->get<Collideable>(entity);
+            const auto& c = registry->get<Collideable>(entity);
             if (!c.active) continue;
-            if (c.collisionLayer != CollisionLayer::BACKGROUND && c.collisionLayer != CollisionLayer::DEFAULT)
+            if (collision_masks::Navigation.Contains(c.collisionLayer))
             {
                 auto col = YELLOW;
-                if (c.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
-                    c.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE)
+                if (c.collisionLayer == collision_layers::GeometryComplex ||
+                    c.collisionLayer == collision_layers::GeometrySimple)
                 {
                     col = GREEN;
-                }
-                else if (c.collisionLayer == CollisionLayer::BUILDING)
-                {
-                    col = RED;
-                }
-                else if (c.collisionLayer == CollisionLayer::CHEST)
-                {
-                    col = PURPLE;
                 }
                 DrawBoundingBox(c.worldBoundingBox, col);
             }
@@ -207,6 +223,12 @@ namespace sage
     bool CollisionSystem::GetFirstCollisionBB(
         entt::entity caller, BoundingBox bb, CollisionLayer layer, CollisionInfo& out)
     {
+        return GetFirstCollisionBB(caller, bb, ResolveQueryMask(layer), out);
+    }
+
+    bool CollisionSystem::GetFirstCollisionBB(
+        entt::entity caller, BoundingBox bb, CollisionMask mask, CollisionInfo& out) const
+    {
         auto view = registry->view<Collideable>();
 
         for (const auto& entity : view)
@@ -214,16 +236,16 @@ namespace sage
             if (caller == entity) continue;
             const auto& col = view.get<Collideable>(entity);
             if (!col.active) continue;
-            if (collisionMatrix[static_cast<int>(layer)][static_cast<int>(col.collisionLayer)])
+            if (mask.Contains(col.collisionLayer))
             {
-                bool colHit = CheckBoxCollision(bb, col.worldBoundingBox);
+                const bool colHit = CheckBoxCollision(bb, col.worldBoundingBox);
                 if (colHit)
                 {
                     CollisionInfo colInfo = {
                         .collidedEntityId = entity,
                         .collidedBB = col.worldBoundingBox,
                         .rlCollision = {},
-                        .collisionLayer = layer};
+                        .collisionLayer = col.collisionLayer};
                     out = colInfo;
                     return true;
                 };
@@ -232,8 +254,12 @@ namespace sage
         return false;
     }
 
-    CollisionSystem::CollisionSystem(entt::registry* _registry)
-        : registry(_registry), collisionMatrix(CreateCollisionMatrix())
+    void CollisionSystem::SetDefaultQueryMask(const CollisionMask mask)
+    {
+        defaultQueryMask = mask;
+    }
+
+    CollisionSystem::CollisionSystem(entt::registry* _registry) : registry(_registry)
     {
     }
 } // namespace sage

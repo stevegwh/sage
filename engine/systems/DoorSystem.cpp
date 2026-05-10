@@ -39,7 +39,8 @@ namespace sage
         if (!door.open)
         {
             auto& col = registry->get<Collideable>(entity);
-            col.collisionLayer = CollisionLayer::BACKGROUND;
+            col.SetCollisionLayer(sage::collision_layers::Background);
+            col.blocksNavigation = false;
             sys->navigationGridSystem->MarkSquareAreaOccupied(col.worldBoundingBox, false);
             float targetRotation = (transform.forward().z > 0) ? door.openYRotation : -door.openYRotation;
             sys->transformSystem->SetLocalRot(entity, Vector3{rotx, targetRotation, rotz});
@@ -50,7 +51,8 @@ namespace sage
             sys->transformSystem->SetLocalRot(entity, Vector3{rotx, closedRotation, rotz});
             door.open = false;
             auto& col = registry->get<Collideable>(entity);
-            col.collisionLayer = CollisionLayer::BUILDING;
+            col.SetCollisionLayer(collision_layers::Obstacle);
+            col.blocksNavigation = true;
             sys->navigationGridSystem->MarkSquareAreaOccupied(col.worldBoundingBox, true);
         }
     }

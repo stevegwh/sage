@@ -26,8 +26,8 @@ namespace sage
         }
 
         const auto& col = registry->get<Collideable>(entity);
-        if (col.collisionLayer != CollisionLayer::GEOMETRY_SIMPLE &&
-            col.collisionLayer != CollisionLayer::GEOMETRY_COMPLEX)
+        if (col.collisionLayer != sage::collision_layers::GeometrySimple &&
+            col.collisionLayer != sage::collision_layers::GeometryComplex)
         {
             disableIndicator();
             return;

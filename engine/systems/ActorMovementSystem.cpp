@@ -411,7 +411,7 @@ namespace sage
 //			ray.direction = { 0, -1, 0 };
 //			debugRays.push_back(ray);
 //			auto collisions = collisionSystem->GetMeshCollisionsWithRay(entity, ray,
-// CollisionLayer::NAVIGATION); 			if (!collisions.empty())
+// navigation collision layer); 			if (!collisions.empty())
 //			{
 //				//auto hitentt = collisions.at(0).collidedEntityId;
 //				//if (registry->any_of<Renderable>(hitentt))

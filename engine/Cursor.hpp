@@ -11,6 +11,8 @@
 #include "raylib.h"
 
 #include <optional>
+#include <string>
+#include <unordered_map>
 
 namespace sage
 {
@@ -36,6 +38,8 @@ namespace sage
         std::optional<HoverInfo> m_hoverInfo{};
 
         Texture2D currentTex{};
+        std::unordered_map<CollisionLayer, std::string> cursorTextureMap{};
+        CollisionMask cursorHoverMask{};
 
         Ray ray{};
         Color defaultColor = WHITE;
@@ -84,6 +88,8 @@ namespace sage
         void Disable();
         void Hide();
         void Show();
+        void SetCursorTexture(CollisionLayer layer, std::string textureKey);
+        void SetCursorHoverMask(CollisionMask mask);
         [[nodiscard]] bool OutOfRange() const;
 
         Cursor(entt::registry* registry, EngineSystems* _sys);

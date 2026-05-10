@@ -24,7 +24,8 @@ namespace sage
     class CollisionSystem
     {
         entt::registry* registry;
-        CollisionMatrix collisionMatrix;
+        CollisionMask defaultQueryMask{collision_masks::DefaultQuery};
+        [[nodiscard]] CollisionMask ResolveQueryMask(CollisionLayer layer) const;
 
       public:
         // Recomputes worldBoundingBox for every dynamic Collideable from its sgTransform.
@@ -35,17 +36,27 @@ namespace sage
         static void SortCollisionsByDistance(std::vector<CollisionInfo>& collisions);
         [[nodiscard]] std::vector<CollisionInfo> GetMeshCollisionsWithRay(
             const entt::entity& caster, const Ray& ray, CollisionLayer layer);
+        [[nodiscard]] std::vector<CollisionInfo> GetMeshCollisionsWithRay(
+            const entt::entity& caster, const Ray& ray, CollisionMask mask);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(
-            const entt::entity& caster, const Ray& ray, CollisionLayer layer = CollisionLayer::DEFAULT);
+            const entt::entity& caster, const Ray& ray, CollisionLayer layer = sage::collision_layers::Default);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(
-            const Ray& ray, CollisionLayer layer = CollisionLayer::DEFAULT);
+            const entt::entity& caster, const Ray& ray, CollisionMask mask);
+        [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(
+            const Ray& ray, CollisionLayer layer = sage::collision_layers::Default);
+        [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(const Ray& ray, CollisionMask mask);
         [[nodiscard]] bool GetFirstCollisionWithRay(
-            const Ray& ray, CollisionInfo& info, CollisionLayer layer = CollisionLayer::DEFAULT);
+            const Ray& ray, CollisionInfo& info, CollisionLayer layer = sage::collision_layers::Default) const;
+        [[nodiscard]] bool GetFirstCollisionWithRay(const Ray& ray, CollisionInfo& info, CollisionMask mask) const;
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithBoundingBox(
-            const BoundingBox& bb, CollisionLayer layer = CollisionLayer::DEFAULT);
+            const BoundingBox& bb, CollisionLayer layer = sage::collision_layers::Default);
+        [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithBoundingBox(
+            const BoundingBox& bb, CollisionMask mask);
         void BoundingBoxDraw(entt::entity entityId, Color color = LIME) const;
         static bool CheckBoxCollision(const BoundingBox& col1, const BoundingBox& col2);
         bool GetFirstCollisionBB(entt::entity caller, BoundingBox bb, CollisionLayer layer, CollisionInfo& out);
+        bool GetFirstCollisionBB(entt::entity caller, BoundingBox bb, CollisionMask mask, CollisionInfo& out) const;
+        void SetDefaultQueryMask(CollisionMask mask);
         void DrawDebug() const;
         explicit CollisionSystem(entt::registry* _registry);
     };

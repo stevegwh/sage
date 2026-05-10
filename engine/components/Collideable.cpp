@@ -18,4 +18,10 @@ namespace sage
         localBoundingBox = local;
         worldBoundingBox = TransformBoundingBox(local, worldMat);
     }
+
+    void Collideable::SetCollisionLayer(const CollisionLayer layer, const CollisionMask mask)
+    {
+        collisionLayer = layer;
+        collidesWith = mask.IsEmpty() ? GetDefaultCollisionMask(layer) : mask;
+    }
 } // namespace sage

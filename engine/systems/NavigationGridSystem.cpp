@@ -396,7 +396,7 @@ namespace sage
         {
             for (int col = min_col; col <= max_col; ++col)
             {
-                if (collideable.collisionLayer == CollisionLayer::STAIRS)
+                if (collideable.collisionLayer == collision_layers::Stairs)
                 {
                     float relativeX =
                         (gridSquares[row][col].worldPosMin.x - area.min.x) / (area.max.x - area.min.x);
@@ -408,11 +408,11 @@ namespace sage
                     gridSquares[row][col].heightMap.Set(
                         interpolatedHeight, Vector3Normalize(Vector3{-stairDirection.x, 1, -stairDirection.z}));
                 }
-                else if (collideable.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE)
+                else if (collideable.collisionLayer == collision_layers::GeometrySimple)
                 {
                     gridSquares[row][col].heightMap.Set(area.max.y, {0, 1, 0});
                 }
-                else if (collideable.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX)
+                else if (collideable.collisionLayer == collision_layers::GeometryComplex)
                 {
                     Vector3 gridCenter = {
                         (gridSquares[row][col].worldPosMin.x + gridSquares[row][col].worldPosMax.x) * 0.5f,
@@ -473,8 +473,8 @@ namespace sage
         for (const auto& entity : view)
         {
             const auto& c = registry->get<Collideable>(entity);
-            if (c.collisionLayer != CollisionLayer::GEOMETRY_COMPLEX &&
-                c.collisionLayer != CollisionLayer::GEOMETRY_SIMPLE)
+            if (c.collisionLayer != collision_layers::GeometryComplex &&
+                c.collisionLayer != collision_layers::GeometrySimple)
                 continue;
 
             // Ensure point of the bounding box is inside the defined walkable
@@ -1131,9 +1131,7 @@ namespace sage
         {
             const auto& bb = view.get<Collideable>(entity);
 
-            if (bb.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX ||
-                bb.collisionLayer == CollisionLayer::GEOMETRY_SIMPLE ||
-                bb.collisionLayer == CollisionLayer::STAIRS)
+            if (IsNavigationLayer(bb.collisionLayer))
             {
                 calculateTerrainHeightAndNormals(entity);
             }
@@ -1165,15 +1163,11 @@ namespace sage
         {
             const auto& bb = view.get<Collideable>(entity);
 
-            if (bb.collisionLayer == CollisionLayer::BUILDING)
+            if (bb.blocksNavigation)
             {
                 MarkSquareAreaOccupied(bb.worldBoundingBox, true, entity);
             }
-            else if (bb.collisionLayer == CollisionLayer::CHEST)
-            {
-                MarkSquareAreaOccupied(bb.worldBoundingBox, true, entity);
-            }
-            else if (bb.collisionLayer == CollisionLayer::GEOMETRY_COMPLEX)
+            else if (bb.collisionLayer == collision_layers::GeometryComplex)
             {
                 // TODO: Using normals as a way of marking terrain as occupied was too troublesome. Needs a better
                 // algorithm.

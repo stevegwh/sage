@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "../engine_config.hpp"
+#include "../CollisionLayers.hpp"
 
 #include "cereal/cereal.hpp"
 #include "entt/entt.hpp"
@@ -18,12 +18,15 @@ namespace sage
     {
         BoundingBox localBoundingBox{};
         BoundingBox worldBoundingBox{};
-        CollisionLayer collisionLayer = CollisionLayer::DEFAULT;
+        CollisionLayer collisionLayer = sage::collision_layers::Default;
+        CollisionMask collidesWith = GetDefaultCollisionMask(sage::collision_layers::Default);
         bool active = true;
         bool debugDraw = false;
+        bool blocksNavigation = false;
 
         Collideable() = default;
         Collideable(const BoundingBox& local, const Matrix& worldMat);
+        void SetCollisionLayer(CollisionLayer layer, CollisionMask mask = CollisionMask{});
 
         template <class Archive>
         void save(Archive& archive) const
@@ -35,6 +38,7 @@ namespace sage
         void load(Archive& archive)
         {
             archive(localBoundingBox, worldBoundingBox, collisionLayer);
+            collidesWith = GetDefaultCollisionMask(collisionLayer);
         }
     };
 
