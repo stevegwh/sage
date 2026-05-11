@@ -42,8 +42,7 @@ namespace sage
         entt::registry* registry;
         Settings* settings;
         AudioManager* audioManager;
-        // std::unique_ptr<GameUIEngine> uiEngine;
-        GameUIEngine* uiEngine{};
+        std::unique_ptr<GameUIEngine> uiEngine;
 
         std::unique_ptr<UserInput> userInput;
         std::unique_ptr<Cursor> cursor;
@@ -64,5 +63,10 @@ namespace sage
 
         EngineSystems(
             entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager);
+        ~EngineSystems();
+
+        [[nodiscard]] GameUIEngine& UI();
+        [[nodiscard]] const GameUIEngine& UI() const;
+        void ReplaceUiEngine(std::unique_ptr<GameUIEngine> replacement);
     };
 } // namespace sage

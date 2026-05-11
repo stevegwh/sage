@@ -38,13 +38,15 @@ namespace sage
         void processWindows();
 
         [[nodiscard]] bool mouseInNonObscuredWindowRegion(Window* window, Vector2 mousePos) const;
-        GameUIEngine(entt::registry* _registry, const EngineSystems* _sys);
 
       public:
         entt::registry* registry;
         UserInput* userInput;
         Cursor* cursor;
         Settings* settings;
+        GameUIEngine(entt::registry* _registry, const EngineSystems* _sys);
+        virtual ~GameUIEngine() = default;
+
         void BringClickedWindowToFront(Window* clicked);
         void CreateErrorMessage(const std::string& msg);
         TooltipWindow* CreateTooltipWindow(std::unique_ptr<TooltipWindow> _tooltipWindow);

@@ -69,7 +69,7 @@ namespace sage
             if (entity == sys->cursor->GetSelectedActor())
             {
                 moveable.onDestinationUnreachable.Publish(entity, destination);
-                sys->uiEngine->CreateErrorMessage("Out of bounds.");
+                sys->UI().CreateErrorMessage("Out of bounds.");
             }
             // std::cout << std::format(
             // "Entity {}: Requested destination out of grid bounds \n", static_cast<int>(entity));
@@ -85,7 +85,7 @@ namespace sage
             // bounds.
             if (entity == sys->cursor->GetSelectedActor())
             {
-                sys->uiEngine->CreateErrorMessage("Out of bounds.");
+                sys->UI().CreateErrorMessage("Out of bounds.");
             }
             // std::cout << std::format(
             // "Entity {}: Current position out of grid bounds \n", static_cast<int>(entity));
@@ -97,7 +97,7 @@ namespace sage
         {
             if (entity == sys->cursor->GetSelectedActor())
             {
-                sys->uiEngine->CreateErrorMessage("Out of range.");
+                sys->UI().CreateErrorMessage("Out of range.");
             }
             // std::cout << std::format(
             // "Entity {}: Requested destination is outside of pathfinding range \n", static_cast<int>(entity));
@@ -141,7 +141,7 @@ namespace sage
         {
             if (entity == sys->cursor->GetSelectedActor())
             {
-                sys->uiEngine->CreateErrorMessage("Destination unreachable.");
+                sys->UI().CreateErrorMessage("Destination unreachable.");
             }
             // std::cout << std::format(// "Entity {}: Destination unreachable \n", static_cast<int>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);

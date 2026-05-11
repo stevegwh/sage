@@ -23,6 +23,8 @@
 #include "systems/UberShaderSystem.hpp"
 #include "UserInput.hpp"
 
+#include <cassert>
+
 namespace sage
 {
     EngineSystems::EngineSystems(
@@ -31,7 +33,6 @@ namespace sage
           settings(_settings),
           audioManager(_audioManager),
           userInput(std::make_unique<UserInput>(_keyMapping, _settings)),
-          // uiEngine(std::make_unique<GameUIEngine>(_registry, this)),
           cursor(std::make_unique<Cursor>(_registry, this)),
           camera(std::make_unique<Camera>(_registry, userInput.get(), this)),
           lightSubSystem(std::make_unique<LightManager>(_registry, camera.get())),
@@ -47,5 +48,26 @@ namespace sage
           doorSystem(std::make_unique<DoorSystem>(_registry, this)),
           cursorClickIndicator(std::make_unique<CursorClickIndicator>(_registry, this))
     {
+        uiEngine = std::make_unique<GameUIEngine>(_registry, this);
+    }
+
+    EngineSystems::~EngineSystems() = default;
+
+    GameUIEngine& EngineSystems::UI()
+    {
+        assert(uiEngine);
+        return *uiEngine;
+    }
+
+    const GameUIEngine& EngineSystems::UI() const
+    {
+        assert(uiEngine);
+        return *uiEngine;
+    }
+
+    void EngineSystems::ReplaceUiEngine(std::unique_ptr<GameUIEngine> replacement)
+    {
+        assert(replacement);
+        uiEngine = std::move(replacement);
     }
 } // namespace sage
