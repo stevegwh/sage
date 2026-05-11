@@ -3,6 +3,8 @@
 //
 #pragma once
 
+#include "engine/Event.hpp"
+
 #include "entt/entt.hpp"
 #include "raylib.h"
 
@@ -10,6 +12,14 @@
 
 namespace sage
 {
+    enum class PathfindFailureReason
+    {
+        DestinationOutOfGrid,
+        ActorOutOfGrid,
+        DestinationOutOfRange,
+        DestinationUnreachable
+    };
+
     // Forward declarations
     struct EngineSystems;
     struct MoveableActor;
@@ -48,6 +58,8 @@ namespace sage
         void updateActorWorldPosition(entt::entity entity) const;
 
       public:
+        Event<entt::entity, Vector3, PathfindFailureReason> onPathfindFailed{};
+
         [[nodiscard]] bool CheckCollisionWithOtherMoveable(
             entt::entity entity, const sgTransform& transform, MoveableActor& moveableActor) const;
         [[nodiscard]] bool ReachedDestination(entt::entity entity) const;

@@ -10,6 +10,7 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -31,17 +32,14 @@ namespace sage
         entt::registry* registry;
         EngineSystems* sys;
 
-        entt::entity selectedActor = entt::null;
-
-        CollisionInfo m_mouseHitInfo{};
-        CollisionInfo m_naviHitInfo{};
         std::optional<HoverInfo> m_hoverInfo{};
 
         Texture2D currentTex{};
         std::unordered_map<CollisionLayer, std::string> cursorTextureMap{};
         CollisionMask cursorHoverMask{};
+        std::function<bool(Vector3)> navigationRangeProvider{};
+        std::function<bool(Vector3)> navigationValidityProvider{};
 
-        Ray ray{};
         Color defaultColor = WHITE;
         Color hoverColor = LIME;
         Color invalidColor = RED;
@@ -51,7 +49,6 @@ namespace sage
         bool hideCursor = false;
         bool enabled = true;
 
-        void getMouseRayCollision();
         void checkMouseHover();
         void onMouseHover() const;
         void onMouseLeftClick() const;
@@ -59,18 +56,13 @@ namespace sage
         void onMouseLeftDown();
         void onMouseRightDown() const;
         void changeCursors(CollisionLayer collisionLayer);
-        static void resetHitInfo(CollisionInfo& hitInfo);
-        [[nodiscard]] bool findMeshCollision(CollisionInfo& hitInfo) const;
 
       public:
         std::string hitObjectName{};
         [[nodiscard]] const CollisionInfo& getMouseHitInfo() const;
         [[nodiscard]] const RayCollision& getFirstNaviCollision() const;
         [[nodiscard]] const RayCollision& getFirstCollision() const;
-        [[nodiscard]] entt::entity GetSelectedActor() const;
-        void SetSelectedActor(entt::entity actor);
 
-        Event<entt::entity, entt::entity> onSelectedActorChange{}; // prev, current
         Event<entt::entity> onCollisionHit{};
         Event<entt::entity> onNavigationClick{};
         Event<entt::entity> onLeftClick{};
@@ -90,6 +82,8 @@ namespace sage
         void Show();
         void SetCursorTexture(CollisionLayer layer, std::string textureKey);
         void SetCursorHoverMask(CollisionMask mask);
+        void SetNavigationRangeProvider(std::function<bool(Vector3)> provider);
+        void SetNavigationValidityProvider(std::function<bool(Vector3)> provider);
         [[nodiscard]] bool OutOfRange() const;
 
         Cursor(entt::registry* registry, EngineSystems* _sys);

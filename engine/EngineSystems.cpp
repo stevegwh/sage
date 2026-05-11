@@ -8,10 +8,10 @@
 
 #include "Camera.hpp"
 #include "Cursor.hpp"
-#include "CursorClickIndicator.hpp"
 #include "FullscreenTextOverlayManager.hpp"
 #include "GameUiEngine.hpp"
 #include "LightManager.hpp"
+#include "Picker.hpp"
 #include "systems/ActorMovementSystem.hpp"
 #include "systems/AnimationSystem.hpp"
 #include "systems/CollisionSystem.hpp"
@@ -33,8 +33,9 @@ namespace sage
           settings(_settings),
           audioManager(_audioManager),
           userInput(std::make_unique<UserInput>(_keyMapping, _settings)),
-          cursor(std::make_unique<Cursor>(_registry, this)),
           camera(std::make_unique<Camera>(_registry, userInput.get(), this)),
+          picker(std::make_unique<Picker>(_registry, this)),
+          cursor(std::make_unique<Cursor>(_registry, this)),
           lightSubSystem(std::make_unique<LightManager>(_registry, camera.get())),
           transformSystem(std::make_unique<TransformSystem>(_registry)),
           renderSystem(std::make_unique<RenderSystem>(_registry)),
@@ -45,8 +46,7 @@ namespace sage
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayFactory(std::make_unique<FullscreenTextOverlayManager>(this)),
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
-          doorSystem(std::make_unique<DoorSystem>(_registry, this)),
-          cursorClickIndicator(std::make_unique<CursorClickIndicator>(_registry, this))
+          doorSystem(std::make_unique<DoorSystem>(_registry, this))
     {
         uiEngine = std::make_unique<GameUIEngine>(_registry, this);
     }

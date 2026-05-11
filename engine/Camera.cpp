@@ -242,10 +242,9 @@ namespace sage
         rlCamera.target = _target;
     }
 
-    void Camera::FocusSelectedActor()
+    void Camera::FocusEntity(const entt::entity entity)
     {
-        auto actorId = sys->cursor->GetSelectedActor();
-        auto& transform = registry->get<sgTransform>(actorId);
+        auto& transform = registry->get<sgTransform>(entity);
 
         auto diff = Vector3Subtract(rlCamera.position, rlCamera.target);
         SetCamera(Vector3Add(transform.GetWorldPos(), diff), transform.GetWorldPos());

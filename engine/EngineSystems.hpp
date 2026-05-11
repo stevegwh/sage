@@ -18,6 +18,7 @@ namespace sage
     // Input/UI group
     class UserInput;
     class Cursor;
+    class Picker;
     class Camera;
     class LightManager;
     class GameUIEngine;
@@ -34,7 +35,6 @@ namespace sage
     class FullscreenTextOverlayManager;
     class SpatialAudioSystem;
     class DoorSystem;
-    class CursorClickIndicator;
 
     class EngineSystems
     {
@@ -45,8 +45,9 @@ namespace sage
         std::unique_ptr<GameUIEngine> uiEngine;
 
         std::unique_ptr<UserInput> userInput;
-        std::unique_ptr<Cursor> cursor;
         std::unique_ptr<Camera> camera;
+        std::unique_ptr<Picker> picker;
+        std::unique_ptr<Cursor> cursor;
         std::unique_ptr<LightManager> lightSubSystem;
 
         std::unique_ptr<TransformSystem> transformSystem;
@@ -59,7 +60,6 @@ namespace sage
         std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayFactory;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;
         std::unique_ptr<DoorSystem> doorSystem;
-        std::unique_ptr<CursorClickIndicator> cursorClickIndicator;
 
         EngineSystems(
             entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager);

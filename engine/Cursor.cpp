@@ -4,35 +4,23 @@
 
 #include "Cursor.hpp"
 
-#include "Camera.hpp"
-#include "components/MoveableActor.hpp"
-#include "components/NavigationGridSquare.hpp"
-#include "components/Renderable.hpp"
-#include "components/sgTransform.hpp"
 #include "EngineSystems.hpp"
-#include "Settings.hpp"
+#include "Picker.hpp"
+#include "ResourceManager.hpp"
 #include "systems/CollisionSystem.hpp"
 #include "systems/NavigationGridSystem.hpp"
 
-#include <algorithm>
 #include <utility>
-
-#ifndef FLT_MAX
-#define FLT_MAX                                                                                                   \
-    340282346638528859811704183484516925440.0f // Maximum value of a float, from bit
-                                               // pattern 01111111011111111111111111111111
-#endif
-
-#include <ranges>
 
 namespace sage
 {
     void Cursor::checkMouseHover()
     {
-        if (!registry->any_of<Collideable>(m_mouseHitInfo.collidedEntityId)) return;
-        const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        const auto& mouseHitInfo = getMouseHitInfo();
+        if (!registry->any_of<Collideable>(mouseHitInfo.collidedEntityId)) return;
+        const auto& layer = registry->get<Collideable>(mouseHitInfo.collidedEntityId).collisionLayer;
 
-        if (!m_mouseHitInfo.rlCollision.hit || !cursorHoverMask.Contains(layer))
+        if (!mouseHitInfo.rlCollision.hit || !cursorHoverMask.Contains(layer))
         {
             if (m_hoverInfo.has_value())
             {
@@ -41,10 +29,10 @@ namespace sage
             m_hoverInfo.reset();
             return;
         }
-        if (!m_hoverInfo.has_value() || m_mouseHitInfo.collidedEntityId != m_hoverInfo->target)
+        if (!m_hoverInfo.has_value() || mouseHitInfo.collidedEntityId != m_hoverInfo->target)
         {
             HoverInfo newInfo;
-            newInfo.target = m_mouseHitInfo.collidedEntityId;
+            newInfo.target = mouseHitInfo.collidedEntityId;
             newInfo.beginHoverTime = GetTime();
             m_hoverInfo.emplace(newInfo);
         }
@@ -54,25 +42,26 @@ namespace sage
     {
         if (!enabled) return;
 
-        onHover.Publish(m_mouseHitInfo.collidedEntityId);
+        onHover.Publish(getMouseHitInfo().collidedEntityId);
     }
 
     void Cursor::onMouseLeftClick() const
     {
         if (!enabled) return;
 
-        const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        const auto& hitInfo = getMouseHitInfo();
+        const auto& layer = registry->get<Collideable>(hitInfo.collidedEntityId).collisionLayer;
         if (IsNavigationLayer(layer))
         {
-            onNavigationClick.Publish(m_mouseHitInfo.collidedEntityId);
+            onNavigationClick.Publish(hitInfo.collidedEntityId);
         }
-        onLeftClick.Publish(m_mouseHitInfo.collidedEntityId);
+        onLeftClick.Publish(hitInfo.collidedEntityId);
     }
 
     void Cursor::onMouseRightClick() const
     {
         if (!enabled) return;
-        onRightClick.Publish(m_mouseHitInfo.collidedEntityId);
+        onRightClick.Publish(getMouseHitInfo().collidedEntityId);
     }
 
     void Cursor::onMouseLeftDown()
@@ -83,10 +72,11 @@ namespace sage
         if (leftClickTimer < 0.25) return;
         leftClickTimer = 0;
 
-        const auto& layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
+        const auto& hitInfo = getMouseHitInfo();
+        const auto& layer = registry->get<Collideable>(hitInfo.collidedEntityId).collisionLayer;
         if (IsNavigationLayer(layer))
         {
-            onNavigationClick.Publish(m_mouseHitInfo.collidedEntityId);
+            onNavigationClick.Publish(hitInfo.collidedEntityId);
         }
     }
 
@@ -136,23 +126,28 @@ namespace sage
         cursorHoverMask = mask;
     }
 
+    void Cursor::SetNavigationRangeProvider(std::function<bool(Vector3)> provider)
+    {
+        navigationRangeProvider = std::move(provider);
+    }
+
+    void Cursor::SetNavigationValidityProvider(std::function<bool(Vector3)> provider)
+    {
+        navigationValidityProvider = std::move(provider);
+    }
+
     bool Cursor::OutOfRange() const
     {
-        auto mouseHit = m_naviHitInfo.rlCollision.point;
-        const auto& moveable = registry->get<MoveableActor>(selectedActor);
-        GridSquare minRange{};
-        GridSquare maxRange{};
-        sys->navigationGridSystem->GetPathfindRange(selectedActor, moveable.pathfindingBounds, minRange, maxRange);
-
-        return !sys->navigationGridSystem->CheckWithinBounds(mouseHit, minRange, maxRange);
+        if (!navigationRangeProvider) return false;
+        return !navigationRangeProvider(getFirstNaviCollision().point);
     }
 
     void Cursor::changeCursors(CollisionLayer collisionLayer)
     {
         if (contextLocked) return;
         if (OutOfRange() ||
-            (IsNavigationLayer(collisionLayer) &&
-             !sys->navigationGridSystem->IsValidMove(m_naviHitInfo.rlCollision.point, selectedActor)))
+            (IsNavigationLayer(collisionLayer) && navigationValidityProvider &&
+             !navigationValidityProvider(getFirstNaviCollision().point)))
         {
             currentTex = ResourceManager::GetInstance().TextureLoad("cursor_denied");
             currentColor = invalidColor;
@@ -168,128 +163,35 @@ namespace sage
         }
     }
 
-    void Cursor::getMouseRayCollision()
-    {
-        // Reset hit information
-        resetHitInfo(m_mouseHitInfo);
-        resetHitInfo(m_naviHitInfo);
-        hitObjectName = "None";
-        currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
-        currentColor = defaultColor;
-
-        auto viewport = sys->settings->GetViewPort();
-        // Get ray and test against objects
-        ray = GetScreenToWorldRayEx(GetMousePosition(), *sys->camera->getRaylibCam(), viewport.x, viewport.y);
-        auto collisions = sys->collisionSystem->GetCollisionsWithRay(ray);
-
-        // Replace floor BB hit with mesh hit then re-sort vector
-        // Discards hits with a BB that do not have a collision with mesh
-        for (auto it = collisions.begin(); it != collisions.end();)
-        {
-            if (RequiresMeshCollision(it->collisionLayer))
-            {
-                if (!findMeshCollision(*it))
-                {
-                    it = collisions.erase(it);
-                    continue;
-                }
-            }
-
-            ++it;
-        }
-
-        if (collisions.empty()) // Could put this sooner, but would need to repeat after above
-        {
-            return;
-        }
-
-        CollisionSystem::SortCollisionsByDistance(collisions);
-
-        m_mouseHitInfo = collisions[0];
-
-        if (IsNavigationLayer(m_mouseHitInfo.collisionLayer))
-        {
-            m_naviHitInfo = m_mouseHitInfo;
-        }
-        else
-        {
-            // Find first navigation collision (if any)
-            const auto navIt = std::find_if(collisions.begin(), collisions.end(), [](const CollisionInfo& coll) {
-                return IsNavigationLayer(coll.collisionLayer);
-            });
-
-            if (navIt != collisions.end())
-            {
-                m_naviHitInfo = *navIt;
-            }
-        }
-
-        onCollisionHit.Publish(m_mouseHitInfo.collidedEntityId);
-
-        const auto layer = registry->get<Collideable>(m_mouseHitInfo.collidedEntityId).collisionLayer;
-        changeCursors(layer);
-    }
-
-    void Cursor::resetHitInfo(CollisionInfo& hitInfo)
-    {
-        hitInfo.rlCollision = {};
-        hitInfo.rlCollision.distance = FLT_MAX;
-        hitInfo.rlCollision.hit = false;
-    }
-
-    // Find the model's mesh collision (instead of using its bounding box)
-    bool Cursor::findMeshCollision(CollisionInfo& hitInfo) const
-    {
-        if (registry->any_of<Renderable>(hitInfo.collidedEntityId))
-        {
-            const auto& renderable = registry->get<Renderable>(hitInfo.collidedEntityId);
-            const auto& transform = registry->get<sgTransform>(hitInfo.collidedEntityId);
-
-            for (int i = 0; i < renderable.GetModel()->GetMeshCount(); ++i)
-            {
-                if (const auto meshCollision =
-                        renderable.GetModel()->GetRayMeshCollision(ray, i, transform.GetMatrix());
-                    meshCollision.hit)
-                {
-                    hitInfo.rlCollision = meshCollision;
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     const CollisionInfo& Cursor::getMouseHitInfo() const
     {
-        return m_mouseHitInfo;
+        return sys->picker->GetMouseHitInfo();
     }
 
     const RayCollision& Cursor::getFirstNaviCollision() const
     {
-        return m_naviHitInfo.rlCollision;
+        return sys->picker->GetFirstNavigationCollision();
     }
 
     const RayCollision& Cursor::getFirstCollision() const
     {
-        return m_mouseHitInfo.rlCollision;
-    }
-
-    entt::entity Cursor::GetSelectedActor() const
-    {
-        return selectedActor;
-    }
-
-    void Cursor::SetSelectedActor(entt::entity actor)
-    {
-        const auto& old = selectedActor;
-        selectedActor = actor;
-        onSelectedActorChange.Publish(old, actor);
+        return sys->picker->GetFirstCollision();
     }
 
     void Cursor::Update()
     {
+        sys->picker->Update();
+        hitObjectName = sys->picker->hitObjectName;
+        currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
+        currentColor = defaultColor;
 
-        getMouseRayCollision();
+        const auto& hitInfo = getMouseHitInfo();
+        if (hitInfo.rlCollision.hit)
+        {
+            onCollisionHit.Publish(hitInfo.collidedEntityId);
+            changeCursors(hitInfo.collisionLayer);
+        }
+
         checkMouseHover();
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
@@ -319,14 +221,15 @@ namespace sage
 
     void Cursor::DrawDebug() const
     {
-        if (!m_mouseHitInfo.rlCollision.hit) return;
         if (contextLocked) return;
-        DrawCube(m_mouseHitInfo.rlCollision.point, 0.5f, 0.5f, 0.5f, currentColor);
+        const auto& mouseHitInfo = getMouseHitInfo();
+        if (!mouseHitInfo.rlCollision.hit) return;
+        DrawCube(mouseHitInfo.rlCollision.point, 0.5f, 0.5f, 0.5f, currentColor);
         Vector3 normalEnd;
-        normalEnd.x = m_mouseHitInfo.rlCollision.point.x + m_mouseHitInfo.rlCollision.normal.x;
-        normalEnd.y = m_mouseHitInfo.rlCollision.point.y + m_mouseHitInfo.rlCollision.normal.y;
-        normalEnd.z = m_mouseHitInfo.rlCollision.point.z + m_mouseHitInfo.rlCollision.normal.z;
-        DrawLine3D(m_mouseHitInfo.rlCollision.point, normalEnd, RED);
+        normalEnd.x = mouseHitInfo.rlCollision.point.x + mouseHitInfo.rlCollision.normal.x;
+        normalEnd.y = mouseHitInfo.rlCollision.point.y + mouseHitInfo.rlCollision.normal.y;
+        normalEnd.z = mouseHitInfo.rlCollision.point.z + mouseHitInfo.rlCollision.normal.z;
+        DrawLine3D(mouseHitInfo.rlCollision.point, normalEnd, RED);
     }
 
     void Cursor::Draw3D()

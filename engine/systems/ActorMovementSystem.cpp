@@ -4,9 +4,7 @@
 #include "components/MoveableActor.hpp"
 #include "components/NavigationGridSquare.hpp"
 #include "components/sgTransform.hpp"
-#include "Cursor.hpp"
 #include "EngineSystems.hpp"
-#include "GameUiEngine.hpp"
 #include "NavigationGridSystem.hpp"
 #include "Serializer.hpp"
 #include "slib.hpp"
@@ -66,11 +64,7 @@ namespace sage
         if (!sys->navigationGridSystem->CheckWithinGridBounds(destination))
         {
             moveable.onDestinationUnreachable.Publish(entity, destination);
-            if (entity == sys->cursor->GetSelectedActor())
-            {
-                moveable.onDestinationUnreachable.Publish(entity, destination);
-                sys->UI().CreateErrorMessage("Out of bounds.");
-            }
+            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationOutOfGrid);
             // std::cout << std::format(
             // "Entity {}: Requested destination out of grid bounds \n", static_cast<int>(entity));
 
@@ -83,25 +77,19 @@ namespace sage
         {
             // This will very rarely happen. Only triggers if the entity's current position is outside of grid
             // bounds.
-            if (entity == sys->cursor->GetSelectedActor())
-            {
-                sys->UI().CreateErrorMessage("Out of bounds.");
-            }
             // std::cout << std::format(
             // "Entity {}: Current position out of grid bounds \n", static_cast<int>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);
+            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::ActorOutOfGrid);
             return;
         }
 
         if (!sys->navigationGridSystem->CheckWithinBounds(destination, minRange, maxRange))
         {
-            if (entity == sys->cursor->GetSelectedActor())
-            {
-                sys->UI().CreateErrorMessage("Out of range.");
-            }
             // std::cout << std::format(
             // "Entity {}: Requested destination is outside of pathfinding range \n", static_cast<int>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);
+            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationOutOfRange);
             return;
         }
 
@@ -139,12 +127,9 @@ namespace sage
         }
         else
         {
-            if (entity == sys->cursor->GetSelectedActor())
-            {
-                sys->UI().CreateErrorMessage("Destination unreachable.");
-            }
             // std::cout << std::format(// "Entity {}: Destination unreachable \n", static_cast<int>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);
+            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationUnreachable);
         }
 
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);

@@ -69,7 +69,7 @@ namespace sage
         void CutscenePose(const sgTransform& location, const Vector3& localOffset);
         void CutsceneEnd();
         void SetCamera(Vector3 _pos, Vector3 _target);
-        void FocusSelectedActor();
+        void FocusEntity(entt::entity entity);
         void DrawDebug();
         void Update();
         explicit Camera(entt::registry* _registry, UserInput* userInput, EngineSystems* _sys);
