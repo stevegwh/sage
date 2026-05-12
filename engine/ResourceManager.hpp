@@ -67,7 +67,8 @@ namespace sage
         std::unordered_map<std::string, Sound> sfx;
 
         Shader gpuShaderLoad(const char* vs, const char* fs);
-        void dedupeAndShareMaterials(Model& model, std::vector<std::string>& materialNames);
+        void dedupeAndShareMaterials(
+            Model& model, std::vector<std::string>& materialNames, const std::string& sourcePath);
         void init();
         void FontLoadFromFile(const std::string& path);
         void ImageLoadFromFile(const std::string& path);
@@ -175,9 +176,34 @@ namespace sage
 
             for (auto& [key, model] : modelCopies)
             {
-                for (unsigned int i = 0; i < model.materialNames.size(); ++i)
+                const size_t originalMaterialNamesSize = model.materialNames.size();
+
+                if (model.model.materialCount <= 0)
                 {
-                    const auto& mat = model.materialNames.at(i);
+                    model.materialNames.clear();
+                    continue;
+                }
+
+                if (static_cast<int>(model.materialNames.size()) > model.model.materialCount)
+                {
+                    model.materialNames.resize(model.model.materialCount);
+                }
+
+                model.materialNames.resize(model.model.materialCount);
+
+                for (int i = 0; i < model.model.materialCount; ++i)
+                {
+                    if (model.materialNames[i].empty())
+                    {
+                        const bool singleDefault =
+                            originalMaterialNamesSize == 0 && model.model.materialCount == 1;
+                        const bool oldGltfDefaultSlot = originalMaterialNamesSize > 0 && i == 0;
+                        model.materialNames[i] = (singleDefault || oldGltfDefaultSlot)
+                                                     ? "Default"
+                                                     : model.sourcePath + "#Material" + std::to_string(i);
+                    }
+
+                    const auto& mat = model.materialNames[i];
                     model.model.materials[i] = materialMap[mat];
                 }
             }

@@ -5,7 +5,6 @@
 #include "ResourceManager.hpp"
 
 #include "components/Renderable.hpp"
-#include "Slibmodel.hpp"
 
 #include "raylib/src/config.h"
 #include "raymath.h"
@@ -13,14 +12,223 @@
 #define STB_INCLUDE_IMPLEMENTATION
 #define STB_INCLUDE_LINE_NONE
 
+#include "external/cgltf.h"
+extern "C"
+{
+#include "raylib/src/external/tinyobj_loader_c.h"
+}
 #include <stb_include.h>
 
 #include <cstring>
+#include <fstream>
 #include <sstream>
 #include <unordered_map>
 
 namespace sage
 {
+    namespace
+    {
+        constexpr const char* DefaultMaterialName = "Default";
+
+        std::string FallbackMaterialName(const std::string& sourcePath, int materialIndex)
+        {
+            return sourcePath + "#Material" + std::to_string(materialIndex);
+        }
+
+        std::string Trim(const std::string& value)
+        {
+            const size_t begin = value.find_first_not_of(" \t\r\n");
+            if (begin == std::string::npos) return "";
+
+            const size_t end = value.find_last_not_of(" \t\r\n");
+            return value.substr(begin, end - begin + 1);
+        }
+
+        bool IsAbsolutePath(const std::string& path)
+        {
+            return !path.empty() && (path[0] == '/' || path[0] == '\\' || (path.size() > 1 && path[1] == ':'));
+        }
+
+        std::string ResolveObjMaterialPath(const char* objFileName, const std::string& materialFileName)
+        {
+            if (IsAbsolutePath(materialFileName)) return materialFileName;
+
+            std::string directory = GetDirectoryPath(objFileName);
+            if (directory.empty()) return materialFileName;
+
+            if (directory.back() != '/' && directory.back() != '\\')
+            {
+                directory += '/';
+            }
+
+            return directory + materialFileName;
+        }
+
+        std::string UnnamedMaterialName(const char* fileName, size_t materialIndex)
+        {
+            return std::string(fileName) + "#Material" + std::to_string(materialIndex);
+        }
+
+        std::string FindObjMaterialLibrary(const char* fileName)
+        {
+            std::ifstream objFile(fileName);
+            if (!objFile.is_open()) return "";
+
+            std::string materialFileName;
+            std::string line;
+            while (std::getline(objFile, line))
+            {
+                const std::string trimmed = Trim(line);
+                if (trimmed.empty() || trimmed[0] == '#') continue;
+
+                constexpr const char* keyword = "mtllib";
+                constexpr size_t keywordLength = 6;
+                if (trimmed.compare(0, keywordLength, keyword) != 0) continue;
+                if (trimmed.size() == keywordLength ||
+                    (trimmed[keywordLength] != ' ' && trimmed[keywordLength] != '\t'))
+                {
+                    continue;
+                }
+
+                // raylib's tinyobj C loader keeps the last mtllib declaration it sees.
+                materialFileName = Trim(trimmed.substr(keywordLength));
+            }
+
+            return materialFileName;
+        }
+
+        std::vector<std::string> LoadObjMaterialNames(const char* fileName)
+        {
+            const std::string materialFileName = FindObjMaterialLibrary(fileName);
+            if (materialFileName.empty()) return {};
+
+            tinyobj_material_t* materials = nullptr;
+            unsigned int materialCount = 0;
+            const std::string materialPath = ResolveObjMaterialPath(fileName, materialFileName);
+            const int result = tinyobj_parse_mtl_file(&materials, &materialCount, materialPath.c_str());
+            if (result != TINYOBJ_SUCCESS)
+            {
+                TraceLog(
+                    LOG_WARNING,
+                    "MODEL: [%s] Failed to parse OBJ material file: %s",
+                    fileName,
+                    materialPath.c_str());
+                return {};
+            }
+
+            std::vector<std::string> names;
+            names.reserve(materialCount);
+            for (unsigned int i = 0; i < materialCount; ++i)
+            {
+                const char* name = materials[i].name;
+                names.emplace_back((name != nullptr && name[0] != '\0') ? name : UnnamedMaterialName(fileName, i));
+            }
+
+            tinyobj_materials_free(materials, materialCount);
+            return names;
+        }
+
+        struct FileData
+        {
+            unsigned char* bytes = nullptr;
+
+            ~FileData()
+            {
+                if (bytes != nullptr) UnloadFileData(bytes);
+            }
+        };
+
+        struct GltfData
+        {
+            cgltf_data* data = nullptr;
+
+            ~GltfData()
+            {
+                if (data != nullptr) cgltf_free(data);
+            }
+        };
+
+        std::vector<std::string> LoadGltfMaterialNames(const char* fileName)
+        {
+            int dataSize = 0;
+            FileData fileData{LoadFileData(fileName, &dataSize)};
+            if (fileData.bytes == nullptr) return {};
+
+            cgltf_options options{};
+            GltfData gltf;
+            const cgltf_result result = cgltf_parse(&options, fileData.bytes, dataSize, &gltf.data);
+            if (result != cgltf_result_success)
+            {
+                TraceLog(LOG_WARNING, "MODEL: [%s] Failed to parse glTF material names", fileName);
+                return {};
+            }
+
+            std::vector<std::string> names;
+            names.reserve(gltf.data->materials_count + 1);
+            names.emplace_back(DefaultMaterialName);
+
+            // raylib's glTF loader reserves material slot 0 for its default material.
+            for (size_t i = 0; i < gltf.data->materials_count; ++i)
+            {
+                const char* name = gltf.data->materials[i].name;
+                names.emplace_back(
+                    (name != nullptr && name[0] != '\0') ? name : UnnamedMaterialName(fileName, i + 1));
+            }
+
+            return names;
+        }
+
+        std::vector<std::string> LoadMaterialNames(const char* fileName)
+        {
+            if (fileName == nullptr || fileName[0] == '\0') return {};
+
+            if (IsFileExtension(fileName, ".obj"))
+            {
+                return LoadObjMaterialNames(fileName);
+            }
+
+            if (IsFileExtension(fileName, ".gltf") || IsFileExtension(fileName, ".glb"))
+            {
+                return LoadGltfMaterialNames(fileName);
+            }
+
+            return {};
+        }
+
+        void NormalizeMaterialNames(
+            Model& model, std::vector<std::string>& materialNames, const std::string& sourcePath)
+        {
+            if (model.materialCount <= 0)
+            {
+                materialNames.clear();
+                return;
+            }
+
+            if (static_cast<int>(materialNames.size()) > model.materialCount)
+            {
+                materialNames.resize(model.materialCount);
+            }
+
+            const size_t originalSize = materialNames.size();
+            materialNames.resize(model.materialCount);
+
+            for (int i = 0; i < model.materialCount; ++i)
+            {
+                if (!materialNames[i].empty()) continue;
+
+                // With no extractor data, a single raylib material is the default material.
+                // With old glTF-packed data, slot 0 may be empty because raylib reserves it.
+                if ((originalSize == 0 && model.materialCount == 1) || (originalSize > 0 && i == 0))
+                {
+                    materialNames[i] = DefaultMaterialName;
+                }
+                else
+                {
+                    materialNames[i] = FallbackMaterialName(sourcePath, i);
+                }
+            }
+        }
+    } // namespace
 
     Shader ResourceManager::gpuShaderLoad(const char* vs, const char* fs)
     {
@@ -39,26 +247,12 @@ namespace sage
     // Replaces a freshly-loaded model's materials with shared singletons in materialMap.
     // raylib-allocated materials that get displaced are released via UnloadMaterial.
     // Materials whose names are not yet pooled are donated to materialMap (first-write wins).
-    void ResourceManager::dedupeAndShareMaterials(Model& model, std::vector<std::string>& materialNames)
+    void ResourceManager::dedupeAndShareMaterials(
+        Model& model, std::vector<std::string>& materialNames, const std::string& sourcePath)
     {
-        if (materialNames.empty())
-        {
-            materialNames.emplace_back("Default");
-            if (!materialMap.contains("Default"))
-            {
-                materialMap.emplace("Default", LoadMaterialDefault());
-            }
-            // raylib's LoadModel always allocates at least one material slot; release the
-            // freshly-loaded copy before swapping in the shared singleton.
-            if (model.materialCount > 0)
-            {
-                UnloadMaterial(model.materials[0]);
-            }
-            model.materials[0] = materialMap.at("Default");
-            return;
-        }
+        NormalizeMaterialNames(model, materialNames, sourcePath);
 
-        for (unsigned int i = 0; i < materialNames.size(); ++i)
+        for (int i = 0; i < model.materialCount; ++i)
         {
             const auto& name = materialNames[i];
             if (!materialMap.contains(name))
@@ -250,9 +444,9 @@ namespace sage
         if (modelCopies.contains(key)) return;
         assert(FileExists(path.c_str()));
 
-        auto materialNames = GetMaterialNames(path.c_str());
+        auto materialNames = LoadMaterialNames(path.c_str());
         Model model = LoadModel(path.c_str());
-        dedupeAndShareMaterials(model, materialNames);
+        dedupeAndShareMaterials(model, materialNames, path);
         modelCopies.emplace(key, ModelInfo{model, std::move(materialNames), path});
     }
 
