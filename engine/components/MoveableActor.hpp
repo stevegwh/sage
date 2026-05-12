@@ -32,8 +32,8 @@ namespace sage
         // std::optional<MoveableActorCollision> moveableActorCollision;
         entt::entity hitEntityId = entt::null;
         Vector3 hitLastPos{};
-        std::optional<entt::entity> actorTarget;
-        std::optional<entt::entity> lootTarget;
+        // Keeps collision rerouting from fighting deliberate movement toward another moveable entity.
+        std::optional<entt::entity> movementCollisionTarget;
         std::deque<Vector3> path{};
 
         Event<entt::entity> onStartMovement{};

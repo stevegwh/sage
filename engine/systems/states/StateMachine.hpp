@@ -12,6 +12,10 @@
 
 namespace sage
 {
+    struct StatePayload
+    {
+        virtual ~StatePayload() = default;
+    };
 
     class State
     {
@@ -45,7 +49,7 @@ namespace sage
             return false;
         }
         virtual ~State() = default;
-        virtual void OnEnter(entt::entity entity) {};
+        virtual void OnEnter(entt::entity entity, const StatePayload& payload = {}) {};
         virtual void OnExit(entt::entity entity) {};
         virtual void Update(entt::entity entity) {};
         virtual void Draw3D(entt::entity entity) {};
@@ -75,7 +79,7 @@ namespace sage
         }
 
       public:
-        void ChangeState(entt::entity entity, StateEnum newStateEnum)
+        void ChangeState(entt::entity entity, StateEnum newStateEnum, const StatePayload& payload = {})
         {
             auto& stateComponent = registry->get<StateComponentType>(entity);
             StateEnum oldStateEnum = stateComponent.GetCurrentStateEnum();
@@ -93,7 +97,7 @@ namespace sage
             stateComponent.RemoveAllSubscriptions();
             GetStateFromEnum(oldStateEnum)->OnExit(entity);
             stateComponent.SetStateEnum(newStateEnum);
-            GetStateFromEnum(newStateEnum)->OnEnter(entity);
+            GetStateFromEnum(newStateEnum)->OnEnter(entity, payload);
         }
 
         virtual ~StateMachine() = default;

@@ -34,7 +34,6 @@ namespace sage
     class UberShaderSystem;
     class FullscreenTextOverlayManager;
     class SpatialAudioSystem;
-    class DoorSystem;
 
     class EngineSystems
     {
@@ -59,7 +58,6 @@ namespace sage
         std::unique_ptr<UberShaderSystem> uberShaderSystem;
         std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayFactory;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;
-        std::unique_ptr<DoorSystem> doorSystem;
 
         EngineSystems(
             entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager);

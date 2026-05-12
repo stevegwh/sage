@@ -4,6 +4,11 @@
 
 #pragma once
 
+namespace lq
+{
+    class DoorSystem;
+}
+
 namespace sage
 {
     class DoorBehaviorComponent
@@ -15,7 +20,7 @@ namespace sage
       public:
         DoorBehaviorComponent() = default;
 
-        friend class DoorSystem;
+        friend class lq::DoorSystem;
     };
 
 } // namespace sage
