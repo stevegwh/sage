@@ -63,11 +63,11 @@ namespace sage
         [[nodiscard]] const RayCollision& getFirstNaviCollision() const;
         [[nodiscard]] const RayCollision& getFirstCollision() const;
 
-        Event<entt::entity> onCollisionHit{};
-        Event<entt::entity> onNavigationClick{};
-        Event<entt::entity> onLeftClick{};
-        Event<entt::entity> onRightClick{};
-        Event<entt::entity> onHover{};
+        Event<entt::entity, CollisionLayer> onCollisionHit{};
+        Event<entt::entity, CollisionLayer> onNavigationClick{};
+        Event<entt::entity, CollisionLayer> onLeftClick{};
+        Event<entt::entity, CollisionLayer> onRightClick{};
+        Event<entt::entity, CollisionLayer> onHover{};
         Event<> onStopHover{};
 
         void Update();

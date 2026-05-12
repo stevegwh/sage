@@ -42,7 +42,8 @@ namespace sage
     {
         if (!enabled) return;
 
-        onHover.Publish(getMouseHitInfo().collidedEntityId);
+        const auto& hitInfo = getMouseHitInfo();
+        onHover.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
     }
 
     void Cursor::onMouseLeftClick() const
@@ -53,15 +54,16 @@ namespace sage
         const auto& layer = registry->get<Collideable>(hitInfo.collidedEntityId).collisionLayer;
         if (IsNavigationLayer(layer))
         {
-            onNavigationClick.Publish(hitInfo.collidedEntityId);
+            onNavigationClick.Publish(hitInfo.collidedEntityId, layer);
         }
-        onLeftClick.Publish(hitInfo.collidedEntityId);
+        onLeftClick.Publish(hitInfo.collidedEntityId, layer);
     }
 
     void Cursor::onMouseRightClick() const
     {
         if (!enabled) return;
-        onRightClick.Publish(getMouseHitInfo().collidedEntityId);
+        const auto& hitInfo = getMouseHitInfo();
+        onRightClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
     }
 
     void Cursor::onMouseLeftDown()
@@ -76,7 +78,7 @@ namespace sage
         const auto& layer = registry->get<Collideable>(hitInfo.collidedEntityId).collisionLayer;
         if (IsNavigationLayer(layer))
         {
-            onNavigationClick.Publish(hitInfo.collidedEntityId);
+            onNavigationClick.Publish(hitInfo.collidedEntityId, layer);
         }
     }
 
@@ -188,7 +190,7 @@ namespace sage
         const auto& hitInfo = getMouseHitInfo();
         if (hitInfo.rlCollision.hit)
         {
-            onCollisionHit.Publish(hitInfo.collidedEntityId);
+            onCollisionHit.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
             changeCursors(hitInfo.collisionLayer);
         }
 
