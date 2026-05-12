@@ -1,4 +1,4 @@
-#include "Picker.hpp"
+#include "MousePicker.hpp"
 
 #include "Camera.hpp"
 #include "components/Renderable.hpp"
@@ -12,7 +12,7 @@
 
 namespace sage
 {
-    void Picker::updateMouseRayCollision()
+    void MousePicker::updateMouseRayCollision()
     {
         resetHitInfo(mouseHitInfo);
         resetHitInfo(navigationHitInfo);
@@ -60,14 +60,14 @@ namespace sage
         onCollisionHit.Publish(mouseHitInfo.collidedEntityId);
     }
 
-    void Picker::resetHitInfo(CollisionInfo& hitInfo)
+    void MousePicker::resetHitInfo(CollisionInfo& hitInfo)
     {
         hitInfo.rlCollision = {};
         hitInfo.rlCollision.distance = std::numeric_limits<float>::max();
         hitInfo.rlCollision.hit = false;
     }
 
-    bool Picker::findMeshCollision(CollisionInfo& hitInfo) const
+    bool MousePicker::findMeshCollision(CollisionInfo& hitInfo) const
     {
         if (registry->any_of<Renderable>(hitInfo.collidedEntityId))
         {
@@ -88,27 +88,27 @@ namespace sage
         return false;
     }
 
-    void Picker::Update()
+    void MousePicker::Update()
     {
         updateMouseRayCollision();
     }
 
-    const CollisionInfo& Picker::GetMouseHitInfo() const
+    const CollisionInfo& MousePicker::GetMouseHitInfo() const
     {
         return mouseHitInfo;
     }
 
-    const RayCollision& Picker::GetFirstNavigationCollision() const
+    const RayCollision& MousePicker::GetFirstNavigationCollision() const
     {
         return navigationHitInfo.rlCollision;
     }
 
-    const RayCollision& Picker::GetFirstCollision() const
+    const RayCollision& MousePicker::GetFirstCollision() const
     {
         return mouseHitInfo.rlCollision;
     }
 
-    Picker::Picker(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
+    MousePicker::MousePicker(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
     {
     }
 } // namespace sage

@@ -11,7 +11,7 @@
 #include "FullscreenTextOverlayManager.hpp"
 #include "GameUiEngine.hpp"
 #include "LightManager.hpp"
-#include "Picker.hpp"
+#include "MousePicker.hpp"
 #include "systems/ActorMovementSystem.hpp"
 #include "systems/AnimationSystem.hpp"
 #include "systems/CollisionSystem.hpp"
@@ -34,7 +34,7 @@ namespace sage
           audioManager(_audioManager),
           userInput(std::make_unique<UserInput>(_keyMapping, _settings)),
           camera(std::make_unique<Camera>(_registry, userInput.get(), this)),
-          picker(std::make_unique<Picker>(_registry, this)),
+          picker(std::make_unique<MousePicker>(_registry, this)),
           cursor(std::make_unique<Cursor>(_registry, this)),
           lightSubSystem(std::make_unique<LightManager>(_registry, camera.get())),
           transformSystem(std::make_unique<TransformSystem>(_registry)),

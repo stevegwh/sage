@@ -12,7 +12,7 @@ namespace sage
 {
     class EngineSystems;
 
-    class Picker
+    class MousePicker
     {
         entt::registry* registry;
         EngineSystems* sys;
@@ -34,6 +34,6 @@ namespace sage
         [[nodiscard]] const RayCollision& GetFirstNavigationCollision() const;
         [[nodiscard]] const RayCollision& GetFirstCollision() const;
 
-        Picker(entt::registry* _registry, EngineSystems* _sys);
+        MousePicker(entt::registry* _registry, EngineSystems* _sys);
     };
 } // namespace sage

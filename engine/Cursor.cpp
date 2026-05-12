@@ -5,7 +5,7 @@
 #include "Cursor.hpp"
 
 #include "EngineSystems.hpp"
-#include "Picker.hpp"
+#include "MousePicker.hpp"
 #include "ResourceManager.hpp"
 #include "systems/CollisionSystem.hpp"
 #include "systems/NavigationGridSystem.hpp"
