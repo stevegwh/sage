@@ -16,7 +16,7 @@ namespace sage
 
       public:
         // All subscriptions added here will be removed when ChangeState is called (via StateMachine).
-        void ManageSubscription(const Subscription& newConnection)
+        void BindSubscription(const Subscription& newConnection)
         {
             currentStateSubscriptions.push_back(newConnection);
         }
