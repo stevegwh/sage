@@ -1,234 +1,65 @@
-//
-// Created by Steve Wheeler on 06/05/2024.
-//
-
 #include "EditorGui.hpp"
 
-#include "Camera.hpp"
-#include "Cursor.hpp"
-#include "EditorSettings.hpp"
-#include "Settings.hpp"
-#include "UserInput.hpp"
-#include "windows/FloatingWindow.hpp"
+#include "engine/GameUiEngine.hpp"
+#include "engine/ResourceManager.hpp"
+#include "engine/Settings.hpp"
+#include "engine/ui/UIElements.hpp"
+#include "engine/ui/UILayout.hpp"
+#include "engine/ui/UIWindow.hpp"
+
+#include <memory>
 
 namespace sage::editor
 {
-    void EditorGui::GuiFocused()
+    void EditorGui::SetPlacementStatus(
+        const std::string& selectedAsset, const std::string& hoveredGrid, const std::string& lastPlaced) const
     {
-        focused = true;
-        camera->ScrollDisable();
+        if (selectedAssetText) selectedAssetText->SetContent("Asset: " + selectedAsset);
+        if (gridText) gridText->SetContent("Grid: " + hoveredGrid);
+        if (lastPlacedText) lastPlacedText->SetContent("Last: " + lastPlaced);
     }
 
-    void EditorGui::GuiNotFocused()
+    EditorGui::EditorGui(GameUIEngine* ui, Settings* settings)
     {
-        focused = false;
-        camera->ScrollEnable();
-    }
+        const auto frame = ResourceManager::GetInstance().TextureLoad("resources/textures/ui/frame.png");
+        auto window = std::make_unique<Window>(
+            settings,
+            frame,
+            TextureStretchMode::STRETCH,
+            24.0f,
+            24.0f,
+            360.0f,
+            184.0f,
+            Padding{20, 16, 14, 14});
 
-    void EditorGui::OpenFileDialog()
-    {
-        fileDialogState->windowActive = true;
-    }
+        overlayWindow = ui->CreateWindow(std::move(window));
+        auto* mainTable = overlayWindow->CreateTable({0, 0, 4, 0});
 
-    void EditorGui::Update()
-    {
-        //        if (fileDialogState->CancelFilePressed)
-        //        {
-        //            EditorApplication::SerializeEditorSettings(editorSettings);
-        //        }
-        //        if (fileDialogState->SelectFilePressed)
-        //        {
-        //            auto previousMap = editorSettings->lastOpenedMap;
-        //            std::cout << TextFormat("%s", fileDialogState->dirPathText) << std::endl;
-        //            editorSettings->lastOpenedMap =
-        //                TextFormat("%s/%s", fileDialogState->dirPathText, fileDialogState->fileNameText);
-        //            editorSettings->lastVisitedDirectory = fileDialogState->dirPathText;
-        //            fileDialogState->SelectFilePressed = false;
-        //            if (previousMap != editorSettings->lastOpenedMap)
-        //            {
-        //                EditorApplication::SerializeEditorSettings(editorSettings);
-        //                onFileOpened.publish();
-        //            }
-        //        }
-    }
-
-    void EditorGui::Draw(const std::string& mode, Cursor* cursor)
-    {
-        // NB: This is being called within Draw2D, I am not sure if that matters. Should separate scene from UI
-        // completely, I think
-        rlImGuiBegin();
-        bool open = true;
-        ImGui::ShowDemoWindow(&open);
-        rlImGuiEnd();
-
-        //        if (fileDialogState->windowActive)
-        //        {
-        //            GuiLock();
-        //            GuiFocused();
-        //        }
-        //        else
-        //        {
-        //            GuiNotFocused();
-        //        }
-        drawDebugCollisionText(cursor);
-        //        float modifier = 100;
-        //        GuiGroupBox({0 + modifier, 8, 184, 30}, nullptr);
-        //        DrawRectangle(0 + modifier, 8, 184, 30, Fade(GRAY, 0.8f));
-        //        if (GuiButton({8 + modifier, 8, 24, 24}, "#002#")) // Save button
-        //        {
-        //            saveButtonPressed.publish();
-        //        }
-        //        if (GuiButton({40 + modifier, 8, 24, 24}, "#001#")) // Load button
-        //        {
-        //            OpenFileDialog();
-        //        }
-        //
-        //        for (auto& window : windows)
-        //        {
-        //            window->Update();
-        //        }
-        //
-        DrawText(TextFormat("EditorApplication Mode: %s", mode.c_str()), screenSize.x - 150, 50, 10, BLACK);
-        //
-        //        GuiUnlock();
-        //        GuiWindowFileDialog(fileDialogState.get());
-    }
-
-    const char* getCollisionLayerName(CollisionLayer layer)
-    {
-        switch (layer)
         {
-        case CollisionLayer::FLOORSIMPLE:
-            return "Floor";
-        case CollisionLayer::FLOORCOMPLEX:
-            return "Terrain";
-        case CollisionLayer::DEFAULT:
-            return "Default";
-        case CollisionLayer::BUILDING:
-            return "Building";
-        case CollisionLayer::NAVIGATION:
-            return "Navigation";
-        default:
-            return "Unknown";
+            auto* titleRow = mainTable->CreateTableRow(18);
+            auto* titleCell = titleRow->CreateTableCell();
+            auto title = std::make_unique<TitleBar>(ui, titleCell, TextBox::FontInfo{});
+            titleCell->CreateTitleBar(std::move(title), "Editor");
         }
-    }
 
-    void EditorGui::drawDebugCollisionText(Cursor* cursor)
-    {
-        // Draw some debug EditorGui text
-        DrawText(TextFormat("Hit Object: %s", cursor->hitObjectName.c_str()), 10, 50, 10, BLACK);
-
-        if (cursor->getFirstCollision().hit)
         {
-            int ypos = 70;
+            auto* contentRow = mainTable->CreateTableRow({10, 0, 0, 0});
+            auto* contentCell = contentRow->CreateTableCell({8, 8, 8, 8});
+            auto* table = contentCell->CreateTable();
 
-            DrawText(TextFormat("Distance: %3.2f", cursor->getFirstCollision().distance), 10, ypos, 10, BLACK);
+            auto addLine = [ui, table](const char* text) {
+                auto* row = table->CreateTableRow();
+                auto* cell = row->CreateTableCell();
+                auto label = std::make_unique<TextBox>(ui, cell, TextBox::FontInfo{});
+                return cell->CreateTextbox(std::move(label), text);
+            };
 
-            DrawText(
-                TextFormat(
-                    "Hit Pos: %3.2f %3.2f %3.2f",
-                    cursor->getFirstCollision().point.x,
-                    cursor->getFirstCollision().point.y,
-                    cursor->getFirstCollision().point.z),
-                10,
-                ypos + 15,
-                10,
-                BLACK);
-
-            DrawText(
-                TextFormat(
-                    "Hit Norm: %3.2f %3.2f %3.2f",
-                    cursor->getFirstCollision().normal.x,
-                    cursor->getFirstCollision().normal.y,
-                    cursor->getFirstCollision().normal.z),
-                10,
-                ypos + 30,
-                10,
-                BLACK);
-
-            // DrawText(TextFormat("Entity ID: %d", cursor->getMouseHitInfo().collidedEntityId), 10,
-            //          ypos + 45, 10, BLACK);
-
-            DrawText(
-                TextFormat("Col Layer: %s", getCollisionLayerName(cursor->getMouseHitInfo().collisionLayer)),
-                10,
-                ypos + 45,
-                10,
-                BLACK);
+            addLine("Scene: Grid workspace");
+            selectedAssetText = addLine("Asset: None");
+            gridText = addLine("Grid: None");
+            lastPlacedText = addLine("Last: None");
         }
-    }
 
-    void EditorGui::onWindowResize(Vector2 newScreenSize)
-    {
-        screenSize = newScreenSize;
-        toolbox->position = {10, 135};
-        toolbox->size = {200, 400};
-        toolbox->content_size = {140, 320};
-
-        objectprops->position = {newScreenSize.x - 200 - 10, 100};
-        objectprops->size = {200, newScreenSize.y / 2 - 100};
-        objectprops->content_size = {140, 320};
-
-        toolprops->position = {newScreenSize.x - 200 - 10, 100 + newScreenSize.y / 2 - 100};
-        toolprops->size = {200, newScreenSize.y / 2 - 100};
-        toolprops->content_size = {140, 320};
-    }
-
-    EditorGui::~EditorGui()
-    {
-        rlImGuiShutdown();
-    }
-
-    EditorGui::EditorGui(
-        EditorSettings* _editorSettings, Settings* _settings, UserInput* _userInput, Camera* _camera)
-        : editorSettings(_editorSettings), camera(_camera), settings(_settings)
-    {
-
-        // TODO: No hardcoded values
-        // TODO: Resolution aware fonts
-        // TODO: Toolbox (create mode) and toolbox properties
-        // TODO: Create tool: rotate, move, scale
-        screenSize = {static_cast<float>(settings->screenWidth), static_cast<float>(settings->screenHeight)};
-        {
-            entt::sink windowUpdate{_userInput->onWindowUpdate};
-            windowUpdate.connect<&EditorGui::onWindowResize>(this);
-        }
-        toolbox = std::make_unique<FloatingWindow>(FloatingWindow({10, 135}, {200, 400}, {140, 320}, "Toolbox"));
-        objectprops = std::make_unique<FloatingWindow>(FloatingWindow(
-            {static_cast<float>(settings->screenWidth - 200 - 10), 100},
-            {200, static_cast<float>(settings->screenHeight) / 2 - 100},
-            {140, 320},
-            "Object Properties"));
-        toolprops = std::make_unique<FloatingWindow>(FloatingWindow(
-            {static_cast<float>(settings->screenWidth - 200 - 10),
-             100 + static_cast<float>(settings->screenHeight) / 2 - 100},
-            {200, static_cast<float>(settings->screenHeight) / 2 - 100},
-            {140, 320},
-            "Tool Properties"));
-        windows.push_back(toolbox.get());
-        windows.push_back(objectprops.get());
-        windows.push_back(toolprops.get());
-        {
-            entt::sink onWindowHover{toolbox->onWindowHover};
-            entt::sink onWindowHoverStop{toolbox->onWindowHoverStop};
-            onWindowHover.connect<&EditorGui::GuiFocused>(this);
-            onWindowHoverStop.connect<&EditorGui::GuiNotFocused>(this);
-        }
-        {
-            entt::sink onWindowHover{objectprops->onWindowHover};
-            entt::sink onWindowHoverStop{objectprops->onWindowHoverStop};
-            onWindowHover.connect<&EditorGui::GuiFocused>(this);
-            onWindowHoverStop.connect<&EditorGui::GuiNotFocused>(this);
-        }
-        {
-            entt::sink onWindowHover{toolprops->onWindowHover};
-            entt::sink onWindowHoverStop{toolprops->onWindowHoverStop};
-            onWindowHover.connect<&EditorGui::GuiFocused>(this);
-            onWindowHoverStop.connect<&EditorGui::GuiNotFocused>(this);
-        }
-        fileDialogState = std::make_unique<GuiWindowFileDialogState>(
-            InitGuiWindowFileDialog(editorSettings->lastVisitedDirectory.c_str()));
-
-        rlImGuiSetup(true);
+        overlayWindow->FinalizeLayout();
     }
 } // namespace sage::editor

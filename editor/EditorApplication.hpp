@@ -1,45 +1,39 @@
-//
-// Created by Steve Wheeler on 04/05/2024.
-//
-
 #pragma once
 
-#include "Application.hpp"
-#include "EditorSettings.hpp"
+#include "entt/entt.hpp"
+
+#include <memory>
 
 namespace sage
 {
-    namespace editor
+    class AudioManager;
+    class EngineSystems;
+    class KeyMapping;
+    struct Settings;
+    class EditorScene;
+
+    class EditorApplication
     {
-        class EditorGui;
-    }
+        std::unique_ptr<entt::registry> registry;
+        std::unique_ptr<KeyMapping> keyMapping;
+        std::unique_ptr<Settings> settings;
+        std::unique_ptr<AudioManager> audioManager;
+        std::unique_ptr<EngineSystems> systems;
+        std::unique_ptr<EditorScene> scene;
 
-    class EditorApplication : public Application
-    {
-        enum class StateFlag
-        {
-            VOID,
-            EDITOR,
-            PLAY
-        };
+        bool exitWindowRequested = false;
+        bool exitWindow = false;
 
-        StateFlag state = StateFlag::EDITOR;
-        std::unique_ptr<EditorSettings> editorSettings;
-        bool debugMode = false;
-
-        void draw() override;
-        void enablePlayMode();
-        void enableEditMode();
-        void manageEditorState();
-        void initEditorScene();
-        void initGameScene();
+        void init();
+        void draw() const;
+        void handleScreenUpdate() const;
 
       public:
-        static std::string editorSettingsPath;
-
-        static void DeserializeEditorSettings(EditorSettings& settings);
-        static void SerializeEditorSettings(EditorSettings* settings);
-        void Update() override;
+        void Update();
         EditorApplication();
+        ~EditorApplication();
+
+        EditorApplication(const EditorApplication&) = delete;
+        EditorApplication& operator=(const EditorApplication&) = delete;
     };
 } // namespace sage

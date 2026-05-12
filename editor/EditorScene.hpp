@@ -1,72 +1,56 @@
-﻿//
-// Created by steve on 22/02/2024.
-//
-
 #pragma once
 
-#include "scenes/Scene.hpp"
-
-#include "entt/entt.hpp"
+#include "engine/components/NavigationGridSquare.hpp"
+#include "raylib.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace sage
 {
-    struct Settings;
-    struct EditorSettings;
-    class UserInput;
+    class EngineSystems;
 
     namespace editor
     {
         class EditorGui;
-        class FloatingWindow;
-    } // namespace editor
+    }
 
-    enum EditorMode
+    class EditorScene
     {
-        IDLE,
-        SELECT,
-        WALK,
-        CREATE
-    };
+        struct PlaceableMesh
+        {
+            std::string displayName;
+            std::string modelKey;
+            std::string labelStem;
+        };
 
-    class EditorScene : public Scene
-    {
-        EditorMode currentEditorMode = IDLE;
-
-        entt::entity boundingBoxHighlight;
-
-        bool destroySelected = false;
-
+        EngineSystems* sys{};
         std::unique_ptr<editor::EditorGui> gui;
-        EditorSettings* editorSettings;
+        std::vector<PlaceableMesh> placeables;
+        std::size_t selectedPlaceableIndex = 0;
+        unsigned int placedMeshCount = 0;
+        std::optional<GridSquare> hoveredGridSquare;
+        std::optional<Vector3> snappedPlacementPosition;
+        std::string lastPlacedLabel = "None";
 
-        // Event responses
-        void OnCursorClick();
-        void OnCollisionHit(entt::entity entity);
-        void OnSerializeSave();
-        void OnOpenPressed();
-        void OnOpenClicked();
-        void OnFileOpened();
-        void OnDeleteModeKeyPressed();
-        void OnCreateModeKeyPressed();
-        void OnGenGridKeyPressed();
+        void createGridPickSurface() const;
+        void refreshPlacementTarget();
+        void refreshOverlay() const;
+        void cyclePlaceable();
+        void placeSelectedMesh();
 
-        entt::entity selectedObject{};
-        void moveSelectedObjectToCursorHit() const;
+        [[nodiscard]] const PlaceableMesh& selectedPlaceable() const;
+        [[nodiscard]] std::string describeHoveredGrid() const;
+        [[nodiscard]] std::string makePlacedLabel(const PlaceableMesh& placeable) const;
 
       public:
-        void Draw3D() override;
-        void Draw2D() override;
-        void DrawDebug3D() override;
-        void Update() override;
-        ~EditorScene() override;
-        EditorScene(
-            entt::registry* _registry,
-            KeyMapping* _keyMapping,
-            Settings* _settings,
-            EditorSettings* _editorSettings);
+        void Update();
+        void Draw3D() const;
+        void Draw2D() const;
+
+        explicit EditorScene(EngineSystems* _sys);
+        ~EditorScene();
     };
 } // namespace sage

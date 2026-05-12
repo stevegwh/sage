@@ -1,213 +1,180 @@
-﻿//
-// Created by steve on 22/02/2024.
-//
-
 #include "EditorScene.hpp"
 
-#include "components/sgTransform.hpp"
 #include "EditorGui.hpp"
-#include "EditorSettings.hpp"
-#include "GameObjectFactory.hpp"
-#include "LightManager.hpp"
-#include "Systems.hpp"
-#include "systems/CollisionSystem.hpp"
-#include "systems/NavigationGridSystem.hpp"
-#include "windows/FloatingWindow.hpp"
+#include "engine/AudioManager.hpp"
+#include "engine/Camera.hpp"
+#include "engine/CollisionLayers.hpp"
+#include "engine/Cursor.hpp"
+#include "engine/EngineSystems.hpp"
+#include "engine/GameUiEngine.hpp"
+#include "engine/LightManager.hpp"
+#include "engine/ResourceManager.hpp"
+#include "engine/UserInput.hpp"
+#include "engine/components/Collideable.hpp"
+#include "engine/components/Renderable.hpp"
+#include "engine/components/sgTransform.hpp"
+#include "engine/systems/RenderSystem.hpp"
+#include "engine/systems/TransformSystem.hpp"
 
+#include "engine/systems/NavigationGridSystem.hpp"
+#include "raylib.h"
 #include "raymath.h"
-#include "Settings.hpp"
-#include "UserInput.hpp"
 
-// TODO: This shouldn't use "sys", it should have its own "Data" class that only inits the systems that it
-// needs.
+#include <format>
 
 namespace sage
 {
-    void EditorScene::moveSelectedObjectToCursorHit() const
+    namespace
     {
-        // TODO: Confirm this works
-        // (It does not. Set event to update the bb of the selected object)
-        auto& selectedObjectTrans = registry->get<sgTransform>(selectedObject);
-        selectedObjectTrans.SetPosition(data->cursor->getFirstCollision().point);
+        constexpr float kGridHalfExtent = 50.0f;
+        constexpr float kGridPickSurfaceHalfHeight = 0.02f;
+        constexpr float kPlacementMarkerHeight = 0.16f;
+    } // namespace
+
+    const EditorScene::PlaceableMesh& EditorScene::selectedPlaceable() const
+    {
+        return placeables.at(selectedPlaceableIndex);
     }
 
-    void EditorScene::OnCursorClick()
+    std::string EditorScene::describeHoveredGrid() const
     {
-        if (gui->focused) return;
-        if (data->cursor->getFirstCollision().hit)
-        {
-            switch (registry->get<Collideable>(data->cursor->getMouseHitInfo().collidedEntityId).collisionLayer)
-            {
-            case CollisionLayer::DEFAULT:
-                break;
-            case CollisionLayer::FLOORSIMPLE:
-                if (currentEditorMode == CREATE)
-                {
-                }
-                else if (currentEditorMode == SELECT)
-                {
-                    moveSelectedObjectToCursorHit();
-                    selectedObject = {};
-                    currentEditorMode = IDLE;
-                }
-                break;
-            case CollisionLayer::BUILDING:
-                currentEditorMode = SELECT;
-                selectedObject = data->cursor->getMouseHitInfo().collidedEntityId;
-                break;
-            }
-        }
-        else
-        {
-            if (currentEditorMode != SELECT)
-            {
-                selectedObject = {};
-            }
-        }
+        if (!hoveredGridSquare.has_value()) return "None";
+        return std::format("{}, {}", hoveredGridSquare->row, hoveredGridSquare->col);
     }
 
-    void EditorScene::OnSerializeSave()
+    std::string EditorScene::makePlacedLabel(const PlaceableMesh& placeable) const
     {
-        // data->Save();
+        return std::format("_EDITOR_{}_{:03}", placeable.labelStem, placedMeshCount + 1);
     }
 
-    void EditorScene::OnOpenPressed()
+    void EditorScene::createGridPickSurface() const
     {
-        if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL))
-        {
-            // data->Load();
-            gui->OpenFileDialog();
-        }
+        const auto entity = sys->registry->create();
+        const BoundingBox gridBounds = {
+            {-kGridHalfExtent, -kGridPickSurfaceHalfHeight, -kGridHalfExtent},
+            {kGridHalfExtent, kGridPickSurfaceHalfHeight, kGridHalfExtent}};
+        auto& collideable = sys->registry->emplace<Collideable>(entity, gridBounds, MatrixIdentity());
+        collideable.SetCollisionLayer(collision_layers::GeometrySimple);
+        sys->registry->emplace<StaticCollideable>(entity);
     }
 
-    void EditorScene::OnFileOpened()
+    void EditorScene::refreshPlacementTarget()
     {
-        sceneChange.publish(); // TODO: Make scene files?
+        hoveredGridSquare.reset();
+        snappedPlacementPosition.reset();
+
+        const auto& collision = sys->cursor->getFirstNaviCollision();
+        if (!collision.hit) return;
+
+        GridSquare square{};
+        if (!sys->navigationGridSystem->WorldToGridSpace(collision.point, square)) return;
+
+        const auto* gridSquare = sys->navigationGridSystem->GetGridSquare(square.row, square.col);
+        if (!gridSquare) return;
+
+        hoveredGridSquare = square;
+        snappedPlacementPosition = {
+            gridSquare->worldPosCentre.x,
+            collision.point.y,
+            gridSquare->worldPosCentre.z};
     }
 
-    void EditorScene::OnDeleteModeKeyPressed()
+    void EditorScene::refreshOverlay() const
     {
-        if (currentEditorMode != SELECT) return;
-        currentEditorMode = IDLE;
-        registry->destroy(selectedObject);
-        selectedObject = {};
+        gui->SetPlacementStatus(selectedPlaceable().displayName, describeHoveredGrid(), lastPlacedLabel);
     }
 
-    void EditorScene::OnCreateModeKeyPressed()
+    void EditorScene::cyclePlaceable()
     {
-        if (currentEditorMode == CREATE)
-            currentEditorMode = IDLE;
-        else
-            currentEditorMode = CREATE;
+        selectedPlaceableIndex = (selectedPlaceableIndex + 1) % placeables.size();
+        refreshOverlay();
     }
 
-    void EditorScene::OnGenGridKeyPressed()
+    void EditorScene::placeSelectedMesh()
     {
-        // data->navigationGridSystem->PopulateGrid();
-    }
+        if (!snappedPlacementPosition.has_value()) return;
 
-    void EditorScene::OnCollisionHit(entt::entity entity)
-    {
-        if (gui->focused) return;
-        // Draw the mesh bbox if we hit it
-        boundingBoxHighlight = entity;
-    }
+        const auto& placeable = selectedPlaceable();
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<sgTransform>(entity);
+        sys->transformSystem->SetPosition(entity, *snappedPlacementPosition);
+        sys->transformSystem->SetScale(entity, 1.0f);
+        sys->transformSystem->SetRotation(entity, Vector3Zero());
 
-    void EditorScene::Draw3D()
-    {
-        if (currentEditorMode == SELECT)
-        {
-            data->collisionSystem->BoundingBoxDraw(selectedObject, ORANGE);
-        }
+        auto model = ResourceManager::GetInstance().GetModelCopy(placeable.modelKey);
+        auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), MatrixIdentity());
+        lastPlacedLabel = makePlacedLabel(placeable);
+        renderable.SetName(lastPlacedLabel);
 
-        if (currentEditorMode == IDLE)
-        {
-            if (boundingBoxHighlight != entt::null)
-            {
-                data->collisionSystem->BoundingBoxDraw(boundingBoxHighlight);
-                boundingBoxHighlight = entt::null;
-            }
-        }
+        const auto localBounds = renderable.GetModel()->CalcLocalBoundingBox();
+        auto& collideable = sys->registry->emplace<Collideable>(
+            entity, localBounds, sys->registry->get<sgTransform>(entity).GetMatrixNoRot());
+        collideable.SetCollisionLayer(collision_layers::Obstacle);
+        collideable.blocksNavigation = true;
+        sys->registry->emplace<StaticCollideable>(entity);
+        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
 
-        Scene::Draw3D();
-    }
-
-    void EditorScene::Draw2D()
-    {
-        std::string mode = "NONE";
-        if (currentEditorMode == IDLE)
-            mode = "VOID";
-        else if (currentEditorMode == SELECT)
-            mode = "SELECT";
-        else if (currentEditorMode == WALK)
-            mode = "MOVE";
-        else if (currentEditorMode == CREATE)
-            mode = "CREATE";
-
-        gui->Draw(mode, data->cursor.get());
-        // Do not draw2D the game cursor
-    }
-
-    void EditorScene::DrawDebug3D()
-    {
-        DrawGrid(data->navigationGridSystem->slices, data->navigationGridSystem->spacing);
-        Scene::DrawDebug3D();
+        ++placedMeshCount;
+        refreshOverlay();
     }
 
     void EditorScene::Update()
     {
-        Scene::Update();
-        gui->Update();
+        sys->audioManager->Update();
+        sys->userInput->ListenForInput();
+        sys->camera->Update();
+        sys->cursor->Update();
+        refreshPlacementTarget();
+
+        if (IsKeyPressed(KEY_TAB))
+        {
+            cyclePlaceable();
+        }
+        if (IsKeyPressed(KEY_P))
+        {
+            placeSelectedMesh();
+        }
+
+        refreshOverlay();
+        sys->UI().Update();
     }
 
-    EditorScene::~EditorScene()
+    void EditorScene::Draw3D() const
     {
+        sys->renderSystem->Draw();
+        DrawGrid(120, 1.0f);
+        DrawLine3D({0, 0.02f, 0}, {8, 0.02f, 0}, RED);
+        DrawLine3D({0, 0.02f, 0}, {0, 8, 0}, GREEN);
+        DrawLine3D({0, 0.02f, 0}, {0, 0.02f, 8}, BLUE);
+
+        if (snappedPlacementPosition.has_value())
+        {
+            const Vector3 marker = {
+                snappedPlacementPosition->x,
+                snappedPlacementPosition->y + kPlacementMarkerHeight,
+                snappedPlacementPosition->z};
+            DrawCubeWires(marker, 1.0f, kPlacementMarkerHeight, 1.0f, GOLD);
+            DrawSphere(marker, 0.08f, GOLD);
+        }
     }
 
-    EditorScene::EditorScene(
-        entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, EditorSettings* _editorSettings)
-        : Scene(_registry, _keyMapping, _settings),
-          editorSettings(_editorSettings),
-          gui(std::make_unique<editor::EditorGui>(
-              _editorSettings, _settings, data->userInput.get(), data->camera.get()))
+    void EditorScene::Draw2D() const
     {
-        {
-            entt::sink onClickEvent{data->cursor->onAnyLeftClick};
-            onClickEvent.connect<&EditorScene::OnCursorClick>(this);
-        }
-        {
-            entt::sink onCollisionHitEvent{data->cursor->onCollisionHit};
-            onCollisionHitEvent.connect<&EditorScene::OnCollisionHit>(this);
-        }
-        {
-            entt::sink keyDeletePressed{data->userInput->keyDeletePressed};
-            keyDeletePressed.connect<&EditorScene::OnDeleteModeKeyPressed>(this);
-        }
-        {
-            entt::sink keyPPressed{data->userInput->keyPPressed};
-            keyPPressed.connect<&EditorScene::OnCreateModeKeyPressed>(this);
-        }
-        {
-            entt::sink keyGPressed{data->userInput->keyGPressed};
-            keyGPressed.connect<&EditorScene::OnGenGridKeyPressed>(this);
-        }
-        {
-            entt::sink keyMPressed{data->userInput->keyMPressed};
-            keyMPressed.connect<&EditorScene::OnSerializeSave>(this);
-        }
-        {
-            entt::sink keyOPressed{data->userInput->keyOPressed};
-            keyOPressed.connect<&EditorScene::OnOpenPressed>(this);
-        }
-        {
-            entt::sink saveButton{gui->saveButtonPressed};
-            saveButton.connect<&EditorScene::OnSerializeSave>(this);
-        }
-        {
-            entt::sink loadButton{gui->onFileOpened};
-            loadButton.connect<&EditorScene::OnFileOpened>(this);
-        }
-        lightSubSystem->lights[0] =
-            CreateLight(LIGHT_POINT, {0, 25, 0}, Vector3Zero(), WHITE, lightSubSystem->shader);
+        sys->UI().Draw2D();
     }
+
+    EditorScene::EditorScene(EngineSystems* _sys)
+        : sys(_sys), gui(std::make_unique<editor::EditorGui>(&sys->UI(), sys->settings))
+    {
+        sys->navigationGridSystem->Init(100, 1.0f);
+        createGridPickSurface();
+        placeables = {
+            PlaceableMesh{"Sphere", "vfx_sphere", "SPHERE"},
+            PlaceableMesh{"Flat Torus", "vfx_flattorus", "FLAT_TORUS"},
+            PlaceableMesh{"Sword", "mdl_sword", "SWORD"},
+        };
+        refreshOverlay();
+    }
+
+    EditorScene::~EditorScene() = default;
 } // namespace sage

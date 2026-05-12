@@ -1,133 +1,107 @@
-//
-// Created by Steve Wheeler on 04/05/2024.
-//
-
 #include "EditorApplication.hpp"
-#include "Camera.hpp"
-#include "Cursor.hpp"
-#include "EditorGui.hpp"
+
 #include "EditorScene.hpp"
-#include "EditorSettings.hpp"
-#include "scenes/ExampleScene.hpp"
-#include "Systems.hpp"
-#include "UserInput.hpp"
+#include "engine/AudioManager.hpp"
+#include "engine/Camera.hpp"
+#include "engine/EngineSystems.hpp"
+#include "engine/KeyMapping.hpp"
+#include "engine/Serializer.hpp"
+#include "engine/Settings.hpp"
+#include "engine/UserInput.hpp"
 
-#include <fstream>
-#include <memory>
-
-#include "cereal/archives/xml.hpp"
-#include "cereal/cereal.hpp"
+#include "raylib.h"
 
 namespace sage
 {
-    std::string EditorApplication::editorSettingsPath = "resources/editor-settings.xml";
-
-    void EditorApplication::enableEditMode()
+    void EditorApplication::init()
     {
-        state = StateFlag::EDITOR;
-    }
-
-    void EditorApplication::enablePlayMode()
-    {
-        state = StateFlag::PLAY;
-    }
-
-    void EditorApplication::initEditorScene()
-    {
-        scene =
-            std::make_unique<EditorScene>(registry.get(), keyMapping.get(), settings.get(), editorSettings.get());
-        {
-            entt::sink keyRPressed{scene->data->userInput->keyRPressed};
-            keyRPressed.connect<&EditorApplication::enablePlayMode>(this);
-        }
-        {
-            entt::sink sink{scene->sceneChange};
-            sink.connect<&EditorApplication::enableEditMode>(this);
-        }
+        SetConfigFlags(FLAG_MSAA_4X_HINT);
+        const auto screenSize = settings->GetScreenSize();
+        InitWindow(static_cast<int>(screenSize.x), static_cast<int>(screenSize.y), "BG Raylib Editor");
+        settings->UpdateViewport();
+        SetExitKey(KEY_NULL);
         EnableCursor();
+
+        serializer::LoadAssetBinFile(registry.get(), "resources/assets.bin");
+        systems = std::make_unique<EngineSystems>(registry.get(), keyMapping.get(), settings.get(), audioManager.get());
+        scene = std::make_unique<EditorScene>(systems.get());
     }
 
-    void EditorApplication::initGameScene()
+    void EditorApplication::draw() const
     {
-        scene = std::make_unique<ExampleScene>(registry.get(), keyMapping.get(), settings.get());
+        BeginDrawing();
+        ClearBackground(Color{232, 235, 238, 255});
+
+        BeginMode3D(*systems->camera->getRaylibCam());
+        scene->Draw3D();
+        EndMode3D();
+
+        scene->Draw2D();
+        DrawFPS(12, 12);
+
+        if (exitWindowRequested)
         {
-            entt::sink keyRPressed{scene->data->userInput->keyRPressed};
-            keyRPressed.connect<&EditorApplication::enableEditMode>(this);
+            const auto viewport = settings->GetViewPort();
+            DrawRectangle(0, 100, static_cast<int>(viewport.x), 200, BLACK);
+            const auto text = "Are you sure you want to exit program? [Y/N]";
+            const auto textSize = MeasureText(text, 30);
+            DrawText(text, static_cast<int>((viewport.x - textSize) / 2), 180, 30, WHITE);
         }
-        HideCursor();
+
+        EndDrawing();
     }
 
-    void EditorApplication::SerializeEditorSettings(EditorSettings* settings)
+    void EditorApplication::handleScreenUpdate() const
     {
-        std::cout << "Save called" << std::endl;
-        using namespace entt::literals;
+        if (!settings->toggleFullScreenRequested) return;
 
-        std::ofstream storage(EditorApplication::editorSettingsPath.c_str());
-        if (!storage.is_open())
+        const auto prev = settings->GetViewPort();
+
+#ifdef __APPLE__
+        if (!IsWindowFullscreen())
         {
-            // Handle file opening error
-            return;
-        }
-
-        {
-            // output finishes flushing its contents when it goes out of scope
-            cereal::XMLOutputArchive output{storage};
-            output(*settings);
-        }
-        storage.close();
-        std::cout << "Save finished" << std::endl;
-    }
-
-    void EditorApplication::DeserializeEditorSettings(EditorSettings& settings)
-    {
-        std::cout << "Load called" << std::endl;
-        using namespace entt::literals;
-
-        std::ifstream storage(EditorApplication::editorSettingsPath.c_str());
-        if (storage.is_open())
-        {
-            cereal::XMLInputArchive input{storage};
-            input(settings);
-            storage.close();
+            const int monitor = GetCurrentMonitor();
+            SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
+            settings->SetScreenSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
+            ToggleFullscreen();
         }
         else
         {
-            // File doesn't exist, create a new file with the default key mapping
-            std::cout << "Key mapping file not found. Creating a new file with the default key mapping."
-                      << std::endl;
-            SerializeEditorSettings(&settings);
+            ToggleFullscreen();
+            settings->ResetToUserDefined();
+            const auto screen = settings->GetScreenSize();
+            SetWindowSize(static_cast<int>(screen.x), static_cast<int>(screen.y));
         }
-        std::cout << "Load finished" << std::endl;
-    }
-
-    void EditorApplication::manageEditorState()
-    {
-        if (state != StateFlag::VOID)
+#else
+        const bool maximized = GetScreenWidth() == GetMonitorWidth(GetCurrentMonitor()) &&
+                               GetScreenHeight() == GetMonitorHeight(GetCurrentMonitor());
+        if (!maximized)
         {
-            registry = std::make_unique<entt::registry>();
-            switch (state)
-            {
-            case StateFlag::PLAY:
-                SerializeEditorSettings(editorSettings.get());
-                initGameScene();
-                break;
-            case StateFlag::EDITOR:
-                initEditorScene();
-                break;
-            case StateFlag::VOID:
-                break;
-            }
-            state = StateFlag::VOID;
+            const int monitor = GetCurrentMonitor();
+            SetWindowSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
+            settings->SetScreenSize(GetMonitorWidth(monitor), GetMonitorHeight(monitor));
+            ToggleBorderlessWindowed();
         }
+        else
+        {
+            ToggleBorderlessWindowed();
+            settings->ResetToUserDefined();
+            const auto screen = settings->GetScreenSize();
+            SetWindowSize(static_cast<int>(screen.x), static_cast<int>(screen.y));
+        }
+#endif
+
+        settings->toggleFullScreenRequested = false;
+        systems->userInput->onWindowUpdate.Publish(prev, settings->GetViewPort());
     }
 
     void EditorApplication::Update()
     {
         init();
         SetTargetFPS(60);
-        while (!exitWindow) // Detect window close button or ESC key
-        {
 
+        while (!exitWindow)
+        {
             if (WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) exitWindowRequested = true;
 
             if (exitWindowRequested)
@@ -138,43 +112,22 @@ namespace sage
                     exitWindowRequested = false;
             }
 
-            manageEditorState();
             scene->Update();
             draw();
             handleScreenUpdate();
         }
     }
 
-    void EditorApplication::draw()
+    EditorApplication::EditorApplication()
+        : registry(std::make_unique<entt::registry>()),
+          keyMapping(std::make_unique<KeyMapping>()),
+          settings(std::make_unique<Settings>(&exitWindow)),
+          audioManager(std::make_unique<AudioManager>())
     {
-        BeginDrawing();
-        ClearBackground(BLUE);
-        BeginMode3D(*scene->data->camera->getRaylibCam());
-        scene->Draw3D();
-        scene->DrawDebug3D();
-        EndMode3D();
-        scene->Draw2D();
-        DrawFPS(10, 10);
-
-        if (exitWindowRequested)
-        {
-            DrawRectangle(0, 100, settings->screenWidth, 200, BLACK);
-            auto textSize = MeasureText("Are you sure you want to exit program? [Y/N]", 30);
-            DrawText(
-                "Are you sure you want to exit program? [Y/N]",
-                (settings->screenWidth - textSize) / 2,
-                180,
-                30,
-                WHITE);
-        }
-
-        EndDrawing();
     }
 
-    EditorApplication::EditorApplication()
+    EditorApplication::~EditorApplication()
     {
-        EditorSettings _settings;
-        DeserializeEditorSettings(_settings);
-        editorSettings = std::make_unique<EditorSettings>(_settings);
+        CloseWindow();
     }
 } // namespace sage

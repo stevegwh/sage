@@ -17,10 +17,17 @@ namespace sage
     void Cursor::checkMouseHover()
     {
         const auto& mouseHitInfo = getMouseHitInfo();
-        if (!registry->any_of<Collideable>(mouseHitInfo.collidedEntityId)) return;
-        const auto& layer = registry->get<Collideable>(mouseHitInfo.collidedEntityId).collisionLayer;
+        if (!mouseHitInfo.rlCollision.hit || !mouseHitInfo.collisionLayer.IsValid())
+        {
+            if (m_hoverInfo.has_value())
+            {
+                onStopHover.Publish();
+            }
+            m_hoverInfo.reset();
+            return;
+        }
 
-        if (!mouseHitInfo.rlCollision.hit || !cursorHoverMask.Contains(layer))
+        if (!cursorHoverMask.Contains(mouseHitInfo.collisionLayer))
         {
             if (m_hoverInfo.has_value())
             {
@@ -51,12 +58,11 @@ namespace sage
         if (!enabled) return;
 
         const auto& hitInfo = getMouseHitInfo();
-        const auto& layer = registry->get<Collideable>(hitInfo.collidedEntityId).collisionLayer;
-        if (IsNavigationLayer(layer))
+        if (hitInfo.rlCollision.hit && IsNavigationLayer(hitInfo.collisionLayer))
         {
-            onNavigationClick.Publish(hitInfo.collidedEntityId, layer);
+            onNavigationClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
         }
-        onLeftClick.Publish(hitInfo.collidedEntityId, layer);
+        onLeftClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
     }
 
     void Cursor::onMouseRightClick() const
@@ -75,10 +81,9 @@ namespace sage
         leftClickTimer = 0;
 
         const auto& hitInfo = getMouseHitInfo();
-        const auto& layer = registry->get<Collideable>(hitInfo.collidedEntityId).collisionLayer;
-        if (IsNavigationLayer(layer))
+        if (hitInfo.rlCollision.hit && IsNavigationLayer(hitInfo.collisionLayer))
         {
-            onNavigationClick.Publish(hitInfo.collidedEntityId, layer);
+            onNavigationClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
         }
     }
 

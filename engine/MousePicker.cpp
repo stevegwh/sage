@@ -62,6 +62,9 @@ namespace sage
 
     void MousePicker::resetHitInfo(CollisionInfo& hitInfo)
     {
+        hitInfo.collidedEntityId = entt::null;
+        hitInfo.collidedBB = {};
+        hitInfo.collisionLayer = CollisionLayer{};
         hitInfo.rlCollision = {};
         hitInfo.rlCollision.distance = std::numeric_limits<float>::max();
         hitInfo.rlCollision.hit = false;
