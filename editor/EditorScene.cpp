@@ -101,7 +101,7 @@ namespace sage
         sys->transformSystem->SetScale(entity, 1.0f);
         sys->transformSystem->SetRotation(entity, Vector3Zero());
 
-        auto model = ResourceManager::GetInstance().GetModelCopy(placeable.modelKey);
+        auto model = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
         auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), MatrixIdentity());
         lastPlacedLabel = makePlacedLabel(placeable);
         renderable.SetName(lastPlacedLabel);

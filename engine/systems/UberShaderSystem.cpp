@@ -23,11 +23,11 @@ namespace sage
         uber.colEmissiveLoc = colEmissionLoc;
         auto& renderable = registry->get<Renderable>(entity);
 
-        // auto& materials = renderable.GetModel()->rlmodel.materials;
-        for (int i = 0; i < renderable.GetModel()->rlmodel.materialCount; ++i)
+        const auto& rlmodel = renderable.GetModel()->GetRlModel();
+        for (int i = 0; i < rlmodel.materialCount; ++i)
         {
-            auto col = renderable.GetModel()->rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].color;
-            auto emissiveTex = renderable.GetModel()->rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].texture.id;
+            auto col = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].color;
+            auto emissiveTex = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].texture.id;
             if (col.r != 0 || col.g != 0 || col.b != 0)
             {
                 uber.SetFlag(i, UberShaderComponent::Flags::EmissiveCol);

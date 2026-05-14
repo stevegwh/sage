@@ -54,30 +54,58 @@ namespace sage
         return vanityName;
     }
 
-    ModelSafe* Renderable::GetModel() const
+    ModelView* Renderable::GetModel()
     {
-        // assert(model != nullptr);
-        return model.get();
+        return std::visit(
+            [](auto& m) -> ModelView* {
+                using T = std::decay_t<decltype(m)>;
+                if constexpr (std::is_same_v<T, std::monostate>)
+                {
+                    return nullptr;
+                }
+                else
+                {
+                    return &m;
+                }
+            },
+            model);
     }
 
-    void Renderable::SetModel(Model _model)
+    const ModelView* Renderable::GetModel() const
     {
-        model = std::make_unique<ModelSafeOwned>(_model);
+        return std::visit(
+            [](const auto& m) -> const ModelView* {
+                using T = std::decay_t<decltype(m)>;
+                if constexpr (std::is_same_v<T, std::monostate>)
+                {
+                    return nullptr;
+                }
+                else
+                {
+                    return &m;
+                }
+            },
+            model);
     }
 
-    void Renderable::SetModel(ModelSafe _model)
+    ModelMutable* Renderable::GetMutable()
     {
-        model = std::make_unique<ModelSafe>(std::move(_model));
+        return std::get_if<ModelMutable>(&model);
     }
 
-    void Renderable::SetModel(ModelSafeOwned _model)
+    const ModelMutable* Renderable::GetMutable() const
     {
-        model = std::make_unique<ModelSafeOwned>(std::move(_model));
+        return std::get_if<ModelMutable>(&model);
     }
 
-    void Renderable::SetModel(ModelSafeManaged _model)
+    void Renderable::SetModel(ModelView _model)
     {
-        model = std::make_unique<ModelSafeManaged>(std::move(_model));
+        model = std::move(_model);
+    }
+
+    void Renderable::SetModel(ModelMutable _model)
+    {
+        model = std::move(_model);
     }
 
     void Renderable::Enable()
@@ -90,118 +118,15 @@ namespace sage
         active = false;
     }
 
-    // Copy constructor — only meaningful when the source holds a shared ModelSafe.
-    // Copying a Renderable that holds a ModelSafeOwned/ModelSafeManaged would either
-    // duplicate procedural ownership or double-release the RM entry, neither of which
-    // is sound.
-    Renderable::Renderable(const Renderable& other)
-        : name(other.name),
-          vanityName(other.vanityName),
-          hint(other.hint),
-          active(other.active),
-          initialTransform(other.initialTransform),
-          reqShaderUpdate(other.reqShaderUpdate),
-          serializable(other.serializable)
+    Renderable::Renderable(ModelView _model, Matrix _localTransform) : initialTransform(_localTransform)
     {
-        if (other.model)
-        {
-            assert(
-                dynamic_cast<ModelSafeOwned*>(other.model.get()) == nullptr &&
-                dynamic_cast<ModelSafeManaged*>(other.model.get()) == nullptr &&
-                "Renderable copy is only valid for shared (non-unique) models");
-            model = std::make_unique<ModelSafe>();
-            model->rlmodel = other.model->rlmodel;
-            model->modelKey = other.model->modelKey;
-        }
+        _model.SetTransform(_localTransform);
+        model = std::move(_model);
     }
 
-    Renderable& Renderable::operator=(const Renderable& other)
+    Renderable::Renderable(ModelMutable _model, Matrix _localTransform) : initialTransform(_localTransform)
     {
-        if (this != &other)
-        {
-            name = other.name;
-            vanityName = other.vanityName;
-            hint = other.hint;
-            active = other.active;
-            initialTransform = other.initialTransform;
-            reqShaderUpdate = other.reqShaderUpdate;
-            serializable = other.serializable;
-
-            if (other.model)
-            {
-                assert(
-                    dynamic_cast<ModelSafeOwned*>(other.model.get()) == nullptr &&
-                    dynamic_cast<ModelSafeManaged*>(other.model.get()) == nullptr &&
-                    "Renderable copy is only valid for shared (non-unique) models");
-                model = std::make_unique<ModelSafe>();
-                model->rlmodel = other.model->rlmodel;
-                model->modelKey = other.model->modelKey;
-            }
-            else
-            {
-                model.reset();
-            }
-        }
-        return *this;
-    }
-
-    // Move constructor
-    Renderable::Renderable(Renderable&& other) noexcept
-        : model(std::move(other.model)),
-          name(std::move(other.name)),
-          vanityName(std::move(other.vanityName)),
-          hint(other.hint),
-          active(other.active),
-          initialTransform(other.initialTransform),
-          reqShaderUpdate(std::move(other.reqShaderUpdate)),
-          serializable(other.serializable)
-    {
-    }
-
-    // Move assignment operator
-    Renderable& Renderable::operator=(Renderable&& other) noexcept
-    {
-        if (this != &other)
-        {
-            model = std::move(other.model);
-            name = std::move(other.name);
-            vanityName = std::move(other.vanityName);
-            hint = other.hint;
-            active = other.active;
-            initialTransform = other.initialTransform;
-            reqShaderUpdate = std::move(other.reqShaderUpdate);
-            serializable = other.serializable;
-        }
-        return *this;
-    }
-
-    Renderable::Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform)
-        : model(std::move(_model)), initialTransform(_localTransform)
-    {
-        model->SetTransform(_localTransform);
-    }
-
-    Renderable::Renderable(Model _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafeOwned>(_model)), initialTransform(_localTransform)
-    {
-        model->SetTransform(_localTransform);
-    }
-
-    Renderable::Renderable(ModelSafe _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafe>(std::move(_model))), initialTransform(_localTransform)
-    {
-        model->SetTransform(_localTransform);
-    }
-
-    Renderable::Renderable(ModelSafeOwned _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafeOwned>(std::move(_model))), initialTransform(_localTransform)
-    {
-        model->SetTransform(_localTransform);
-    }
-
-    Renderable::Renderable(ModelSafeManaged _model, Matrix _localTransform)
-        : model(std::make_unique<ModelSafeManaged>(std::move(_model))), initialTransform(_localTransform)
-    {
-        model->SetTransform(_localTransform);
+        _model.SetTransform(_localTransform);
+        model = std::move(_model);
     }
 } // namespace sage

@@ -13,6 +13,8 @@
 #define STB_INCLUDE_LINE_NONE
 
 #include "external/cgltf.h"
+
+#include <ranges>
 extern "C"
 {
 #include "raylib/src/external/tinyobj_loader_c.h"
@@ -455,71 +457,121 @@ namespace sage
         modelCopies.emplace(key, modelInfo);
     }
 
-    /**
-     * @brief Returns a shallow copy of the loaded model
-     * NB: Caller should not free the memory.
-     * @param key the *key* of the model, not its path. This is either an alias defined in the JSON file, or the
-     * mesh name in Blender minus its format extension
-     * @return Model
-     */
-    ModelSafe ResourceManager::GetModelCopy(const std::string& key)
+    namespace
     {
-        assert(modelCopies.contains(key));
-        ModelSafe modelsafe;
-        modelsafe.rlmodel = modelCopies.at(key).model;
-        modelsafe.SetKey(key);
-        return modelsafe;
+        // Registry of generators for primitives baked into the asset pack. CreateModelMutable
+        // uses these to regenerate a fresh mesh when the source asset has no on-disk file.
+        // Hardcoded list — raylib's GenMesh* functions, parameterized at canonical unit sizes
+        // (callers scale via the entity's transform).
+        using PrimitiveGenerator = Mesh (*)();
+
+        Mesh GenSphere()
+        {
+            return GenMeshSphere(1.0f, 32, 32);
+        }
+        Mesh GenHemiSphere()
+        {
+            return GenMeshHemiSphere(1.0f, 16, 32);
+        }
+        Mesh GenPlane()
+        {
+            return GenMeshPlane(1.0f, 1.0f, 1, 1);
+        }
+        Mesh GenCube()
+        {
+            return GenMeshCube(1.0f, 1.0f, 1.0f);
+        }
+        Mesh GenCylinder()
+        {
+            return GenMeshCylinder(1.0f, 1.0f, 32);
+        }
+        Mesh GenCone()
+        {
+            return GenMeshCone(1.0f, 1.0f, 32);
+        }
+        Mesh GenTorus()
+        {
+            return GenMeshTorus(0.25f, 1.0f, 16, 32);
+        }
+        Mesh GenKnot()
+        {
+            return GenMeshKnot(1.0f, 2.0f, 16, 128);
+        }
+        Mesh GenPoly()
+        {
+            return GenMeshPoly(5, 1.0f);
+        }
+
+        const std::unordered_map<std::string, PrimitiveGenerator>& PrimitiveGenerators()
+        {
+            static const std::unordered_map<std::string, PrimitiveGenerator> generators = {
+                {"primitive_sphere", &GenSphere},
+                {"primitive_hemisphere", &GenHemiSphere},
+                {"primitive_plane", &GenPlane},
+                {"primitive_cube", &GenCube},
+                {"primitive_cylinder", &GenCylinder},
+                {"primitive_cone", &GenCone},
+                {"primitive_torus", &GenTorus},
+                {"primitive_knot", &GenKnot},
+                {"primitive_poly", &GenPoly},
+            };
+            return generators;
+        }
+    } // namespace
+
+    /* Non-owning view onto the shared model entry stored under viewKey. Read-only API.
+    The returned ModelView's lifetime is independent of RM: it just borrows; the
+    underlying entry stays alive until UnloadAll (i.e. scene tear-down). */
+    ModelView ResourceManager::GetModelView(const std::string& viewKey) const
+    {
+        assert(modelCopies.contains(viewKey));
+        ModelView view;
+        view.rlmodel = modelCopies.at(viewKey).model;
+        view.assetKey = viewKey;
+        return view;
     }
 
-    ModelSafeManaged ResourceManager::GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey)
+    /* Create a new deep-copy entry in the mutable pool from the asset stored under
+    viewKey, and returns a ModelMutable view onto it. The deep copy has private
+    materials, so mutations through the returned view are isolated. Lifetime of
+    the new entry is scene-tied (released at UnloadAll). For models loaded from
+    disk this re-loads via sourcePath; for baked primitives it regenerates via a
+    registered generator function. */
+    ModelMutable ResourceManager::CreateModelMutable(const std::string& viewKey)
     {
-        assert(modelCopies.contains(srcKey));
-        assert(!modelCopies.contains(dstKey) && "GetModelDeepCopy: dstKey already registered");
-        const auto& info = modelCopies.at(srcKey);
-        assert(!info.sourcePath.empty() && "GetModelDeepCopy: sourcePath missing (re-pack assets)");
-        assert(FileExists(info.sourcePath.c_str()) && "GetModelDeepCopy: source file missing at runtime");
+        assert(modelCopies.contains(viewKey));
+        const auto& info = modelCopies.at(viewKey);
 
-        // Fresh load: the resulting Model has its own private mesh data AND its own
-        // private material allocations (raylib LoadModel allocates materials per call).
-        // We deliberately skip dedupeAndShareMaterials so mutations on this entry
-        // (SetTexture, SetMaterial, SetShader) stay local to this dstKey.
-        Model model = LoadModel(info.sourcePath.c_str());
+        const std::string instanceKey = viewKey + "#mut_" + std::to_string(mutableInstanceCounter++);
+        assert(!modelCopies.contains(instanceKey) && "CreateModelMutable: instanceKey collision");
+
+        Model model;
+        const auto& generators = PrimitiveGenerators();
+        if (!info.sourcePath.empty())
+        {
+            // On-disk asset — re-load to get private mesh + material allocations.
+            assert(FileExists(info.sourcePath.c_str()) && "CreateModelMutable: source file missing at runtime");
+            model = LoadModel(info.sourcePath.c_str());
+        }
+        else if (const auto it = generators.find(viewKey); it != generators.end())
+        {
+            // Baked primitive — regenerate mesh, raylib allocates fresh default materials.
+            model = LoadModelFromMesh(it->second());
+        }
+        else
+        {
+            assert(false && "CreateModelMutable: asset has no sourcePath and is not a registered primitive");
+            return {};
+        }
 
         modelCopies.emplace(
-            dstKey, ModelInfo{model, info.materialNames, info.sourcePath, /*privateMaterials=*/true});
+            instanceKey, ModelInfo{model, info.materialNames, info.sourcePath, /*privateMaterials=*/true});
 
-        ModelSafeManaged safe;
-        safe.rlmodel = modelCopies.at(dstKey).model;
-        safe.SetKey(dstKey);
-        return safe;
-    }
-
-    void ResourceManager::ReleaseDeepCopy(const std::string& dstKey)
-    {
-        auto it = modelCopies.find(dstKey);
-        if (it == modelCopies.end()) return;
-        assert(it->second.privateMaterials && "ReleaseDeepCopy: cannot release a shared-material entry");
-
-        Model& m = it->second.model;
-        // Free the per-material maps allocations made by raylib's LoadModel, but DO NOT
-        // call UnloadMaterial — that would UnloadShader / rlUnloadTexture the textures
-        // and shaders inside, which are shared/cached via ResourceManager (TextureLoad,
-        // ShaderLoad) and still in use by other entries.
-        for (int i = 0; i < m.materialCount; ++i)
-        {
-            RL_FREE(m.materials[i].maps);
-        }
-        for (int i = 0; i < m.meshCount; ++i)
-        {
-            UnloadMesh(m.meshes[i]);
-        }
-        RL_FREE(m.meshes);
-        RL_FREE(m.materials);
-        RL_FREE(m.meshMaterial);
-        RL_FREE(m.bones);
-        RL_FREE(m.bindPose);
-
-        modelCopies.erase(it);
+        ModelMutable mut;
+        mut.rlmodel = modelCopies.at(instanceKey).model;
+        mut.assetKey = viewKey;
+        mut.instanceKey = instanceKey;
+        return mut;
     }
 
     void ResourceManager::ModelAnimationLoadFromFile(const std::string& path)
@@ -540,7 +592,7 @@ namespace sage
         }
     }
 
-    ModelAnimation* ResourceManager::GetModelAnimation(const std::string& key, int* animsCount)
+    ModelAnimation* ResourceManager::GetModelAnimation(const std::string& key, int* animsCount) const
     {
         if (!modelAnimations.contains(key))
         {
@@ -555,7 +607,7 @@ namespace sage
 
     void ResourceManager::UnloadImages()
     {
-        for (const auto& [key, image] : images)
+        for (const auto& image : images | std::views::values)
         {
             UnloadImage(image);
         }
@@ -564,11 +616,11 @@ namespace sage
 
     void ResourceManager::UnloadShaderFileText()
     {
-        for (const auto& [key, vs] : vertShaderFileText)
+        for (const auto& vs : vertShaderFileText | std::views::values)
         {
             UnloadFileText(vs);
         }
-        for (const auto& [key, fs] : fragShaderFileText)
+        for (const auto& fs : fragShaderFileText | std::views::values)
         {
             UnloadFileText(fs);
         }
@@ -576,7 +628,7 @@ namespace sage
         fragShaderFileText.clear();
     }
 
-    void sgUnloadModel(Model model)
+    void sgUnloadModel(const Model& model)
     {
         // Unload meshes
         for (int i = 0; i < model.meshCount; i++)
@@ -596,11 +648,11 @@ namespace sage
 
     void ResourceManager::UnloadAll()
     {
-        for (auto& [key, s] : sfx)
+        for (auto& s : sfx | std::views::values)
         {
             UnloadSound(s);
         }
-        for (auto& [key, mus] : music)
+        for (auto& mus : music | std::views::values)
         {
             UnloadMusicStream(mus);
         }
@@ -615,7 +667,7 @@ namespace sage
             RL_FREE(mat.maps);
         }
         std::cout << "Unloading models" << std::endl;
-        for (auto& [path, info] : modelCopies)
+        for (auto& info : modelCopies | std::views::values)
         {
             if (info.privateMaterials)
             {
@@ -642,31 +694,31 @@ namespace sage
                 sgUnloadModel(info.model);
             }
         }
-        for (const auto& [key, tex] : nonModelTextures)
+        for (const auto& tex : nonModelTextures | std::views::values)
         {
             UnloadTexture(tex);
         }
-        for (const auto& [key, image] : images)
+        for (const auto& image : images | std::views::values)
         {
             UnloadImage(image);
         }
-        for (const auto& [key, p] : modelAnimations)
+        for (const auto& [fst, snd] : modelAnimations | std::views::values)
         {
-            UnloadModelAnimations(p.first, p.second);
+            UnloadModelAnimations(fst, snd);
         }
-        for (const auto& [key, shader] : shaders)
+        for (const auto& shader : shaders | std::views::values)
         {
             UnloadShader(shader);
         }
-        for (const auto& [key, text] : vertShaderFileText)
+        for (const auto& text : vertShaderFileText | std::views::values)
         {
             UnloadFileText(text);
         }
-        for (const auto& [key, text] : fragShaderFileText)
+        for (const auto& text : fragShaderFileText | std::views::values)
         {
             UnloadFileText(text);
         }
-        for (const auto& [key, font] : fonts)
+        for (const auto& font : fonts | std::views::values)
         {
             UnloadFont(font);
         }

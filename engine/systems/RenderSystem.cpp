@@ -4,6 +4,7 @@
 
 #include "RenderSystem.hpp"
 
+#include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 
@@ -24,16 +25,32 @@ namespace sage
         auto deferredView =
             registry->view<Renderable, sgTransform, RenderableDeferred>(entt::exclude<UberShaderComponent>);
         auto uberView = registry->view<Renderable, sgTransform, UberShaderComponent>();
+        auto dynamicView = registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>);
+        auto dynamicDeferredView = registry->view<DynamicRenderable, sgTransform, RenderableDeferred>();
 
         auto renderEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
             if (!renderable.active) return;
 
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
-            auto& model = renderable.GetModel()->rlmodel;
 
             Vector3 rotationAxis = {0.0f, 1.0f, 0.0f};
 
             renderable.GetModel()->Draw(
+                transform.GetWorldPos(),
+                rotationAxis,
+                transform.GetWorldRot().y,
+                transform.GetScale(),
+                renderable.hint);
+        };
+
+        auto renderDynamicEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
+            if (!renderable.active) return;
+
+            if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
+
+            Vector3 rotationAxis = {0.0f, 1.0f, 0.0f};
+
+            renderable.Draw(
                 transform.GetWorldPos(),
                 rotationAxis,
                 transform.GetWorldRot().y,
@@ -48,6 +65,13 @@ namespace sage
             auto& r = normalView.get<Renderable>(entity);
             const auto& t = normalView.get<sgTransform>(entity);
             renderEntity(r, t, entity);
+        }
+
+        for (auto entity : dynamicView)
+        {
+            auto& r = dynamicView.get<DynamicRenderable>(entity);
+            const auto& t = dynamicView.get<sgTransform>(entity);
+            renderDynamicEntity(r, t, entity);
         }
 
         for (auto entity : uberView)
@@ -75,6 +99,13 @@ namespace sage
             auto& r = deferredView.get<Renderable>(entity);
             const auto& t = deferredView.get<sgTransform>(entity);
             renderEntity(r, t, entity);
+        }
+
+        for (auto entity : dynamicDeferredView)
+        {
+            auto& r = dynamicDeferredView.get<DynamicRenderable>(entity);
+            const auto& t = dynamicDeferredView.get<sgTransform>(entity);
+            renderDynamicEntity(r, t, entity);
         }
     }
 

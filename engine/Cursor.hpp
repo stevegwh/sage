@@ -56,10 +56,12 @@ namespace sage
         void onMouseLeftDown();
         void onMouseRightDown() const;
         void changeCursors(CollisionLayer collisionLayer);
+        [[nodiscard]] bool shouldPublishNavigationClick(const CollisionInfo& mouseHitInfo) const;
 
       public:
         std::string hitObjectName{};
         [[nodiscard]] const CollisionInfo& getMouseHitInfo() const;
+        [[nodiscard]] const CollisionInfo& getNavigationHitInfo() const;
         [[nodiscard]] const RayCollision& getFirstNaviCollision() const;
         [[nodiscard]] const RayCollision& getFirstCollision() const;
 

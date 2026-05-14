@@ -31,6 +31,7 @@ namespace sage
 
         void Update();
         [[nodiscard]] const CollisionInfo& GetMouseHitInfo() const;
+        [[nodiscard]] const CollisionInfo& GetNavigationHitInfo() const;
         [[nodiscard]] const RayCollision& GetFirstNavigationCollision() const;
         [[nodiscard]] const RayCollision& GetFirstCollision() const;
 

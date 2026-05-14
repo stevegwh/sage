@@ -101,6 +101,11 @@ namespace sage
         return mouseHitInfo;
     }
 
+    const CollisionInfo& MousePicker::GetNavigationHitInfo() const
+    {
+        return navigationHitInfo;
+    }
+
     const RayCollision& MousePicker::GetFirstNavigationCollision() const
     {
         return navigationHitInfo.rlCollision;

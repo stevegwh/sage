@@ -58,9 +58,10 @@ namespace sage
         if (!enabled) return;
 
         const auto& hitInfo = getMouseHitInfo();
-        if (hitInfo.rlCollision.hit && IsNavigationLayer(hitInfo.collisionLayer))
+        if (shouldPublishNavigationClick(hitInfo))
         {
-            onNavigationClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
+            const auto& navHitInfo = getNavigationHitInfo();
+            onNavigationClick.Publish(navHitInfo.collidedEntityId, navHitInfo.collisionLayer);
         }
         onLeftClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
     }
@@ -81,9 +82,10 @@ namespace sage
         leftClickTimer = 0;
 
         const auto& hitInfo = getMouseHitInfo();
-        if (hitInfo.rlCollision.hit && IsNavigationLayer(hitInfo.collisionLayer))
+        if (shouldPublishNavigationClick(hitInfo))
         {
-            onNavigationClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
+            const auto& navHitInfo = getNavigationHitInfo();
+            onNavigationClick.Publish(navHitInfo.collidedEntityId, navHitInfo.collisionLayer);
         }
     }
 
@@ -175,6 +177,11 @@ namespace sage
         return sys->picker->GetMouseHitInfo();
     }
 
+    const CollisionInfo& Cursor::getNavigationHitInfo() const
+    {
+        return sys->picker->GetNavigationHitInfo();
+    }
+
     const RayCollision& Cursor::getFirstNaviCollision() const
     {
         return sys->picker->GetFirstNavigationCollision();
@@ -224,6 +231,18 @@ namespace sage
         {
             onMouseHover();
         }
+    }
+
+    bool Cursor::shouldPublishNavigationClick(const CollisionInfo& mouseHitInfo) const
+    {
+        const auto& navHitInfo = getNavigationHitInfo();
+        if (!navHitInfo.rlCollision.hit || !IsNavigationLayer(navHitInfo.collisionLayer)) return false;
+        if (IsNavigationLayer(mouseHitInfo.collisionLayer)) return true;
+        if (cursorHoverMask.Contains(mouseHitInfo.collisionLayer)) return false;
+        if (mouseHitInfo.collisionLayer == collision_layers::Obstacle) return false;
+
+        const auto cursorIt = cursorTextureMap.find(mouseHitInfo.collisionLayer);
+        return cursorIt == cursorTextureMap.end() || cursorIt->second != "cursor_denied";
     }
 
     void Cursor::DrawDebug() const

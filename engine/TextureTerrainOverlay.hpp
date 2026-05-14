@@ -18,6 +18,7 @@ namespace sage
         EngineSystems* sys;
 
         Texture2D texture;
+        Shader shader{};
         const entt::entity entity;
         GridSquare lastHit{};
         bool initialised = false;
@@ -26,7 +27,7 @@ namespace sage
         float radius{};
 
         void updateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
-        ModelSafeOwned generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
+        Model generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
         void updateMeshData(Mesh& mesh, const GridSquare& minRange, const GridSquare& maxRange) const;
         Mesh createInitialMesh(const GridSquare& minRange, const GridSquare& maxRange) const;
         void updateVertexData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const;
@@ -36,7 +37,7 @@ namespace sage
 
       public:
         void SetHint(Color col) const;
-        void SetShader(Shader shader) const;
+        void SetShader(Shader shader);
         void Enable(bool enable);
         void Init(Vector3 startPos, float _radius = 10);
         [[nodiscard]] bool IsActive() const;

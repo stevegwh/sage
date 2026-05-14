@@ -28,9 +28,10 @@ namespace sage
         Model model;
         std::vector<std::string>
             materialNames;      // names of this mesh's materials (at the same index in model.materials)
-        std::string sourcePath; // path used by raylib LoadModel; required by GetModelDeepCopy at runtime
-        // True when this entry's materials are NOT shared with materialMap (i.e. it's a deep-copy
-        // entry created by GetModelDeepCopy). UnloadAll / ReleaseDeepCopy must UnloadMaterial them.
+        std::string sourcePath; // path used by raylib LoadModel; required by CreateModelMutable at runtime
+        // True when this entry's materials are private (i.e. it's a mutable-pool entry
+        // created by CreateModelMutable). UnloadAll frees the per-material
+        // maps allocations directly rather than going through the shared materialMap.
         bool privateMaterials = false;
 
         template <class Archive>
@@ -61,6 +62,9 @@ namespace sage
         std::unordered_map<std::string, Texture> nonModelTextures{}; // Textures loaded outside of model loading
         std::unordered_map<std::string, ModelInfo> modelCopies{};
         std::unordered_map<std::string, std::pair<ModelAnimation*, int>> modelAnimations{};
+        // Monotonic counter used to mint unique instance keys for mutable-pool entries
+        // returned by CreateModelMutable. Not serialized.
+        std::uint64_t mutableInstanceCounter = 0;
         std::unordered_map<std::string, char*> vertShaderFileText{};
         std::unordered_map<std::string, char*> fragShaderFileText{};
         std::unordered_map<std::string, Music> music;
@@ -93,15 +97,9 @@ namespace sage
         Font FontLoad(const std::string& path);
         void ImageUnload(const std::string& key);
         [[nodiscard]] ImageSafe GetImage(const std::string& key);
-        [[nodiscard]] ModelSafe GetModelCopy(const std::string& key);
-        // Creates a unique entry under dstKey by re-loading the model from disk via the
-        // src entry's sourcePath. Materials are NOT shared with materialMap — the deep
-        // copy owns them privately, so mutations on the returned ModelSafeManaged are
-        // isolated. The entry is released automatically when the returned handle is
-        // destroyed (or via ReleaseDeepCopy).
-        [[nodiscard]] ModelSafeManaged GetModelDeepCopy(const std::string& srcKey, const std::string& dstKey);
-        void ReleaseDeepCopy(const std::string& dstKey);
-        [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount);
+        [[nodiscard]] ModelView GetModelView(const std::string& viewKey) const;
+        [[nodiscard]] ModelMutable CreateModelMutable(const std::string& viewKey);
+        [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount) const;
         void UnloadImages();
         void UnloadShaderFileText();
 

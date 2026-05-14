@@ -1,7 +1,9 @@
 #include "TextureTerrainOverlay.hpp"
+#include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 #include "EngineSystems.hpp"
+#include "ResourceManager.hpp"
 #include "systems/NavigationGridSystem.hpp"
 #include "systems/TransformSystem.hpp"
 
@@ -97,7 +99,10 @@ namespace sage
 
     void TextureTerrainOverlay::updateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const
     {
-        auto& mesh = *registry->get<Renderable>(entity).GetModel()->rlmodel.meshes;
+        auto& renderable = registry->get<DynamicRenderable>(entity);
+        auto* meshPtr = renderable.GetMesh();
+        assert(meshPtr && "TextureTerrainOverlay: dynamic renderable must hold a model");
+        auto& mesh = *meshPtr;
         updateMeshData(mesh, minRange, maxRange);
 
         int vertexCount = mesh.vertexCount;
@@ -106,8 +111,7 @@ namespace sage
         UpdateMeshBuffer(mesh, 2, mesh.texcoords, vertexCount * 2 * sizeof(float), 0);
     }
 
-    ModelSafeOwned TextureTerrainOverlay::generateTerrainPolygon(
-        const GridSquare& minRange, const GridSquare& maxRange) const
+    Model TextureTerrainOverlay::generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const
     {
         Mesh mesh = createInitialMesh(minRange, maxRange);
 
@@ -115,26 +119,27 @@ namespace sage
         Model model = LoadModelFromMesh(mesh);
         model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
 
-        return ModelSafeOwned(model);
+        return model;
     }
 
     void TextureTerrainOverlay::SetHint(Color col) const
     {
-        auto& renderable = registry->get<Renderable>(entity);
+        auto& renderable = registry->get<DynamicRenderable>(entity);
         renderable.hint = col;
     }
 
-    void TextureTerrainOverlay::SetShader(Shader shader) const
+    void TextureTerrainOverlay::SetShader(Shader _shader)
     {
-        auto& renderable = registry->get<Renderable>(entity);
-        renderable.GetModel()->SetShader(shader);
+        shader = _shader;
+        auto& renderable = registry->get<DynamicRenderable>(entity);
+        renderable.SetShader(_shader);
     }
 
     void TextureTerrainOverlay::Enable(bool enable)
     {
         assert(initialised);
         m_active = enable;
-        auto& renderable = registry->get<Renderable>(entity);
+        auto& renderable = registry->get<DynamicRenderable>(entity);
         renderable.active = enable;
     }
 
@@ -151,8 +156,9 @@ namespace sage
         sys->navigationGridSystem->WorldToGridSpace(startPos, lastHit);
         GridSquare minRange{}, maxRange{};
         sys->navigationGridSystem->GetGridRange(startPos, static_cast<int>(radius), minRange, maxRange);
-        auto& renderable = registry->get<Renderable>(entity);
+        auto& renderable = registry->get<DynamicRenderable>(entity);
         renderable.SetModel(generateTerrainPolygon(minRange, maxRange));
+        renderable.SetShader(shader);
 
         // Calculate the center of the mesh in world space
         const auto& gridSquares = sys->navigationGridSystem->GetGridSquares();
@@ -169,7 +175,7 @@ namespace sage
         // Calculate the offset to center the mesh on the mouse position
         meshOffset = {startPos.x - meshCenter.x, 0, startPos.z - meshCenter.z};
         sys->transformSystem->SetPosition(entity, meshOffset);
-        renderable.GetModel()->SetTransform(MatrixIdentity());
+        renderable.SetTransform(MatrixIdentity());
     }
 
     bool TextureTerrainOverlay::IsActive() const
@@ -204,11 +210,9 @@ namespace sage
         : registry(_registry), sys(_engineSystems), texture(tex), entity(_registry->create())
     {
         assert(shaderPath != nullptr);
+        shader = ResourceManager::GetInstance().ShaderLoad(nullptr, shaderPath);
 
-        GridSquare minRange{}, maxRange{};
-        auto& r =
-            registry->emplace<Renderable>(entity, generateTerrainPolygon(minRange, maxRange), MatrixIdentity());
-        r.GetModel()->SetShader(ResourceManager::GetInstance().ShaderLoad(nullptr, shaderPath), 0);
+        auto& r = registry->emplace<DynamicRenderable>(entity);
         r.active = false;
         r.SetName("TextureTerrainOverlay");
         r.hint = _hint;
@@ -228,11 +232,9 @@ namespace sage
           entity(_registry->create())
     {
         assert(shaderPath != nullptr);
+        shader = ResourceManager::GetInstance().ShaderLoad(nullptr, shaderPath);
 
-        GridSquare minRange{}, maxRange{};
-        auto& r =
-            registry->emplace<Renderable>(entity, generateTerrainPolygon(minRange, maxRange), MatrixIdentity());
-        r.GetModel()->SetShader(ResourceManager::GetInstance().ShaderLoad(nullptr, shaderPath), 0);
+        auto& r = registry->emplace<DynamicRenderable>(entity);
         r.active = false;
         r.SetName("TextureTerrainOverlay");
         r.hint = _hint;
@@ -251,12 +253,11 @@ namespace sage
           texture(ResourceManager::GetInstance().TextureLoad(assetId)),
           entity(_registry->create())
     {
-        GridSquare minRange{}, maxRange{};
-        auto& r =
-            registry->emplace<Renderable>(entity, generateTerrainPolygon(minRange, maxRange), MatrixIdentity());
+        shader = _shader;
+
+        auto& r = registry->emplace<DynamicRenderable>(entity);
         r.active = false;
         r.SetName("TextureTerrainOverlay");
-        r.GetModel()->SetShader(_shader, 0);
         r.hint = _hint;
 
         registry->emplace<sgTransform>(entity);

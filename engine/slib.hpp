@@ -47,30 +47,19 @@ namespace sage
         };
     };
 
-    class Renderable;
     class ResourceManager;
-    class TextureTerrainOverlay;
-    class LightManager;
-    class UberShaderSystem;
-    class RenderSystem;
-    class ResourcePacker;
 
     /**
-     * Non-owning view of a Model whose storage lives in ResourceManager.
-     * Read-only public API. SetShader is private (struct-copy-local on shared
-     * material entries, but gated behind friend access so random callers cannot
-     * reach for it). SetTexture / SetMaterial do not exist here at all — they
-     * write through the shared materials[i].maps pointer and only make sense on
-     * a unique entry; see ModelSafeOwned and ModelSafeManaged.
+     * Non-owning, copyable view of a Model stored in ResourceManager. Read-only public
+     * API — the public surface intentionally exposes no material/texture/shader mutators
+     * because the underlying entry may be shared across many viewers. Lifetime is
+     * controlled by ResourceManager (scene-tied); a view never releases storage.
      */
-    class ModelSafe
+    class ModelView
     {
       protected:
         Model rlmodel{};
-        std::string modelKey{};
-
-        void SetShader(Shader shader, int materialIdx) const;
-        void SetShader(Shader shader) const;
+        std::string assetKey{};
 
       public:
         [[nodiscard]] const Model& GetRlModel() const;
@@ -91,81 +80,64 @@ namespace sage
         [[nodiscard]] int GetMeshCount() const;
         [[nodiscard]] int GetMaterialCount() const;
         [[nodiscard]] Matrix GetTransform() const;
+        // Mutates this view's local copy of Model::transform only; not propagated to any
+        // other view of the same entry. Use for per-entity local transforms.
         void SetTransform(Matrix trans);
         [[nodiscard]] Shader GetShader(int materialIdx) const;
-        void SetKey(const std::string& newKey);
+        // Mutates the shader on this view's underlying entry. If the entry is shared
+        // (this is a plain ModelView, not the deep-copy backing of a ModelMutable),
+        // the change is visible to all viewers of the same entry — by design, used
+        // for system-wide shader assignments (LightManager, UberShaderSystem, etc.).
+        void SetShader(Shader shader, int materialIdx) const;
+        void SetShader(Shader shader) const;
         [[nodiscard]] const std::string& GetKey() const;
 
-        ModelSafe(const ModelSafe&) = delete;
-        ModelSafe& operator=(const ModelSafe&) = delete;
-        ModelSafe(ModelSafe&& other) noexcept;
-        ModelSafe& operator=(ModelSafe&& other) noexcept;
-        ModelSafe() = default;
-        virtual ~ModelSafe() = default;
+        ModelView() = default;
+        ~ModelView() = default;
+        ModelView(const ModelView&) = default;
+        ModelView& operator=(const ModelView&) = default;
+        ModelView(ModelView&&) noexcept = default;
+        ModelView& operator=(ModelView&&) noexcept = default;
 
-        friend class Renderable;
         friend class ResourceManager;
-        friend class TextureTerrainOverlay;
-        friend class LightManager;
-        friend class UberShaderSystem;
-        friend class RenderSystem;
-        friend class ResourcePacker;
-        friend struct UberShaderComponent;
     };
 
     /**
-     * A procedurally-created Model whose storage (meshes + per-material maps allocations)
-     * is owned by this object directly. The destructor frees those allocations locally
-     * but does NOT UnloadMaterial — textures and shaders inside the maps are typically
-     * RM-cached and shared. Public mutators are sound because the Model is not shared.
-     * Move-only.
+     * Non-owning, copyable view of a Model in ResourceManager's mutable pool. Each
+     * entry in that pool is a deep copy with private materials, so material/texture/
+     * shader mutations are local to the entry. Copying a ModelMutable yields another
+     * view onto the same entry — both copies see the same mutations.
+     *
+     * Mutators (SetMaterial / SetTexture) write through the internal materials pointer,
+     * they do not reallocate it. A future mutator must preserve that invariant or
+     * sibling copies will diverge from RM's record.
      */
-    class ModelSafeOwned : public ModelSafe
+    class ModelMutable : public ModelView
     {
+        std::string instanceKey{};
+
       public:
-        using ModelSafe::SetShader;
+        using ModelView::ModelView;
+        using ModelView::SetShader;
 
         void SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const;
         void SetMaterial(unsigned int idx, Material mat) const;
 
-        ModelSafeOwned(const ModelSafeOwned&) = delete;
-        ModelSafeOwned& operator=(const ModelSafeOwned&) = delete;
-        ModelSafeOwned(ModelSafeOwned&& other) noexcept;
-        ModelSafeOwned& operator=(ModelSafeOwned&& other) noexcept;
+        // Mutable handle to the underlying raylib Model. Use for direct buffer updates
+        // (e.g. UpdateMeshBuffer on a procedurally-evolving mesh). The pointers inside
+        // (meshes/materials/etc.) are shared with the RM-stored entry — writes through
+        // them reach the entry. Do NOT reassign those pointers; that would diverge this
+        // view from the RM record.
+        [[nodiscard]] Model& GetRlModelMut();
 
-        explicit ModelSafeOwned(Model& rawModel);
-        ModelSafeOwned() = default;
-        ~ModelSafeOwned() override;
-    };
-
-    /**
-     * Handle to a ResourceManager-managed deep-copy entry. ResourceManager owns the
-     * storage (registered under modelKey); the destructor releases the entry via
-     * ResourceManager::ReleaseDeepCopy. Public mutators are sound because the entry
-     * is unique to this handle. Move-only.
-     */
-    class ModelSafeManaged : public ModelSafe
-    {
-      public:
-        using ModelSafe::SetShader;
-
-        void SetTexture(Texture texture, int materialIdx, MaterialMapIndex mapIdx) const;
-        void SetMaterial(unsigned int idx, Material mat) const;
-
-        ModelSafeManaged(const ModelSafeManaged&) = delete;
-        ModelSafeManaged& operator=(const ModelSafeManaged&) = delete;
-        ModelSafeManaged(ModelSafeManaged&& other) noexcept;
-        ModelSafeManaged& operator=(ModelSafeManaged&& other) noexcept;
-
-        ModelSafeManaged() = default;
-        ~ModelSafeManaged() override;
+        [[nodiscard]] const std::string& GetInstanceKey() const;
 
         friend class ResourceManager;
     };
 
     // Frees model meshes/bones/bindPose without unloading individual materials.
     // Use when materials are shared (e.g. owned by ResourceManager::materialMap).
-    void sgUnloadModel(Model model);
+    void sgUnloadModel(const Model& model);
 
     std::string TitleCase(const std::string& A);
     bool AlmostEquals(Vector3 a, Vector3 b);

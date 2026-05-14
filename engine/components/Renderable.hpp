@@ -11,9 +11,10 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <cstdint>
 #include <functional>
 #include <string>
-#include <vector>
+#include <variant>
 
 namespace sage
 {
@@ -25,7 +26,7 @@ namespace sage
 
     class Renderable
     {
-        std::unique_ptr<ModelSafe> model;
+        std::variant<std::monostate, ModelView, ModelMutable> model;
         std::string name = "Default";
         std::string vanityName;
         void setVanityName();
@@ -40,47 +41,78 @@ namespace sage
         [[nodiscard]] const std::string& GetName() const;
         void SetName(const std::string& _name);
         [[nodiscard]] std::string GetVanityName() const;
-        [[nodiscard]] ModelSafe* GetModel() const;
-        void SetModel(Model _model);
-        void SetModel(ModelSafe _model);
-        void SetModel(ModelSafeOwned _model);
-        void SetModel(ModelSafeManaged _model);
+
+        // Returns the underlying view (ModelView pointer; also valid when holding a
+        // ModelMutable, since it derives from ModelView). Returns nullptr if the
+        // Renderable has no model (default-constructed / monostate).
+        [[nodiscard]] ModelView* GetModel();
+        [[nodiscard]] const ModelView* GetModel() const;
+
+        // Returns a pointer to the mutable view if this Renderable holds one,
+        // otherwise nullptr. Use when you need to call mutating methods
+        // (SetTexture, SetMaterial) that don't exist on ModelView.
+        [[nodiscard]] ModelMutable* GetMutable();
+        [[nodiscard]] const ModelMutable* GetMutable() const;
+
+        void SetModel(ModelView _model);
+        void SetModel(ModelMutable _model);
 
         void Enable();
         void Disable();
 
         Renderable() = default;
+        ~Renderable() = default;
+        Renderable(const Renderable&) = default;
+        Renderable& operator=(const Renderable&) = default;
+        Renderable(Renderable&&) noexcept = default;
+        Renderable& operator=(Renderable&&) noexcept = default;
 
-        // Copy operations (deep copy)
-        Renderable(const Renderable& other);
-        Renderable& operator=(const Renderable& other);
-        // Move operations
-        Renderable(Renderable&& other) noexcept;
-        Renderable& operator=(Renderable&& other) noexcept;
-
-        Renderable(std::unique_ptr<ModelSafe> _model, Matrix _localTransform);
-        Renderable(Model _model, Matrix _localTransform);
-        Renderable(ModelSafe _model, Matrix _localTransform);
-        Renderable(ModelSafeOwned _model, Matrix _localTransform);
-        Renderable(ModelSafeManaged _model, Matrix _localTransform);
+        Renderable(ModelView _model, Matrix _localTransform);
+        Renderable(ModelMutable _model, Matrix _localTransform);
 
         template <class Archive>
         void save(Archive& archive) const
         {
-            // assert(!model->GetKey().empty());
-            archive(model->GetKey(), name, vanityName, initialTransform);
+            std::uint8_t kind = 0;
+            std::string key;
+            if (const auto* mut = std::get_if<ModelMutable>(&model))
+            {
+                kind = 2;
+                key = mut->GetKey();
+            }
+            else if (const auto* view = std::get_if<ModelView>(&model))
+            {
+                kind = 1;
+                key = view->GetKey();
+            }
+            archive(kind, key, name, vanityName, initialTransform);
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
-            std::string modelKey;
-            archive(modelKey, name, vanityName, initialTransform);
-            ModelSafe modelSafe(ResourceManager::GetInstance().GetModelCopy(modelKey));
-            // Model data must be deserialised from ResourceManager before deserialising models
-            assert(modelSafe.rlmodel.meshes != nullptr);
-            modelSafe.rlmodel.transform = initialTransform;
-            model = std::make_unique<ModelSafe>(std::move(modelSafe));
+            std::uint8_t kind = 0;
+            std::string key;
+            archive(kind, key, name, vanityName, initialTransform);
+
+            if (kind == 1)
+            {
+                ModelView view = ResourceManager::GetInstance().GetModelView(key);
+                assert(view.GetRlModel().meshes != nullptr);
+                view.SetTransform(initialTransform);
+                model = std::move(view);
+            }
+            else if (kind == 2)
+            {
+                ModelMutable mut = ResourceManager::GetInstance().CreateModelMutable(key);
+                assert(mut.GetRlModel().meshes != nullptr);
+                mut.SetTransform(initialTransform);
+                model = std::move(mut);
+            }
+            else
+            {
+                model = std::monostate{};
+            }
         }
     };
 } // namespace sage
