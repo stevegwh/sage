@@ -1,43 +1,42 @@
 cmake_minimum_required(VERSION 3.26)
-project(BG_Raylib)
+project(sage LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(SAGE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Dependencies
-include(FetchContent)
-FetchContent_Declare(
-        entt
-        GIT_REPOSITORY "https://github.com/skypjack/entt.git"
-        GIT_TAG "v3.13.2"
-)
-FetchContent_MakeAvailable(entt)
+if (NOT TARGET EnTT::EnTT)
+    include(FetchContent)
+    FetchContent_Declare(
+            entt
+            GIT_REPOSITORY "https://github.com/skypjack/entt.git"
+            GIT_TAG "v3.13.2"
+    )
+    FetchContent_MakeAvailable(entt)
+endif ()
 
 set(PLATFORM "Desktop" CACHE STRING "" FORCE)
-add_subdirectory(vendor/raylib)
-# raylib's DecompressData() default-caps output at 64 MiB (rcore.c). Our packed assets
-# (LoadAssetBinFile) decompress well above that. Bumping the cap; the buffer is
-# transient — raylib realloc()s it down to the actual size right after sinflate returns.
-target_compile_definitions(raylib PRIVATE MAX_DECOMPRESSION_SIZE=512)
-include_directories(vendor)
-include_directories(vendor/magic_enum)
+if (NOT TARGET raylib)
+    add_subdirectory(vendor/raylib)
+    # raylib's DecompressData() default-caps output at 64 MiB (rcore.c). Packed
+    # assets can exceed that, and raylib realloc()s the transient buffer down.
+    target_compile_definitions(raylib PRIVATE MAX_DECOMPRESSION_SIZE=512)
+endif ()
 
 # Options
-option(BUILD_EDITOR "Build the editor" OFF)
-option(BUILD_RESPACKER "Build the resource packer" ON)
-option(BUILD_GAME "Build the game" ON)
+option(SAGE_BUILD_EDITOR "Build the Sage editor" OFF)
 
 # Tell the engine where to find project-specific extension headers
-# (e.g. project/CustomCollisionLayers.hpp). Must be set before add_subdirectory(engine).
-set(SAGE_PROJECT_INCLUDE_DIR ${CMAKE_SOURCE_DIR})
+# (e.g. project/CustomCollisionLayers.hpp).
+if (NOT DEFINED SAGE_PROJECT_INCLUDE_DIR)
+    set(SAGE_PROJECT_INCLUDE_DIR ${SAGE_ROOT_DIR}/engine/defaults)
+endif ()
 
 # Add subdirectories
 add_subdirectory(engine)
-add_subdirectory(game)
 
-if (BUILD_EDITOR)
+if (SAGE_BUILD_EDITOR)
     add_subdirectory(editor)
-endif ()
-
-if (BUILD_RESPACKER)
-    add_subdirectory(respacker)
 endif ()

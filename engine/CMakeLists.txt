@@ -1,5 +1,9 @@
 # CMakeLists.txt
 
+if (NOT DEFINED SAGE_ROOT_DIR)
+    get_filename_component(SAGE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
+endif ()
+
 # Path the consuming project provides for engine extension headers
 # (e.g. project/CustomCollisionLayers.hpp). When unset, falls back to the
 # engine's stub directory so the engine builds standalone.
@@ -28,8 +32,9 @@ target_include_directories(engine
         ${CMAKE_CURRENT_SOURCE_DIR}
         PUBLIC
         # For external consumers (game) - they use "components/..."
-        ${CMAKE_SOURCE_DIR}
-        ${CMAKE_SOURCE_DIR}/vendor
+        ${SAGE_ROOT_DIR}
+        ${SAGE_ROOT_DIR}/vendor
+        ${SAGE_ROOT_DIR}/vendor/magic_enum
         # Resolves project/CustomCollisionLayers.hpp (and any future project
         # extension headers). Defaults to engine/defaults/ for standalone builds.
         ${SAGE_PROJECT_INCLUDE_DIR}

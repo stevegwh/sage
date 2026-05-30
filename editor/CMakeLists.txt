@@ -1,9 +1,13 @@
 # editor/CMakeLists.txt
 
+if (NOT DEFINED SAGE_ROOT_DIR)
+    get_filename_component(SAGE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/.. ABSOLUTE)
+endif ()
+
 file(GLOB EDITOR_HEADERS *.hpp)
 file(GLOB EDITOR_SOURCES *.cpp)
 
-set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/vendor/imgui)
+set(IMGUI_DIR ${SAGE_ROOT_DIR}/vendor/imgui)
 
 add_library(imgui_raylib STATIC
         ${IMGUI_DIR}/imgui.cpp
