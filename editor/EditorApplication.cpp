@@ -20,45 +20,11 @@ namespace sage
 {
     namespace
     {
-        constexpr float EDITOR_LEFT_DOCK_WIDTH = 340.0f;
-        constexpr float EDITOR_RIGHT_DOCK_WIDTH = 440.0f;
-        constexpr float EDITOR_ASSET_BROWSER_HEIGHT = 344.0f;
-        constexpr float EDITOR_SCENE_VIEW_PADDING = 18.0f;
-        constexpr float EDITOR_SCENE_ASPECT = 16.0f / 9.0f;
-
-        Rectangle CalculateSceneViewport(Settings& settings, const bool fullscreen)
+        void ConfigureEditorSceneViewport(
+            Settings& settings, editor::EditorDockLayout& dockLayout, const bool fullscreen)
         {
-            const auto appViewport = settings.GetViewPort();
-            if (fullscreen)
-            {
-                return {0.0f, 0.0f, appViewport.x, appViewport.y};
-            }
-            const float left = settings.ScaleValueWidth(EDITOR_LEFT_DOCK_WIDTH + EDITOR_SCENE_VIEW_PADDING);
-            const float right = settings.ScaleValueWidth(EDITOR_RIGHT_DOCK_WIDTH + EDITOR_SCENE_VIEW_PADDING);
-            const float bottom =
-                settings.ScaleValueHeight(EDITOR_ASSET_BROWSER_HEIGHT + EDITOR_SCENE_VIEW_PADDING * 2.0f);
-            const float top = settings.ScaleValueHeight(EDITOR_SCENE_VIEW_PADDING);
-
-            const float availableWidth = std::max(1.0f, appViewport.x - left - right);
-            const float availableHeight = std::max(1.0f, appViewport.y - top - bottom);
-            float viewportWidth = availableWidth;
-            float viewportHeight = viewportWidth / EDITOR_SCENE_ASPECT;
-            if (viewportHeight > availableHeight)
-            {
-                viewportHeight = availableHeight;
-                viewportWidth = viewportHeight * EDITOR_SCENE_ASPECT;
-            }
-
-            return {
-                left + (availableWidth - viewportWidth) * 0.5f,
-                top + (availableHeight - viewportHeight) * 0.5f,
-                viewportWidth,
-                viewportHeight};
-        }
-
-        void ConfigureEditorSceneViewport(Settings& settings, const bool fullscreen)
-        {
-            const Rectangle viewport = CalculateSceneViewport(settings, fullscreen);
+            editor::ClampEditorDockLayout(dockLayout);
+            const Rectangle viewport = editor::CalculateEditorSceneViewport(settings, dockLayout, fullscreen);
             settings.SetRenderViewport(
                 static_cast<int>(viewport.width), static_cast<int>(viewport.height), {viewport.x, viewport.y});
         }
@@ -77,7 +43,7 @@ namespace sage
         const auto screenSize = settings->GetScreenSize();
         InitWindow(static_cast<int>(screenSize.x), static_cast<int>(screenSize.y), "BG Raylib Editor");
         settings->UpdateViewport();
-        ConfigureEditorSceneViewport(*settings, viewportFullscreen);
+        ConfigureEditorSceneViewport(*settings, dockLayout, viewportFullscreen);
         SetExitKey(KEY_NULL);
         EnableCursor();
 
@@ -89,7 +55,7 @@ namespace sage
         {
             serializer::LoadAssetBinFile(registry.get(), "resources/editor-map-assets.bin");
         }
-        scene = std::make_unique<EditorScene>(systems.get());
+        scene = std::make_unique<EditorScene>(systems.get(), &dockLayout);
 
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
@@ -192,7 +158,7 @@ namespace sage
     void EditorApplication::refreshViewportLayout(const Vector2 previousViewport)
     {
         settings->SetScreenSize(GetScreenWidth(), GetScreenHeight());
-        ConfigureEditorSceneViewport(*settings, viewportFullscreen);
+        ConfigureEditorSceneViewport(*settings, dockLayout, viewportFullscreen);
         const auto appViewport = settings->GetViewPort();
         systems->userInput->onWindowUpdate.Publish(previousViewport, appViewport);
 
@@ -243,6 +209,10 @@ namespace sage
             handleViewportFullscreenToggle();
             scene->Update();
             draw();
+            if (scene->ConsumeDockLayoutChanged())
+            {
+                refreshViewportLayout(settings->GetViewPort());
+            }
             handleScreenUpdate();
         }
     }

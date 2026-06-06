@@ -25,14 +25,11 @@ namespace sage::editor
     namespace
     {
         constexpr int THUMBNAIL_SIZE = 128;
-        constexpr float LEFT_DOCK_WIDTH = 340.0f;
-        constexpr float RIGHT_DOCK_WIDTH = 440.0f;
-        constexpr float ASSET_BROWSER_MARGIN = 18.0f;
-        constexpr float ASSET_BROWSER_HEIGHT = 344.0f;
         constexpr float ASSET_TILE_WIDTH = 152.0f;
         constexpr float ASSET_TILE_HEIGHT = 188.0f;
         constexpr float FLATPACK_TILE_HEIGHT = 116.0f;
         constexpr float ASSET_DEFAULTS_PANEL_WIDTH = 260.0f;
+        constexpr float DOCK_RESIZE_HANDLE_THICKNESS = 8.0f;
         constexpr Color EDITOR_WINDOW_BACKGROUND = {35, 38, 43, 245};
         constexpr Color EDITOR_TEXT = {230, 234, 240, 255};
         constexpr const char* HIERARCHY_DRAG_PAYLOAD = "SAGE_HIER_ENTITY";
@@ -321,6 +318,37 @@ namespace sage::editor
 
             DrawTextEx(font, text.c_str(), {position.x + 1.0f, position.y + 1.0f}, fontSize, 1.0f, BLACK);
             DrawTextEx(font, text.c_str(), position, fontSize, 1.0f, color);
+        }
+
+        bool DrawDockResizeHandle(
+            const char* id,
+            const ImVec2 pos,
+            const ImVec2 size,
+            const ImGuiMouseCursor cursor,
+            const std::function<bool(ImVec2)>& resize)
+        {
+            ImGui::SetCursorScreenPos(pos);
+            ImGui::InvisibleButton(id, size);
+            const bool hovered = ImGui::IsItemHovered();
+            const bool active = ImGui::IsItemActive();
+            if (hovered || active)
+            {
+                ImGui::SetMouseCursor(cursor);
+            }
+
+            bool changed = false;
+            if (active)
+            {
+                changed = resize(ImGui::GetIO().MouseDelta);
+            }
+
+            const ImVec4 color =
+                active ? ImVec4{0.36f, 0.58f, 0.92f, 0.95f}
+                       : hovered ? ImVec4{0.36f, 0.58f, 0.92f, 0.70f}
+                                 : ImVec4{0.28f, 0.32f, 0.38f, 0.55f};
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                pos, ImVec2{pos.x + size.x, pos.y + size.y}, ImGui::GetColorU32(color));
+            return changed;
         }
 
         template <class DrawFn>
@@ -612,9 +640,10 @@ namespace sage::editor
         const auto viewportOffset = settings->GetViewportOffset();
         const auto viewport = settings->GetViewPort();
         const float mainMenuHeight = ImGui::GetFrameHeight();
+        const float leftDockWidth = dockLayout ? dockLayout->leftDockWidth : EDITOR_LEFT_DOCK_DEFAULT_WIDTH;
         const ImVec2 windowPos{viewportOffset.x, viewportOffset.y + mainMenuHeight};
         const ImVec2 windowSize{
-            settings->ScaleValueWidth(LEFT_DOCK_WIDTH), std::max(1.0f, viewport.y - mainMenuHeight)};
+            settings->ScaleValueWidth(leftDockWidth), std::max(1.0f, viewport.y - mainMenuHeight)};
 
         ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
         ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
@@ -759,6 +788,20 @@ namespace sage::editor
                     drawEntry(index);
                 }
             }
+
+            if (dockLayout)
+            {
+                dockLayoutChanged |= DrawDockResizeHandle(
+                    "##hierarchy_resize",
+                    ImVec2{windowPos.x + windowSize.x - DOCK_RESIZE_HANDLE_THICKNESS, windowPos.y},
+                    ImVec2{DOCK_RESIZE_HANDLE_THICKNESS, windowSize.y},
+                    ImGuiMouseCursor_ResizeEW,
+                    [this, viewport](const ImVec2 delta) {
+                        const float logicalDelta =
+                            delta.x * Settings::TARGET_SCREEN_WIDTH / std::max(1.0f, viewport.x);
+                        return SetLeftDockWidth(*dockLayout, dockLayout->leftDockWidth + logicalDelta);
+                    });
+            }
         }
         ImGui::End();
 
@@ -782,7 +825,8 @@ namespace sage::editor
         const auto viewportOffset = settings->GetViewportOffset();
         const auto viewport = settings->GetViewPort();
         const float mainMenuHeight = ImGui::GetFrameHeight();
-        const float width = settings->ScaleValueWidth(RIGHT_DOCK_WIDTH);
+        const float rightDockWidth = dockLayout ? dockLayout->rightDockWidth : EDITOR_RIGHT_DOCK_DEFAULT_WIDTH;
+        const float width = settings->ScaleValueWidth(rightDockWidth);
         const ImVec2 windowPos{
             viewportOffset.x + viewport.x - width,
             viewportOffset.y + mainMenuHeight};
@@ -820,6 +864,20 @@ namespace sage::editor
                     DrawInspectorComponent(component);
                 }
             }
+
+            if (dockLayout)
+            {
+                dockLayoutChanged |= DrawDockResizeHandle(
+                    "##inspector_resize",
+                    windowPos,
+                    ImVec2{DOCK_RESIZE_HANDLE_THICKNESS, windowSize.y},
+                    ImGuiMouseCursor_ResizeEW,
+                    [this, viewport](const ImVec2 delta) {
+                        const float logicalDelta =
+                            delta.x * Settings::TARGET_SCREEN_WIDTH / std::max(1.0f, viewport.x);
+                        return SetRightDockWidth(*dockLayout, dockLayout->rightDockWidth - logicalDelta);
+                    });
+            }
         }
         ImGui::End();
 
@@ -833,10 +891,14 @@ namespace sage::editor
 
         const auto viewportOffset = settings->GetViewportOffset();
         const auto viewport = settings->GetViewPort();
-        const float left = settings->ScaleValueWidth(LEFT_DOCK_WIDTH + ASSET_BROWSER_MARGIN);
-        const float right = settings->ScaleValueWidth(RIGHT_DOCK_WIDTH + ASSET_BROWSER_MARGIN);
-        const float height = settings->ScaleValueHeight(ASSET_BROWSER_HEIGHT);
-        const float bottomMargin = settings->ScaleValueHeight(ASSET_BROWSER_MARGIN);
+        const float leftDockWidth = dockLayout ? dockLayout->leftDockWidth : EDITOR_LEFT_DOCK_DEFAULT_WIDTH;
+        const float rightDockWidth = dockLayout ? dockLayout->rightDockWidth : EDITOR_RIGHT_DOCK_DEFAULT_WIDTH;
+        const float assetDrawerHeight =
+            dockLayout ? dockLayout->assetDrawerHeight : EDITOR_ASSET_DRAWER_DEFAULT_HEIGHT;
+        const float left = settings->ScaleValueWidth(leftDockWidth + EDITOR_SCENE_VIEW_PADDING);
+        const float right = settings->ScaleValueWidth(rightDockWidth + EDITOR_SCENE_VIEW_PADDING);
+        const float height = settings->ScaleValueHeight(assetDrawerHeight);
+        const float bottomMargin = settings->ScaleValueHeight(EDITOR_SCENE_VIEW_PADDING);
         const ImVec2 windowPos{
             viewportOffset.x + left,
             viewportOffset.y + viewport.y - height - bottomMargin};
@@ -903,6 +965,20 @@ namespace sage::editor
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
+            }
+
+            if (dockLayout)
+            {
+                dockLayoutChanged |= DrawDockResizeHandle(
+                    "##asset_drawer_resize",
+                    windowPos,
+                    ImVec2{windowSize.x, DOCK_RESIZE_HANDLE_THICKNESS},
+                    ImGuiMouseCursor_ResizeNS,
+                    [this, viewport](const ImVec2 delta) {
+                        const float logicalDelta =
+                            delta.y * Settings::TARGET_SCREEN_HEIGHT / std::max(1.0f, viewport.y);
+                        return SetAssetDrawerHeight(*dockLayout, dockLayout->assetDrawerHeight - logicalDelta);
+                    });
             }
         }
         ImGui::End();
@@ -1048,6 +1124,13 @@ namespace sage::editor
     bool EditorGui::WantsKeyboardCapture() const
     {
         return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
+    }
+
+    bool EditorGui::ConsumeDockLayoutChanged()
+    {
+        const bool changed = dockLayoutChanged;
+        dockLayoutChanged = false;
+        return changed;
     }
 
     EditorGui::DeleteConfirmationAction EditorGui::ConsumeDeleteConfirmationAction()
@@ -1290,6 +1373,7 @@ namespace sage::editor
 
     EditorGui::EditorGui(
         Settings* _settings,
+        EditorDockLayout* _dockLayout,
         const std::vector<AssetEntry>& assets,
         const std::function<void(std::size_t)>& onAssetSelected,
         const std::function<void(std::filesystem::path)>& onFlatpackSelected,
@@ -1297,6 +1381,7 @@ namespace sage::editor
         const std::function<void(entt::entity, entt::entity)>& onHierarchyReparent,
         ModelDefaultCallbacks callbacks)
         : settings(_settings),
+          dockLayout(_dockLayout),
           onAssetSelectedCb(onAssetSelected),
           onFlatpackSelectedCb(onFlatpackSelected),
           onSceneObjectSelectedCb(onSceneObjectSelected),

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorDockLayout.hpp"
 #include "EditorInspector.hpp"
 
 #include "raylib.h"
@@ -67,6 +68,7 @@ namespace sage
             };
 
             Settings* settings{};
+            EditorDockLayout* dockLayout{};
             std::vector<AssetEntry> assetEntries;
             std::vector<RenderTexture2D> assetThumbnails;
             std::vector<SceneObjectEntry> hierarchyEntries;
@@ -93,6 +95,7 @@ namespace sage
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
+            bool dockLayoutChanged = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
             void drawAssetDefaultsControls();
@@ -127,9 +130,11 @@ namespace sage
             [[nodiscard]] bool IsDeleteConfirmationVisible() const;
             [[nodiscard]] bool WantsMouseCapture() const;
             [[nodiscard]] bool WantsKeyboardCapture() const;
+            [[nodiscard]] bool ConsumeDockLayoutChanged();
             [[nodiscard]] DeleteConfirmationAction ConsumeDeleteConfirmationAction();
             EditorGui(
                 Settings* _settings,
+                EditorDockLayout* _dockLayout,
                 const std::vector<AssetEntry>& assets,
                 const std::function<void(std::size_t)>& onAssetSelected,
                 const std::function<void(std::filesystem::path)>& onFlatpackSelected,

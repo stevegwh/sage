@@ -707,6 +707,11 @@ namespace sage
         return editorModes->HandleEscapePressed();
     }
 
+    bool EditorScene::ConsumeDockLayoutChanged() const
+    {
+        return gui && gui->ConsumeDockLayoutChanged();
+    }
+
     void EditorScene::SetViewportFullscreen(const bool fullscreen)
     {
         viewportFullscreen = fullscreen;
@@ -717,7 +722,7 @@ namespace sage
         gui->SetSceneName(sceneName);
     }
 
-    EditorScene::EditorScene(EngineSystems* _sys) : sys(_sys)
+    EditorScene::EditorScene(EngineSystems* _sys, editor::EditorDockLayout* dockLayout) : sys(_sys)
     {
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
         assetCatalog =
@@ -746,6 +751,7 @@ namespace sage
 
         gui = std::make_unique<editor::EditorGui>(
             sys->settings,
+            dockLayout,
             assetCatalog->AssetEntries(),
             [this](const std::size_t index) { editorModes->SelectPlaceable(index); },
             [this](std::filesystem::path path) { editorModes->SelectFlatpack(std::move(path)); },

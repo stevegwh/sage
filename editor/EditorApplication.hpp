@@ -1,5 +1,7 @@
 #pragma once
 
+#include "EditorDockLayout.hpp"
+
 #include "entt/entt.hpp"
 #include "raylib.h"
 
@@ -16,6 +18,7 @@ namespace sage
     class EditorApplication
     {
         RenderTexture renderTexture{};
+        editor::EditorDockLayout dockLayout{};
 
         std::unique_ptr<entt::registry> registry;
         std::unique_ptr<KeyMapping> keyMapping;

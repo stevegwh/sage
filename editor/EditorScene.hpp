@@ -26,6 +26,10 @@ namespace ImGui
 namespace sage
 {
     class EngineSystems;
+    namespace editor
+    {
+        struct EditorDockLayout;
+    }
 
     class EditorScene
     {
@@ -85,6 +89,7 @@ namespace sage
         void DrawOverlay2D() const;
         void DrawImGui() const;
         [[nodiscard]] bool HandleEscapePressed() const;
+        [[nodiscard]] bool ConsumeDockLayoutChanged() const;
 
         // Instantiates a flatpack at the given world anchor. Returns the root
         // entity on success. Called from the editor state machine when the
@@ -95,7 +100,7 @@ namespace sage
         void SetViewportFullscreen(bool fullscreen);
         void SetSceneName(const std::string& sceneName) const;
 
-        explicit EditorScene(EngineSystems* _sys);
+        EditorScene(EngineSystems* _sys, editor::EditorDockLayout* dockLayout);
         ~EditorScene();
     };
 } // namespace sage
