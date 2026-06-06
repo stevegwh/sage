@@ -101,6 +101,7 @@ namespace sage::editor
         void refreshOverlay() const;
         void refreshSceneWindows() const;
         [[nodiscard]] bool isMouseOverUiCell() const;
+        [[nodiscard]] bool isKeyboardEditing() const;
         [[nodiscard]] bool isDeleteConfirmationVisible() const;
         [[nodiscard]] EditorGui::DeleteConfirmationAction consumeDeleteConfirmationAction();
         [[nodiscard]] std::optional<entt::entity> pickSceneEntityUnderCursor() const;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "InspectorFieldBuilder.hpp"
+#include "EditorInspector.hpp"
 
 #include "engine/Event.hpp"
 #include "raylib.h"
@@ -72,10 +72,8 @@ namespace sage
             };
 
           private:
-            Window* hierarchyWindow{};
             Window* assetWindow{};
             Window* assetDefaultsWindow{};
-            Window* inspectorWindow{};
             Window* deleteConfirmationWindow{};
             GameUIEngine* ui{};
             Settings* settings{};
@@ -83,20 +81,23 @@ namespace sage
             std::vector<AssetEntry> assetEntries;
             std::vector<RenderTexture2D> assetThumbnails;
             std::vector<ImageBox*> assetButtons;
-            std::vector<TextBox*> hierarchyRows;
             std::vector<SceneObjectEntry> hierarchyEntries;
             std::vector<FlatpackEntry> flatpackEntries;
             std::vector<TextBox*> browserTabButtons;
             std::function<void(std::size_t)> onAssetSelectedCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
+            std::function<void(entt::entity)> onSceneObjectSelectedCb;
+            std::function<void(entt::entity, entt::entity)> onHierarchyReparentCb;
             BrowserTab currentTab = BrowserTab::Assets;
             Subscription assetScrollSub{};
-            Subscription hierarchyScrollSub{};
-            InspectorFieldBuilder inspectorFieldBlueprints;
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
             std::optional<entt::entity> selectedSceneEntity;
+            std::optional<entt::entity> focusedHierarchyEntity;
+            std::optional<entt::entity> pendingHierarchyContextEntity;
+            std::string inspectorSelectedEntity = "None";
+            std::vector<InspectedComponent> inspectedComponents;
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
@@ -104,25 +105,21 @@ namespace sage
             TextBox* defaultsPositionText{};
             TextBox* defaultsRotationText{};
             TextBox* defaultsScaleText{};
-            TextBox* inspectorSelectionText{};
             TextBox* deleteConfirmationText{};
             bool imGuiEnabled = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
-            void createHierarchyWindow(
-                const std::function<void(entt::entity)>& onSceneObjectSelected,
-                const std::function<void(entt::entity, entt::entity)>& onHierarchyReparent);
             void createAssetWindow(
                 const std::vector<AssetEntry>& assets, const std::function<void(std::size_t)>& onAssetSelected);
             void createAssetDefaultsWindow();
-            void createInspectorWindow();
             void createDeleteConfirmationWindow();
             void refreshAssetButtonContent();
-            void refreshHierarchyRowContent();
 
           public:
             void StartImGui();
             void EndImGui();
+            void DrawHierarchyWindow();
+            void DrawInspectorWindow();
             void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;
             void SetAssetDefaultsStatus(
                 const std::string& assetName,
@@ -136,15 +133,15 @@ namespace sage
             void SetHierarchy(
                 const std::vector<SceneObjectEntry>& entries, std::optional<entt::entity> selectedEntity);
             void FocusHierarchyOnEntity(entt::entity entity);
-            // Maps a viewport-space cursor position to the hierarchy entity at
-            // that row, if any. Used to drive the right-click context menu.
-            [[nodiscard]] std::optional<entt::entity> HierarchyEntityAtViewportPos(Vector2 viewportPos) const;
+            [[nodiscard]] std::optional<entt::entity> ConsumeHierarchyContextEntity();
             void SetInspector(
                 const std::string& selectedEntity, const std::vector<InspectedComponent>& inspectedComponents);
             void DrawSceneViewInfo() const;
             void ShowDeleteConfirmation(const std::string& selectedEntity) const;
             void HideDeleteConfirmation() const;
             [[nodiscard]] bool IsDeleteConfirmationVisible() const;
+            [[nodiscard]] bool WantsMouseCapture() const;
+            [[nodiscard]] bool WantsKeyboardCapture() const;
             [[nodiscard]] DeleteConfirmationAction ConsumeDeleteConfirmationAction();
             EditorGui(
                 GameUIEngine* _ui,

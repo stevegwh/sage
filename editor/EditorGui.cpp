@@ -9,16 +9,22 @@
 #include "engine/ui/UIWindow.hpp"
 #include "engine/slib.hpp"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 
 #include "raymath.h"
 #include "rlImGui.h"
 
 #include <algorithm>
-#include <array>
+#include <cctype>
+#include <cfloat>
 #include <cmath>
-#include <iterator>
+#include <cstdint>
+#include <format>
 #include <memory>
 #include <optional>
+#include <sstream>
+#include <string_view>
+#include <type_traits>
 #include <utility>
 
 namespace sage::editor
@@ -28,21 +34,288 @@ namespace sage::editor
         constexpr int THUMBNAIL_SIZE = 128;
         constexpr int ASSET_GRID_COLUMNS = 5;
         constexpr int ASSET_VISIBLE_ROWS = 2;
-        constexpr int HIERARCHY_MAX_ROWS = 32;
         constexpr float LEFT_DOCK_WIDTH = 340.0f;
         constexpr float RIGHT_DOCK_WIDTH = 440.0f;
-        constexpr float DOCK_HEIGHT = 1080.0f;
         constexpr float ASSET_BROWSER_MARGIN = 18.0f;
         constexpr float ASSET_BROWSER_HEIGHT = 344.0f;
         constexpr float ASSET_BROWSER_WIDTH =
             1920.0f - LEFT_DOCK_WIDTH - RIGHT_DOCK_WIDTH - ASSET_BROWSER_MARGIN * 2.0f;
         constexpr Color EDITOR_WINDOW_BACKGROUND = {35, 38, 43, 245};
         constexpr Color EDITOR_TEXT = {230, 234, 240, 255};
-        constexpr float SIDE_DOCK_TITLE_ROW_HEIGHT = 4.0f;
+        constexpr const char* HIERARCHY_DRAG_PAYLOAD = "SAGE_HIER_ENTITY";
         constexpr float BOTTOM_DOCK_TITLE_ROW_HEIGHT = 10.0f;
         constexpr float FLOATING_PANEL_TITLE_ROW_HEIGHT = 15.0f;
         constexpr Padding CONTENT_ROW_PADDING = {2, 0, 0, 0};
         constexpr Padding CONTENT_CELL_PADDING = {2, 6, 8, 8};
+
+        ImVec4 ToImGuiColor(const Color color)
+        {
+            return {
+                static_cast<float>(color.r) / 255.0f,
+                static_cast<float>(color.g) / 255.0f,
+                static_cast<float>(color.b) / 255.0f,
+                static_cast<float>(color.a) / 255.0f};
+        }
+
+        std::uint32_t EntityPayloadId(const entt::entity entity)
+        {
+            return static_cast<std::uint32_t>(entt::to_integral(entity));
+        }
+
+        entt::entity EntityFromPayloadId(const std::uint32_t id)
+        {
+            return static_cast<entt::entity>(id);
+        }
+
+        template <class T>
+        void CommitField(const LeafField<T>& field, const T& value)
+        {
+            if (field.setter)
+                field.setter(value);
+            else if (field.data)
+                *field.data = value;
+        }
+
+        std::string TrimCopy(std::string_view value)
+        {
+            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
+            {
+                value.remove_prefix(1);
+            }
+            while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+            {
+                value.remove_suffix(1);
+            }
+            return std::string{value};
+        }
+
+        std::string NormalizedNumberList(std::string_view value)
+        {
+            std::string result{value};
+            for (auto& c : result)
+            {
+                if (c == ',' || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}')
+                {
+                    c = ' ';
+                }
+            }
+            return result;
+        }
+
+        bool ParseBool(std::string_view value, bool& out)
+        {
+            auto text = TrimCopy(value);
+            std::ranges::transform(text, text.begin(), [](const unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            if (text == "true" || text == "1" || text == "yes" || text == "on")
+            {
+                out = true;
+                return true;
+            }
+            if (text == "false" || text == "0" || text == "no" || text == "off")
+            {
+                out = false;
+                return true;
+            }
+            return false;
+        }
+
+        bool ParseScalar(std::string_view value, int& out)
+        {
+            try
+            {
+                std::size_t parsed = 0;
+                const auto result = std::stoi(TrimCopy(value), &parsed);
+                if (parsed == 0) return false;
+                out = result;
+                return true;
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+
+        bool ParseScalar(std::string_view value, unsigned int& out)
+        {
+            int parsed = 0;
+            if (!ParseScalar(value, parsed)) return false;
+            out = static_cast<unsigned int>(std::max(0, parsed));
+            return true;
+        }
+
+        bool ParseScalar(std::string_view value, std::uint64_t& out)
+        {
+            try
+            {
+                std::size_t parsed = 0;
+                const auto result = std::stoull(TrimCopy(value), &parsed);
+                if (parsed == 0) return false;
+                out = static_cast<std::uint64_t>(result);
+                return true;
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+
+        bool ParseScalar(std::string_view value, float& out)
+        {
+            try
+            {
+                std::size_t parsed = 0;
+                const auto result = std::stof(TrimCopy(value), &parsed);
+                if (parsed == 0) return false;
+                out = result;
+                return true;
+            }
+            catch (...)
+            {
+                return false;
+            }
+        }
+
+        bool ParseVector2(std::string_view value, Vector2& out)
+        {
+            std::istringstream stream{NormalizedNumberList(value)};
+            return static_cast<bool>(stream >> out.x >> out.y);
+        }
+
+        bool ParseVector3(std::string_view value, Vector3& out)
+        {
+            std::istringstream stream{NormalizedNumberList(value)};
+            return static_cast<bool>(stream >> out.x >> out.y >> out.z);
+        }
+
+        bool ParseColor(std::string_view value, Color& out)
+        {
+            const auto text = TrimCopy(value);
+            if (!text.empty() && text.front() == '#')
+            {
+                try
+                {
+                    const auto hex = text.substr(1);
+                    if (hex.size() != 6 && hex.size() != 8) return false;
+                    const auto packed = std::stoul(hex, nullptr, 16);
+                    out.r = static_cast<unsigned char>((packed >> (hex.size() == 8 ? 24 : 16)) & 0xff);
+                    out.g = static_cast<unsigned char>((packed >> (hex.size() == 8 ? 16 : 8)) & 0xff);
+                    out.b = static_cast<unsigned char>((packed >> (hex.size() == 8 ? 8 : 0)) & 0xff);
+                    out.a = hex.size() == 8 ? static_cast<unsigned char>(packed & 0xff) : 255;
+                    return true;
+                }
+                catch (...)
+                {
+                    return false;
+                }
+            }
+
+            std::istringstream stream{NormalizedNumberList(text)};
+            int r = 0;
+            int g = 0;
+            int b = 0;
+            int a = 255;
+            if (!(stream >> r >> g >> b)) return false;
+            stream >> a;
+            out = {
+                static_cast<unsigned char>(std::clamp(r, 0, 255)),
+                static_cast<unsigned char>(std::clamp(g, 0, 255)),
+                static_cast<unsigned char>(std::clamp(b, 0, 255)),
+                static_cast<unsigned char>(std::clamp(a, 0, 255))};
+            return true;
+        }
+
+        std::string FormatLeafValue(const LeafField<bool>& field)
+        {
+            return field.data && *field.data ? "true" : "false";
+        }
+
+        template <class T>
+        std::string FormatLeafValue(const LeafField<T>& field)
+        {
+            if (!field.data) return {};
+            if constexpr (std::is_same_v<T, float>)
+                return std::format("{:.3f}", *field.data);
+            else if constexpr (std::is_same_v<T, std::string>)
+                return *field.data;
+            else
+                return std::to_string(*field.data);
+        }
+
+        std::string FormatLeafValue(const LeafField<Vector2>& field)
+        {
+            if (!field.data) return {};
+            return std::format("{:.3f}, {:.3f}", field.data->x, field.data->y);
+        }
+
+        std::string FormatLeafValue(const LeafField<Vector3>& field)
+        {
+            if (!field.data) return {};
+            return std::format("{:.3f}, {:.3f}, {:.3f}", field.data->x, field.data->y, field.data->z);
+        }
+
+        std::string FormatLeafValue(const LeafField<::Color>& field)
+        {
+            if (!field.data) return {};
+            return std::format(
+                "#{:02X}{:02X}{:02X}{:02X}", field.data->r, field.data->g, field.data->b, field.data->a);
+        }
+
+        std::string FormatEnumValue(const EnumField& field)
+        {
+            if (!field.getIndex) return {};
+            const auto index = field.getIndex();
+            if (index >= field.options.size()) return {};
+            return field.options[index];
+        }
+
+        std::string FormatFieldValue(const FieldValue& value)
+        {
+            return std::visit(
+                [](const auto& field) {
+                    using T = std::decay_t<decltype(field)>;
+                    if constexpr (std::is_same_v<T, EnumField>)
+                        return FormatEnumValue(field);
+                    else
+                        return FormatLeafValue(field);
+                },
+                value);
+        }
+
+        std::string FormatComponentValues(const InspectedComponent& component)
+        {
+            std::string result = component.displayName;
+            for (const auto& field : component.fields)
+            {
+                result += "\n";
+                result += field.label;
+                result += ": ";
+                result += FormatFieldValue(field.value);
+            }
+            return result;
+        }
+
+        void DrawFieldClipboardMenu(
+            const std::string& value,
+            const bool editable,
+            const std::function<bool(std::string_view)>& paste)
+        {
+            if (!ImGui::BeginPopupContextItem("field_context")) return;
+
+            if (ImGui::MenuItem("Copy Value"))
+            {
+                ImGui::SetClipboardText(value.c_str());
+            }
+            if (editable && ImGui::MenuItem("Paste Value"))
+            {
+                if (const char* clipboard = ImGui::GetClipboardText(); clipboard != nullptr && paste)
+                {
+                    (void)paste(clipboard);
+                }
+            }
+            ImGui::EndPopup();
+        }
 
         TextBox::FontInfo EditorTextFontInfo()
         {
@@ -57,25 +330,6 @@ namespace sage::editor
             info.font = ResourceManager::GetInstance().FontLoad("resources/fonts/NotoSans/NotoSans-ExtraBold.ttf");
             info.baseFontSize = 22;
             info.minFontSize = 18;
-            return info;
-        }
-
-        TextBox::FontInfo EditorInspectorFontInfo()
-        {
-            auto info = EditorTextFontInfo();
-            info.font = ResourceManager::GetInstance().FontLoad("resources/fonts/NotoSans/NotoSans-SemiBold.ttf");
-            info.baseFontSize = 18;
-            info.minFontSize = 15;
-            return info;
-        }
-
-        // TextInput boxes paint a light background, so the inspector's normal
-        // light text colour would be unreadable inside them.
-        TextBox::FontInfo EditorInspectorInputFontInfo()
-        {
-            auto info = EditorInspectorFontInfo();
-            info.color = Color{17, 24, 39, 255};
-            info.font = ResourceManager::GetInstance().FontLoad("resources/fonts/FiraCode/FiraCode-SemiBold.ttf");
             return info;
         }
 
@@ -233,119 +487,6 @@ namespace sage::editor
             }
         };
 
-        class HierarchyRowButton final : public TextBox
-        {
-            std::size_t rowIndex = 0;
-            const std::vector<EditorGui::SceneObjectEntry>* entries{};
-            std::function<std::size_t()> scrollOffset;
-            const std::optional<entt::entity>* selectedEntity{};
-            std::function<void(entt::entity)> onSceneObjectSelected;
-            std::function<void(entt::entity, entt::entity)> onHierarchyReparent;
-
-          public:
-            void OnClick() override
-            {
-                if (!entries || !scrollOffset || !onSceneObjectSelected) return;
-                const std::size_t entryIndex = scrollOffset() + rowIndex;
-                if (entryIndex >= entries->size()) return;
-                onSceneObjectSelected(entries->at(entryIndex).entity);
-            }
-
-            [[nodiscard]] entt::entity ResolveEntity() const
-            {
-                if (!entries || !scrollOffset) return entt::null;
-                const std::size_t entryIndex = scrollOffset() + rowIndex;
-                if (entryIndex >= entries->size()) return entt::null;
-                return entries->at(entryIndex).entity;
-            }
-
-            void ReceiveDrop(CellElement* droppedElement) override
-            {
-                if (!canReceiveDragDrops || !onHierarchyReparent) return;
-                auto* sourceRow = dynamic_cast<HierarchyRowButton*>(droppedElement);
-                if (!sourceRow) return;
-                const auto dragged = sourceRow->ResolveEntity();
-                const auto target = ResolveEntity();
-                if (dragged == entt::null || target == entt::null) return;
-                if (dragged == target) return;
-                onHierarchyReparent(dragged, target);
-            }
-
-            void DragDraw() override
-            {
-                const auto mousePos = engine->ViewportMousePosition();
-                const auto& content = GetContent();
-                if (content.empty()) return;
-                DrawRectangle(
-                    mousePos.x + 12.0f, mousePos.y + 4.0f, rec.width * 0.6f, rec.height, {37, 99, 235, 200});
-                DrawTextEx(
-                    fontInfo.font,
-                    content.c_str(),
-                    Vector2{mousePos.x + 18.0f, mousePos.y + 4.0f + (rec.height - fontInfo.fontSize) * 0.5f},
-                    fontInfo.fontSize,
-                    fontInfo.fontSpacing,
-                    WHITE);
-            }
-
-            void UpdateDimensions() override
-            {
-                UpdateFontScaling();
-                rec = {
-                    parent->GetRec().x + parent->padding.left,
-                    parent->GetRec().y + parent->padding.up,
-                    parent->GetRec().width - parent->padding.left - parent->padding.right,
-                    parent->GetRec().height - parent->padding.up - parent->padding.down};
-            }
-
-            void Draw2D() override
-            {
-                const std::size_t entryIndex = scrollOffset ? scrollOffset() + rowIndex : rowIndex;
-                const bool hasEntry = entries && entryIndex < entries->size();
-                const bool selected = hasEntry && selectedEntity && selectedEntity->has_value() &&
-                                      selectedEntity->value() == entries->at(entryIndex).entity;
-
-                if (hasEntry)
-                {
-                    DrawRectangleRec(rec, selected ? Color{221, 235, 255, 255} : Color{246, 248, 251, 255});
-                    DrawRectangleLinesEx(
-                        rec,
-                        selected ? 2.0f : 1.0f,
-                        selected ? Color{37, 99, 235, 255} : Color{208, 216, 228, 255});
-                }
-
-                if (GetContent().empty()) return;
-
-                DrawTextEx(
-                    fontInfo.font,
-                    GetContent().c_str(),
-                    Vector2{rec.x + 14.0f, rec.y + (rec.height - fontInfo.fontSize) * 0.5f},
-                    fontInfo.fontSize,
-                    fontInfo.fontSpacing,
-                    fontInfo.color);
-            }
-
-            HierarchyRowButton(
-                GameUIEngine* ui,
-                TableCell* parent,
-                std::size_t index,
-                const std::vector<EditorGui::SceneObjectEntry>* sceneEntries,
-                std::function<std::size_t()> firstVisibleEntry,
-                const std::optional<entt::entity>* activeEntity,
-                std::function<void(entt::entity)> callback,
-                std::function<void(entt::entity, entt::entity)> reparentCallback)
-                : TextBox(ui, parent, TextBox::FontInfo{}, VertAlignment::MIDDLE, HoriAlignment::LEFT),
-                  rowIndex(index),
-                  entries(sceneEntries),
-                  scrollOffset(std::move(firstVisibleEntry)),
-                  selectedEntity(activeEntity),
-                  onSceneObjectSelected(std::move(callback)),
-                  onHierarchyReparent(std::move(reparentCallback))
-            {
-                draggable = true;
-                canReceiveDragDrops = true;
-            }
-        };
-
         void DrawTextFit(
             const Font font,
             const std::string& text,
@@ -363,6 +504,268 @@ namespace sage::editor
             DrawTextEx(font, text.c_str(), position, fontSize, 1.0f, color);
         }
 
+        template <class DrawFn>
+        void DrawMaybeDisabled(const bool editable, DrawFn&& draw)
+        {
+            if (!editable) ImGui::BeginDisabled();
+            draw();
+            if (!editable) ImGui::EndDisabled();
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable)
+        {
+            bool value = field.data && *field.data;
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::Checkbox("##value", &value) && editable)
+                {
+                    CommitField(field, value);
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                bool parsed = false;
+                if (!ParseBool(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<int>& field, const bool editable)
+        {
+            int value = field.data ? *field.data : 0;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::DragInt("##value", &value, 1.0f) && editable)
+                {
+                    CommitField(field, value);
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                int parsed = 0;
+                if (!ParseScalar(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<unsigned int>& field, const bool editable)
+        {
+            unsigned int value = field.data ? *field.data : 0;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::DragScalar("##value", ImGuiDataType_U32, &value, 1.0f) && editable)
+                {
+                    CommitField(field, value);
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                unsigned int parsed = 0;
+                if (!ParseScalar(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<std::uint64_t>& field, const bool editable)
+        {
+            std::uint64_t value = field.data ? *field.data : 0;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::InputScalar("##value", ImGuiDataType_U64, &value) && editable)
+                {
+                    CommitField(field, value);
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                std::uint64_t parsed = 0;
+                if (!ParseScalar(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<float>& field, const bool editable)
+        {
+            float value = field.data ? *field.data : 0.0f;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::DragFloat("##value", &value, 0.05f, 0.0f, 0.0f, "%.3f") && editable)
+                {
+                    CommitField(field, value);
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                float parsed = 0.0f;
+                if (!ParseScalar(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<std::string>& field, const bool editable)
+        {
+            std::string value = field.data ? *field.data : std::string{};
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            const auto flags = editable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
+            if (ImGui::InputText("##value", &value, flags) && editable)
+            {
+                CommitField(field, value);
+            }
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                CommitField(field, std::string{text});
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<Vector2>& field, const bool editable)
+        {
+            float value[2] = {
+                field.data ? field.data->x : 0.0f,
+                field.data ? field.data->y : 0.0f};
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::DragFloat2("##value", value, 0.05f, 0.0f, 0.0f, "%.3f") && editable)
+                {
+                    CommitField(field, Vector2{value[0], value[1]});
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                Vector2 parsed{};
+                if (!ParseVector2(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<Vector3>& field, const bool editable)
+        {
+            float value[3] = {
+                field.data ? field.data->x : 0.0f,
+                field.data ? field.data->y : 0.0f,
+                field.data ? field.data->z : 0.0f};
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::DragFloat3("##value", value, 0.05f, 0.0f, 0.0f, "%.3f") && editable)
+                {
+                    CommitField(field, Vector3{value[0], value[1], value[2]});
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                Vector3 parsed{};
+                if (!ParseVector3(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const LeafField<::Color>& field, const bool editable)
+        {
+            float value[4] = {
+                field.data ? static_cast<float>(field.data->r) / 255.0f : 1.0f,
+                field.data ? static_cast<float>(field.data->g) / 255.0f : 1.0f,
+                field.data ? static_cast<float>(field.data->b) / 255.0f : 1.0f,
+                field.data ? static_cast<float>(field.data->a) / 255.0f : 1.0f};
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            constexpr ImGuiColorEditFlags flags =
+                ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf |
+                ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_InputRGB;
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::ColorEdit4("##value", value, flags) && editable)
+                {
+                    const auto toByte = [](const float v) {
+                        return static_cast<unsigned char>(std::clamp(v, 0.0f, 1.0f) * 255.0f);
+                    };
+                    CommitField(field, Color{toByte(value[0]), toByte(value[1]), toByte(value[2]), toByte(value[3])});
+                }
+            });
+            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                Color parsed{};
+                if (!ParseColor(text, parsed)) return false;
+                CommitField(field, parsed);
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldWidget(const EnumField& field, const bool editable)
+        {
+            const auto currentIndex = field.getIndex ? field.getIndex() : 0;
+            const char* currentLabel =
+                currentIndex < field.options.size() ? field.options[currentIndex].c_str() : "";
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::BeginCombo("##value", currentLabel))
+                {
+                    for (std::size_t i = 0; i < field.options.size(); ++i)
+                    {
+                        const bool selected = i == currentIndex;
+                        if (ImGui::Selectable(field.options[i].c_str(), selected) && editable && field.setIndex)
+                        {
+                            field.setIndex(i);
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
+                }
+            });
+            DrawFieldClipboardMenu(FormatEnumValue(field), editable, [field](const std::string_view text) {
+                const auto pasted = TrimCopy(text);
+                const auto it = std::ranges::find(field.options, pasted);
+                if (it == field.options.end() || !field.setIndex) return false;
+                field.setIndex(static_cast<std::size_t>(std::distance(field.options.begin(), it)));
+                return true;
+            });
+        }
+
+        void DrawInspectorFieldRow(const InspectorField& field)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(field.label.c_str());
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::PushID(field.label.c_str());
+            std::visit(
+                [&](const auto& value) {
+                    DrawInspectorFieldWidget(value, field.editable);
+                },
+                field.value);
+            ImGui::PopID();
+        }
+
+        void DrawInspectorComponent(const InspectedComponent& component)
+        {
+            ImGui::PushID(component.displayName.c_str());
+            const bool open = ImGui::CollapsingHeader(
+                component.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
+            if (ImGui::BeginPopupContextItem("component_context"))
+            {
+                if (ImGui::MenuItem("Copy Component Values"))
+                {
+                    const auto text = FormatComponentValues(component);
+                    ImGui::SetClipboardText(text.c_str());
+                }
+                ImGui::EndPopup();
+            }
+
+            if (open)
+            {
+                constexpr ImGuiTableFlags tableFlags =
+                    ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH | ImGuiTableFlags_SizingStretchProp |
+                    ImGuiTableFlags_PadOuterX;
+                if (ImGui::BeginTable("fields", 2, tableFlags))
+                {
+                    ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+                    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+                    for (const auto& field : component.fields)
+                    {
+                        DrawInspectorFieldRow(field);
+                    }
+                    ImGui::EndTable();
+                }
+            }
+            ImGui::PopID();
+        }
+
     } // namespace
 
     void EditorGui::StartImGui()
@@ -376,6 +779,237 @@ namespace sage::editor
         rlImGuiEnd();
         imGuiEnabled = false;
     }
+
+    void EditorGui::DrawHierarchyWindow()
+    {
+        if (!settings) return;
+
+        if (focusedHierarchyEntity.has_value() &&
+            !std::ranges::any_of(hierarchyEntries, [this](const SceneObjectEntry& entry) {
+                return entry.entity == *focusedHierarchyEntity;
+            }))
+        {
+            focusedHierarchyEntity.reset();
+        }
+
+        const auto viewportOffset = settings->GetViewportOffset();
+        const auto viewport = settings->GetViewPort();
+        const float mainMenuHeight = ImGui::GetFrameHeight();
+        const ImVec2 windowPos{viewportOffset.x, viewportOffset.y + mainMenuHeight};
+        const ImVec2 windowSize{
+            settings->ScaleValueWidth(LEFT_DOCK_WIDTH), std::max(1.0f, viewport.y - mainMenuHeight)};
+
+        ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ToImGuiColor(EDITOR_WINDOW_BACKGROUND));
+        ImGui::PushStyleColor(ImGuiCol_Text, ToImGuiColor(EDITOR_TEXT));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.18f, 0.26f, 0.38f, 0.90f});
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.23f, 0.34f, 0.50f, 0.95f});
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 12.0f});
+
+        std::optional<entt::entity> sceneSelectionRequest;
+        std::optional<std::pair<entt::entity, entt::entity>> reparentRequest;
+
+        constexpr ImGuiWindowFlags windowFlags =
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings;
+
+        if (ImGui::Begin("Hierarchy", nullptr, windowFlags))
+        {
+            if (hierarchyEntries.empty())
+            {
+                ImGui::TextDisabled("No scene objects");
+            }
+            else
+            {
+                auto subtreeContainsEntity = [this](const std::size_t rootIndex, const entt::entity entity) {
+                    if (rootIndex >= hierarchyEntries.size()) return false;
+                    const int rootDepth = hierarchyEntries[rootIndex].depth;
+                    for (std::size_t i = rootIndex; i < hierarchyEntries.size(); ++i)
+                    {
+                        if (i != rootIndex && hierarchyEntries[i].depth <= rootDepth) break;
+                        if (hierarchyEntries[i].entity == entity) return true;
+                    }
+                    return false;
+                };
+
+                auto skipSubtree = [this](std::size_t& index, const int depth) {
+                    ++index;
+                    while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > depth)
+                    {
+                        ++index;
+                    }
+                };
+
+                std::function<void(std::size_t&)> drawEntry = [&](std::size_t& index) {
+                    if (index >= hierarchyEntries.size()) return;
+
+                    const std::size_t entryIndex = index;
+                    const auto& entry = hierarchyEntries[entryIndex];
+                    const bool hasChildren = entryIndex + 1 < hierarchyEntries.size() &&
+                                             hierarchyEntries[entryIndex + 1].depth > entry.depth;
+                    const bool selected = selectedSceneEntity.has_value() && *selectedSceneEntity == entry.entity;
+
+                    ImGuiTreeNodeFlags nodeFlags =
+                        ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow |
+                        ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                    if (selected) nodeFlags |= ImGuiTreeNodeFlags_Selected;
+                    if (!hasChildren) nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+
+                    if (hasChildren)
+                    {
+                        if (focusedHierarchyEntity.has_value() &&
+                            subtreeContainsEntity(entryIndex, *focusedHierarchyEntity))
+                        {
+                            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                        }
+                        else
+                        {
+                            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+                        }
+                    }
+
+                    const auto imguiEntityId =
+                        static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
+                    const bool open = ImGui::TreeNodeEx(
+                        reinterpret_cast<void*>(imguiEntityId), nodeFlags, "%s", entry.displayName.c_str());
+
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+                    {
+                        sceneSelectionRequest = entry.entity;
+                    }
+
+                    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                    {
+                        pendingHierarchyContextEntity = entry.entity;
+                    }
+
+                    if (focusedHierarchyEntity.has_value() && *focusedHierarchyEntity == entry.entity)
+                    {
+                        ImGui::SetScrollHereY(0.5f);
+                        focusedHierarchyEntity.reset();
+                    }
+
+                    if (ImGui::BeginDragDropSource())
+                    {
+                        const std::uint32_t payload = EntityPayloadId(entry.entity);
+                        ImGui::SetDragDropPayload(HIERARCHY_DRAG_PAYLOAD, &payload, sizeof(payload));
+                        ImGui::TextUnformatted(entry.displayName.c_str());
+                        ImGui::EndDragDropSource();
+                    }
+
+                    if (ImGui::BeginDragDropTarget())
+                    {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(HIERARCHY_DRAG_PAYLOAD);
+                            payload != nullptr && payload->Delivery &&
+                            payload->DataSize == sizeof(std::uint32_t))
+                        {
+                            const auto dragged =
+                                EntityFromPayloadId(*static_cast<const std::uint32_t*>(payload->Data));
+                            if (dragged != entry.entity)
+                            {
+                                reparentRequest = std::pair{dragged, entry.entity};
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    if (!hasChildren)
+                    {
+                        ++index;
+                    }
+                    else if (open)
+                    {
+                        ++index;
+                        while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > entry.depth)
+                        {
+                            drawEntry(index);
+                        }
+                        ImGui::TreePop();
+                    }
+                    else
+                    {
+                        skipSubtree(index, entry.depth);
+                    }
+
+                };
+
+                std::size_t index = 0;
+                while (index < hierarchyEntries.size())
+                {
+                    drawEntry(index);
+                }
+            }
+        }
+        ImGui::End();
+
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor(5);
+
+        if (sceneSelectionRequest.has_value() && onSceneObjectSelectedCb)
+        {
+            onSceneObjectSelectedCb(*sceneSelectionRequest);
+        }
+        if (reparentRequest.has_value() && onHierarchyReparentCb)
+        {
+            onHierarchyReparentCb(reparentRequest->first, reparentRequest->second);
+        }
+    }
+
+    void EditorGui::DrawInspectorWindow()
+    {
+        if (!settings) return;
+
+        const auto viewportOffset = settings->GetViewportOffset();
+        const auto viewport = settings->GetViewPort();
+        const float mainMenuHeight = ImGui::GetFrameHeight();
+        const float width = settings->ScaleValueWidth(RIGHT_DOCK_WIDTH);
+        const ImVec2 windowPos{
+            viewportOffset.x + viewport.x - width,
+            viewportOffset.y + mainMenuHeight};
+        const ImVec2 windowSize{width, std::max(1.0f, viewport.y - mainMenuHeight)};
+
+        ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ToImGuiColor(EDITOR_WINDOW_BACKGROUND));
+        ImGui::PushStyleColor(ImGuiCol_Text, ToImGuiColor(EDITOR_TEXT));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.18f, 0.26f, 0.38f, 0.90f});
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.23f, 0.34f, 0.50f, 0.95f});
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 12.0f});
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{6.0f, 5.0f});
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0f, 7.0f});
+
+        constexpr ImGuiWindowFlags windowFlags =
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings;
+
+        if (ImGui::Begin("Inspector", nullptr, windowFlags))
+        {
+            ImGui::Text("Selected: %s", inspectorSelectedEntity.c_str());
+            ImGui::Separator();
+
+            if (inspectedComponents.empty())
+            {
+                ImGui::TextDisabled("No component data");
+            }
+            else
+            {
+                for (const auto& component : inspectedComponents)
+                {
+                    DrawInspectorComponent(component);
+                }
+            }
+        }
+        ImGui::End();
+
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(5);
+    }
+
     void EditorGui::SetOverlayStatus(const std::string& mode, const std::string& cursor) const
     {
         modeStatus = mode;
@@ -413,77 +1047,30 @@ namespace sage::editor
         }
     }
 
-    void EditorGui::refreshHierarchyRowContent()
-    {
-        const std::size_t scrollOffset = hierarchyWindow && hierarchyWindow->GetScrollbar()
-                                             ? hierarchyWindow->GetScrollbar()->ScrollOffset()
-                                             : 0;
-        for (std::size_t i = 0; i < hierarchyRows.size(); ++i)
-        {
-            const std::size_t entryIndex = scrollOffset + i;
-            if (entryIndex >= hierarchyEntries.size())
-            {
-                hierarchyRows[i]->SetContent("");
-                continue;
-            }
-
-            const auto& entry = hierarchyEntries[entryIndex];
-            hierarchyRows[i]->SetContent(
-                std::string(static_cast<std::size_t>(entry.depth * 2), ' ') + entry.displayName);
-        }
-    }
-
     void EditorGui::SetHierarchy(
         const std::vector<SceneObjectEntry>& entries, const std::optional<entt::entity> selectedEntity)
     {
         hierarchyEntries = entries;
         selectedSceneEntity = selectedEntity;
-        if (auto* sb = hierarchyWindow ? hierarchyWindow->GetScrollbar() : nullptr) sb->ClampOffset();
-        refreshHierarchyRowContent();
     }
 
-    std::optional<entt::entity> EditorGui::HierarchyEntityAtViewportPos(const Vector2 viewportPos) const
+    std::optional<entt::entity> EditorGui::ConsumeHierarchyContextEntity()
     {
-        if (!hierarchyWindow || hierarchyWindow->IsHidden()) return std::nullopt;
-        if (!PointInsideRect(hierarchyWindow->GetRec(), viewportPos)) return std::nullopt;
-
-        const std::size_t scrollOffset = hierarchyWindow->GetScrollbar()
-                                             ? hierarchyWindow->GetScrollbar()->ScrollOffset()
-                                             : 0;
-        for (std::size_t i = 0; i < hierarchyRows.size(); ++i)
-        {
-            const auto* row = hierarchyRows[i];
-            if (!row || !row->parent) continue;
-            if (!PointInsideRect(row->parent->GetRec(), viewportPos)) continue;
-            const std::size_t entryIndex = scrollOffset + i;
-            if (entryIndex >= hierarchyEntries.size()) return std::nullopt;
-            return hierarchyEntries[entryIndex].entity;
-        }
-        return std::nullopt;
+        const auto entity = pendingHierarchyContextEntity;
+        pendingHierarchyContextEntity.reset();
+        return entity;
     }
 
     void EditorGui::FocusHierarchyOnEntity(const entt::entity entity)
     {
-        auto* sb = hierarchyWindow ? hierarchyWindow->GetScrollbar() : nullptr;
-        if (sb == nullptr) return;
-
-        const auto it = std::ranges::find_if(
-            hierarchyEntries, [entity](const SceneObjectEntry& entry) { return entry.entity == entity; });
-        if (it == hierarchyEntries.end()) return;
-
-        const auto entryIndex = static_cast<std::size_t>(std::distance(hierarchyEntries.begin(), it));
-        const std::size_t visibleRows = sb->VisibleRows();
-        const std::size_t centeredOffset = entryIndex > visibleRows / 2 ? entryIndex - visibleRows / 2 : 0;
-        sb->SetScrollOffset(centeredOffset);
-        refreshHierarchyRowContent();
+        focusedHierarchyEntity = entity;
     }
 
     void EditorGui::SetInspector(
         const std::string& selectedEntity, const std::vector<InspectedComponent>& inspectedComponents)
     {
-        if (inspectorSelectionText) inspectorSelectionText->SetContent("Selected: " + selectedEntity);
-        inspectorFieldBlueprints.Rebuild(inspectedComponents);
-        inspectorFieldBlueprints.Draw();
+        inspectorSelectedEntity = selectedEntity;
+        this->inspectedComponents = inspectedComponents;
     }
 
     void EditorGui::DrawSceneViewInfo() const
@@ -534,6 +1121,16 @@ namespace sage::editor
     bool EditorGui::IsDeleteConfirmationVisible() const
     {
         return deleteConfirmationWindow && !deleteConfirmationWindow->IsHidden();
+    }
+
+    bool EditorGui::WantsMouseCapture() const
+    {
+        return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+    }
+
+    bool EditorGui::WantsKeyboardCapture() const
+    {
+        return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureKeyboard;
     }
 
     EditorGui::DeleteConfirmationAction EditorGui::ConsumeDeleteConfirmationAction()
@@ -609,70 +1206,6 @@ namespace sage::editor
         EndTextureMode();
 
         return thumbnail;
-    }
-
-    void EditorGui::createHierarchyWindow(
-        const std::function<void(entt::entity)>& onSceneObjectSelected,
-        const std::function<void(entt::entity, entt::entity)>& onHierarchyReparent)
-    {
-        auto window = std::make_unique<WindowDocked>(
-            settings,
-            editorWindowBackgroundTexture,
-            TextureStretchMode::STRETCH,
-            0.0f,
-            0.0f,
-            LEFT_DOCK_WIDTH,
-            DOCK_HEIGHT,
-            VertAlignment::TOP,
-            HoriAlignment::LEFT,
-            Padding{18, 16, 14, 14});
-
-        hierarchyWindow = ui->CreateWindowDocked(std::move(window));
-        auto* mainTable = hierarchyWindow->CreateTable({0, 0, 1, 0});
-
-        {
-            auto* titleRow = mainTable->CreateTableRow(SIDE_DOCK_TITLE_ROW_HEIGHT);
-            auto* titleCell = titleRow->CreateTableCell();
-            auto title = std::make_unique<TitleBar>(ui, titleCell, EditorTitleFontInfo());
-            titleCell->CreateTitleBar(std::move(title), "Hierarchy");
-        }
-
-        hierarchyWindow->SetOverflowContingency(OverflowContingency::SCROLLBAR);
-
-        {
-            auto* contentRow = mainTable->CreateTableRow(CONTENT_ROW_PADDING);
-            auto* listCell = contentRow->CreateTableCell(Padding{2, 8, 8, 2});
-            auto* table = listCell->CreateTable();
-
-            hierarchyRows.reserve(HIERARCHY_MAX_ROWS);
-            for (int i = 0; i < HIERARCHY_MAX_ROWS; ++i)
-            {
-                auto* row = table->CreateTableRow();
-                auto* cell = row->CreateTableCell(Padding{3, 3, 6, 6});
-                auto button = std::make_unique<HierarchyRowButton>(
-                    ui,
-                    cell,
-                    static_cast<std::size_t>(i),
-                    &hierarchyEntries,
-                    [this]() {
-                        auto* sb = hierarchyWindow ? hierarchyWindow->GetScrollbar() : nullptr;
-                        return sb ? sb->ScrollOffset() : std::size_t{0};
-                    },
-                    &selectedSceneEntity,
-                    onSceneObjectSelected,
-                    onHierarchyReparent);
-                hierarchyRows.push_back(cell->CreateTextbox(std::move(button), ""));
-            }
-        }
-
-        if (auto* sb = hierarchyWindow->GetScrollbar())
-        {
-            sb->SetProviders(
-                [this]() { return hierarchyEntries.size(); }, [this]() { return hierarchyRows.size(); });
-            hierarchyScrollSub = sb->onScrollChanged.Subscribe([this]() { refreshHierarchyRowContent(); });
-        }
-
-        hierarchyWindow->FinalizeLayout();
     }
 
     void EditorGui::createAssetWindow(
@@ -850,64 +1383,6 @@ namespace sage::editor
         assetDefaultsWindow->Hide();
     }
 
-    void EditorGui::createInspectorWindow()
-    {
-        auto window = std::make_unique<WindowDocked>(
-            settings,
-            editorWindowBackgroundTexture,
-            TextureStretchMode::STRETCH,
-            0.0f,
-            0.0f,
-            RIGHT_DOCK_WIDTH,
-            DOCK_HEIGHT,
-            VertAlignment::TOP,
-            HoriAlignment::RIGHT,
-            Padding{20, 16, 14, 14});
-
-        inspectorWindow = ui->CreateWindowDocked(std::move(window));
-        auto* mainTable = inspectorWindow->CreateTable({0, 0, 4, 0});
-
-        {
-            auto* titleRow = mainTable->CreateTableRow(SIDE_DOCK_TITLE_ROW_HEIGHT);
-            auto* titleCell = titleRow->CreateTableCell();
-            auto title = std::make_unique<TitleBar>(ui, titleCell, EditorTitleFontInfo());
-            titleCell->CreateTitleBar(std::move(title), "Inspector");
-        }
-
-        inspectorWindow->SetOverflowContingency(OverflowContingency::SCROLLBAR);
-
-        {
-            auto* contentRow = mainTable->CreateTableRow(CONTENT_ROW_PADDING);
-            auto* contentCell = contentRow->CreateTableCell(CONTENT_CELL_PADDING);
-            auto* table = contentCell->CreateTable();
-
-            auto addLine = [this, table](const char* text) {
-                auto* row = table->CreateTableRow(6.0f);
-                auto* cell = row->CreateTableCell(Padding{2, 2, 2, 2});
-                auto label = std::make_unique<TextBox>(
-                    ui, cell, EditorInspectorFontInfo(), VertAlignment::MIDDLE, HoriAlignment::LEFT);
-                return cell->CreateTextbox(std::move(label), text);
-            };
-
-            inspectorSelectionText = addLine("Selected: None");
-
-            auto* fieldsRow = table->CreateTableRow(Padding{2, 0, 0, 0});
-            auto* fieldsCell = fieldsRow->CreateTableCell(Padding{2, 2, 2, 2});
-            auto* inspectorFieldsTable = fieldsCell->CreateTable();
-            inspectorFieldBlueprints.Attach(ui, inspectorFieldsTable);
-        }
-
-        if (auto* sb = inspectorWindow->GetScrollbar())
-        {
-            sb->SetProviders(
-                [this]() { return inspectorFieldBlueprints.TotalRows(); },
-                [this]() { return inspectorFieldBlueprints.VisibleRows(); });
-            inspectorFieldBlueprints.AttachScrollbar(sb);
-        }
-
-        inspectorWindow->FinalizeLayout();
-    }
-
     void EditorGui::createDeleteConfirmationWindow()
     {
         auto window = std::make_unique<WindowDocked>(
@@ -972,6 +1447,8 @@ namespace sage::editor
           settings(_settings),
           onAssetSelectedCb(onAssetSelected),
           onFlatpackSelectedCb(onFlatpackSelected),
+          onSceneObjectSelectedCb(onSceneObjectSelected),
+          onHierarchyReparentCb(onHierarchyReparent),
           modelDefaultCallbacks(std::move(callbacks))
     {
         Image panelImage = GenImageColor(1, 1, EDITOR_WINDOW_BACKGROUND);
@@ -985,10 +1462,8 @@ namespace sage::editor
             assetThumbnails.push_back(createAssetThumbnail(asset));
         }
 
-        createHierarchyWindow(onSceneObjectSelected, onHierarchyReparent);
         createAssetWindow(assets, onAssetSelected);
         createAssetDefaultsWindow();
-        createInspectorWindow();
         createDeleteConfirmationWindow();
     }
 

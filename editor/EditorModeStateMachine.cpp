@@ -68,7 +68,7 @@ namespace sage::editor
     {
         HandleDeleteConfirmationInput(machine);
 
-        if (TextInput::AnyEditing()) return;
+        if (machine.isKeyboardEditing()) return;
 
         HandleKeyboardInput(machine);
         HandleMouseInput(machine);
@@ -238,7 +238,7 @@ namespace sage::editor
 
     void EditorPlaceState::Update(EditorModeStateMachine& machine)
     {
-        if (TextInput::AnyEditing()) return;
+        if (machine.isKeyboardEditing()) return;
 
         if (IsKeyPressed(KEY_LEFT_BRACKET))
         {
@@ -400,7 +400,7 @@ namespace sage::editor
         (void)machine.selectSelection(entity);
         SyncPlacementFromEntity(machine, entity);
 
-        if (TextInput::AnyEditing()) return;
+        if (machine.isKeyboardEditing()) return;
 
         if (IsKeyPressed(KEY_TAB))
         {
@@ -607,8 +607,13 @@ namespace sage::editor
 
     bool EditorModeStateMachine::isMouseOverUiCell() const
     {
-        return scene.sys->UI().GetCellUnderCursor() != nullptr ||
+        return scene.sys->UI().GetCellUnderCursor() != nullptr || scene.gui->WantsMouseCapture() ||
                !scene.sys->settings->IsPointInRenderViewport(GetMousePosition());
+    }
+
+    bool EditorModeStateMachine::isKeyboardEditing() const
+    {
+        return TextInput::AnyEditing() || scene.gui->WantsKeyboardCapture();
     }
 
     bool EditorModeStateMachine::isDeleteConfirmationVisible() const

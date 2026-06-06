@@ -270,7 +270,8 @@ namespace sage
         sys->collisionSystem->Update();
         sys->audioManager->Update();
         sys->userInput->ListenForInput();
-        const bool uiBlocksScroll = !viewportFullscreen && sys->UI().IsMouseOverWindow();
+        const bool uiBlocksScroll =
+            !viewportFullscreen && (sys->UI().IsMouseOverWindow() || (gui && gui->WantsMouseCapture()));
         if (uiBlocksScroll || !sys->settings->IsPointInRenderViewport(GetMousePosition()))
         {
             sys->camera->ScrollDisable();
@@ -283,7 +284,7 @@ namespace sage
         sys->cursor->Update();
         editorModes->RefreshPlacementTarget();
         // TODO: Should be part of some mode
-        if (!TextInput::AnyEditing())
+        if (!TextInput::AnyEditing() && !(gui && gui->WantsKeyboardCapture()))
         {
             if (IsKeyPressed(KEY_EQUAL))
             {
@@ -333,6 +334,8 @@ namespace sage
         if (viewportFullscreen) return;
         gui->StartImGui();
         drawMainMenuBar();
+        gui->DrawHierarchyWindow();
+        gui->DrawInspectorWindow();
         drawFileBrowsers();
         drawHierarchyContextMenu();
         gui->EndImGui();
@@ -342,16 +345,10 @@ namespace sage
     {
         constexpr const char* kPopupId = "hierarchy_context_menu";
 
-        // Right-click outside any ImGui window: capture the cursor over the
-        // hierarchy and arm the popup.
-        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && !ImGui::GetIO().WantCaptureMouse)
+        if (const auto entity = gui->ConsumeHierarchyContextEntity(); entity.has_value())
         {
-            const auto viewportMouse = sys->settings->ScreenToViewportPosition(GetMousePosition());
-            if (const auto entity = gui->HierarchyEntityAtViewportPos(viewportMouse); entity.has_value())
-            {
-                hierarchyContextEntity = *entity;
-                ImGui::OpenPopup(kPopupId);
-            }
+            hierarchyContextEntity = *entity;
+            ImGui::OpenPopup(kPopupId);
         }
 
         if (ImGui::BeginPopup(kPopupId))
