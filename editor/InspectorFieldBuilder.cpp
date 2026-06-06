@@ -30,6 +30,9 @@ namespace sage::editor
     {
         constexpr std::size_t INSPECTOR_VISIBLE_ROWS = 24;
         constexpr Color EDITOR_TEXT = {230, 234, 240, 255};
+        constexpr Color COMPONENT_HEADER_BACKGROUND = {45, 50, 58, 245};
+        constexpr Color COMPONENT_HEADER_BORDER = {92, 101, 116, 245};
+        constexpr Color COMPONENT_HEADER_ACCENT = {96, 165, 250, 255};
 
         TextBox::FontInfo EditorInspectorFontInfo()
         {
@@ -47,6 +50,35 @@ namespace sage::editor
             info.color = Color{17, 24, 39, 255};
             return info;
         }
+
+        class ComponentHeaderBox final : public TextBox
+        {
+          public:
+            using TextBox::TextBox;
+
+            void Draw2D() override
+            {
+                if (parent)
+                {
+                    const auto bounds = parent->GetRec();
+                    DrawRectangleRec(bounds, COMPONENT_HEADER_BACKGROUND);
+                    DrawRectangleRec(
+                        Rectangle{bounds.x, bounds.y, 4.0f, bounds.height}, COMPONENT_HEADER_ACCENT);
+                    DrawLineEx(
+                        Vector2{bounds.x, bounds.y},
+                        Vector2{bounds.x + bounds.width, bounds.y},
+                        1.0f,
+                        COMPONENT_HEADER_BORDER);
+                    DrawLineEx(
+                        Vector2{bounds.x, bounds.y + bounds.height - 1.0f},
+                        Vector2{bounds.x + bounds.width, bounds.y + bounds.height - 1.0f},
+                        1.0f,
+                        COMPONENT_HEADER_BORDER);
+                }
+
+                TextBox::Draw2D();
+            }
+        };
 
         // --- Per-type formatters (display) -----------------------------------------
         std::string formatScalar(int v)
@@ -561,9 +593,9 @@ namespace sage::editor
 
     void InspectorFieldBuilder::createHeaderRow(const std::string& label) const
     {
-        auto* headerRow = fieldTable->CreateTableRow(Padding{2, 2, 2, 2});
-        auto* headerCell = headerRow->CreateTableCell(Padding{2, 2, 2, 2});
-        auto header = std::make_unique<TextBox>(
+        auto* headerRow = fieldTable->CreateTableRow(Padding{3, 3, 0, 0});
+        auto* headerCell = headerRow->CreateTableCell(Padding{3, 3, 12, 6});
+        auto header = std::make_unique<ComponentHeaderBox>(
             ui, headerCell, EditorInspectorFontInfo(), VertAlignment::MIDDLE, HoriAlignment::LEFT);
         headerCell->CreateTextbox(std::move(header), label);
     }

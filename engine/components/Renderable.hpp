@@ -120,7 +120,7 @@ namespace sage
         {
             i.field("Active", active);
             i.field("Serializable", serializable);
-            i.field("Name", name, false);
+            i.field("Name", name, true);
             i.field("Hint", hint);
         }
     };

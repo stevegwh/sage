@@ -37,6 +37,49 @@ namespace sage::editor
                 archive(entity, transform, collideable, renderable);
             }
         };
+
+        struct LightEditorObjectRecord
+        {
+            std::uint32_t lightIndex = 0;
+            EditorObjectDescriptor descriptor{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(lightIndex, descriptor);
+            }
+        };
+
+        struct EntityEditorObjectRecord
+        {
+            sage::serializer::entity entity{};
+            EditorObjectDescriptor descriptor{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(entity, descriptor);
+            }
+        };
+
+        EditorObjectDescriptor fallbackLayoutDescriptor(const entt::entity entity, const Renderable& renderable)
+        {
+            auto name = renderable.GetVanityName();
+            if (name.empty()) name = renderable.GetName();
+            if (name.empty()) name = "entity_" + std::to_string(entt::to_integral(entity));
+
+            return EditorObjectDescriptor{
+                .name = name,
+                .category = "Layout",
+                .selectable = true,
+                .visibleInHierarchy = true,
+                .locked = false};
+        }
+
+        bool hasMoreSerializedData(std::istream& stream)
+        {
+            return stream.peek() != std::char_traits<char>::eof();
+        }
     } // namespace
 
     bool IsEditorLayoutMap(const char* path)
@@ -64,9 +107,11 @@ namespace sage::editor
         std::unordered_map<std::uint32_t, entt::entity> idMap;
 
         sage::serializer::ReadCompressedBinary(
-            path, kEditorLayoutMapMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
+            path, kEditorLayoutMapMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
+                std::vector<entt::entity> loadedLights;
                 std::vector<Light> lights;
                 input(lights);
+                loadedLights.reserve(lights.size());
                 for (const auto& light : lights)
                 {
                     const auto entity = destination->create();
@@ -74,6 +119,7 @@ namespace sage::editor
                     loadedLight.enabled = true;
                     destination->emplace<EditorMapEntity>(entity);
                     destination->emplace<Light>(entity, loadedLight);
+                    loadedLights.push_back(entity);
                 }
 
                 std::vector<LayoutEntityRecord> layoutEntities;
@@ -87,6 +133,37 @@ namespace sage::editor
                     destination->get<Collideable>(entity).isStatic = true;
                     destination->emplace<Renderable>(entity, record.renderable);
                     idMap[record.entity.id] = entity;
+                }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<LightEditorObjectRecord> lightEditorObjects;
+                    input(lightEditorObjects);
+                    for (const auto& record : lightEditorObjects)
+                    {
+                        if (record.lightIndex >= loadedLights.size()) continue;
+                        const auto entity = loadedLights[record.lightIndex];
+                        destination->emplace_or_replace<EditorObjectDescriptor>(entity, record.descriptor);
+                    }
+                }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<EntityEditorObjectRecord> entityEditorObjects;
+                    input(entityEditorObjects);
+                    for (const auto& record : entityEditorObjects)
+                    {
+                        const auto iter = idMap.find(record.entity.id);
+                        if (iter == idMap.end()) continue;
+                        destination->emplace_or_replace<EditorObjectDescriptor>(iter->second, record.descriptor);
+                    }
+                }
+
+                for (const auto entity : destination->view<EditorMapEntity, Renderable>())
+                {
+                    if (destination->any_of<EditorObjectDescriptor>(entity)) continue;
+                    destination->emplace<EditorObjectDescriptor>(
+                        entity, fallbackLayoutDescriptor(entity, destination->get<Renderable>(entity)));
                 }
             });
 
@@ -112,6 +189,7 @@ namespace sage::editor
         sage::serializer::WriteCompressedBinary(
             path, kEditorLayoutMapMagic, [&](cereal::BinaryOutputArchive& output) {
                 std::vector<Light> lights;
+                std::vector<entt::entity> lightEntities;
                 for (const auto entity : source.view<EditorMapEntity, Light>())
                 {
                     auto light = source.get<Light>(entity);
@@ -120,6 +198,7 @@ namespace sage::editor
                         light.position = source.get<sgTransform>(entity).GetWorldPos();
                     }
                     lights.push_back(light);
+                    lightEntities.push_back(entity);
                 }
                 output(lights);
 
@@ -134,6 +213,29 @@ namespace sage::editor
                     record.renderable = view.get<Renderable>(entityHandle);
                 }
                 output(layoutEntities);
+
+                std::vector<LightEditorObjectRecord> lightEditorObjects;
+                lightEditorObjects.reserve(lightEntities.size());
+                for (std::size_t i = 0; i < lightEntities.size(); ++i)
+                {
+                    const auto entity = lightEntities[i];
+                    if (!source.any_of<EditorObjectDescriptor>(entity)) continue;
+                    lightEditorObjects.push_back(
+                        LightEditorObjectRecord{
+                            .lightIndex = static_cast<std::uint32_t>(i),
+                            .descriptor = source.get<EditorObjectDescriptor>(entity)});
+                }
+                output(lightEditorObjects);
+
+                std::vector<EntityEditorObjectRecord> entityEditorObjects;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, Renderable, Collideable, EditorObjectDescriptor>())
+                {
+                    entityEditorObjects.push_back(
+                        EntityEditorObjectRecord{
+                            .entity = {entt::entt_traits<entt::entity>::to_entity(entity)},
+                            .descriptor = source.get<EditorObjectDescriptor>(entity)});
+                }
+                output(entityEditorObjects);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

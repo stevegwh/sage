@@ -46,10 +46,10 @@ namespace sage::editor
 
     void RegisterDefaultInspectorComponents(InspectorRegistry& registry)
     {
-        // Transform first so Position/Rotation/Scale sit at the top of the inspector.
+        // Keep the editor identity first; it is the user's primary handle for scene objects.
+        registry.Register<EditorObjectDescriptor>("Editor Object");
         registry.Register<sgTransform>("Transform");
         registry.Register<PersistentEntityId>("Persistent Entity Id");
-        registry.Register<EditorObjectDescriptor>("Editor Object");
         registry.Register<AssetReference>("Asset Reference");
         registry.Register<Renderable>("Renderable");
         registry.Register<Collideable>("Collideable");
