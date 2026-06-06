@@ -82,7 +82,6 @@ namespace sage
       public:
         void Update() const;
         void Draw3D() const;
-        void Draw2D() const;
         void DrawOverlay2D() const;
         void DrawImGui() const;
         [[nodiscard]] bool HandleEscapePressed() const;

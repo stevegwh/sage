@@ -7,7 +7,6 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
-#include "engine/GameUiEngine.hpp"
 #include "engine/Settings.hpp"
 #include "engine/UserInput.hpp"
 
@@ -607,13 +606,13 @@ namespace sage::editor
 
     bool EditorModeStateMachine::isMouseOverUiCell() const
     {
-        return scene.sys->UI().GetCellUnderCursor() != nullptr || scene.gui->WantsMouseCapture() ||
+        return scene.gui->WantsMouseCapture() ||
                !scene.sys->settings->IsPointInRenderViewport(GetMousePosition());
     }
 
     bool EditorModeStateMachine::isKeyboardEditing() const
     {
-        return TextInput::AnyEditing() || scene.gui->WantsKeyboardCapture();
+        return scene.gui->WantsKeyboardCapture();
     }
 
     bool EditorModeStateMachine::isDeleteConfirmationVisible() const

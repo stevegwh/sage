@@ -2,7 +2,6 @@
 
 #include "EditorInspector.hpp"
 
-#include "engine/Event.hpp"
 #include "raylib.h"
 
 #include "entt/entt.hpp"
@@ -15,11 +14,6 @@
 
 namespace sage
 {
-    class GameUIEngine;
-    class ImageBox;
-    class Table;
-    class TextBox;
-    class Window;
     struct Settings;
 
     namespace editor
@@ -46,12 +40,6 @@ namespace sage
                 std::filesystem::path path;
             };
 
-            enum class BrowserTab
-            {
-                Assets,
-                Flatpacks
-            };
-
             struct ModelDefaultCallbacks
             {
                 std::function<void()> heightDown;
@@ -72,24 +60,22 @@ namespace sage
             };
 
           private:
-            Window* assetWindow{};
-            Window* assetDefaultsWindow{};
-            Window* deleteConfirmationWindow{};
-            GameUIEngine* ui{};
+            enum class BrowserTab
+            {
+                Assets,
+                Flatpacks
+            };
+
             Settings* settings{};
-            Texture2D editorWindowBackgroundTexture{};
             std::vector<AssetEntry> assetEntries;
             std::vector<RenderTexture2D> assetThumbnails;
-            std::vector<ImageBox*> assetButtons;
             std::vector<SceneObjectEntry> hierarchyEntries;
             std::vector<FlatpackEntry> flatpackEntries;
-            std::vector<TextBox*> browserTabButtons;
             std::function<void(std::size_t)> onAssetSelectedCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
             std::function<void(entt::entity)> onSceneObjectSelectedCb;
             std::function<void(entt::entity, entt::entity)> onHierarchyReparentCb;
             BrowserTab currentTab = BrowserTab::Assets;
-            Subscription assetScrollSub{};
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
@@ -98,38 +84,37 @@ namespace sage
             std::optional<entt::entity> pendingHierarchyContextEntity;
             std::string inspectorSelectedEntity = "None";
             std::vector<InspectedComponent> inspectedComponents;
+            std::string assetDefaultsAssetName = "None";
+            std::string assetDefaultsHeight = "0.00";
+            std::string assetDefaultsRotation = "0";
+            std::string assetDefaultsScale = "1.00";
+            std::string deleteConfirmationPrompt = "Delete selected entity?";
+            bool deleteConfirmationVisible = false;
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
-            TextBox* defaultsAssetText{};
-            TextBox* defaultsPositionText{};
-            TextBox* defaultsRotationText{};
-            TextBox* defaultsScaleText{};
-            TextBox* deleteConfirmationText{};
-            bool imGuiEnabled = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
-            void createAssetWindow(
-                const std::vector<AssetEntry>& assets, const std::function<void(std::size_t)>& onAssetSelected);
-            void createAssetDefaultsWindow();
-            void createDeleteConfirmationWindow();
-            void refreshAssetButtonContent();
+            void drawAssetDefaultsControls();
+            void drawAssetGrid();
+            void drawFlatpackGrid();
 
           public:
             void StartImGui();
             void EndImGui();
             void DrawHierarchyWindow();
             void DrawInspectorWindow();
+            void DrawAssetDrawerWindow();
+            void DrawDeleteConfirmationModal();
             void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;
             void SetAssetDefaultsStatus(
                 const std::string& assetName,
                 const std::string& modelDefaultHeight,
                 const std::string& modelDefaultRotation,
-                const std::string& modelDefaultScale) const;
+                const std::string& modelDefaultScale);
             void SetSceneName(const std::string& sceneName) const;
             void SetSelectedAsset(std::optional<std::size_t> index);
             void SetFlatpacks(std::vector<FlatpackEntry> entries);
-            [[nodiscard]] BrowserTab CurrentBrowserTab() const { return currentTab; }
             void SetHierarchy(
                 const std::vector<SceneObjectEntry>& entries, std::optional<entt::entity> selectedEntity);
             void FocusHierarchyOnEntity(entt::entity entity);
@@ -137,14 +122,13 @@ namespace sage
             void SetInspector(
                 const std::string& selectedEntity, const std::vector<InspectedComponent>& inspectedComponents);
             void DrawSceneViewInfo() const;
-            void ShowDeleteConfirmation(const std::string& selectedEntity) const;
-            void HideDeleteConfirmation() const;
+            void ShowDeleteConfirmation(const std::string& selectedEntity);
+            void HideDeleteConfirmation();
             [[nodiscard]] bool IsDeleteConfirmationVisible() const;
             [[nodiscard]] bool WantsMouseCapture() const;
             [[nodiscard]] bool WantsKeyboardCapture() const;
             [[nodiscard]] DeleteConfirmationAction ConsumeDeleteConfirmationAction();
             EditorGui(
-                GameUIEngine* _ui,
                 Settings* _settings,
                 const std::vector<AssetEntry>& assets,
                 const std::function<void(std::size_t)>& onAssetSelected,

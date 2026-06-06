@@ -16,7 +16,6 @@ namespace sage
     class EditorApplication
     {
         RenderTexture renderTexture{};
-        RenderTexture renderTexture2d{};
 
         std::unique_ptr<entt::registry> registry;
         std::unique_ptr<KeyMapping> keyMapping;

@@ -94,9 +94,6 @@ namespace sage
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
-        const auto appViewport = settings->GetViewPort();
-        renderTexture2d =
-            LoadFilteredRenderTexture(static_cast<int>(appViewport.x), static_cast<int>(appViewport.y));
         rlImGuiSetup(true);
     }
 
@@ -107,11 +104,6 @@ namespace sage
         BeginMode3D(*systems->camera->getRaylibCam());
         scene->Draw3D();
         EndMode3D();
-        EndTextureMode();
-
-        BeginTextureMode(renderTexture2d);
-        ClearBackground(BLANK);
-        scene->Draw2D();
         EndTextureMode();
 
         BeginDrawing();
@@ -127,8 +119,6 @@ namespace sage
             {0, 0, renderViewport.x, -renderViewport.y},
             {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
             WHITE);
-
-        DrawTextureRec(renderTexture2d.texture, {0, 0, appViewport.x, -appViewport.y}, appViewportOffset, WHITE);
 
         scene->DrawOverlay2D();
         scene->DrawImGui();
@@ -210,10 +200,6 @@ namespace sage
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
-
-        UnloadRenderTexture(renderTexture2d);
-        renderTexture2d =
-            LoadFilteredRenderTexture(static_cast<int>(appViewport.x), static_cast<int>(appViewport.y));
     }
 
     void EditorApplication::handleViewportFullscreenToggle()
@@ -273,7 +259,6 @@ namespace sage
     {
         rlImGuiShutdown();
         UnloadRenderTexture(renderTexture);
-        UnloadRenderTexture(renderTexture2d);
         CloseWindow();
     }
 } // namespace sage

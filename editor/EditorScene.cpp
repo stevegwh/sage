@@ -13,7 +13,6 @@
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Cursor.hpp"
 #include "engine/EngineSystems.hpp"
-#include "engine/GameUiEngine.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
 #include "engine/ResourceManager.hpp"
@@ -270,8 +269,7 @@ namespace sage
         sys->collisionSystem->Update();
         sys->audioManager->Update();
         sys->userInput->ListenForInput();
-        const bool uiBlocksScroll =
-            !viewportFullscreen && (sys->UI().IsMouseOverWindow() || (gui && gui->WantsMouseCapture()));
+        const bool uiBlocksScroll = !viewportFullscreen && gui && gui->WantsMouseCapture();
         if (uiBlocksScroll || !sys->settings->IsPointInRenderViewport(GetMousePosition()))
         {
             sys->camera->ScrollDisable();
@@ -284,7 +282,7 @@ namespace sage
         sys->cursor->Update();
         editorModes->RefreshPlacementTarget();
         // TODO: Should be part of some mode
-        if (!TextInput::AnyEditing() && !(gui && gui->WantsKeyboardCapture()))
+        if (!(gui && gui->WantsKeyboardCapture()))
         {
             if (IsKeyPressed(KEY_EQUAL))
             {
@@ -301,7 +299,6 @@ namespace sage
         sys->lightSubSystem->RefreshLights();
         refreshOverlay();
         refreshSceneWindows();
-        if (!viewportFullscreen) sys->UI().Update();
     }
 
     void EditorScene::Draw3D() const
@@ -317,12 +314,6 @@ namespace sage
         }
     }
 
-    void EditorScene::Draw2D() const
-    {
-        if (viewportFullscreen) return;
-        sys->UI().Draw2D();
-    }
-
     void EditorScene::DrawOverlay2D() const
     {
         if (viewportFullscreen) return;
@@ -336,8 +327,10 @@ namespace sage
         drawMainMenuBar();
         gui->DrawHierarchyWindow();
         gui->DrawInspectorWindow();
+        gui->DrawAssetDrawerWindow();
         drawFileBrowsers();
         drawHierarchyContextMenu();
+        gui->DrawDeleteConfirmationModal();
         gui->EndImGui();
     }
 
@@ -752,7 +745,6 @@ namespace sage
         editorModes = std::make_unique<editor::EditorModeStateMachine>(*this, *transformEditor);
 
         gui = std::make_unique<editor::EditorGui>(
-            &sys->UI(),
             sys->settings,
             assetCatalog->AssetEntries(),
             [this](const std::size_t index) { editorModes->SelectPlaceable(index); },

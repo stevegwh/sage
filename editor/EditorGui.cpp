@@ -1,13 +1,7 @@
 #include "EditorGui.hpp"
 
-#include "engine/GameUiEngine.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
-#include "engine/ui/Scrollbar.hpp"
-#include "engine/ui/UIElements.hpp"
-#include "engine/ui/UILayout.hpp"
-#include "engine/ui/UIWindow.hpp"
-#include "engine/slib.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
@@ -20,7 +14,6 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
-#include <memory>
 #include <optional>
 #include <sstream>
 #include <string_view>
@@ -32,21 +25,17 @@ namespace sage::editor
     namespace
     {
         constexpr int THUMBNAIL_SIZE = 128;
-        constexpr int ASSET_GRID_COLUMNS = 5;
-        constexpr int ASSET_VISIBLE_ROWS = 2;
         constexpr float LEFT_DOCK_WIDTH = 340.0f;
         constexpr float RIGHT_DOCK_WIDTH = 440.0f;
         constexpr float ASSET_BROWSER_MARGIN = 18.0f;
         constexpr float ASSET_BROWSER_HEIGHT = 344.0f;
-        constexpr float ASSET_BROWSER_WIDTH =
-            1920.0f - LEFT_DOCK_WIDTH - RIGHT_DOCK_WIDTH - ASSET_BROWSER_MARGIN * 2.0f;
+        constexpr float ASSET_TILE_WIDTH = 152.0f;
+        constexpr float ASSET_TILE_HEIGHT = 188.0f;
+        constexpr float FLATPACK_TILE_HEIGHT = 116.0f;
+        constexpr float ASSET_DEFAULTS_PANEL_WIDTH = 260.0f;
         constexpr Color EDITOR_WINDOW_BACKGROUND = {35, 38, 43, 245};
         constexpr Color EDITOR_TEXT = {230, 234, 240, 255};
         constexpr const char* HIERARCHY_DRAG_PAYLOAD = "SAGE_HIER_ENTITY";
-        constexpr float BOTTOM_DOCK_TITLE_ROW_HEIGHT = 10.0f;
-        constexpr float FLOATING_PANEL_TITLE_ROW_HEIGHT = 15.0f;
-        constexpr Padding CONTENT_ROW_PADDING = {2, 0, 0, 0};
-        constexpr Padding CONTENT_CELL_PADDING = {2, 6, 8, 8};
 
         ImVec4 ToImGuiColor(const Color color)
         {
@@ -316,176 +305,6 @@ namespace sage::editor
             }
             ImGui::EndPopup();
         }
-
-        TextBox::FontInfo EditorTextFontInfo()
-        {
-            auto info = TextBox::FontInfo{};
-            info.color = EDITOR_TEXT;
-            return info;
-        }
-
-        TextBox::FontInfo EditorTitleFontInfo()
-        {
-            auto info = EditorTextFontInfo();
-            info.font = ResourceManager::GetInstance().FontLoad("resources/fonts/NotoSans/NotoSans-ExtraBold.ttf");
-            info.baseFontSize = 22;
-            info.minFontSize = 18;
-            return info;
-        }
-
-        class AssetThumbnailButton final : public ImageBox
-        {
-            std::optional<std::size_t> assetIndex;
-            std::string label;
-            RenderTexture2D* thumbnail{};
-            std::optional<std::size_t>* selectedAssetIndex{};
-            std::function<void(std::size_t)> onAssetSelected;
-
-          public:
-            void OnClick() override
-            {
-                if (assetIndex.has_value() && onAssetSelected) onAssetSelected(*assetIndex);
-            }
-
-            void SetAsset(
-                const std::optional<std::size_t> index,
-                std::string displayName = "",
-                RenderTexture2D* assetThumbnail = nullptr)
-            {
-                assetIndex = index;
-                label = std::move(displayName);
-                thumbnail = assetThumbnail;
-            }
-
-            void UpdateDimensions() override
-            {
-                rec = {
-                    parent->GetRec().x + parent->padding.left,
-                    parent->GetRec().y + parent->padding.up,
-                    parent->GetRec().width - parent->padding.left - parent->padding.right,
-                    parent->GetRec().height - parent->padding.up - parent->padding.down};
-            }
-
-            void Draw2D() override
-            {
-                if (!assetIndex.has_value())
-                {
-                    DrawRectangleRec(rec, Color{39, 42, 47, 180});
-                    DrawRectangleLinesEx(rec, 1.0f, Color{75, 82, 94, 180});
-                    return;
-                }
-
-                const bool selected =
-                    selectedAssetIndex && selectedAssetIndex->has_value() && **selectedAssetIndex == *assetIndex;
-                const Color background = selected ? Color{221, 235, 255, 255} : Color{245, 247, 250, 255};
-                const Color border = selected ? Color{37, 99, 235, 255} : Color{171, 181, 196, 255};
-
-                DrawRectangleRec(rec, background);
-                DrawRectangleLinesEx(rec, selected ? 3.0f : 1.0f, border);
-
-                const float labelHeight = 28.0f;
-                const float imageSize = std::max(0.0f, std::min(rec.width, rec.height - labelHeight - 6.0f));
-                const Rectangle imageDest = {
-                    rec.x + (rec.width - imageSize) * 0.5f, rec.y + 6.0f, imageSize, imageSize};
-
-                if (thumbnail && thumbnail->texture.id != 0)
-                {
-                    DrawTexturePro(
-                        thumbnail->texture,
-                        {0.0f,
-                         0.0f,
-                         static_cast<float>(thumbnail->texture.width),
-                         -static_cast<float>(thumbnail->texture.height)},
-                        imageDest,
-                        Vector2Zero(),
-                        0.0f,
-                        WHITE);
-                }
-
-                int fontSize = 16;
-                const Font font =
-                    ResourceManager::GetInstance().FontLoad("resources/fonts/FiraCode/FiraCode-SemiBold.ttf");
-                const int maxTextWidth = static_cast<int>(std::max(0.0f, rec.width - 12.0f));
-                while (fontSize > 12 && MeasureTextEx(font, label.c_str(), fontSize, 1.0f).x > maxTextWidth)
-                {
-                    --fontSize;
-                }
-                const Vector2 textSize = MeasureTextEx(font, label.c_str(), fontSize, 1.0f);
-                DrawTextEx(
-                    font,
-                    label.c_str(),
-                    {rec.x + (rec.width - textSize.x) * 0.5f,
-                     rec.y + rec.height - labelHeight + (labelHeight - textSize.y) * 0.5f},
-                    fontSize,
-                    1.0f,
-                    BLACK);
-            }
-
-            AssetThumbnailButton(
-                GameUIEngine* ui,
-                TableCell* parent,
-                std::optional<std::size_t>* selectedIndex,
-                std::function<void(std::size_t)> callback)
-                : ImageBox(
-                      ui,
-                      parent,
-                      ResourceManager::GetInstance().TextureLoad("resources/transpixel.png"),
-                      ImageBox::OverflowBehaviour::ALLOW_OVERFLOW),
-                  selectedAssetIndex(selectedIndex),
-                  onAssetSelected(std::move(callback))
-            {
-            }
-        };
-
-        class TextButton final : public TextBox
-        {
-            std::function<void()> onPressed;
-            std::function<bool()> isVisible;
-
-          public:
-            void OnClick() override
-            {
-                if (isVisible && !isVisible()) return;
-                if (onPressed) onPressed();
-            }
-
-            void UpdateDimensions() override
-            {
-                rec = {
-                    parent->GetRec().x + parent->padding.left,
-                    parent->GetRec().y + parent->padding.up,
-                    parent->GetRec().width - parent->padding.left - parent->padding.right,
-                    parent->GetRec().height - parent->padding.up - parent->padding.down};
-            }
-
-            void Draw2D() override
-            {
-                if (isVisible && !isVisible()) return;
-                DrawRectangleRec(rec, Color{233, 238, 246, 255});
-                DrawRectangleLinesEx(rec, 1.0f, Color{151, 164, 184, 255});
-                const int fontSize = static_cast<int>(fontInfo.fontSize);
-                const Vector2 textSize =
-                    MeasureTextEx(fontInfo.font, GetContent().c_str(), fontSize, fontInfo.fontSpacing);
-                DrawTextEx(
-                    fontInfo.font,
-                    GetContent().c_str(),
-                    {rec.x + (rec.width - textSize.x) * 0.5f, rec.y + (rec.height - textSize.y) * 0.5f},
-                    fontSize,
-                    fontInfo.fontSpacing,
-                    BLACK);
-            }
-
-            TextButton(
-                GameUIEngine* ui,
-                TableCell* parent,
-                std::function<void()> callback,
-                std::function<bool()> visiblePredicate = {})
-                : TextBox(ui, parent, TextBox::FontInfo{}, VertAlignment::MIDDLE, HoriAlignment::CENTER),
-                  onPressed(std::move(callback)),
-                  isVisible(std::move(visiblePredicate))
-            {
-            }
-        };
 
         void DrawTextFit(
             const Font font,
@@ -771,13 +590,11 @@ namespace sage::editor
     void EditorGui::StartImGui()
     {
         rlImGuiBegin();
-        imGuiEnabled = true;
     }
 
     void EditorGui::EndImGui()
     {
         rlImGuiEnd();
-        imGuiEnabled = false;
     }
 
     void EditorGui::DrawHierarchyWindow()
@@ -1010,6 +827,124 @@ namespace sage::editor
         ImGui::PopStyleColor(5);
     }
 
+    void EditorGui::DrawAssetDrawerWindow()
+    {
+        if (!settings) return;
+
+        const auto viewportOffset = settings->GetViewportOffset();
+        const auto viewport = settings->GetViewPort();
+        const float left = settings->ScaleValueWidth(LEFT_DOCK_WIDTH + ASSET_BROWSER_MARGIN);
+        const float right = settings->ScaleValueWidth(RIGHT_DOCK_WIDTH + ASSET_BROWSER_MARGIN);
+        const float height = settings->ScaleValueHeight(ASSET_BROWSER_HEIGHT);
+        const float bottomMargin = settings->ScaleValueHeight(ASSET_BROWSER_MARGIN);
+        const ImVec2 windowPos{
+            viewportOffset.x + left,
+            viewportOffset.y + viewport.y - height - bottomMargin};
+        const ImVec2 windowSize{std::max(1.0f, viewport.x - left - right), height};
+
+        ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ToImGuiColor(EDITOR_WINDOW_BACKGROUND));
+        ImGui::PushStyleColor(ImGuiCol_Text, ToImGuiColor(EDITOR_TEXT));
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.18f, 0.26f, 0.38f, 0.90f});
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.23f, 0.34f, 0.50f, 0.95f});
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 12.0f});
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{6.0f, 5.0f});
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0f, 7.0f});
+
+        constexpr ImGuiWindowFlags windowFlags =
+            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings;
+
+        if (ImGui::Begin("Asset Drawer", nullptr, windowFlags))
+        {
+            const bool showDefaults = selectedAssetIndex.has_value();
+            if (showDefaults && ImGui::BeginTable("asset_drawer_split", 2, ImGuiTableFlags_SizingStretchProp))
+            {
+                ImGui::TableSetupColumn("Browser", ImGuiTableColumnFlags_WidthStretch);
+                ImGui::TableSetupColumn("Defaults", ImGuiTableColumnFlags_WidthFixed, ASSET_DEFAULTS_PANEL_WIDTH);
+
+                ImGui::TableNextColumn();
+                if (ImGui::BeginTabBar("asset_tabs"))
+                {
+                    if (ImGui::BeginTabItem("Assets"))
+                    {
+                        currentTab = BrowserTab::Assets;
+                        drawAssetGrid();
+                        ImGui::EndTabItem();
+                    }
+                    if (ImGui::BeginTabItem("Flatpacks"))
+                    {
+                        currentTab = BrowserTab::Flatpacks;
+                        drawFlatpackGrid();
+                        ImGui::EndTabItem();
+                    }
+                    ImGui::EndTabBar();
+                }
+
+                ImGui::TableNextColumn();
+                drawAssetDefaultsControls();
+                ImGui::EndTable();
+            }
+            else if (ImGui::BeginTabBar("asset_tabs"))
+            {
+                if (ImGui::BeginTabItem("Assets"))
+                {
+                    currentTab = BrowserTab::Assets;
+                    drawAssetGrid();
+                    ImGui::EndTabItem();
+                }
+                if (ImGui::BeginTabItem("Flatpacks"))
+                {
+                    currentTab = BrowserTab::Flatpacks;
+                    drawFlatpackGrid();
+                    ImGui::EndTabItem();
+                }
+                ImGui::EndTabBar();
+            }
+        }
+        ImGui::End();
+
+        ImGui::PopStyleVar(3);
+        ImGui::PopStyleColor(5);
+    }
+
+    void EditorGui::DrawDeleteConfirmationModal()
+    {
+        if (deleteConfirmationVisible)
+        {
+            ImGui::OpenPopup("Confirm Delete");
+        }
+
+        bool open = deleteConfirmationVisible;
+        ImGui::SetNextWindowSize(ImVec2{420.0f, 0.0f}, ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal("Confirm Delete", &open, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextWrapped("%s", deleteConfirmationPrompt.c_str());
+            ImGui::Spacing();
+            if (ImGui::Button("Delete", ImVec2{120.0f, 0.0f}))
+            {
+                pendingDeleteConfirmationAction = DeleteConfirmationAction::Confirm;
+                deleteConfirmationVisible = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
+            {
+                pendingDeleteConfirmationAction = DeleteConfirmationAction::Cancel;
+                deleteConfirmationVisible = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+        if (!open)
+        {
+            deleteConfirmationVisible = false;
+        }
+    }
+
     void EditorGui::SetOverlayStatus(const std::string& mode, const std::string& cursor) const
     {
         modeStatus = mode;
@@ -1020,12 +955,12 @@ namespace sage::editor
         const std::string& assetName,
         const std::string& modelDefaultHeight,
         const std::string& modelDefaultRotation,
-        const std::string& modelDefaultScale) const
+        const std::string& modelDefaultScale)
     {
-        if (defaultsAssetText) defaultsAssetText->SetContent("Asset: " + assetName);
-        if (defaultsPositionText) defaultsPositionText->SetContent(modelDefaultHeight);
-        if (defaultsRotationText) defaultsRotationText->SetContent(modelDefaultRotation);
-        if (defaultsScaleText) defaultsScaleText->SetContent(modelDefaultScale);
+        assetDefaultsAssetName = assetName;
+        assetDefaultsHeight = modelDefaultHeight;
+        assetDefaultsRotation = modelDefaultRotation;
+        assetDefaultsScale = modelDefaultScale;
     }
 
     void EditorGui::SetSceneName(const std::string& sceneName) const
@@ -1036,15 +971,6 @@ namespace sage::editor
     void EditorGui::SetSelectedAsset(const std::optional<std::size_t> index)
     {
         selectedAssetIndex = index;
-        if (!assetDefaultsWindow) return;
-        if (selectedAssetIndex.has_value())
-        {
-            if (assetDefaultsWindow->IsHidden()) assetDefaultsWindow->Show();
-        }
-        else
-        {
-            if (!assetDefaultsWindow->IsHidden()) assetDefaultsWindow->Hide();
-        }
     }
 
     void EditorGui::SetHierarchy(
@@ -1075,14 +1001,14 @@ namespace sage::editor
 
     void EditorGui::DrawSceneViewInfo() const
     {
-        if (!ui || !ui->settings) return;
+        if (!settings) return;
 
-        const auto renderViewport = ui->settings->GetRenderViewportScreenRect();
-        const float x = renderViewport.x + ui->settings->ScaleValueWidth(16.0f);
-        const float y = renderViewport.y + ui->settings->ScaleValueHeight(14.0f);
-        const float maxWidth = std::max(1.0f, renderViewport.width - ui->settings->ScaleValueWidth(32.0f));
-        const int titleSize = std::max(22, static_cast<int>(ui->settings->ScaleValueMaintainRatio(22.0f)));
-        const int metaSize = std::max(16, static_cast<int>(ui->settings->ScaleValueMaintainRatio(16.0f)));
+        const auto renderViewport = settings->GetRenderViewportScreenRect();
+        const float x = renderViewport.x + settings->ScaleValueWidth(16.0f);
+        const float y = renderViewport.y + settings->ScaleValueHeight(14.0f);
+        const float maxWidth = std::max(1.0f, renderViewport.width - settings->ScaleValueWidth(32.0f));
+        const int titleSize = std::max(22, static_cast<int>(settings->ScaleValueMaintainRatio(22.0f)));
+        const int metaSize = std::max(16, static_cast<int>(settings->ScaleValueMaintainRatio(16.0f)));
         const Font titleFont =
             ResourceManager::GetInstance().FontLoad("resources/fonts/FiraCode/FiraCode-Bold.ttf");
         const Font metaFont =
@@ -1092,35 +1018,26 @@ namespace sage::editor
         DrawTextFit(
             metaFont,
             "Mode: " + modeStatus + "  |  Cursor: " + cursorStatus,
-            {x, y + ui->settings->ScaleValueHeight(28.0f)},
+            {x, y + settings->ScaleValueHeight(28.0f)},
             maxWidth,
             metaSize,
             Color{202, 211, 224, 255});
     }
 
-    void EditorGui::ShowDeleteConfirmation(const std::string& selectedEntity) const
+    void EditorGui::ShowDeleteConfirmation(const std::string& selectedEntity)
     {
-        if (deleteConfirmationText)
-        {
-            deleteConfirmationText->SetContent("Delete " + selectedEntity + "?");
-        }
-        if (deleteConfirmationWindow && deleteConfirmationWindow->IsHidden())
-        {
-            deleteConfirmationWindow->Show();
-        }
+        deleteConfirmationPrompt = "Delete " + selectedEntity + "?";
+        deleteConfirmationVisible = true;
     }
 
-    void EditorGui::HideDeleteConfirmation() const
+    void EditorGui::HideDeleteConfirmation()
     {
-        if (deleteConfirmationWindow && !deleteConfirmationWindow->IsHidden())
-        {
-            deleteConfirmationWindow->Hide();
-        }
+        deleteConfirmationVisible = false;
     }
 
     bool EditorGui::IsDeleteConfirmationVisible() const
     {
-        return deleteConfirmationWindow && !deleteConfirmationWindow->IsHidden();
+        return deleteConfirmationVisible;
     }
 
     bool EditorGui::WantsMouseCapture() const
@@ -1140,46 +1057,9 @@ namespace sage::editor
         return action;
     }
 
-    void EditorGui::refreshAssetButtonContent()
-    {
-        const std::size_t scrollRow =
-            assetWindow && assetWindow->GetScrollbar() ? assetWindow->GetScrollbar()->ScrollOffset() : 0;
-        const std::size_t firstItemIndex = scrollRow * ASSET_GRID_COLUMNS;
-
-        const std::size_t itemCount =
-            (currentTab == BrowserTab::Assets) ? assetEntries.size() : flatpackEntries.size();
-
-        for (std::size_t slot = 0; slot < assetButtons.size(); ++slot)
-        {
-            auto* button = dynamic_cast<AssetThumbnailButton*>(assetButtons[slot]);
-            if (!button) continue;
-
-            const std::size_t itemIndex = firstItemIndex + slot;
-            if (itemIndex >= itemCount)
-            {
-                button->SetAsset(std::nullopt);
-                continue;
-            }
-
-            if (currentTab == BrowserTab::Assets)
-            {
-                button->SetAsset(
-                    itemIndex, assetEntries[itemIndex].displayName, &assetThumbnails.at(itemIndex));
-            }
-            else
-            {
-                // Flatpacks have no rendered thumbnail yet — just show the label
-                // on a blank tile so the click target stays consistent.
-                button->SetAsset(itemIndex, flatpackEntries[itemIndex].displayName, nullptr);
-            }
-        }
-    }
-
     void EditorGui::SetFlatpacks(std::vector<FlatpackEntry> entries)
     {
         flatpackEntries = std::move(entries);
-        if (auto* sb = assetWindow ? assetWindow->GetScrollbar() : nullptr) sb->ClampOffset();
-        refreshAssetButtonContent();
     }
 
     RenderTexture2D EditorGui::createAssetThumbnail(const AssetEntry& asset) const
@@ -1208,234 +1088,207 @@ namespace sage::editor
         return thumbnail;
     }
 
-    void EditorGui::createAssetWindow(
-        const std::vector<AssetEntry>& assets, const std::function<void(std::size_t)>& /*unused*/)
+    void EditorGui::drawAssetDefaultsControls()
     {
-        auto window = std::make_unique<WindowDocked>(
-            settings,
-            editorWindowBackgroundTexture,
-            TextureStretchMode::STRETCH,
-            LEFT_DOCK_WIDTH + ASSET_BROWSER_MARGIN,
-            -ASSET_BROWSER_MARGIN,
-            ASSET_BROWSER_WIDTH,
-            ASSET_BROWSER_HEIGHT,
-            VertAlignment::BOTTOM,
-            HoriAlignment::LEFT,
-            Padding{20, 16, 14, 14});
-
-        assetWindow = ui->CreateWindowDocked(std::move(window));
-        assetWindow->SetOverflowContingency(OverflowContingency::SCROLLBAR);
-        auto* mainTable = assetWindow->CreateTable({0, 0, 4, 0});
-
+        if (ImGui::BeginChild("asset_defaults", ImVec2{0.0f, 0.0f}, true))
         {
-            auto* tabRow = mainTable->CreateTableRow(BOTTOM_DOCK_TITLE_ROW_HEIGHT);
-            auto makeTab = [&](const char* label, BrowserTab tab) {
-                auto* cell = tabRow->CreateTableCell(Padding{2, 2, 4, 4});
-                auto button = std::make_unique<TextButton>(ui, cell, [this, tab]() {
-                    if (currentTab == tab) return;
-                    currentTab = tab;
-                    if (auto* sb = assetWindow ? assetWindow->GetScrollbar() : nullptr)
-                    {
-                        sb->ClampOffset();
-                    }
-                    refreshAssetButtonContent();
-                });
-                browserTabButtons.push_back(cell->CreateTextbox(std::move(button), label));
+            ImGui::TextUnformatted("Asset Defaults");
+            ImGui::Separator();
+            ImGui::TextWrapped("Asset: %s", assetDefaultsAssetName.c_str());
+
+            auto adjustmentRow = [](const char* label,
+                                    const std::string& value,
+                                    const std::function<void()>& down,
+                                    const std::function<void()>& up) {
+                ImGui::PushID(label);
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(label);
+                ImGui::SameLine(70.0f);
+                if (ImGui::SmallButton("-") && down) down();
+                ImGui::SameLine();
+                auto displayValue = value;
+                ImGui::SetNextItemWidth(72.0f);
+                ImGui::InputText("##value", &displayValue, ImGuiInputTextFlags_ReadOnly);
+                ImGui::SameLine();
+                if (ImGui::SmallButton("+") && up) up();
+                ImGui::PopID();
             };
-            makeTab("Assets", BrowserTab::Assets);
-            makeTab("Flatpacks", BrowserTab::Flatpacks);
+
+            adjustmentRow("Z", assetDefaultsHeight, modelDefaultCallbacks.heightDown, modelDefaultCallbacks.heightUp);
+            adjustmentRow(
+                "Rot Y",
+                assetDefaultsRotation,
+                modelDefaultCallbacks.rotationDown,
+                modelDefaultCallbacks.rotationUp);
+            adjustmentRow("Scale", assetDefaultsScale, modelDefaultCallbacks.scaleDown, modelDefaultCallbacks.scaleUp);
+
+            ImGui::Spacing();
+            if (ImGui::Button("Apply", ImVec2{96.0f, 0.0f}) && modelDefaultCallbacks.apply)
+            {
+                modelDefaultCallbacks.apply();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Reset", ImVec2{96.0f, 0.0f}) && modelDefaultCallbacks.reset)
+            {
+                modelDefaultCallbacks.reset();
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    void EditorGui::drawAssetGrid()
+    {
+        if (assetEntries.empty())
+        {
+            ImGui::TextDisabled("No assets loaded");
+            return;
         }
 
-        {
-            auto* contentRow = mainTable->CreateTableRow(CONTENT_ROW_PADDING);
-            auto* contentCell = contentRow->CreateTableCell(CONTENT_CELL_PADDING);
-            auto* table = contentCell->CreateTable();
+        const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        const float columnPitch = ASSET_TILE_WIDTH + ImGui::GetStyle().ItemSpacing.x;
+        const int columns = std::max(1, static_cast<int>(availableWidth / columnPitch));
 
-            // Dispatch click to either the asset or flatpack callback depending
-            // on which tab is active when the click arrives.
-            auto onBrowserItemSelected = [this](std::size_t index) {
-                if (currentTab == BrowserTab::Assets)
+        if (!ImGui::BeginChild("asset_grid_scroll", ImVec2{0.0f, 0.0f}, false))
+        {
+            ImGui::EndChild();
+            return;
+        }
+
+        if (ImGui::BeginTable("asset_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
+        {
+            for (int column = 0; column < columns; ++column)
+            {
+                ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, ASSET_TILE_WIDTH);
+            }
+
+            for (std::size_t i = 0; i < assetEntries.size(); ++i)
+            {
+                if (i % static_cast<std::size_t>(columns) == 0)
                 {
-                    if (onAssetSelectedCb) onAssetSelectedCb(index);
+                    ImGui::TableNextRow(ImGuiTableRowFlags_None, ASSET_TILE_HEIGHT);
+                }
+                ImGui::TableSetColumnIndex(static_cast<int>(i % static_cast<std::size_t>(columns)));
+                const auto& asset = assetEntries[i];
+                const bool selected = selectedAssetIndex.has_value() && *selectedAssetIndex == i;
+
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::BeginGroup();
+                ImGui::PushStyleColor(
+                    ImGuiCol_Button,
+                    selected ? ImVec4{0.20f, 0.39f, 0.72f, 1.00f} : ImVec4{0.14f, 0.16f, 0.19f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.23f, 0.34f, 0.50f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
+
+                Texture2D* texture = i < assetThumbnails.size() ? &assetThumbnails[i].texture : nullptr;
+                const bool clicked =
+                    texture ? ImGui::ImageButton(
+                                  "thumbnail",
+                                  reinterpret_cast<ImTextureID>(texture),
+                                  ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE},
+                                  ImVec2{0.0f, 1.0f},
+                                  ImVec2{1.0f, 0.0f},
+                                  ImVec4{0.10f, 0.11f, 0.13f, 1.00f})
+                            : ImGui::Button("No Preview", ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE});
+                ImGui::PopStyleColor(3);
+
+                if (clicked && onAssetSelectedCb)
+                {
+                    onAssetSelectedCb(i);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("%s\n%s", asset.displayName.c_str(), asset.modelKey.c_str());
+                }
+                if (ImGui::BeginPopupContextItem("asset_context"))
+                {
+                    if (ImGui::MenuItem("Copy Asset Name")) ImGui::SetClipboardText(asset.displayName.c_str());
+                    if (ImGui::MenuItem("Copy Model Key")) ImGui::SetClipboardText(asset.modelKey.c_str());
+                    ImGui::EndPopup();
+                }
+
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ASSET_TILE_WIDTH);
+                if (selected)
+                {
+                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.72f, 0.83f, 1.00f, 1.00f});
+                    ImGui::TextWrapped("%s", asset.displayName.c_str());
+                    ImGui::PopStyleColor();
                 }
                 else
                 {
-                    if (index >= flatpackEntries.size() || !onFlatpackSelectedCb) return;
-                    onFlatpackSelectedCb(flatpackEntries[index].path);
+                    ImGui::TextWrapped("%s", asset.displayName.c_str());
                 }
-            };
-
-            assetButtons.clear();
-            assetButtons.reserve(ASSET_VISIBLE_ROWS * ASSET_GRID_COLUMNS);
-            for (int rowIndex = 0; rowIndex < ASSET_VISIBLE_ROWS; ++rowIndex)
-            {
-                auto* row = table->CreateTableRow(Padding{0, 0, 0, 0});
-                for (int colIndex = 0; colIndex < ASSET_GRID_COLUMNS; ++colIndex)
-                {
-                    auto* cell = row->CreateTableCell(Padding{5, 5, 5, 5});
-                    auto thumbnail = std::make_unique<AssetThumbnailButton>(
-                        ui, cell, &selectedAssetIndex, onBrowserItemSelected);
-                    assetButtons.push_back(cell->CreateImagebox(std::move(thumbnail)));
-                }
+                ImGui::PopTextWrapPos();
+                ImGui::EndGroup();
+                ImGui::PopID();
             }
+            ImGui::EndTable();
         }
-
-        if (auto* sb = assetWindow->GetScrollbar())
-        {
-            sb->SetProviders(
-                [this]() {
-                    const std::size_t count = (currentTab == BrowserTab::Assets) ? assetEntries.size()
-                                                                                 : flatpackEntries.size();
-                    return (count + ASSET_GRID_COLUMNS - 1) / ASSET_GRID_COLUMNS;
-                },
-                []() { return static_cast<std::size_t>(ASSET_VISIBLE_ROWS); });
-            assetScrollSub = sb->onScrollChanged.Subscribe([this]() { refreshAssetButtonContent(); });
-        }
-
-        assetWindow->FinalizeLayout();
-        refreshAssetButtonContent();
+        ImGui::EndChild();
     }
 
-    void EditorGui::createAssetDefaultsWindow()
+    void EditorGui::drawFlatpackGrid()
     {
-        auto window = std::make_unique<WindowDocked>(
-            settings,
-            editorWindowBackgroundTexture,
-            TextureStretchMode::STRETCH,
-            LEFT_DOCK_WIDTH + ASSET_BROWSER_MARGIN,
-            -(ASSET_BROWSER_MARGIN + ASSET_BROWSER_HEIGHT + 12.0f),
-            392.0f,
-            232.0f,
-            VertAlignment::BOTTOM,
-            HoriAlignment::LEFT,
-            Padding{20, 16, 14, 14});
-
-        assetDefaultsWindow = ui->CreateWindowDocked(std::move(window));
-        auto* mainTable = assetDefaultsWindow->CreateTable({0, 0, 4, 0});
-
+        if (flatpackEntries.empty())
         {
-            auto* titleRow = mainTable->CreateTableRow(FLOATING_PANEL_TITLE_ROW_HEIGHT);
-            auto* titleCell = titleRow->CreateTableCell();
-            auto title = std::make_unique<TitleBar>(ui, titleCell, EditorTitleFontInfo());
-            titleCell->CreateTitleBar(std::move(title), "Asset Defaults");
+            ImGui::TextDisabled("No flatpacks found");
+            return;
         }
 
+        const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+        const float columnPitch = ASSET_TILE_WIDTH + ImGui::GetStyle().ItemSpacing.x;
+        const int columns = std::max(1, static_cast<int>(availableWidth / columnPitch));
+
+        if (!ImGui::BeginChild("flatpack_grid_scroll", ImVec2{0.0f, 0.0f}, false))
         {
-            auto* contentRow = mainTable->CreateTableRow(CONTENT_ROW_PADDING);
-            auto* contentCell = contentRow->CreateTableCell(CONTENT_CELL_PADDING);
-            auto* table = contentCell->CreateTable();
-
-            auto addLine = [this, table](const char* text) {
-                auto* row = table->CreateTableRow();
-                auto* cell = row->CreateTableCell();
-                auto label = std::make_unique<TextBox>(ui, cell, EditorTextFontInfo());
-                return cell->CreateTextbox(std::move(label), text);
-            };
-
-            defaultsAssetText = addLine("Asset: None");
-
-            auto addControlRow = [this, table](
-                                     const char* labelText,
-                                     const char* initialValue,
-                                     const std::function<void()>& onDown,
-                                     const std::function<void()>& onUp) {
-                auto* row = table->CreateTableRow();
-
-                auto* labelCell = row->CreateTableCell(36.0f);
-                auto label = std::make_unique<TextBox>(ui, labelCell, EditorTextFontInfo());
-                labelCell->CreateTextbox(std::move(label), labelText);
-
-                auto* downCell = row->CreateTableCell(15.0f, Padding{1, 1, 2, 2});
-                auto downButton = std::make_unique<TextButton>(ui, downCell, onDown);
-                downCell->CreateTextbox(std::move(downButton), "-");
-
-                auto* valueCell = row->CreateTableCell(34.0f);
-                auto value = std::make_unique<TextBox>(
-                    ui, valueCell, EditorTextFontInfo(), VertAlignment::TOP, HoriAlignment::CENTER);
-                auto* valueText = valueCell->CreateTextbox(std::move(value), initialValue);
-
-                auto* upCell = row->CreateTableCell(15.0f, Padding{1, 1, 2, 2});
-                auto upButton = std::make_unique<TextButton>(ui, upCell, onUp);
-                upCell->CreateTextbox(std::move(upButton), "+");
-
-                return valueText;
-            };
-
-            defaultsPositionText =
-                addControlRow("Z", "0.00", modelDefaultCallbacks.heightDown, modelDefaultCallbacks.heightUp);
-            defaultsRotationText =
-                addControlRow("Rot Y", "0", modelDefaultCallbacks.rotationDown, modelDefaultCallbacks.rotationUp);
-            defaultsScaleText =
-                addControlRow("Scale", "1.00", modelDefaultCallbacks.scaleDown, modelDefaultCallbacks.scaleUp);
-
-            auto* buttonRow = table->CreateTableRow();
-
-            auto* applyCell = buttonRow->CreateTableCell(50.0f, Padding{3, 3, 4, 4});
-            auto applyButton = std::make_unique<TextButton>(ui, applyCell, modelDefaultCallbacks.apply);
-            applyCell->CreateTextbox(std::move(applyButton), "Apply");
-
-            auto* resetCell = buttonRow->CreateTableCell(50.0f, Padding{3, 3, 4, 4});
-            auto resetButton = std::make_unique<TextButton>(ui, resetCell, modelDefaultCallbacks.reset);
-            resetCell->CreateTextbox(std::move(resetButton), "Reset");
+            ImGui::EndChild();
+            return;
         }
 
-        assetDefaultsWindow->FinalizeLayout();
-        assetDefaultsWindow->Hide();
-    }
-
-    void EditorGui::createDeleteConfirmationWindow()
-    {
-        auto window = std::make_unique<WindowDocked>(
-            settings,
-            editorWindowBackgroundTexture,
-            TextureStretchMode::STRETCH,
-            0.0f,
-            0.0f,
-            420.0f,
-            164.0f,
-            VertAlignment::MIDDLE,
-            HoriAlignment::CENTER,
-            Padding{20, 16, 14, 14});
-
-        deleteConfirmationWindow = ui->CreateWindowDocked(std::move(window));
-        auto* mainTable = deleteConfirmationWindow->CreateTable({0, 0, 4, 0});
-
+        if (ImGui::BeginTable("flatpack_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
         {
-            auto* titleRow = mainTable->CreateTableRow(FLOATING_PANEL_TITLE_ROW_HEIGHT);
-            auto* titleCell = titleRow->CreateTableCell();
-            auto title = std::make_unique<TitleBar>(ui, titleCell, EditorTitleFontInfo());
-            titleCell->CreateTitleBar(std::move(title), "Confirm Delete");
+            for (int column = 0; column < columns; ++column)
+            {
+                ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, ASSET_TILE_WIDTH);
+            }
+
+            for (std::size_t i = 0; i < flatpackEntries.size(); ++i)
+            {
+                if (i % static_cast<std::size_t>(columns) == 0)
+                {
+                    ImGui::TableNextRow(ImGuiTableRowFlags_None, FLATPACK_TILE_HEIGHT);
+                }
+                ImGui::TableSetColumnIndex(static_cast<int>(i % static_cast<std::size_t>(columns)));
+                const auto& flatpack = flatpackEntries[i];
+                ImGui::PushID(static_cast<int>(i));
+                ImGui::BeginGroup();
+                const bool clicked = ImGui::Button("Flatpack", ImVec2{ASSET_TILE_WIDTH, 56.0f});
+                if (clicked && onFlatpackSelectedCb)
+                {
+                    onFlatpackSelectedCb(flatpack.path);
+                }
+                if (ImGui::IsItemHovered())
+                {
+                    ImGui::SetTooltip("%s", flatpack.path.string().c_str());
+                }
+                if (ImGui::BeginPopupContextItem("flatpack_context"))
+                {
+                    const auto path = flatpack.path.string();
+                    if (ImGui::MenuItem("Copy Flatpack Name")) ImGui::SetClipboardText(flatpack.displayName.c_str());
+                    if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
+                    ImGui::EndPopup();
+                }
+                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ASSET_TILE_WIDTH);
+                ImGui::TextWrapped("%s", flatpack.displayName.c_str());
+                ImGui::PopTextWrapPos();
+                ImGui::EndGroup();
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
         }
-
-        {
-            auto* textRow = mainTable->CreateTableRow(44.0f);
-            auto* textCell = textRow->CreateTableCell({8, 8, 8, 8});
-            auto text = std::make_unique<TextBox>(
-                ui, textCell, EditorTextFontInfo(), VertAlignment::MIDDLE, HoriAlignment::CENTER);
-            deleteConfirmationText = textCell->CreateTextbox(std::move(text), "Delete selected entity?");
-        }
-
-        {
-            auto* buttonRow = mainTable->CreateTableRow(34.0f);
-
-            auto* confirmCell = buttonRow->CreateTableCell(50.0f, Padding{3, 3, 4, 4});
-            auto confirmButton = std::make_unique<TextButton>(ui, confirmCell, [this]() {
-                pendingDeleteConfirmationAction = DeleteConfirmationAction::Confirm;
-            });
-            confirmCell->CreateTextbox(std::move(confirmButton), "Delete");
-
-            auto* cancelCell = buttonRow->CreateTableCell(50.0f, Padding{3, 3, 4, 4});
-            auto cancelButton = std::make_unique<TextButton>(
-                ui, cancelCell, [this]() { pendingDeleteConfirmationAction = DeleteConfirmationAction::Cancel; });
-            cancelCell->CreateTextbox(std::move(cancelButton), "Cancel");
-        }
-
-        deleteConfirmationWindow->FinalizeLayout();
-        deleteConfirmationWindow->Hide();
+        ImGui::EndChild();
     }
 
     EditorGui::EditorGui(
-        GameUIEngine* _ui,
         Settings* _settings,
         const std::vector<AssetEntry>& assets,
         const std::function<void(std::size_t)>& onAssetSelected,
@@ -1443,37 +1296,23 @@ namespace sage::editor
         const std::function<void(entt::entity)>& onSceneObjectSelected,
         const std::function<void(entt::entity, entt::entity)>& onHierarchyReparent,
         ModelDefaultCallbacks callbacks)
-        : ui(_ui),
-          settings(_settings),
+        : settings(_settings),
           onAssetSelectedCb(onAssetSelected),
           onFlatpackSelectedCb(onFlatpackSelected),
           onSceneObjectSelectedCb(onSceneObjectSelected),
           onHierarchyReparentCb(onHierarchyReparent),
           modelDefaultCallbacks(std::move(callbacks))
     {
-        Image panelImage = GenImageColor(1, 1, EDITOR_WINDOW_BACKGROUND);
-        editorWindowBackgroundTexture = LoadTextureFromImage(panelImage);
-        UnloadImage(panelImage);
-
         assetEntries = assets;
         assetThumbnails.reserve(assetEntries.size());
         for (const auto& asset : assetEntries)
         {
             assetThumbnails.push_back(createAssetThumbnail(asset));
         }
-
-        createAssetWindow(assets, onAssetSelected);
-        createAssetDefaultsWindow();
-        createDeleteConfirmationWindow();
     }
 
     EditorGui::~EditorGui()
     {
-        if (editorWindowBackgroundTexture.id != 0)
-        {
-            UnloadTexture(editorWindowBackgroundTexture);
-        }
-
         for (auto& thumbnail : assetThumbnails)
         {
             if (thumbnail.id != 0)
