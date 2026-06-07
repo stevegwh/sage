@@ -8,9 +8,11 @@
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
+#include "project/CustomSceneTags.hpp"
 
 #include <algorithm>
 #include <optional>
+#include <string>
 #include <utility>
 
 namespace sage::editor
@@ -167,6 +169,37 @@ namespace sage::editor
             const auto& list = GetCollisionLayers();
             if (idx < list.size()) *p = list[idx];
         };
+        fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
+    }
+
+    void ComponentInspector::tagSet(const std::string& label, std::string& tags, const bool ed)
+    {
+        // A single scene tag chosen from the project's CustomSceneTags, rendered as a
+        // dropdown via EnumField (same path as the CollisionLayer field). Index 0 is
+        // "(none)"; the remaining options are the project tags, plus the entity's
+        // current tag if it isn't one of them (so legacy values stay selectable).
+        EnumField e{.data = &tags};
+        e.options.emplace_back("(none)");
+        for (const auto& tag : CustomSceneTags)
+            e.options.emplace_back(tag);
+
+        const auto current = std::string{TrimSceneTag(SceneTagText(tags))};
+        if (!current.empty() && std::ranges::find(e.options, current) == e.options.end())
+            e.options.push_back(current);
+
+        e.getIndex = [options = e.options, p = &tags]() -> std::size_t {
+            const auto cur = std::string{TrimSceneTag(SceneTagText(*p))};
+            if (cur.empty()) return 0;
+            const auto it = std::ranges::find(options, cur);
+            return it != options.end() ? static_cast<std::size_t>(std::distance(options.begin(), it)) : 0;
+        };
+        e.setIndex = [options = e.options, p = &tags](const std::size_t idx) {
+            if (idx == 0 || idx >= options.size())
+                p->clear();
+            else
+                *p = options[idx];
+        };
+
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
     }
 

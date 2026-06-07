@@ -183,6 +183,11 @@ namespace sage::editor
         // Bespoke: dropdown sourced from GetCollisionLayers(). Stored as EnumField.
         void field(const std::string& label, sage::CollisionLayer& v, bool rw = true);
 
+        // Bespoke: dropdown of the project's scene tags (sage::CustomSceneTags),
+        // sourced like the CollisionLayer field. `tags` is the MetaData::tags
+        // string; picking an option replaces it. Stored as EnumField.
+        void tagSet(const std::string& label, std::string& tags, bool rw = true);
+
         // sgTransform proxy. Reads come from the cached Vector3 inside the proxy;
         // writes route through the proxy's operator=, which dispatches to TransformSystem
         // so the hierarchy stays in sync. The component author just passes the field,
