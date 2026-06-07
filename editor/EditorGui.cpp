@@ -43,6 +43,28 @@ namespace sage::editor
                 static_cast<float>(color.a) / 255.0f};
         }
 
+        // Draws a search field with a placeholder hint plus a trailing "x" button that
+        // clears the bound filter. idPrefix must be unique per call site.
+        void DrawSearchFilter(ImGuiTextFilter& filter, const char* idPrefix, const char* hint, const float width)
+        {
+            ImGui::PushID(idPrefix);
+            const float buttonWidth = ImGui::GetFrameHeight();
+            const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+            ImGui::SetNextItemWidth(std::max(1.0f, width - buttonWidth - spacing));
+            if (ImGui::InputTextWithHint("##filter_input", hint, filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
+            {
+                filter.Build();
+            }
+            ImGui::SameLine(0.0f, spacing);
+            ImGui::BeginDisabled(!filter.IsActive());
+            if (ImGui::Button("x##filter_clear", ImVec2{buttonWidth, buttonWidth}))
+            {
+                filter.Clear();
+            }
+            ImGui::EndDisabled();
+            ImGui::PopID();
+        }
+
         std::uint32_t EntityPayloadId(const entt::entity entity)
         {
             return static_cast<std::uint32_t>(entt::to_integral(entity));
@@ -850,7 +872,7 @@ namespace sage::editor
             const float resizeHandleX = windowPos.x + windowSize.x - resizeHandleWidth;
 
             const float filterWidth = std::max(1.0f, resizeHandleX - ImGui::GetCursorScreenPos().x);
-            hierarchyFilter.Draw("##hierarchy_filter", filterWidth);
+            DrawSearchFilter(hierarchyFilter, "hierarchy_filter", "Search...", filterWidth);
             ImGui::Spacing();
 
             const ImVec2 contentRegion = ImGui::GetContentRegionAvail();
@@ -1547,7 +1569,7 @@ namespace sage::editor
             return;
         }
 
-        assetFilter.Draw("##asset_filter", ImGui::GetContentRegionAvail().x);
+        DrawSearchFilter(assetFilter, "asset_filter", "Search...", ImGui::GetContentRegionAvail().x);
         ImGui::Spacing();
 
         // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
@@ -1660,6 +1682,26 @@ namespace sage::editor
             return;
         }
 
+        DrawSearchFilter(flatpackFilter, "flatpack_filter", "Search...", ImGui::GetContentRegionAvail().x);
+        ImGui::Spacing();
+
+        // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
+        std::vector<std::size_t> visibleFlatpacks;
+        visibleFlatpacks.reserve(flatpackEntries.size());
+        for (std::size_t i = 0; i < flatpackEntries.size(); ++i)
+        {
+            if (flatpackFilter.PassFilter(flatpackEntries[i].displayName.c_str()))
+            {
+                visibleFlatpacks.push_back(i);
+            }
+        }
+
+        if (visibleFlatpacks.empty())
+        {
+            ImGui::TextDisabled("No flatpacks match the filter");
+            return;
+        }
+
         const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
         const float columnPitch = ASSET_TILE_WIDTH + ImGui::GetStyle().ItemSpacing.x;
         const int columns = std::max(1, static_cast<int>(availableWidth / columnPitch));
@@ -1677,13 +1719,14 @@ namespace sage::editor
                 ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, ASSET_TILE_WIDTH);
             }
 
-            for (std::size_t i = 0; i < flatpackEntries.size(); ++i)
+            for (std::size_t slot = 0; slot < visibleFlatpacks.size(); ++slot)
             {
-                if (i % static_cast<std::size_t>(columns) == 0)
+                const std::size_t i = visibleFlatpacks[slot];
+                if (slot % static_cast<std::size_t>(columns) == 0)
                 {
                     ImGui::TableNextRow(ImGuiTableRowFlags_None, FLATPACK_TILE_HEIGHT);
                 }
-                ImGui::TableSetColumnIndex(static_cast<int>(i % static_cast<std::size_t>(columns)));
+                ImGui::TableSetColumnIndex(static_cast<int>(slot % static_cast<std::size_t>(columns)));
                 const auto& flatpack = flatpackEntries[i];
                 ImGui::PushID(static_cast<int>(i));
                 ImGui::BeginGroup();

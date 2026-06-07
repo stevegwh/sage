@@ -103,6 +103,7 @@ namespace sage
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
             BrowserTab currentTab = BrowserTab::Assets;
             ImGuiTextFilter assetFilter;
+            ImGuiTextFilter flatpackFilter;
             ImGuiTextFilter hierarchyFilter;
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
