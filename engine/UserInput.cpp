@@ -6,6 +6,12 @@
 
 namespace sage
 {
+    bool IsMetaKeyDown()
+    {
+        return IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) || IsKeyDown(KEY_LEFT_SUPER) ||
+               IsKeyDown(KEY_RIGHT_SUPER);
+    }
+
     void UserInput::toggleFullScreen() const
     {
         settings->toggleFullScreenRequested = true;

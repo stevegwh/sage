@@ -105,24 +105,6 @@ namespace sage::editor
     {
     }
 
-    void EditorTransformEditor::EnterEditMode(
-        const std::vector<entt::entity>& entities, EditorEditState& outSnapshot)
-    {
-        outSnapshot.snapshots.clear();
-        outSnapshot.snapshots.reserve(entities.size());
-        for (const auto entity : entities)
-        {
-            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
-
-            const auto& transform = sys->registry->get<sgTransform>(entity);
-            outSnapshot.snapshots.push_back(
-                {.entity = entity,
-                 .originalPosition = transform.GetWorldPos(),
-                 .originalRotation = transform.GetWorldRot(),
-                 .originalScale = transform.GetScale()});
-        }
-    }
-
     void EditorTransformEditor::ExitEditMode()
     {
         if (gizmo.IsDragging())
@@ -130,25 +112,6 @@ namespace sage::editor
             sys->camera->UnlockInput();
         }
         gizmo.EndDrag();
-    }
-
-    void EditorTransformEditor::RestoreSnapshot(const EditorEditState& snapshot)
-    {
-        entt::entity notifiedEntity = entt::null;
-        for (const auto& saved : snapshot.snapshots)
-        {
-            const auto entity = saved.entity;
-            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
-
-            auto& transform = sys->registry->get<sgTransform>(entity);
-            transform.position.world = saved.originalPosition;
-            transform.rotation.world = saved.originalRotation;
-            transform.scale.world = saved.originalScale;
-
-            updateEntityCollisionBounds(entity);
-            if (notifiedEntity == entt::null) notifiedEntity = entity;
-        }
-        notify(notifiedEntity);
     }
 
     void EditorTransformEditor::Update(const std::vector<entt::entity>& entities)

@@ -15,6 +15,7 @@
 #include "rlImGui.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace sage
 {
@@ -36,6 +37,30 @@ namespace sage
             auto texture = LoadRenderTexture(std::max(1, width), std::max(1, height));
             SetTextureFilter(texture.texture, TEXTURE_FILTER_BILINEAR);
             return texture;
+        }
+
+        void DrawViewportFpsCounter(const Settings& settings)
+        {
+            const auto viewport = settings.GetRenderViewPort();
+            const float scale = Settings::GetScreenScaleFactor(viewport.x, viewport.y);
+            const int fps = GetFPS();
+            const char* fpsText = TextFormat("%i FPS", fps);
+            const int fontSize = std::max(10, static_cast<int>(std::round(20.0f * scale)));
+            const int padding = std::max(4, static_cast<int>(std::round(10.0f * scale)));
+            const int textWidth = MeasureText(fpsText, fontSize);
+
+            Color color = LIME;
+            if (fps < 15)
+            {
+                color = RED;
+            }
+            else if (fps < 30)
+            {
+                color = ORANGE;
+            }
+
+            const int x = std::max(padding, static_cast<int>(viewport.x) - textWidth - padding);
+            DrawText(fpsText, x, padding, fontSize, color);
         }
     } // namespace
 
@@ -73,6 +98,7 @@ namespace sage
         BeginMode3D(*systems->camera->getRaylibCam());
         scene->Draw3D();
         EndMode3D();
+        DrawViewportFpsCounter(*settings);
         EndTextureMode();
 
         BeginDrawing();
@@ -90,7 +116,6 @@ namespace sage
 
         scene->DrawOverlay2D();
         scene->DrawImGui(exitWindowRequested, exitWindow);
-        DrawFPS(12, 32);
 
         EndDrawing();
     }

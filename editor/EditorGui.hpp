@@ -84,6 +84,16 @@ namespace sage
                 Cancel
             };
 
+            // Result of drawing the inspector for one frame. `changed` is true the
+            // frame a field's value is written; `began`/`committed` bracket an edit
+            // gesture so undo/redo can open and close a single transaction.
+            struct InspectorEditResult
+            {
+                bool changed = false;
+                bool began = false;
+                bool committed = false;
+            };
+
           private:
             enum class BrowserTab
             {
@@ -137,7 +147,7 @@ namespace sage
             void StartImGui();
             void EndImGui();
             void DrawHierarchyWindow();
-            bool DrawInspectorWindow();
+            InspectorEditResult DrawInspectorWindow();
             void DrawAssetDrawerWindow();
             void DrawDeleteConfirmationModal();
             void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;

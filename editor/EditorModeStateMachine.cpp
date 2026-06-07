@@ -1,6 +1,7 @@
 #include "EditorModeStateMachine.hpp"
 
 #include "EditorGui.hpp"
+#include "EditorHistory.hpp"
 #include "EditorScene.hpp"
 #include "EditorTransformEditor.hpp"
 #include "engine/Camera.hpp"
@@ -359,6 +360,7 @@ namespace sage::editor
         }
         if (!entity.has_value()) return false;
 
+        machine.history().RecordCreate(EditAction::Place, {*entity});
         (void)machine.selection().Select(*entity);
         machine.refreshSceneWindows();
         machine.focusHierarchyOnEntity(*entity);
@@ -413,7 +415,7 @@ namespace sage::editor
         }
 
         machine.enableCollideableStaticOverride(entities);
-        machine.transformEditor.EnterEditMode(entities, *this);
+        machine.history().Begin(EditAction::Transform, entities);
         SyncPlacementFromEntity(machine, entities.front());
         machine.refreshOverlay();
         machine.refreshSceneWindows();
@@ -423,6 +425,10 @@ namespace sage::editor
     {
         machine.disableCollideableStaticOverride(entities);
         machine.transformEditor.ExitEditMode();
+        if (machine.history().HasActiveTransaction())
+        {
+            machine.history().Commit();
+        }
     }
 
     void EditorEditState::Update(EditorModeStateMachine& machine)
@@ -472,80 +478,83 @@ namespace sage::editor
         }
 
         const bool shiftDown = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-        switch (machine.transformEditor.Mode())
+        if (!IsMetaKeyDown())
         {
-        case EditGizmo::Mode::Translate: {
-            Vector3 positionDelta{};
-            if (IsKeyPressedOrRepeated(KEY_LEFT))
+            switch (machine.transformEditor.Mode())
             {
-                positionDelta.x -= EDIT_TRANSLATION_STEP;
+            case EditGizmo::Mode::Translate: {
+                Vector3 positionDelta{};
+                if (IsKeyPressedOrRepeated(KEY_LEFT))
+                {
+                    positionDelta.x -= EDIT_TRANSLATION_STEP;
+                }
+                if (IsKeyPressedOrRepeated(KEY_RIGHT))
+                {
+                    positionDelta.x += EDIT_TRANSLATION_STEP;
+                }
+                if (shiftDown)
+                {
+                    if (IsKeyPressedOrRepeated(KEY_UP))
+                    {
+                        positionDelta.y += EDIT_TRANSLATION_STEP;
+                    }
+                    if (IsKeyPressedOrRepeated(KEY_DOWN))
+                    {
+                        positionDelta.y -= EDIT_TRANSLATION_STEP;
+                    }
+                }
+                else
+                {
+                    if (IsKeyPressedOrRepeated(KEY_UP))
+                    {
+                        positionDelta.z += EDIT_TRANSLATION_STEP;
+                    }
+                    if (IsKeyPressedOrRepeated(KEY_DOWN))
+                    {
+                        positionDelta.z -= EDIT_TRANSLATION_STEP;
+                    }
+                }
+                if (positionDelta.x != 0.0f || positionDelta.y != 0.0f || positionDelta.z != 0.0f)
+                {
+                    machine.transformEditor.AdjustPosition(entities, positionDelta);
+                }
+                break;
             }
-            if (IsKeyPressedOrRepeated(KEY_RIGHT))
-            {
-                positionDelta.x += EDIT_TRANSLATION_STEP;
-            }
-            if (shiftDown)
-            {
+            case EditGizmo::Mode::Rotate: {
+                if (IsKeyPressedOrRepeated(KEY_LEFT))
+                {
+                    machine.transformEditor.AdjustRotationAxis(
+                        entities, EditGizmo::Axis::Y, -PLACEMENT_ROTATION_STEP);
+                }
+                if (IsKeyPressedOrRepeated(KEY_RIGHT))
+                {
+                    machine.transformEditor.AdjustRotationAxis(
+                        entities, EditGizmo::Axis::Y, PLACEMENT_ROTATION_STEP);
+                }
                 if (IsKeyPressedOrRepeated(KEY_UP))
                 {
-                    positionDelta.y += EDIT_TRANSLATION_STEP;
+                    machine.transformEditor.AdjustRotationAxis(
+                        entities, EditGizmo::Axis::X, PLACEMENT_ROTATION_STEP);
                 }
                 if (IsKeyPressedOrRepeated(KEY_DOWN))
                 {
-                    positionDelta.y -= EDIT_TRANSLATION_STEP;
+                    machine.transformEditor.AdjustRotationAxis(
+                        entities, EditGizmo::Axis::X, -PLACEMENT_ROTATION_STEP);
                 }
+                break;
             }
-            else
-            {
-                if (IsKeyPressedOrRepeated(KEY_UP))
+            case EditGizmo::Mode::Scale: {
+                if (IsKeyPressedOrRepeated(KEY_LEFT))
                 {
-                    positionDelta.z += EDIT_TRANSLATION_STEP;
+                    machine.transformEditor.AdjustScale(entities, -PLACEMENT_SCALE_STEP);
                 }
-                if (IsKeyPressedOrRepeated(KEY_DOWN))
+                if (IsKeyPressedOrRepeated(KEY_RIGHT))
                 {
-                    positionDelta.z -= EDIT_TRANSLATION_STEP;
+                    machine.transformEditor.AdjustScale(entities, PLACEMENT_SCALE_STEP);
                 }
+                break;
             }
-            if (positionDelta.x != 0.0f || positionDelta.y != 0.0f || positionDelta.z != 0.0f)
-            {
-                machine.transformEditor.AdjustPosition(entities, positionDelta);
             }
-            break;
-        }
-        case EditGizmo::Mode::Rotate: {
-            if (IsKeyPressedOrRepeated(KEY_LEFT))
-            {
-                machine.transformEditor.AdjustRotationAxis(
-                    entities, EditGizmo::Axis::Y, -PLACEMENT_ROTATION_STEP);
-            }
-            if (IsKeyPressedOrRepeated(KEY_RIGHT))
-            {
-                machine.transformEditor.AdjustRotationAxis(
-                    entities, EditGizmo::Axis::Y, PLACEMENT_ROTATION_STEP);
-            }
-            if (IsKeyPressedOrRepeated(KEY_UP))
-            {
-                machine.transformEditor.AdjustRotationAxis(
-                    entities, EditGizmo::Axis::X, PLACEMENT_ROTATION_STEP);
-            }
-            if (IsKeyPressedOrRepeated(KEY_DOWN))
-            {
-                machine.transformEditor.AdjustRotationAxis(
-                    entities, EditGizmo::Axis::X, -PLACEMENT_ROTATION_STEP);
-            }
-            break;
-        }
-        case EditGizmo::Mode::Scale: {
-            if (IsKeyPressedOrRepeated(KEY_LEFT))
-            {
-                machine.transformEditor.AdjustScale(entities, -PLACEMENT_SCALE_STEP);
-            }
-            if (IsKeyPressedOrRepeated(KEY_RIGHT))
-            {
-                machine.transformEditor.AdjustScale(entities, PLACEMENT_SCALE_STEP);
-            }
-            break;
-        }
         }
 
         if (IsKeyPressed(KEY_P))
@@ -578,7 +587,10 @@ namespace sage::editor
 
     bool EditorEditState::CancelEditSelectedTransform(EditorModeStateMachine& machine)
     {
-        machine.transformEditor.RestoreSnapshot(*this);
+        if (machine.history().HasActiveTransaction())
+        {
+            machine.history().Rollback();
+        }
         machine.ChangeState(EditorSelectState{});
         machine.refreshOverlay();
         machine.refreshSceneWindows();
@@ -704,6 +716,7 @@ namespace sage::editor
 
     void EditorModeStateMachine::deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const
     {
+        history().RecordDestroy(EditAction::Delete, entities);
         for (const auto entity : entities)
         {
             deleteEntityAndChildren(entity);
@@ -753,6 +766,11 @@ namespace sage::editor
     const EditorPlacementController& EditorModeStateMachine::placement() const
     {
         return *scene.placementController;
+    }
+
+    EditorHistory& EditorModeStateMachine::history() const
+    {
+        return *scene.history;
     }
 
     void EditorModeStateMachine::enableCollideableStaticOverride(const entt::entity entity) const

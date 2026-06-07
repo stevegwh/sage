@@ -1,13 +1,12 @@
 //
-// Edit-mode behaviour: gizmo input, pivot toggling, snapshot/restore,
-// pivot-aware matrix application, inspector-input commit path. Owned by
-// EditorScene; driven by EditorModeStateMachine during EditorEditState.
+// Edit-mode behaviour: gizmo input, pivot toggling, pivot-aware matrix
+// application, inspector-input commit path. Owned by EditorScene; driven by
+// EditorModeStateMachine during EditorEditState.
 //
 
 #pragma once
 
 #include "EditGizmo.hpp"
-#include "EditorModeStateMachine.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -40,10 +39,8 @@ namespace sage::editor
 
         EditorTransformEditor(EngineSystems* sys, OnApplied onApplied);
 
-        // Lifecycle. EnterEditMode populates the snapshot fields used by RestoreSnapshot.
-        void EnterEditMode(const std::vector<entt::entity>& entities, EditorEditState& outSnapshot);
+        // Lifecycle.
         void ExitEditMode();
-        void RestoreSnapshot(const EditorEditState& snapshot);
 
         // Per-frame gizmo update / draw. Update is a no-op unless a drag is
         // currently active; the state machine calls TryStartDrag separately on

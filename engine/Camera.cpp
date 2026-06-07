@@ -111,8 +111,7 @@ namespace sage
 
     void Camera::handleInput()
     {
-        if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL) || IsKeyDown(KEY_LEFT_ALT) ||
-            IsKeyDown(KEY_RIGHT_ALT) || lockInput)
+        if (lockInput || IsMetaKeyDown() || IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
             return;
 
         handleMouseScroll();

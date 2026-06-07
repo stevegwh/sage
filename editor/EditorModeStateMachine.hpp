@@ -20,6 +20,7 @@ namespace sage
 
 namespace sage::editor
 {
+    class EditorHistory;
     class EditorModeStateMachine;
     class EditorPlacementController;
     class EditorSelection;
@@ -69,19 +70,10 @@ namespace sage::editor
         void OnTransformApplied(EditorModeStateMachine& machine, entt::entity entity);
     };
 
-    struct EditorTransformSnapshot
-    {
-        entt::entity entity = entt::null;
-        Vector3 originalPosition{};
-        Vector3 originalRotation{};
-        Vector3 originalScale{1.0f, 1.0f, 1.0f};
-    };
-
     struct EditorEditState
     {
         static std::string GetName(const EditorModeStateMachine& machine);
         std::vector<entt::entity> entities;
-        std::vector<EditorTransformSnapshot> snapshots;
 
         void OnEnter(EditorModeStateMachine& machine);
         void OnExit(EditorModeStateMachine& machine);
@@ -130,6 +122,7 @@ namespace sage::editor
         [[nodiscard]] bool hasTransform(entt::entity entity) const;
         [[nodiscard]] EditorPlacementController& placement();
         [[nodiscard]] const EditorPlacementController& placement() const;
+        [[nodiscard]] EditorHistory& history() const;
         void enableCollideableStaticOverride(entt::entity entity) const;
         void disableCollideableStaticOverride(entt::entity entity) const;
         void enableCollideableStaticOverride(const std::vector<entt::entity>& entities) const;

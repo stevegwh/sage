@@ -382,15 +382,23 @@ namespace sage
         }
         gui->StartImGui();
         drawMainMenuBar(exitRequested);
-        const bool inspectorChanged = gui->DrawInspectorWindow();
-        if (inspectorChanged)
+
+        // Snapshot the selection's clean state on idle frames so an inspector edit
+        // that mutates on its activation frame (checkbox/combo) still has a correct
+        // "before" to undo to. See EditorHistory::CaptureBaseline.
+        if (history && !history->HasActiveTransaction() && !ImGui::IsAnyItemActive())
         {
-            refreshSceneWindows();
+            history->CaptureBaseline(selection->Selected());
         }
+        const auto inspectorEdit = gui->DrawInspectorWindow();
+        handleInspectorEdit(inspectorEdit);
+
         gui->DrawHierarchyWindow();
         gui->DrawAssetDrawerWindow();
+        handleFileShortcuts();
         drawFileBrowsers();
         handleClipboardShortcuts();
+        handleHistoryShortcuts();
         drawHierarchyContextMenu();
         gui->DrawDeleteConfirmationModal();
         drawExitConfirmationModal(exitRequested, exitConfirmed);
@@ -472,6 +480,19 @@ namespace sage
         }
     }
 
+    void EditorScene::handleFileShortcuts() const
+    {
+        constexpr ImGuiInputFlags shortcutFlags = ImGuiInputFlags_RouteGlobal;
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, shortcutFlags))
+        {
+            saveMap();
+        }
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, shortcutFlags))
+        {
+            openLoadMapBrowser();
+        }
+    }
+
     void EditorScene::handleClipboardShortcuts() const
     {
         // ImGuiMod_Ctrl maps to Cmd on macOS, and RouteGlobal yields to an active
@@ -485,6 +506,79 @@ namespace sage
         {
             PasteClipboard();
         }
+    }
+
+    void EditorScene::handleHistoryShortcuts() const
+    {
+        if (!history) return;
+        // Ignore while a transaction is mid-flight (gizmo edit session, inspector
+        // drag): the open transaction owns the registry state right now.
+        if (history->HasActiveTransaction()) return;
+
+        // Redo first: Ctrl+Z is a prefix of Ctrl+Shift+Z.
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal))
+        {
+            history->Redo();
+        }
+        else if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal))
+        {
+            history->Undo();
+        }
+    }
+
+    void EditorScene::handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const
+    {
+        if (!history) return;
+
+        if (result.began && !history->HasActiveTransaction())
+        {
+            history->BeginFromBaseline(editor::EditAction::EditField);
+        }
+        if (result.changed)
+        {
+            refreshSceneWindows();
+        }
+        if (result.committed && history->HasActiveTransaction())
+        {
+            history->Commit();
+        }
+    }
+
+    void EditorScene::onHistoryApplied(const std::vector<entt::entity>& restored) const
+    {
+        // Mirror the post-load/post-paste fixups: re-hook the lit shader and re-derive
+        // collision bounds from the restored world transforms.
+        applyLitShaderToLoadedRenderables();
+        if (transformEditor)
+        {
+            for (const auto entity : restored)
+            {
+                if (sys->registry->valid(entity)) transformEditor->RefreshCollisionBoundsRecursive(entity);
+            }
+        }
+        if (sys->lightSubSystem) sys->lightSubSystem->RefreshLights();
+
+        if (selection)
+        {
+            selection->Clear();
+            bool first = true;
+            for (const auto entity : restored)
+            {
+                if (!sys->registry->valid(entity)) continue;
+                if (first)
+                {
+                    (void)selection->Select(entity);
+                    first = false;
+                }
+                else
+                {
+                    (void)selection->Toggle(entity);
+                }
+            }
+        }
+
+        refreshSceneWindows();
+        refreshOverlay();
     }
 
     void EditorScene::CopySelection() const
@@ -521,6 +615,8 @@ namespace sage
                 transformEditor->RefreshCollisionBoundsRecursive(root);
             }
         }
+
+        if (history) history->RecordCreate(editor::EditAction::Paste, newRoots);
 
         selection->Clear();
         bool first = true;
@@ -592,11 +688,11 @@ namespace sage
         if (!ImGui::BeginMainMenuBar()) return;
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Load Map"))
+            if (ImGui::MenuItem("Load Map", "Ctrl+O"))
             {
                 openLoadMapBrowser();
             }
-            if (ImGui::MenuItem("Save Map"))
+            if (ImGui::MenuItem("Save Map", "Ctrl+S"))
             {
                 saveMap();
             }
@@ -608,6 +704,23 @@ namespace sage
             if (ImGui::MenuItem("Quit"))
             {
                 exitRequested = true;
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Edit"))
+        {
+            const bool historyBusy = history && history->HasActiveTransaction();
+            const bool canUndo = history && !historyBusy && history->CanUndo();
+            const bool canRedo = history && !historyBusy && history->CanRedo();
+            const std::string undoLabel = history ? history->UndoLabel() : "Undo";
+            const std::string redoLabel = history ? history->RedoLabel() : "Redo";
+            if (ImGui::MenuItem(undoLabel.c_str(), "Ctrl+Z", false, canUndo))
+            {
+                history->Undo();
+            }
+            if (ImGui::MenuItem(redoLabel.c_str(), "Ctrl+Shift+Z", false, canRedo))
+            {
+                history->Redo();
             }
             ImGui::EndMenu();
         }
@@ -693,6 +806,7 @@ namespace sage
                 .brightness = DEFAULT_LIGHT_BRIGHTNESS});
 
         sys->lightSubSystem->RefreshLights();
+        if (history) history->RecordCreate(editor::EditAction::AddLight, {entity});
         editorModes->SelectSceneEntity(entity);
     }
 
@@ -775,6 +889,10 @@ namespace sage
 
     void EditorScene::clearCurrentMap() const
     {
+        if (history)
+        {
+            history->Clear();
+        }
         if (editorModes)
         {
             editorModes->ChangeState<editor::EditorSelectState>();
@@ -927,8 +1045,10 @@ namespace sage
             cur = sys->registry->get<sgTransform>(cur).GetParent();
         }
 
+        if (history) history->Begin(editor::EditAction::Reparent, {dragged});
         sys->transformSystem->SetParent(dragged, newParent, insertBefore);
         hierarchyTree->NoteHierarchyMove(dragged, newParent, insertBefore);
+        if (history) history->Commit();
         refreshSceneWindows();
     }
 
@@ -984,6 +1104,8 @@ namespace sage
                 editorModes->OnTransformApplied(entity);
             }
         });
+        history = std::make_unique<editor::EditorHistory>(
+            sys, [this](const std::vector<entt::entity>& restored) { onHistoryApplied(restored); });
         editorModes = std::make_unique<editor::EditorModeStateMachine>(*this, *transformEditor);
 
         gui = std::make_unique<editor::EditorGui>(

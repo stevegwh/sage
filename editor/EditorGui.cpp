@@ -382,6 +382,14 @@ namespace sage::editor
             return changed;
         }
 
+        // Edit-boundary probes for undo/redo. The inspector mutates the live
+        // component every frame a widget is held, so these flag the frame an edit
+        // begins (widget activated) and the frame it ends with a value change.
+        // DrawInspectorWindow resets them before drawing and reads them after.
+        // Single-threaded immediate-mode UI makes file-scope state safe here.
+        bool g_fieldEditBegan = false;
+        bool g_fieldEditCommitted = false;
+
         template <class DrawFn>
         void DrawMaybeDisabled(const bool editable, DrawFn&& draw)
         {
@@ -408,6 +416,11 @@ namespace sage::editor
             ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
             if (!editable) ImGui::BeginDisabled();
             draw();
+            // The widget is the last-submitted item here (the clipboard menu, if any,
+            // is submitted by the caller after this returns), so these queries refer
+            // to it.
+            g_fieldEditBegan |= ImGui::IsItemActivated();
+            g_fieldEditCommitted |= ImGui::IsItemDeactivatedAfterEdit();
             if (!editable) ImGui::EndDisabled();
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(styleColorCount);
@@ -1112,10 +1125,12 @@ namespace sage::editor
         }
     }
 
-    bool EditorGui::DrawInspectorWindow()
+    EditorGui::InspectorEditResult EditorGui::DrawInspectorWindow()
     {
-        if (!settings) return false;
+        if (!settings) return {};
         bool changed = false;
+        g_fieldEditBegan = false;
+        g_fieldEditCommitted = false;
 
         const auto viewportOffset = settings->GetViewportOffset();
         const auto viewport = settings->GetViewPort();
@@ -1179,7 +1194,7 @@ namespace sage::editor
 
         ImGui::PopStyleVar(3);
         ImGui::PopStyleColor(5);
-        return changed;
+        return {.changed = changed, .began = g_fieldEditBegan, .committed = g_fieldEditCommitted};
     }
 
     void EditorGui::DrawAssetDrawerWindow()

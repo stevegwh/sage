@@ -4,6 +4,7 @@
 #include "EditorEntityOperations.hpp"
 #include "EditorGui.hpp"
 #include "EditorHierarchyTree.hpp"
+#include "EditorHistory.hpp"
 #include "EditorInspector.hpp"
 #include "EditorModelDefaultsController.hpp"
 #include "EditorModeStateMachine.hpp"
@@ -51,6 +52,7 @@ namespace sage
         std::unique_ptr<editor::EditorHierarchyTree> hierarchyTree;
         std::unique_ptr<editor::EditorPlacementController> placementController;
         std::unique_ptr<editor::EditorTransformEditor> transformEditor;
+        std::unique_ptr<editor::EditorHistory> history;
         std::unique_ptr<editor::EditorModeStateMachine> editorModes;
         std::unique_ptr<ImGui::FileBrowser> loadMapBrowser{};
         std::unique_ptr<ImGui::FileBrowser> saveMapBrowser{};
@@ -79,7 +81,11 @@ namespace sage
         void moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const;
         void drawHierarchyContextMenu() const;
         static void drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed);
+        void handleFileShortcuts() const;
         void handleClipboardShortcuts() const;
+        void handleHistoryShortcuts() const;
+        void handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const;
+        void onHistoryApplied(const std::vector<entt::entity>& restored) const;
         void createFlatpackFromEntity(entt::entity entity) const;
         void copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const;
         void refreshFlatpackCatalog() const;

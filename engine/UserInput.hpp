@@ -12,6 +12,8 @@
 
 namespace sage
 {
+    [[nodiscard]] bool IsMetaKeyDown();
+
     class UserInput
     {
         KeyMapping* keyMapping;
