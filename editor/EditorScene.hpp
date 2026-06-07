@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace ImGui
 {
@@ -77,7 +78,9 @@ namespace sage
         void refreshAfterMapLoad() const;
         void moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const;
         void drawHierarchyContextMenu() const;
+        void handleClipboardShortcuts() const;
         void createFlatpackFromEntity(entt::entity entity) const;
+        void copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const;
         void refreshFlatpackCatalog() const;
 
         void focusSelectedObject() const;
@@ -103,6 +106,12 @@ namespace sage
         // user clicks in-scene while a flatpack is armed.
         [[nodiscard]] std::optional<entt::entity> PlaceFlatpackAt(
             const std::filesystem::path& path, Vector3 anchor) const;
+
+        // Copies the current selection (and descendants) into the clipboard.
+        void CopySelection() const;
+        // Instantiates the clipboard contents, selecting the new root entities.
+        void PasteClipboard() const;
+        [[nodiscard]] bool HasClipboard() const;
 
         void SetViewportFullscreen(bool fullscreen);
         void SetSceneName(const std::string& sceneName) const;

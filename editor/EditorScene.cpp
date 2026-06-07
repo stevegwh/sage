@@ -382,6 +382,7 @@ namespace sage
         gui->DrawHierarchyWindow();
         gui->DrawAssetDrawerWindow();
         drawFileBrowsers();
+        handleClipboardShortcuts();
         drawHierarchyContextMenu();
         gui->DrawDeleteConfirmationModal();
         gui->EndImGui();
@@ -405,6 +406,23 @@ namespace sage
             }
             else
             {
+                if (ImGui::MenuItem("Copy", "Ctrl+C"))
+                {
+                    const auto selected = selection->Selected();
+                    if (std::ranges::find(selected, hierarchyContextEntity) != selected.end())
+                    {
+                        copyEntitiesToClipboard(selected);
+                    }
+                    else
+                    {
+                        copyEntitiesToClipboard({hierarchyContextEntity});
+                    }
+                }
+                if (ImGui::MenuItem("Paste", "Ctrl+V", false, HasClipboard()))
+                {
+                    PasteClipboard();
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Create Flatpack"))
                 {
                     createFlatpackFromEntity(hierarchyContextEntity);
@@ -412,6 +430,75 @@ namespace sage
             }
             ImGui::EndPopup();
         }
+    }
+
+    void EditorScene::handleClipboardShortcuts() const
+    {
+        // ImGuiMod_Ctrl maps to Cmd on macOS, and RouteGlobal yields to an active
+        // text field that already owns Ctrl+C/V, so this needs no manual modifier
+        // or focus handling.
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal))
+        {
+            CopySelection();
+        }
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal))
+        {
+            PasteClipboard();
+        }
+    }
+
+    void EditorScene::CopySelection() const
+    {
+        copyEntitiesToClipboard(selection->Selected());
+    }
+
+    void EditorScene::copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const
+    {
+        if (roots.empty()) return;
+        entityOperations->CopyEntities(roots);
+    }
+
+    bool EditorScene::HasClipboard() const
+    {
+        return entityOperations->HasClipboard();
+    }
+
+    void EditorScene::PasteClipboard() const
+    {
+        if (!entityOperations->HasClipboard()) return;
+
+        const auto newRoots = entityOperations->PasteClipboard();
+        if (newRoots.empty()) return;
+
+        // Match the post-placement fixups PlaceFlatpackAt relies on: the pasted
+        // renderables need the lit shader hooked up and their collision bounds
+        // re-derived from the freshly applied world transforms.
+        applyLitShaderToLoadedRenderables();
+        if (transformEditor)
+        {
+            for (const auto root : newRoots)
+            {
+                transformEditor->RefreshCollisionBoundsRecursive(root);
+            }
+        }
+
+        selection->Clear();
+        bool first = true;
+        for (const auto root : newRoots)
+        {
+            if (first)
+            {
+                (void)selection->Select(root);
+                first = false;
+            }
+            else
+            {
+                (void)selection->Toggle(root);
+            }
+        }
+
+        refreshSceneWindows();
+        refreshOverlay();
     }
 
     void EditorScene::createFlatpackFromEntity(const entt::entity entity) const
