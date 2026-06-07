@@ -54,6 +54,7 @@ namespace sage::editor
     {
         std::string label;
         bool editable = true;
+        bool mixed = false;
         FieldValue value;
     };
 
@@ -287,6 +288,8 @@ namespace sage::editor
 
         [[nodiscard]] std::vector<InspectedComponent> Inspect(
             entt::registry& registry, entt::entity entity) const;
+        [[nodiscard]] std::vector<InspectedComponent> Inspect(
+            entt::registry& registry, const std::vector<entt::entity>& entities) const;
     };
 
     void RegisterDefaultInspectorComponents(InspectorRegistry& registry);

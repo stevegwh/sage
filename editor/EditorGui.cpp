@@ -284,7 +284,7 @@ namespace sage::editor
                 result += "\n";
                 result += field.label;
                 result += ": ";
-                result += FormatFieldValue(field.value);
+                result += field.mixed ? "-" : FormatFieldValue(field.value);
             }
             return result;
         }
@@ -391,8 +391,64 @@ namespace sage::editor
             ImGui::PopStyleColor(styleColorCount);
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable)
+        template <class T, class ParseFn>
+        bool DrawMixedTextField(const LeafField<T>& field, const bool editable, ParseFn&& parse)
         {
+            std::string value = "-";
+            bool changed = false;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                constexpr ImGuiInputTextFlags flags =
+                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+                const bool enterPressed = ImGui::InputText("##value", &value, flags);
+                const bool commit = enterPressed || ImGui::IsItemDeactivatedAfterEdit();
+                if (commit && editable && value != "-")
+                {
+                    T parsed{};
+                    if (parse(value, parsed))
+                    {
+                        changed = CommitField(field, parsed);
+                    }
+                }
+            });
+            changed |= DrawFieldClipboardMenu("-", editable, [field, parse](const std::string_view text) {
+                T parsed{};
+                if (!parse(text, parsed)) return false;
+                return CommitField(field, parsed);
+            });
+            return changed;
+        }
+
+        bool DrawMixedStringField(const LeafField<std::string>& field, const bool editable)
+        {
+            std::string value = "-";
+            bool changed = false;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            DrawMaybeDisabled(editable, [&]() {
+                constexpr ImGuiInputTextFlags flags =
+                    ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+                const bool enterPressed = ImGui::InputText("##value", &value, flags);
+                const bool commit = enterPressed || ImGui::IsItemDeactivatedAfterEdit();
+                if (commit && editable && value != "-")
+                {
+                    changed = CommitField(field, value);
+                }
+            });
+            changed |= DrawFieldClipboardMenu("-", editable, [field](const std::string_view text) {
+                return CommitField(field, std::string{text});
+            });
+            return changed;
+        }
+
+        bool DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable, const bool mixed)
+        {
+            if (mixed)
+            {
+                return DrawMixedTextField<bool>(field, editable, [](const std::string_view text, bool& out) {
+                    return ParseBool(text, out);
+                });
+            }
+
             bool value = field.data && *field.data;
             bool changed = false;
             DrawMaybeDisabled(editable, [&]() {
@@ -409,8 +465,15 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<int>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<int>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<int>(field, editable, [](const std::string_view text, int& out) {
+                    return ParseScalar(text, out);
+                });
+            }
+
             int value = field.data ? *field.data : 0;
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
@@ -428,8 +491,17 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<unsigned int>& field, const bool editable)
+        bool DrawInspectorFieldWidget(
+            const LeafField<unsigned int>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<unsigned int>(
+                    field, editable, [](const std::string_view text, unsigned int& out) {
+                        return ParseScalar(text, out);
+                    });
+            }
+
             unsigned int value = field.data ? *field.data : 0;
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
@@ -447,8 +519,17 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<std::uint64_t>& field, const bool editable)
+        bool DrawInspectorFieldWidget(
+            const LeafField<std::uint64_t>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<std::uint64_t>(
+                    field, editable, [](const std::string_view text, std::uint64_t& out) {
+                        return ParseScalar(text, out);
+                    });
+            }
+
             std::uint64_t value = field.data ? *field.data : 0;
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
@@ -466,8 +547,15 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<float>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<float>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<float>(field, editable, [](const std::string_view text, float& out) {
+                    return ParseScalar(text, out);
+                });
+            }
+
             float value = field.data ? *field.data : 0.0f;
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
@@ -485,8 +573,14 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<std::string>& field, const bool editable)
+        bool DrawInspectorFieldWidget(
+            const LeafField<std::string>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedStringField(field, editable);
+            }
+
             std::string value = field.data ? *field.data : std::string{};
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
@@ -503,8 +597,15 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<Vector2>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<Vector2>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<Vector2>(field, editable, [](const std::string_view text, Vector2& out) {
+                    return ParseVector2(text, out);
+                });
+            }
+
             float value[2] = {
                 field.data ? field.data->x : 0.0f,
                 field.data ? field.data->y : 0.0f};
@@ -524,8 +625,15 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<Vector3>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<Vector3>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<Vector3>(field, editable, [](const std::string_view text, Vector3& out) {
+                    return ParseVector3(text, out);
+                });
+            }
+
             float value[3] = {
                 field.data ? field.data->x : 0.0f,
                 field.data ? field.data->y : 0.0f,
@@ -546,8 +654,15 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<::Color>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<::Color>& field, const bool editable, const bool mixed)
         {
+            if (mixed)
+            {
+                return DrawMixedTextField<::Color>(field, editable, [](const std::string_view text, Color& out) {
+                    return ParseColor(text, out);
+                });
+            }
+
             float value[4] = {
                 field.data ? static_cast<float>(field.data->r) / 255.0f : 1.0f,
                 field.data ? static_cast<float>(field.data->g) / 255.0f : 1.0f,
@@ -577,11 +692,11 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const EnumField& field, const bool editable)
+        bool DrawInspectorFieldWidget(const EnumField& field, const bool editable, const bool mixed)
         {
             const auto currentIndex = field.getIndex ? field.getIndex() : 0;
             const char* currentLabel =
-                currentIndex < field.options.size() ? field.options[currentIndex].c_str() : "";
+                mixed ? "-" : currentIndex < field.options.size() ? field.options[currentIndex].c_str() : "";
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
@@ -600,7 +715,7 @@ namespace sage::editor
                     ImGui::EndCombo();
                 }
             });
-            changed |= DrawFieldClipboardMenu(FormatEnumValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(mixed ? "-" : FormatEnumValue(field), editable, [field](const std::string_view text) {
                 const auto pasted = TrimCopy(text);
                 const auto it = std::ranges::find(field.options, pasted);
                 if (it == field.options.end() || !field.setIndex) return false;
@@ -622,7 +737,7 @@ namespace sage::editor
             bool changed = false;
             std::visit(
                 [&](const auto& value) {
-                    changed = DrawInspectorFieldWidget(value, field.editable);
+                    changed = DrawInspectorFieldWidget(value, field.editable, field.mixed);
                 },
                 field.value);
             ImGui::PopID();
@@ -707,7 +822,7 @@ namespace sage::editor
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 12.0f});
 
-        std::optional<entt::entity> sceneSelectionRequest;
+        std::optional<SceneSelectionRequest> sceneSelectionRequest;
         std::optional<HierarchyMoveRequest> hierarchyMoveRequest;
 
         auto acceptHierarchyDrop = [&](const entt::entity newParent, const entt::entity insertBefore) {
@@ -830,7 +945,8 @@ namespace sage::editor
                         const auto& entry = hierarchyEntries[entryIndex];
                         const bool hasChildren = entryIndex + 1 < hierarchyEntries.size() &&
                                                  hierarchyEntries[entryIndex + 1].depth > entry.depth;
-                        const bool selected = selectedSceneEntity.has_value() && *selectedSceneEntity == entry.entity;
+                        const bool selected =
+                            std::ranges::find(selectedSceneEntities, entry.entity) != selectedSceneEntities.end();
 
                         drawInsertBeforeTarget(entryIndex);
 
@@ -860,7 +976,9 @@ namespace sage::editor
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                         {
-                            sceneSelectionRequest = entry.entity;
+                            sceneSelectionRequest = SceneSelectionRequest{
+                                .entity = entry.entity,
+                                .additive = ImGui::GetIO().KeyShift};
                         }
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -1184,10 +1302,10 @@ namespace sage::editor
     }
 
     void EditorGui::SetHierarchy(
-        const std::vector<SceneObjectEntry>& entries, const std::optional<entt::entity> selectedEntity)
+        const std::vector<SceneObjectEntry>& entries, std::vector<entt::entity> selectedEntities)
     {
         hierarchyEntries = entries;
-        selectedSceneEntity = selectedEntity;
+        selectedSceneEntities = std::move(selectedEntities);
     }
 
     std::optional<entt::entity> EditorGui::ConsumeHierarchyContextEntity()
@@ -1511,7 +1629,7 @@ namespace sage::editor
         const std::vector<AssetEntry>& assets,
         const std::function<void(std::size_t)>& onAssetSelected,
         const std::function<void(std::filesystem::path)>& onFlatpackSelected,
-        const std::function<void(entt::entity)>& onSceneObjectSelected,
+        const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
         const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
         ModelDefaultCallbacks callbacks)
         : settings(_settings),

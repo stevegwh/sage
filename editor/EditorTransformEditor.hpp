@@ -14,6 +14,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace sage
 {
@@ -40,16 +41,16 @@ namespace sage::editor
         EditorTransformEditor(EngineSystems* sys, OnApplied onApplied);
 
         // Lifecycle. EnterEditMode populates the snapshot fields used by RestoreSnapshot.
-        void EnterEditMode(entt::entity entity, EditorEditState& outSnapshot);
+        void EnterEditMode(const std::vector<entt::entity>& entities, EditorEditState& outSnapshot);
         void ExitEditMode();
         void RestoreSnapshot(const EditorEditState& snapshot);
 
         // Per-frame gizmo update / draw. Update is a no-op unless a drag is
         // currently active; the state machine calls TryStartDrag separately on
         // mouse-down to begin one.
-        void Update(entt::entity entity);
-        bool TryStartDrag(entt::entity entity, Vector2 mousePosition);
-        void Draw3D(entt::entity entity) const;
+        void Update(const std::vector<entt::entity>& entities);
+        bool TryStartDrag(const std::vector<entt::entity>& entities, Vector2 mousePosition);
+        void Draw3D(const std::vector<entt::entity>& entities) const;
 
         // Mode + pivot.
         void SetMode(EditGizmo::Mode);
@@ -64,15 +65,16 @@ namespace sage::editor
         }
         [[nodiscard]] std::string DescribeMode() const;
         [[nodiscard]] Vector3 PivotWorldPosition(entt::entity entity) const;
+        [[nodiscard]] Vector3 PivotWorldPosition(const std::vector<entt::entity>& entities) const;
         [[nodiscard]] bool IsGizmoDragging() const
         {
             return gizmo.IsDragging();
         }
 
         // Keyboard / arrow-key paths driven by the state machine.
-        void AdjustPosition(entt::entity entity, Vector3 worldDelta);
-        void AdjustRotationAxis(entt::entity entity, EditGizmo::Axis axis, float degrees);
-        void AdjustScale(entt::entity entity, float delta);
+        void AdjustPosition(const std::vector<entt::entity>& entities, Vector3 worldDelta);
+        void AdjustRotationAxis(const std::vector<entt::entity>& entities, EditGizmo::Axis axis, float degrees);
+        void AdjustScale(const std::vector<entt::entity>& entities, float delta);
 
         // Rebuilds collision bounds for `entity` and all its descendants.
         // Used after bulk-instantiating entities (e.g. flatpacks) so each new
@@ -92,7 +94,9 @@ namespace sage::editor
         void updateEntityCollisionBounds(entt::entity entity) const;
         void notify(entt::entity entity) const;
         [[nodiscard]] Vector3 snapToGridXZ(Vector3 worldPos) const;
+        void applyPositionDelta(const std::vector<entt::entity>& entities, Vector3 worldDelta);
 
-        Vector3 dragUnsnappedPosition{};
+        Vector3 dragUnsnappedPivotPosition{};
+        Vector3 dragLastSnappedPivotPosition{};
     };
 } // namespace sage::editor

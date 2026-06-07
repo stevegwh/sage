@@ -119,9 +119,13 @@ namespace sage::editor
     {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell())
         {
+            const bool additive = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
             if (!SelectSceneEntityUnderCursor(machine))
             {
-                ClearSceneEntitySelection(machine);
+                if (!additive)
+                {
+                    ClearSceneEntitySelection(machine);
+                }
             }
         }
     }
@@ -131,7 +135,8 @@ namespace sage::editor
         const auto entity = machine.pickSceneEntityUnderCursor();
         if (!entity.has_value()) return false;
 
-        SelectSceneEntity(machine, *entity);
+        const bool additive = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        SelectSceneEntity(machine, *entity, additive);
         return true;
     }
 
@@ -146,9 +151,10 @@ namespace sage::editor
         machine.refreshSceneWindows();
     }
 
-    void EditorSelectState::SelectSceneEntity(EditorModeStateMachine& machine, const entt::entity entity)
+    void EditorSelectState::SelectSceneEntity(
+        EditorModeStateMachine& machine, const entt::entity entity, const bool additive)
     {
-        if (!machine.selectSelection(entity)) return;
+        if (!machine.selectSelection(entity, additive)) return;
         machine.ChangeState(EditorSelectState{});
         machine.hideDeleteConfirmation();
         machine.refreshSceneWindows();
@@ -157,7 +163,7 @@ namespace sage::editor
     void EditorSelectState::RequestDeleteSelectedEntity(EditorModeStateMachine& machine)
     {
         if (!machine.hasSelection()) return;
-        if (!machine.activeTransformEntity().has_value())
+        if (machine.transformTargets().empty())
         {
             ClearSceneEntitySelection(machine);
             return;
@@ -173,32 +179,31 @@ namespace sage::editor
 
     void EditorSelectState::ConfirmDeleteSelectedEntity(EditorModeStateMachine& machine)
     {
-        const auto selectedEntity = machine.currentSelection();
-        if (!selectedEntity.has_value())
+        const auto selectedEntities = machine.selectionRoots();
+        if (selectedEntities.empty())
         {
             machine.hideDeleteConfirmation();
             return;
         }
 
-        const auto entity = *selectedEntity;
         machine.clearSelection();
         machine.hideDeleteConfirmation();
-        machine.deleteEntityAndChildren(entity);
+        machine.deleteEntitiesAndChildren(selectedEntities);
         machine.refreshSceneWindows();
         machine.refreshOverlay();
     }
 
     void EditorSelectState::BeginEditSelectedTransform(EditorModeStateMachine& machine)
     {
-        const auto selectedEntity = machine.activeTransformEntity();
-        if (!selectedEntity.has_value())
+        const auto selectedEntities = machine.transformTargets();
+        if (selectedEntities.empty())
         {
             ClearSceneEntitySelection(machine);
             return;
         }
 
         machine.hideDeleteConfirmation();
-        machine.ChangeState(EditorEditState{.entity = *selectedEntity});
+        machine.ChangeState(EditorEditState{.entities = selectedEntities});
         machine.refreshOverlay();
         machine.refreshSceneWindows();
     }
@@ -368,36 +373,47 @@ namespace sage::editor
 
     void EditorEditState::OnEnter(EditorModeStateMachine& machine)
     {
-        if (!machine.hasTransform(entity))
+        if (entities.empty())
+        {
+            entities = machine.transformTargets();
+        }
+
+        std::erase_if(entities, [&machine](const entt::entity entity) {
+            return !machine.hasTransform(entity);
+        });
+
+        if (entities.empty())
         {
             machine.ChangeState(EditorSelectState{});
             return;
         }
 
-        (void)machine.selectSelection(entity);
-        machine.enableCollideableStaticOverride(entity);
-        machine.transformEditor.EnterEditMode(entity, *this);
-        SyncPlacementFromEntity(machine, entity);
+        machine.enableCollideableStaticOverride(entities);
+        machine.transformEditor.EnterEditMode(entities, *this);
+        SyncPlacementFromEntity(machine, entities.front());
         machine.refreshOverlay();
         machine.refreshSceneWindows();
     }
 
     void EditorEditState::OnExit(EditorModeStateMachine& machine)
     {
-        machine.disableCollideableStaticOverride(entity);
+        machine.disableCollideableStaticOverride(entities);
         machine.transformEditor.ExitEditMode();
     }
 
     void EditorEditState::Update(EditorModeStateMachine& machine)
     {
-        if (!machine.hasTransform(entity))
+        std::erase_if(entities, [&machine](const entt::entity entity) {
+            return !machine.hasTransform(entity);
+        });
+
+        if (entities.empty())
         {
             ClearSceneEntitySelection(machine);
             return;
         }
 
-        (void)machine.selectSelection(entity);
-        SyncPlacementFromEntity(machine, entity);
+        SyncPlacementFromEntity(machine, entities.front());
 
         if (machine.isKeyboardEditing()) return;
 
@@ -409,7 +425,7 @@ namespace sage::editor
 
         if (machine.transformEditor.IsGizmoDragging())
         {
-            machine.transformEditor.Update(entity);
+            machine.transformEditor.Update(entities);
             return;
         }
 
@@ -426,10 +442,9 @@ namespace sage::editor
             machine.transformEditor.SetMode(EditGizmo::Mode::Scale);
         }
 
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell() &&
-            machine.hasTransform(entity))
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell())
         {
-            if (machine.transformEditor.TryStartDrag(entity, GetMousePosition())) return;
+            if (machine.transformEditor.TryStartDrag(entities, GetMousePosition())) return;
         }
 
         const bool shiftDown = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
@@ -469,37 +484,41 @@ namespace sage::editor
             }
             if (positionDelta.x != 0.0f || positionDelta.y != 0.0f || positionDelta.z != 0.0f)
             {
-                machine.transformEditor.AdjustPosition(entity, positionDelta);
+                machine.transformEditor.AdjustPosition(entities, positionDelta);
             }
             break;
         }
         case EditGizmo::Mode::Rotate: {
             if (IsKeyPressedOrRepeated(KEY_LEFT))
             {
-                machine.transformEditor.AdjustRotationAxis(entity, EditGizmo::Axis::Y, -PLACEMENT_ROTATION_STEP);
+                machine.transformEditor.AdjustRotationAxis(
+                    entities, EditGizmo::Axis::Y, -PLACEMENT_ROTATION_STEP);
             }
             if (IsKeyPressedOrRepeated(KEY_RIGHT))
             {
-                machine.transformEditor.AdjustRotationAxis(entity, EditGizmo::Axis::Y, PLACEMENT_ROTATION_STEP);
+                machine.transformEditor.AdjustRotationAxis(
+                    entities, EditGizmo::Axis::Y, PLACEMENT_ROTATION_STEP);
             }
             if (IsKeyPressedOrRepeated(KEY_UP))
             {
-                machine.transformEditor.AdjustRotationAxis(entity, EditGizmo::Axis::X, PLACEMENT_ROTATION_STEP);
+                machine.transformEditor.AdjustRotationAxis(
+                    entities, EditGizmo::Axis::X, PLACEMENT_ROTATION_STEP);
             }
             if (IsKeyPressedOrRepeated(KEY_DOWN))
             {
-                machine.transformEditor.AdjustRotationAxis(entity, EditGizmo::Axis::X, -PLACEMENT_ROTATION_STEP);
+                machine.transformEditor.AdjustRotationAxis(
+                    entities, EditGizmo::Axis::X, -PLACEMENT_ROTATION_STEP);
             }
             break;
         }
         case EditGizmo::Mode::Scale: {
             if (IsKeyPressedOrRepeated(KEY_LEFT))
             {
-                machine.transformEditor.AdjustScale(entity, -PLACEMENT_SCALE_STEP);
+                machine.transformEditor.AdjustScale(entities, -PLACEMENT_SCALE_STEP);
             }
             if (IsKeyPressedOrRepeated(KEY_RIGHT))
             {
-                machine.transformEditor.AdjustScale(entity, PLACEMENT_SCALE_STEP);
+                machine.transformEditor.AdjustScale(entities, PLACEMENT_SCALE_STEP);
             }
             break;
         }
@@ -523,7 +542,7 @@ namespace sage::editor
         DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, ORANGE);
         DrawSphere(marker, 0.08f, ORANGE);
 
-        machine.transformEditor.Draw3D(entity);
+        machine.transformEditor.Draw3D(entities);
     }
 
     void EditorEditState::FinishEditSelectedTransform(EditorModeStateMachine& machine)
@@ -544,14 +563,14 @@ namespace sage::editor
 
     void EditorEditState::ToggleEditPivotMode(EditorModeStateMachine& machine)
     {
-        if (!machine.hasTransform(entity))
+        if (entities.empty())
         {
             ClearSceneEntitySelection(machine);
             return;
         }
 
         machine.transformEditor.TogglePivotMode();
-        SyncPlacementFromEntity(machine, entity);
+        SyncPlacementFromEntity(machine, entities.front());
         machine.refreshOverlay();
         machine.refreshSceneWindows();
     }
@@ -574,9 +593,12 @@ namespace sage::editor
         return CancelEditSelectedTransform(machine);
     }
 
-    void EditorEditState::OnTransformApplied(EditorModeStateMachine& machine, const entt::entity entity)
+    void EditorEditState::OnTransformApplied(EditorModeStateMachine& machine, const entt::entity)
     {
-        SyncPlacementFromEntity(machine, entity);
+        if (!entities.empty())
+        {
+            SyncPlacementFromEntity(machine, entities.front());
+        }
         machine.refreshOverlay();
         machine.refreshSceneWindows();
     }
@@ -636,9 +658,9 @@ namespace sage::editor
         scene.selection->Clear();
     }
 
-    bool EditorModeStateMachine::selectSelection(const entt::entity entity)
+    bool EditorModeStateMachine::selectSelection(const entt::entity entity, const bool additive)
     {
-        return scene.selection->Select(entity);
+        return scene.selection->Select(entity, additive);
     }
 
     bool EditorModeStateMachine::hasSelection() const
@@ -651,9 +673,19 @@ namespace sage::editor
         return scene.selection->ActiveTransformEntity();
     }
 
-    std::optional<entt::entity> EditorModeStateMachine::currentSelection() const
+    std::vector<entt::entity> EditorModeStateMachine::selectionRoots() const
     {
-        return scene.selection->Current();
+        return scene.selection->TransformTargets();
+    }
+
+    std::vector<entt::entity> EditorModeStateMachine::selectionEffectiveEntities() const
+    {
+        return scene.selection->EffectiveEntities();
+    }
+
+    std::vector<entt::entity> EditorModeStateMachine::transformTargets() const
+    {
+        return scene.selection->TransformTargets();
     }
 
     void EditorModeStateMachine::hideDeleteConfirmation() const
@@ -669,6 +701,14 @@ namespace sage::editor
     void EditorModeStateMachine::deleteEntityAndChildren(const entt::entity entity) const
     {
         scene.entityOperations->DeleteEntityAndChildren(entity);
+    }
+
+    void EditorModeStateMachine::deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const
+    {
+        for (const auto entity : entities)
+        {
+            deleteEntityAndChildren(entity);
+        }
     }
 
     void EditorModeStateMachine::focusHierarchyOnEntity(const entt::entity entity) const
@@ -726,6 +766,24 @@ namespace sage::editor
         DisableCollideableStaticOverride(*scene.sys->registry, entity);
     }
 
+    void EditorModeStateMachine::enableCollideableStaticOverride(
+        const std::vector<entt::entity>& entities) const
+    {
+        for (const auto entity : entities)
+        {
+            enableCollideableStaticOverride(entity);
+        }
+    }
+
+    void EditorModeStateMachine::disableCollideableStaticOverride(
+        const std::vector<entt::entity>& entities) const
+    {
+        for (const auto entity : entities)
+        {
+            disableCollideableStaticOverride(entity);
+        }
+    }
+
     void EditorModeStateMachine::SelectPlaceable(const std::size_t index)
     {
         if (!canSelectPlaceable(index)) return;
@@ -737,10 +795,10 @@ namespace sage::editor
         ChangeState(EditorPlaceState{.flatpackPath = std::move(path)});
     }
 
-    void EditorModeStateMachine::SelectSceneEntity(const entt::entity entity)
+    void EditorModeStateMachine::SelectSceneEntity(const entt::entity entity, const bool additive)
     {
         ChangeState(EditorSelectState{});
-        std::get<EditorSelectState>(currentState).SelectSceneEntity(*this, entity);
+        std::get<EditorSelectState>(currentState).SelectSceneEntity(*this, entity, additive);
     }
 
     bool EditorModeStateMachine::HandleEscapePressed()

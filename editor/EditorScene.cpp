@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <format>
 #include <iostream>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -65,6 +66,46 @@ namespace sage
             const Vector3 center = editor::BoundingBoxCenter(bounds);
             const Vector3 halfSize = Vector3Scale(Vector3Subtract(bounds.max, bounds.min), 0.5f);
             return {.position = center, .radius = std::max(1.0f, Vector3Length(halfSize))};
+        }
+
+        BoundingBox boundsFromPoint(const Vector3 point)
+        {
+            return BoundingBox{.min = point, .max = point};
+        }
+
+        void expandBounds(BoundingBox& bounds, const BoundingBox& other)
+        {
+            bounds.min.x = std::min(bounds.min.x, other.min.x);
+            bounds.min.y = std::min(bounds.min.y, other.min.y);
+            bounds.min.z = std::min(bounds.min.z, other.min.z);
+            bounds.max.x = std::max(bounds.max.x, other.max.x);
+            bounds.max.y = std::max(bounds.max.y, other.max.y);
+            bounds.max.z = std::max(bounds.max.z, other.max.z);
+        }
+
+        std::optional<BoundingBox> focusBoundsForEntity(entt::registry& registry, const entt::entity entity)
+        {
+            if (!registry.valid(entity) || !registry.any_of<sgTransform>(entity)) return std::nullopt;
+
+            if (registry.any_of<Collideable>(entity))
+            {
+                return registry.get<Collideable>(entity).worldBoundingBox;
+            }
+
+            if (registry.any_of<Renderable>(entity))
+            {
+                const auto& transform = registry.get<sgTransform>(entity);
+                const auto& renderable = registry.get<Renderable>(entity);
+                if (const auto* model = renderable.GetModel(); model != nullptr)
+                {
+                    const Matrix entityMatrix = editor::BuildRenderableEntityMatrix(
+                        transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+                    const Matrix worldMatrix = MatrixMultiply(model->GetTransform(), entityMatrix);
+                    return editor::TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), worldMatrix);
+                }
+            }
+
+            return boundsFromPoint(registry.get<sgTransform>(entity).GetWorldPos());
         }
 
         std::filesystem::path ensureMapExtension(std::filesystem::path path)
@@ -162,8 +203,10 @@ namespace sage
 
     std::string EditorScene::describeSelectedSceneEntity() const
     {
-        const auto entity = selection->ActiveTransformEntity();
-        return entity.has_value() ? hierarchyTree->GetEntityName(*entity) : "None";
+        const auto entities = selection->TransformTargets();
+        if (entities.empty()) return "None";
+        if (entities.size() == 1) return hierarchyTree->GetEntityName(entities.front());
+        return std::format("{} selected", entities.size());
     }
 
     void EditorScene::applyLitShaderToLoadedRenderables() const
@@ -205,39 +248,42 @@ namespace sage
 
     void EditorScene::refreshSceneWindows() const
     {
-        const auto activeEntity = selection->ActiveTransformEntity();
-        auto inspectedComponents = activeEntity.has_value()
-                                       ? inspectorRegistry.Inspect(*sys->registry, *activeEntity)
+        const auto selectedRoots = selection->TransformTargets();
+        auto inspectedComponents = !selectedRoots.empty()
+                                       ? inspectorRegistry.Inspect(*sys->registry, selectedRoots)
                                        : std::vector<editor::InspectedComponent>{};
 
-        gui->SetHierarchy(hierarchyTree->CollectSceneObjectEntries(), activeEntity);
+        gui->SetHierarchy(hierarchyTree->CollectSceneObjectEntries(), selection->EffectiveEntities());
         gui->SetInspector(describeSelectedSceneEntity(), inspectedComponents);
     }
 
     void EditorScene::focusSelectedObject() const
     {
-        const auto selectedEntity = selection->ActiveTransformEntity();
-        if (!selectedEntity.has_value()) return;
+        const auto selectedEntities = selection->EffectiveEntities();
+        if (selectedEntities.empty()) return;
 
-        const auto entity = *selectedEntity;
-        FocusTarget target{.position = sys->registry->get<sgTransform>(entity).GetWorldPos()};
-
-        if (sys->registry->any_of<Collideable>(entity))
+        std::optional<BoundingBox> combinedBounds;
+        for (const auto entity : selectedEntities)
         {
-            target = focusTargetFromBounds(sys->registry->get<Collideable>(entity).worldBoundingBox);
+            const auto bounds = focusBoundsForEntity(*sys->registry, entity);
+            if (!bounds.has_value()) continue;
+
+            if (combinedBounds.has_value())
+                expandBounds(*combinedBounds, *bounds);
+            else
+                combinedBounds = bounds;
         }
-        else if (sys->registry->any_of<Renderable>(entity))
+
+        FocusTarget target{};
+        if (combinedBounds.has_value())
         {
-            const auto& transform = sys->registry->get<sgTransform>(entity);
-            const auto& renderable = sys->registry->get<Renderable>(entity);
-            if (const auto* model = renderable.GetModel(); model != nullptr)
-            {
-                const Matrix entityMatrix = editor::BuildRenderableEntityMatrix(
-                    transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-                const Matrix worldMatrix = MatrixMultiply(model->GetTransform(), entityMatrix);
-                target = focusTargetFromBounds(
-                    editor::TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), worldMatrix));
-            }
+            target = focusTargetFromBounds(*combinedBounds);
+        }
+        else
+        {
+            const auto primary = selection->ActiveTransformEntity();
+            if (!primary.has_value()) return;
+            target = {.position = sys->registry->get<sgTransform>(*primary).GetWorldPos()};
         }
 
         const float focusDistance =
@@ -307,10 +353,12 @@ namespace sage
         sys->lightSubSystem->DrawDebugLights();
         placementController->DrawGridAndAxes();
         editorModes->Draw3D();
-        const auto selectedEntity = selection->ActiveTransformEntity();
-        if (selectedEntity.has_value() && sys->registry->any_of<Collideable>(*selectedEntity))
+        for (const auto entity : selection->EffectiveEntities())
         {
-            DrawBoundingBox(sys->registry->get<Collideable>(*selectedEntity).worldBoundingBox, ORANGE);
+            if (sys->registry->valid(entity) && sys->registry->any_of<Collideable>(entity))
+            {
+                DrawBoundingBox(sys->registry->get<Collideable>(entity).worldBoundingBox, ORANGE);
+            }
         }
     }
 
@@ -811,7 +859,9 @@ namespace sage
             assetCatalog->AssetEntries(),
             [this](const std::size_t index) { editorModes->SelectPlaceable(index); },
             [this](std::filesystem::path path) { editorModes->SelectFlatpack(std::move(path)); },
-            [this](const entt::entity entity) { editorModes->SelectSceneEntity(entity); },
+            [this](const editor::EditorGui::SceneSelectionRequest& request) {
+                editorModes->SelectSceneEntity(request.entity, request.additive);
+            },
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
         SetSceneName(UNTITLED_SCENE_NAME);

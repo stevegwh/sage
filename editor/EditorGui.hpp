@@ -43,6 +43,12 @@ namespace sage
                 entt::entity insertBefore = entt::null;
             };
 
+            struct SceneSelectionRequest
+            {
+                entt::entity entity = entt::null;
+                bool additive = false;
+            };
+
             struct FlatpackEntry
             {
                 std::string displayName;
@@ -83,13 +89,13 @@ namespace sage
             std::vector<FlatpackEntry> flatpackEntries;
             std::function<void(std::size_t)> onAssetSelectedCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
-            std::function<void(entt::entity)> onSceneObjectSelectedCb;
+            std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
             BrowserTab currentTab = BrowserTab::Assets;
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
-            std::optional<entt::entity> selectedSceneEntity;
+            std::vector<entt::entity> selectedSceneEntities;
             std::optional<entt::entity> focusedHierarchyEntity;
             std::optional<entt::entity> pendingHierarchyContextEntity;
             std::string inspectorSelectedEntity = "None";
@@ -127,7 +133,7 @@ namespace sage
             void SetSelectedAsset(std::optional<std::size_t> index);
             void SetFlatpacks(std::vector<FlatpackEntry> entries);
             void SetHierarchy(
-                const std::vector<SceneObjectEntry>& entries, std::optional<entt::entity> selectedEntity);
+                const std::vector<SceneObjectEntry>& entries, std::vector<entt::entity> selectedEntities);
             void FocusHierarchyOnEntity(entt::entity entity);
             [[nodiscard]] std::optional<entt::entity> ConsumeHierarchyContextEntity();
             void SetInspector(
@@ -146,7 +152,7 @@ namespace sage
                 const std::vector<AssetEntry>& assets,
                 const std::function<void(std::size_t)>& onAssetSelected,
                 const std::function<void(std::filesystem::path)>& onFlatpackSelected,
-                const std::function<void(entt::entity)>& onSceneObjectSelected,
+                const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
                 const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
                 ModelDefaultCallbacks callbacks);
             ~EditorGui();

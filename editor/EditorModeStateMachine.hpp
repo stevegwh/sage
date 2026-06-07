@@ -11,6 +11,7 @@
 #include <optional>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace sage
 {
@@ -35,7 +36,7 @@ namespace sage::editor
         void HandleMouseInput(EditorModeStateMachine& machine);
         bool SelectSceneEntityUnderCursor(EditorModeStateMachine& machine);
         void ClearSceneEntitySelection(EditorModeStateMachine& machine);
-        void SelectSceneEntity(EditorModeStateMachine& machine, entt::entity entity);
+        void SelectSceneEntity(EditorModeStateMachine& machine, entt::entity entity, bool additive);
         void RequestDeleteSelectedEntity(EditorModeStateMachine& machine);
         void CancelDeleteSelectedEntity(EditorModeStateMachine& machine);
         void ConfirmDeleteSelectedEntity(EditorModeStateMachine& machine);
@@ -65,13 +66,19 @@ namespace sage::editor
         void OnTransformApplied(EditorModeStateMachine& machine, entt::entity entity);
     };
 
-    struct EditorEditState
+    struct EditorTransformSnapshot
     {
-        static std::string GetName(const EditorModeStateMachine& machine);
         entt::entity entity = entt::null;
         Vector3 originalPosition{};
         Vector3 originalRotation{};
         Vector3 originalScale{1.0f, 1.0f, 1.0f};
+    };
+
+    struct EditorEditState
+    {
+        static std::string GetName(const EditorModeStateMachine& machine);
+        std::vector<entt::entity> entities;
+        std::vector<EditorTransformSnapshot> snapshots;
 
         void OnEnter(EditorModeStateMachine& machine);
         void OnExit(EditorModeStateMachine& machine);
@@ -106,13 +113,16 @@ namespace sage::editor
         [[nodiscard]] EditorGui::DeleteConfirmationAction consumeDeleteConfirmationAction();
         [[nodiscard]] std::optional<entt::entity> pickSceneEntityUnderCursor() const;
         void clearSelection();
-        [[nodiscard]] bool selectSelection(entt::entity entity);
+        [[nodiscard]] bool selectSelection(entt::entity entity, bool additive = false);
         [[nodiscard]] bool hasSelection() const;
         [[nodiscard]] std::optional<entt::entity> activeTransformEntity() const;
-        [[nodiscard]] std::optional<entt::entity> currentSelection() const;
+        [[nodiscard]] std::vector<entt::entity> selectionRoots() const;
+        [[nodiscard]] std::vector<entt::entity> selectionEffectiveEntities() const;
+        [[nodiscard]] std::vector<entt::entity> transformTargets() const;
         void hideDeleteConfirmation() const;
         void showDeleteConfirmationForSelection() const;
         void deleteEntityAndChildren(entt::entity entity) const;
+        void deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const;
         void focusHierarchyOnEntity(entt::entity entity) const;
         void focusSelectedObject() const;
         void focusSelectedObjectInHierarchy() const;
@@ -124,6 +134,8 @@ namespace sage::editor
         [[nodiscard]] const EditorPlacementController& placement() const;
         void enableCollideableStaticOverride(entt::entity entity) const;
         void disableCollideableStaticOverride(entt::entity entity) const;
+        void enableCollideableStaticOverride(const std::vector<entt::entity>& entities) const;
+        void disableCollideableStaticOverride(const std::vector<entt::entity>& entities) const;
 
       public:
         template <typename NewState>
@@ -140,7 +152,7 @@ namespace sage::editor
         void AdjustGridSurfaceY(float amount);
         void SelectPlaceable(std::size_t index);
         void SelectFlatpack(std::filesystem::path path);
-        void SelectSceneEntity(entt::entity entity);
+        void SelectSceneEntity(entt::entity entity, bool additive = false);
         bool HandleEscapePressed();
         void OnTransformApplied(entt::entity entity);
 

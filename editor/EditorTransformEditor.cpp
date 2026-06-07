@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <utility>
 
 namespace sage::editor
@@ -27,6 +28,76 @@ namespace sage::editor
         // scale as a single number. Kept local; placement-grid extraction will
         // eventually centralise this.
         constexpr float MIN_SCALE = 0.1f;
+
+        BoundingBox BoundsFromPoint(const Vector3 point)
+        {
+            return BoundingBox{.min = point, .max = point};
+        }
+
+        void ExpandBounds(BoundingBox& bounds, const BoundingBox& other)
+        {
+            bounds.min.x = std::min(bounds.min.x, other.min.x);
+            bounds.min.y = std::min(bounds.min.y, other.min.y);
+            bounds.min.z = std::min(bounds.min.z, other.min.z);
+            bounds.max.x = std::max(bounds.max.x, other.max.x);
+            bounds.max.y = std::max(bounds.max.y, other.max.y);
+            bounds.max.z = std::max(bounds.max.z, other.max.z);
+        }
+
+        std::optional<BoundingBox> EntityBounds(entt::registry& registry, const entt::entity entity)
+        {
+            if (!registry.valid(entity) || !registry.any_of<sgTransform>(entity)) return std::nullopt;
+
+            if (registry.any_of<Renderable>(entity))
+            {
+                const auto& transform = registry.get<sgTransform>(entity);
+                const auto& renderable = registry.get<Renderable>(entity);
+                if (const auto* model = renderable.GetModel(); model != nullptr)
+                {
+                    const Matrix entityMatrix = BuildRenderableEntityMatrix(
+                        transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+                    return TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), entityMatrix);
+                }
+            }
+
+            if (registry.any_of<Collideable>(entity))
+            {
+                return registry.get<Collideable>(entity).worldBoundingBox;
+            }
+
+            return BoundsFromPoint(registry.get<sgTransform>(entity).GetWorldPos());
+        }
+
+        void AppendSubtreeBounds(
+            entt::registry& registry, const entt::entity entity, std::optional<BoundingBox>& bounds)
+        {
+            if (!registry.valid(entity) || !registry.any_of<sgTransform>(entity)) return;
+
+            if (const auto entityBounds = EntityBounds(registry, entity); entityBounds.has_value())
+            {
+                if (bounds.has_value())
+                    ExpandBounds(*bounds, *entityBounds);
+                else
+                    bounds = entityBounds;
+            }
+
+            for (const auto child : registry.get<sgTransform>(entity).GetChildren())
+            {
+                AppendSubtreeBounds(registry, child, bounds);
+            }
+        }
+
+        bool HasValidTransform(entt::registry& registry, const std::vector<entt::entity>& entities)
+        {
+            return std::ranges::any_of(entities, [&registry](const entt::entity entity) {
+                return registry.valid(entity) && registry.any_of<sgTransform>(entity);
+            });
+        }
+
+        float UniformScale(const Vector3 scale)
+        {
+            return std::max(MIN_SCALE, (scale.x + scale.y + scale.z) / 3.0f);
+        }
     } // namespace
 
     EditorTransformEditor::EditorTransformEditor(EngineSystems* _sys, OnApplied _onApplied)
@@ -34,15 +105,22 @@ namespace sage::editor
     {
     }
 
-    void EditorTransformEditor::EnterEditMode(const entt::entity entity, EditorEditState& outSnapshot)
+    void EditorTransformEditor::EnterEditMode(
+        const std::vector<entt::entity>& entities, EditorEditState& outSnapshot)
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        outSnapshot.snapshots.clear();
+        outSnapshot.snapshots.reserve(entities.size());
+        for (const auto entity : entities)
+        {
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
 
-        const auto& transform = sys->registry->get<sgTransform>(entity);
-        outSnapshot.entity = entity;
-        outSnapshot.originalPosition = transform.GetWorldPos();
-        outSnapshot.originalRotation = transform.GetWorldRot();
-        outSnapshot.originalScale = transform.GetScale();
+            const auto& transform = sys->registry->get<sgTransform>(entity);
+            outSnapshot.snapshots.push_back(
+                {.entity = entity,
+                 .originalPosition = transform.GetWorldPos(),
+                 .originalRotation = transform.GetWorldRot(),
+                 .originalScale = transform.GetScale()});
+        }
     }
 
     void EditorTransformEditor::ExitEditMode()
@@ -56,24 +134,28 @@ namespace sage::editor
 
     void EditorTransformEditor::RestoreSnapshot(const EditorEditState& snapshot)
     {
-        const auto entity = snapshot.entity;
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        entt::entity notifiedEntity = entt::null;
+        for (const auto& saved : snapshot.snapshots)
+        {
+            const auto entity = saved.entity;
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
 
-        auto& transform = sys->registry->get<sgTransform>(entity);
-        transform.position.world = snapshot.originalPosition;
-        transform.rotation.world = snapshot.originalRotation;
-        transform.scale.world = snapshot.originalScale;
+            auto& transform = sys->registry->get<sgTransform>(entity);
+            transform.position.world = saved.originalPosition;
+            transform.rotation.world = saved.originalRotation;
+            transform.scale.world = saved.originalScale;
 
-        updateEntityCollisionBounds(entity);
-        notify(entity);
+            updateEntityCollisionBounds(entity);
+            if (notifiedEntity == entt::null) notifiedEntity = entity;
+        }
+        notify(notifiedEntity);
     }
 
-    void EditorTransformEditor::Update(const entt::entity entity)
+    void EditorTransformEditor::Update(const std::vector<entt::entity>& entities)
     {
         if (!gizmo.IsDragging()) return;
 
-        if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !sys->registry->valid(entity) ||
-            !sys->registry->any_of<sgTransform>(entity))
+        if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !HasValidTransform(*sys->registry, entities))
         {
             ExitEditMode();
             return;
@@ -82,7 +164,7 @@ namespace sage::editor
         const Camera3D camera = *sys->camera->getRaylibCam();
         const Vector2 viewport = sys->settings->GetRenderViewPort();
         const Vector2 mousePosition = sys->settings->ScreenToRenderViewportPosition(GetMousePosition());
-        const Vector3 origin = PivotWorldPosition(entity);
+        const Vector3 origin = PivotWorldPosition(entities);
 
         const auto sample = gizmo.SampleDrag(camera, viewport, origin, mode, mousePosition);
         if (sample.axis == EditGizmo::Axis::None) return;
@@ -109,53 +191,54 @@ namespace sage::editor
                 // precision to per-frame snap rounding, then commit the snapped result.
                 const Vector3 worldDelta =
                     Vector3Scale(axisVector, sample.projectedAxisPixels * size / screenLength);
-                dragUnsnappedPosition = Vector3Add(dragUnsnappedPosition, worldDelta);
-                auto& transform = sys->registry->get<sgTransform>(entity);
-                const Vector3 snapped = snapToGridXZ(dragUnsnappedPosition);
-                if (!Vector3Equals(transform.GetWorldPos(), snapped))
+                dragUnsnappedPivotPosition = Vector3Add(dragUnsnappedPivotPosition, worldDelta);
+                const Vector3 snapped = snapToGridXZ(dragUnsnappedPivotPosition);
+                const Vector3 appliedDelta = Vector3Subtract(snapped, dragLastSnappedPivotPosition);
+                if (!Vector3Equals(appliedDelta, Vector3Zero()))
                 {
-                    transform.position.world = snapped;
-                    updateEntityCollisionBounds(entity);
-                    notify(entity);
+                    applyPositionDelta(entities, appliedDelta);
+                    dragLastSnappedPivotPosition = snapped;
                 }
             }
             break;
         }
         case EditGizmo::Mode::Rotate:
-            AdjustRotationAxis(entity, sample.axis, sample.rotationDegrees);
+            AdjustRotationAxis(entities, sample.axis, sample.rotationDegrees);
             break;
         case EditGizmo::Mode::Scale:
-            AdjustScale(entity, sample.projectedAxisPixels * 0.01f);
+            AdjustScale(entities, sample.projectedAxisPixels * 0.01f);
             break;
         }
     }
 
-    bool EditorTransformEditor::TryStartDrag(const entt::entity entity, const Vector2 mousePosition)
+    bool EditorTransformEditor::TryStartDrag(
+        const std::vector<entt::entity>& entities, const Vector2 mousePosition)
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return false;
+        if (!HasValidTransform(*sys->registry, entities)) return false;
         if (!sys->settings->IsPointInRenderViewport(mousePosition)) return false;
 
         const Camera3D camera = *sys->camera->getRaylibCam();
         const Vector2 viewport = sys->settings->GetRenderViewPort();
         const Vector2 renderMousePosition = sys->settings->ScreenToRenderViewportPosition(mousePosition);
-        const Vector3 origin = PivotWorldPosition(entity);
+        const Vector3 origin = PivotWorldPosition(entities);
 
         const auto axis = gizmo.HitTest(camera, viewport, origin, mode, renderMousePosition);
         if (axis == EditGizmo::Axis::None) return false;
 
         gizmo.BeginDrag(axis, renderMousePosition);
-        dragUnsnappedPosition = sys->registry->get<sgTransform>(entity).GetWorldPos();
+        dragUnsnappedPivotPosition = origin;
+        dragLastSnappedPivotPosition = snapToGridXZ(origin);
         sys->camera->LockInput();
         return true;
     }
 
-    void EditorTransformEditor::Draw3D(const entt::entity entity) const
+    void EditorTransformEditor::Draw3D(const std::vector<entt::entity>& entities) const
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        if (!HasValidTransform(*sys->registry, entities)) return;
 
         const Camera3D camera = *sys->camera->getRaylibCam();
         const Vector2 viewport = sys->settings->GetRenderViewPort();
-        const Vector3 origin = PivotWorldPosition(entity);
+        const Vector3 origin = PivotWorldPosition(entities);
         gizmo.Draw(camera, viewport, origin, mode);
     }
 
@@ -203,14 +286,51 @@ namespace sage::editor
         return BoundingBoxCenter(worldBounds);
     }
 
-    void EditorTransformEditor::AdjustPosition(const entt::entity entity, const Vector3 worldDelta)
+    Vector3 EditorTransformEditor::PivotWorldPosition(const std::vector<entt::entity>& entities) const
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        if (entities.empty()) return Vector3Zero();
 
-        auto& transform = sys->registry->get<sgTransform>(entity);
-        transform.position.world = snapToGridXZ(Vector3Add(transform.GetWorldPos(), worldDelta));
-        updateEntityCollisionBounds(entity);
-        notify(entity);
+        if (pivotMode != PivotMode::LocalCenter)
+        {
+            Vector3 sum{};
+            int count = 0;
+            for (const auto entity : entities)
+            {
+                if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+                sum = Vector3Add(sum, sys->registry->get<sgTransform>(entity).GetWorldPos());
+                ++count;
+            }
+            return count > 0 ? Vector3Scale(sum, 1.0f / static_cast<float>(count)) : Vector3Zero();
+        }
+
+        std::optional<BoundingBox> bounds;
+        for (const auto entity : entities)
+        {
+            AppendSubtreeBounds(*sys->registry, entity, bounds);
+        }
+
+        if (bounds.has_value()) return BoundingBoxCenter(*bounds);
+        for (const auto entity : entities)
+        {
+            if (sys->registry->valid(entity) && sys->registry->any_of<sgTransform>(entity))
+            {
+                return PivotWorldPosition(entity);
+            }
+        }
+        return Vector3Zero();
+    }
+
+    void EditorTransformEditor::AdjustPosition(
+        const std::vector<entt::entity>& entities, const Vector3 worldDelta)
+    {
+        if (!HasValidTransform(*sys->registry, entities)) return;
+
+        const Vector3 pivot = PivotWorldPosition(entities);
+        const Vector3 snappedPivot = snapToGridXZ(Vector3Add(pivot, worldDelta));
+        const Vector3 appliedDelta = Vector3Subtract(snappedPivot, pivot);
+        if (Vector3Equals(appliedDelta, Vector3Zero())) return;
+
+        applyPositionDelta(entities, appliedDelta);
     }
 
     Vector3 EditorTransformEditor::snapToGridXZ(const Vector3 worldPos) const
@@ -223,10 +343,30 @@ namespace sage::editor
             (std::floor(worldPos.z / spacing) + 0.5f) * spacing};
     }
 
-    void EditorTransformEditor::AdjustRotationAxis(
-        const entt::entity entity, const EditGizmo::Axis axis, const float amount)
+    void EditorTransformEditor::applyPositionDelta(
+        const std::vector<entt::entity>& entities, const Vector3 worldDelta)
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        entt::entity notifiedEntity = entt::null;
+        for (const auto entity : entities)
+        {
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+
+            auto& transform = sys->registry->get<sgTransform>(entity);
+            transform.position.world = Vector3Add(transform.GetWorldPos(), worldDelta);
+            updateEntityCollisionBounds(entity);
+            if (notifiedEntity == entt::null) notifiedEntity = entity;
+        }
+        notify(notifiedEntity);
+    }
+
+    void EditorTransformEditor::AdjustRotationAxis(
+        const std::vector<entt::entity>& entities, const EditGizmo::Axis axis, const float amount)
+    {
+        if (!HasValidTransform(*sys->registry, entities) || axis == EditGizmo::Axis::None ||
+            axis == EditGizmo::Axis::Uniform)
+        {
+            return;
+        }
 
         auto wrapDegrees = [](float degrees) {
             while (degrees >= 360.0f) degrees -= 360.0f;
@@ -234,66 +374,84 @@ namespace sage::editor
             return degrees;
         };
 
-        auto& transform = sys->registry->get<sgTransform>(entity);
-        Vector3 rotation = transform.GetWorldRot();
         Matrix rotationDelta = MatrixIdentity();
 
         if (axis == EditGizmo::Axis::X)
         {
-            rotation.x = wrapDegrees(rotation.x + amount);
             rotationDelta = MatrixRotateX(amount * DEG2RAD);
         }
         else if (axis == EditGizmo::Axis::Z)
         {
-            rotation.z = wrapDegrees(rotation.z + amount);
             rotationDelta = MatrixRotateZ(amount * DEG2RAD);
         }
         else
         {
-            rotation.y = wrapDegrees(rotation.y + amount);
             rotationDelta = MatrixRotateY(amount * DEG2RAD);
         }
 
-        // For LocalCenter pivot mode, the model's visible center should stay anchored
-        // at the pivot. Translate the transform origin so the (pivot → origin) offset
-        // rotates with the delta — the model's body then orbits the pivot.
-        if (pivotMode == PivotMode::LocalCenter)
+        const Vector3 pivot = PivotWorldPosition(entities);
+        entt::entity notifiedEntity = entt::null;
+        for (const auto entity : entities)
         {
-            const Vector3 pivot = PivotWorldPosition(entity);
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+
+            auto& transform = sys->registry->get<sgTransform>(entity);
+            Vector3 rotation = transform.GetWorldRot();
             const Vector3 offset = Vector3Subtract(transform.GetWorldPos(), pivot);
             const Vector3 newOffset = Vector3Transform(offset, rotationDelta);
             transform.position.world = Vector3Add(pivot, newOffset);
+
+            if (axis == EditGizmo::Axis::X)
+                rotation.x = wrapDegrees(rotation.x + amount);
+            else if (axis == EditGizmo::Axis::Z)
+                rotation.z = wrapDegrees(rotation.z + amount);
+            else
+                rotation.y = wrapDegrees(rotation.y + amount);
+
+            transform.rotation.world = rotation;
+            updateEntityCollisionBounds(entity);
+            if (notifiedEntity == entt::null) notifiedEntity = entity;
         }
 
-        transform.rotation.world = rotation;
-        updateEntityCollisionBounds(entity);
-        notify(entity);
+        notify(notifiedEntity);
     }
 
-    void EditorTransformEditor::AdjustScale(const entt::entity entity, const float delta)
+    void EditorTransformEditor::AdjustScale(const std::vector<entt::entity>& entities, const float delta)
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        if (!HasValidTransform(*sys->registry, entities)) return;
 
-        auto& transform = sys->registry->get<sgTransform>(entity);
-        const Vector3 currentScale = transform.GetScale();
-        const float currentUniformScale =
-            std::max(MIN_SCALE, (currentScale.x + currentScale.y + currentScale.z) / 3.0f);
+        float totalUniformScale = 0.0f;
+        int scaleCount = 0;
+        for (const auto entity : entities)
+        {
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+            totalUniformScale += UniformScale(sys->registry->get<sgTransform>(entity).GetScale());
+            ++scaleCount;
+        }
+        if (scaleCount == 0) return;
+
+        const float currentUniformScale = totalUniformScale / static_cast<float>(scaleCount);
         const float nextUniformScale = std::max(MIN_SCALE, currentUniformScale + delta);
         const float scaleFactor = nextUniformScale / currentUniformScale;
+        const Vector3 pivot = PivotWorldPosition(entities);
 
-        // For LocalCenter pivot mode, scale the (pivot → origin) offset so the model
-        // expands/contracts about the pivot rather than about the transform origin.
-        if (pivotMode == PivotMode::LocalCenter)
+        entt::entity notifiedEntity = entt::null;
+        for (const auto entity : entities)
         {
-            const Vector3 pivot = PivotWorldPosition(entity);
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+
+            auto& transform = sys->registry->get<sgTransform>(entity);
             const Vector3 offset = Vector3Subtract(transform.GetWorldPos(), pivot);
             const Vector3 newOffset = Vector3Scale(offset, scaleFactor);
             transform.position.world = Vector3Add(pivot, newOffset);
+
+            const float entityScale = std::max(MIN_SCALE, UniformScale(transform.GetScale()) * scaleFactor);
+            transform.scale.world = {entityScale, entityScale, entityScale};
+            updateEntityCollisionBounds(entity);
+            if (notifiedEntity == entt::null) notifiedEntity = entity;
         }
 
-        transform.scale.world = {nextUniformScale, nextUniformScale, nextUniformScale};
-        updateEntityCollisionBounds(entity);
-        notify(entity);
+        notify(notifiedEntity);
     }
 
     void EditorTransformEditor::updateEntityCollisionBounds(const entt::entity entity) const
