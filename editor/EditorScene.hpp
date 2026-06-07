@@ -61,7 +61,7 @@ namespace sage
         void giveTransformsToLights() const;
         void refreshOverlay() const;
         void refreshSceneWindows() const;
-        void drawMainMenuBar() const;
+        void drawMainMenuBar(bool& exitRequested) const;
         void drawFileBrowsers() const;
         void openLoadMapBrowser() const;
         void openSaveMapBrowser() const;
@@ -78,6 +78,7 @@ namespace sage
         void refreshAfterMapLoad() const;
         void moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const;
         void drawHierarchyContextMenu() const;
+        static void drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed);
         void handleClipboardShortcuts() const;
         void createFlatpackFromEntity(entt::entity entity) const;
         void copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const;
@@ -97,7 +98,7 @@ namespace sage
         void Update() const;
         void Draw3D() const;
         void DrawOverlay2D() const;
-        void DrawImGui() const;
+        void DrawImGui(bool& exitRequested, bool& exitConfirmed) const;
         [[nodiscard]] bool HandleEscapePressed() const;
         [[nodiscard]] bool ConsumeDockLayoutChanged() const;
 

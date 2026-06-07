@@ -66,7 +66,7 @@ namespace sage
         rlImGuiSetup(true);
     }
 
-    void EditorApplication::draw() const
+    void EditorApplication::draw()
     {
         BeginTextureMode(renderTexture);
         ClearBackground(BLANK);
@@ -78,7 +78,6 @@ namespace sage
         BeginDrawing();
         ClearBackground(BLACK);
 
-        const auto appViewport = settings->GetViewPort();
         const auto appViewportOffset = settings->GetViewportOffset();
         const auto renderViewport = settings->GetRenderViewPort();
         const auto renderViewportOffset = settings->GetRenderViewportOffset();
@@ -90,26 +89,8 @@ namespace sage
             WHITE);
 
         scene->DrawOverlay2D();
-        scene->DrawImGui();
+        scene->DrawImGui(exitWindowRequested, exitWindow);
         DrawFPS(12, 32);
-
-        if (exitWindowRequested)
-        {
-            DrawRectangle(
-                static_cast<int>(appViewportOffset.x),
-                static_cast<int>(appViewportOffset.y + 100.0f),
-                static_cast<int>(appViewport.x),
-                200,
-                BLACK);
-            const auto text = "Are you sure you want to exit program? [Y/N]";
-            const auto textSize = MeasureText(text, 30);
-            DrawText(
-                text,
-                static_cast<int>(appViewportOffset.x + (appViewport.x - textSize) / 2.0f),
-                static_cast<int>(appViewportOffset.y + 180.0f),
-                30,
-                WHITE);
-        }
 
         EndDrawing();
     }
@@ -203,15 +184,7 @@ namespace sage
         while (!exitWindow)
         {
             if (WindowShouldClose()) exitWindowRequested = true;
-            if (IsKeyPressed(KEY_ESCAPE) && !scene->HandleEscapePressed()) exitWindowRequested = true;
-
-            if (exitWindowRequested)
-            {
-                if (IsKeyPressed(KEY_Y))
-                    exitWindow = true;
-                else if (IsKeyPressed(KEY_N))
-                    exitWindowRequested = false;
-            }
+            if (IsKeyPressed(KEY_ESCAPE)) (void)scene->HandleEscapePressed();
 
             handleWindowResize();
             handleViewportFullscreenToggle();

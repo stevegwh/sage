@@ -34,7 +34,7 @@ namespace sage
         bool viewportFullscreen = false;
 
         void init();
-        void draw() const;
+        void draw();
         void handleScreenUpdate();
         void handleWindowResize();
         void handleViewportFullscreenToggle();

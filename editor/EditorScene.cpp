@@ -369,11 +369,19 @@ namespace sage
         gui->DrawSceneViewInfo();
     }
 
-    void EditorScene::DrawImGui() const
+    void EditorScene::DrawImGui(bool& exitRequested, bool& exitConfirmed) const
     {
-        if (viewportFullscreen) return;
+        if (viewportFullscreen)
+        {
+            // Still drive the exit confirmation modal so the editor can be closed
+            // while a viewport is fullscreen (the rest of the UI is hidden).
+            gui->StartImGui();
+            drawExitConfirmationModal(exitRequested, exitConfirmed);
+            gui->EndImGui();
+            return;
+        }
         gui->StartImGui();
-        drawMainMenuBar();
+        drawMainMenuBar(exitRequested);
         const bool inspectorChanged = gui->DrawInspectorWindow();
         if (inspectorChanged)
         {
@@ -385,7 +393,39 @@ namespace sage
         handleClipboardShortcuts();
         drawHierarchyContextMenu();
         gui->DrawDeleteConfirmationModal();
+        drawExitConfirmationModal(exitRequested, exitConfirmed);
         gui->EndImGui();
+    }
+
+    void EditorScene::drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed)
+    {
+        constexpr const char* kPopupId = "Exit Editor";
+
+        if (exitRequested && !ImGui::IsPopupOpen(kPopupId))
+        {
+            ImGui::OpenPopup(kPopupId);
+        }
+
+        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2{0.5f, 0.5f});
+        ImGui::SetNextWindowSize(ImVec2{360.0f, 0.0f}, ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal(kPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+        {
+            ImGui::TextWrapped("Are you sure you want to exit the editor?");
+            ImGui::Spacing();
+            if (ImGui::Button("Exit", ImVec2{120.0f, 0.0f}))
+            {
+                exitConfirmed = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
+            {
+                exitRequested = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 
     void EditorScene::drawHierarchyContextMenu() const
@@ -547,7 +587,7 @@ namespace sage
         return root;
     }
 
-    void EditorScene::drawMainMenuBar() const
+    void EditorScene::drawMainMenuBar(bool& exitRequested) const
     {
         if (!ImGui::BeginMainMenuBar()) return;
         if (ImGui::BeginMenu("File"))
@@ -563,6 +603,11 @@ namespace sage
             if (ImGui::MenuItem("Save Map As..."))
             {
                 openSaveMapBrowser();
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Quit"))
+            {
+                exitRequested = true;
             }
             ImGui::EndMenu();
         }

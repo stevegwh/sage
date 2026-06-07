@@ -848,6 +848,11 @@ namespace sage::editor
         {
             const float resizeHandleWidth = dockLayout ? DOCK_RESIZE_HANDLE_THICKNESS : 0.0f;
             const float resizeHandleX = windowPos.x + windowSize.x - resizeHandleWidth;
+
+            const float filterWidth = std::max(1.0f, resizeHandleX - ImGui::GetCursorScreenPos().x);
+            hierarchyFilter.Draw("##hierarchy_filter", filterWidth);
+            ImGui::Spacing();
+
             const ImVec2 contentRegion = ImGui::GetContentRegionAvail();
             const ImVec2 treePos = ImGui::GetCursorScreenPos();
             const ImVec2 treeSize{
@@ -900,6 +905,19 @@ namespace sage::editor
                         return false;
                     };
 
+                    // True if the entry at rootIndex or any of its descendants matches the
+                    // active search filter. Used to keep ancestors of a match visible.
+                    auto subtreePassesFilter = [this](const std::size_t rootIndex) {
+                        if (rootIndex >= hierarchyEntries.size()) return false;
+                        const int rootDepth = hierarchyEntries[rootIndex].depth;
+                        for (std::size_t i = rootIndex; i < hierarchyEntries.size(); ++i)
+                        {
+                            if (i != rootIndex && hierarchyEntries[i].depth <= rootDepth) break;
+                            if (hierarchyFilter.PassFilter(hierarchyEntries[i].displayName.c_str())) return true;
+                        }
+                        return false;
+                    };
+
                     auto drawInsertBeforeTarget = [&](const std::size_t entryIndex) {
                         const auto& entry = hierarchyEntries[entryIndex];
                         constexpr float targetHeight = 7.0f;
@@ -943,6 +961,13 @@ namespace sage::editor
 
                         const std::size_t entryIndex = index;
                         const auto& entry = hierarchyEntries[entryIndex];
+
+                        if (hierarchyFilter.IsActive() && !subtreePassesFilter(entryIndex))
+                        {
+                            skipSubtree(index, entry.depth);
+                            return;
+                        }
+
                         const bool hasChildren = entryIndex + 1 < hierarchyEntries.size() &&
                                                  hierarchyEntries[entryIndex + 1].depth > entry.depth;
                         const bool selected =
@@ -958,8 +983,9 @@ namespace sage::editor
 
                         if (hasChildren)
                         {
-                            if (focusedHierarchyEntity.has_value() &&
-                                subtreeContainsEntity(entryIndex, *focusedHierarchyEntity))
+                            if (hierarchyFilter.IsActive() ||
+                                (focusedHierarchyEntity.has_value() &&
+                                 subtreeContainsEntity(entryIndex, *focusedHierarchyEntity)))
                             {
                                 ImGui::SetNextItemOpen(true, ImGuiCond_Always);
                             }
@@ -1521,6 +1547,28 @@ namespace sage::editor
             return;
         }
 
+        assetFilter.Draw("##asset_filter", ImGui::GetContentRegionAvail().x);
+        ImGui::Spacing();
+
+        // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
+        std::vector<std::size_t> visibleAssets;
+        visibleAssets.reserve(assetEntries.size());
+        for (std::size_t i = 0; i < assetEntries.size(); ++i)
+        {
+            const auto& asset = assetEntries[i];
+            if (assetFilter.PassFilter(asset.displayName.c_str()) ||
+                assetFilter.PassFilter(asset.modelKey.c_str()))
+            {
+                visibleAssets.push_back(i);
+            }
+        }
+
+        if (visibleAssets.empty())
+        {
+            ImGui::TextDisabled("No assets match the filter");
+            return;
+        }
+
         const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
         const float columnPitch = ASSET_TILE_WIDTH + ImGui::GetStyle().ItemSpacing.x;
         const int columns = std::max(1, static_cast<int>(availableWidth / columnPitch));
@@ -1538,13 +1586,14 @@ namespace sage::editor
                 ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, ASSET_TILE_WIDTH);
             }
 
-            for (std::size_t i = 0; i < assetEntries.size(); ++i)
+            for (std::size_t slot = 0; slot < visibleAssets.size(); ++slot)
             {
-                if (i % static_cast<std::size_t>(columns) == 0)
+                const std::size_t i = visibleAssets[slot];
+                if (slot % static_cast<std::size_t>(columns) == 0)
                 {
                     ImGui::TableNextRow(ImGuiTableRowFlags_None, ASSET_TILE_HEIGHT);
                 }
-                ImGui::TableSetColumnIndex(static_cast<int>(i % static_cast<std::size_t>(columns)));
+                ImGui::TableSetColumnIndex(static_cast<int>(slot % static_cast<std::size_t>(columns)));
                 const auto& asset = assetEntries[i];
                 const bool selected = selectedAssetIndex.has_value() && *selectedAssetIndex == i;
 

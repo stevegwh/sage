@@ -3,6 +3,7 @@
 #include "EditorDockLayout.hpp"
 #include "EditorInspector.hpp"
 
+#include "imgui.h"
 #include "raylib.h"
 
 #include "entt/entt.hpp"
@@ -101,6 +102,8 @@ namespace sage
             std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
             BrowserTab currentTab = BrowserTab::Assets;
+            ImGuiTextFilter assetFilter;
+            ImGuiTextFilter hierarchyFilter;
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
