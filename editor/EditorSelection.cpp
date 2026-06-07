@@ -1,7 +1,7 @@
 #include "EditorSelection.hpp"
 
-#include "engine/EngineSystems.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/EngineSystems.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -30,8 +30,13 @@ namespace sage::editor
         return false;
     }
 
-    void EditorSelection::appendEffective(
-        const entt::entity entity, std::vector<entt::entity>& out) const
+    bool EditorSelection::coveredByAncestor(const entt::entity entity) const
+    {
+        return std::ranges::any_of(
+            selectedRoots, [this, entity](const entt::entity root) { return isAncestorOf(root, entity); });
+    }
+
+    void EditorSelection::appendWithChildren(const entt::entity entity, std::vector<entt::entity>& out) const
     {
         if (!isSelectable(entity)) return;
         if (std::ranges::find(out, entity) != out.end()) return;
@@ -39,15 +44,13 @@ namespace sage::editor
         out.push_back(entity);
         for (const auto child : sys->registry->get<sgTransform>(entity).GetChildren())
         {
-            appendEffective(child, out);
+            appendWithChildren(child, out);
         }
     }
 
     void EditorSelection::normalizeRoots()
     {
-        std::erase_if(selectedRoots, [this](const entt::entity entity) {
-            return !isSelectable(entity);
-        });
+        std::erase_if(selectedRoots, [this](const entt::entity entity) { return !isSelectable(entity); });
 
         std::vector<entt::entity> normalized;
         normalized.reserve(selectedRoots.size());
@@ -55,14 +58,12 @@ namespace sage::editor
         {
             if (std::ranges::find(normalized, entity) != normalized.end()) continue;
 
-            const bool coveredByAncestor = std::ranges::any_of(normalized, [this, entity](const entt::entity root) {
-                return isAncestorOf(root, entity);
-            });
-            if (coveredByAncestor) continue;
+            const bool covered = std::ranges::any_of(
+                normalized, [this, entity](const entt::entity root) { return isAncestorOf(root, entity); });
+            if (covered) continue;
 
-            std::erase_if(normalized, [this, entity](const entt::entity root) {
-                return isAncestorOf(entity, root);
-            });
+            std::erase_if(
+                normalized, [this, entity](const entt::entity root) { return isAncestorOf(entity, root); });
             normalized.push_back(entity);
         }
 
@@ -71,25 +72,10 @@ namespace sage::editor
 
     bool EditorSelection::Select(const entt::entity entity)
     {
-        return Select(entity, false);
-    }
-
-    bool EditorSelection::Select(const entt::entity entity, const bool additive)
-    {
-        return additive ? Toggle(entity) : [&]() {
-            if (!isSelectable(entity)) return false;
-            selectedRoots = {entity};
-            normalizeRoots();
-            return true;
-        }();
-    }
-
-    bool EditorSelection::Add(const entt::entity entity)
-    {
         if (!isSelectable(entity)) return false;
-        if (ContainsEffective(entity)) return true;
 
-        selectedRoots.push_back(entity);
+        selectedRoots = {entity};
+        selectionAnchor = entity;
         normalizeRoots();
         return true;
     }
@@ -97,19 +83,42 @@ namespace sage::editor
     bool EditorSelection::Toggle(const entt::entity entity)
     {
         if (!isSelectable(entity)) return false;
+        selectionAnchor = entity;
 
+        // Already a selected root: toggle it off.
         if (const auto it = std::ranges::find(selectedRoots, entity); it != selectedRoots.end())
         {
             selectedRoots.erase(it);
             return true;
         }
 
-        return Add(entity);
+        // Already covered by a selected ancestor: nothing to add.
+        if (coveredByAncestor(entity)) return true;
+
+        selectedRoots.push_back(entity);
+        normalizeRoots();
+        return true;
+    }
+
+    bool EditorSelection::SelectRange(const std::vector<entt::entity>& orderedRange)
+    {
+        std::vector<entt::entity> next;
+        next.reserve(orderedRange.size());
+        for (const auto entity : orderedRange)
+        {
+            if (isSelectable(entity)) next.push_back(entity);
+        }
+        if (next.empty()) return false;
+
+        selectedRoots = std::move(next);
+        normalizeRoots();
+        return true;
     }
 
     void EditorSelection::Clear()
     {
         selectedRoots.clear();
+        selectionAnchor = entt::null;
     }
 
     bool EditorSelection::HasSelection() const
@@ -117,55 +126,36 @@ namespace sage::editor
         return !selectedRoots.empty();
     }
 
-    std::optional<entt::entity> EditorSelection::Current() const
+    std::optional<entt::entity> EditorSelection::Active() const
     {
         if (selectedRoots.empty()) return std::nullopt;
         const auto entity = selectedRoots.back();
         return isSelectable(entity) ? std::optional{entity} : std::nullopt;
     }
 
-    std::optional<entt::entity> EditorSelection::ActiveTransformEntity() const
-    {
-        return Current();
-    }
-
-    const std::vector<entt::entity>& EditorSelection::Roots() const
-    {
-        return selectedRoots;
-    }
-
-    std::vector<entt::entity> EditorSelection::TransformTargets() const
-    {
-        std::vector<entt::entity> targets;
-        targets.reserve(selectedRoots.size());
-        for (const auto entity : selectedRoots)
-        {
-            if (isSelectable(entity)) targets.push_back(entity);
-        }
-        return targets;
-    }
-
-    std::vector<entt::entity> EditorSelection::EffectiveEntities() const
+    std::vector<entt::entity> EditorSelection::Selected() const
     {
         std::vector<entt::entity> result;
+        result.reserve(selectedRoots.size());
         for (const auto entity : selectedRoots)
         {
-            appendEffective(entity, result);
+            if (isSelectable(entity)) result.push_back(entity);
         }
         return result;
     }
 
-    bool EditorSelection::ContainsRoot(const entt::entity entity) const
+    std::vector<entt::entity> EditorSelection::SelectedWithChildren() const
     {
-        return std::ranges::find(selectedRoots, entity) != selectedRoots.end();
+        std::vector<entt::entity> result;
+        for (const auto entity : selectedRoots)
+        {
+            appendWithChildren(entity, result);
+        }
+        return result;
     }
 
-    bool EditorSelection::ContainsEffective(const entt::entity entity) const
+    entt::entity EditorSelection::Anchor() const
     {
-        for (const auto root : selectedRoots)
-        {
-            if (root == entity || isAncestorOf(root, entity)) return true;
-        }
-        return false;
+        return isSelectable(selectionAnchor) ? selectionAnchor : entt::null;
     }
 } // namespace sage::editor

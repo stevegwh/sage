@@ -976,9 +976,7 @@ namespace sage::editor
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                         {
-                            sceneSelectionRequest = SceneSelectionRequest{
-                                .entity = entry.entity,
-                                .additive = ImGui::GetIO().KeyShift};
+                            sceneSelectionRequest = makeSceneSelectionRequest(entry.entity);
                         }
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -1301,11 +1299,55 @@ namespace sage::editor
         selectedAssetIndex = index;
     }
 
+    EditorGui::SceneSelectionRequest EditorGui::makeSceneSelectionRequest(const entt::entity clicked) const
+    {
+        const ImGuiIO& io = ImGui::GetIO();
+
+        // Shift selects every entity in the displayed tree between the anchor and
+        // the clicked entity, mirroring file-explorer range selection.
+        if (io.KeyShift && hierarchySelectionAnchor != entt::null)
+        {
+            const auto indexOf = [this](const entt::entity entity) -> std::optional<std::size_t> {
+                for (std::size_t i = 0; i < hierarchyEntries.size(); ++i)
+                {
+                    if (hierarchyEntries[i].entity == entity) return i;
+                }
+                return std::nullopt;
+            };
+
+            const auto anchorIndex = indexOf(hierarchySelectionAnchor);
+            const auto clickedIndex = indexOf(clicked);
+            if (anchorIndex.has_value() && clickedIndex.has_value())
+            {
+                const auto [lo, hi] = std::minmax(*anchorIndex, *clickedIndex);
+                std::vector<entt::entity> rangeEntities;
+                rangeEntities.reserve(hi - lo + 1);
+                for (std::size_t i = lo; i <= hi; ++i)
+                {
+                    rangeEntities.push_back(hierarchyEntries[i].entity);
+                }
+                return SceneSelectionRequest{
+                    .entity = clicked, .mode = SceneSelectionMode::Range, .rangeEntities = std::move(rangeEntities)};
+            }
+        }
+
+        // Alt/meta toggles a single entity into or out of the selection.
+        if (io.KeyAlt)
+        {
+            return SceneSelectionRequest{.entity = clicked, .mode = SceneSelectionMode::Toggle};
+        }
+
+        return SceneSelectionRequest{.entity = clicked, .mode = SceneSelectionMode::Replace};
+    }
+
     void EditorGui::SetHierarchy(
-        const std::vector<SceneObjectEntry>& entries, std::vector<entt::entity> selectedEntities)
+        const std::vector<SceneObjectEntry>& entries,
+        std::vector<entt::entity> selectedEntities,
+        const entt::entity selectionAnchor)
     {
         hierarchyEntries = entries;
         selectedSceneEntities = std::move(selectedEntities);
+        hierarchySelectionAnchor = selectionAnchor;
     }
 
     std::optional<entt::entity> EditorGui::ConsumeHierarchyContextEntity()

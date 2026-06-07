@@ -142,7 +142,7 @@ namespace sage::editor
 
     void EditorSelectState::ClearSceneEntitySelection(EditorModeStateMachine& machine)
     {
-        machine.clearSelection();
+        machine.selection().Clear();
         if (machine.IsEditMode())
         {
             machine.ChangeState(EditorSelectState{});
@@ -154,7 +154,31 @@ namespace sage::editor
     void EditorSelectState::SelectSceneEntity(
         EditorModeStateMachine& machine, const entt::entity entity, const bool additive)
     {
-        if (!machine.selectSelection(entity, additive)) return;
+        const bool changed = additive ? machine.selection().Toggle(entity) : machine.selection().Select(entity);
+        if (!changed) return;
+        machine.ChangeState(EditorSelectState{});
+        machine.hideDeleteConfirmation();
+        machine.refreshSceneWindows();
+    }
+
+    void EditorSelectState::SelectSceneFromHierarchy(
+        EditorModeStateMachine& machine, const EditorGui::SceneSelectionRequest& request)
+    {
+        bool changed = false;
+        switch (request.mode)
+        {
+        case EditorGui::SceneSelectionMode::Replace:
+            changed = machine.selection().Select(request.entity);
+            break;
+        case EditorGui::SceneSelectionMode::Toggle:
+            changed = machine.selection().Toggle(request.entity);
+            break;
+        case EditorGui::SceneSelectionMode::Range:
+            changed = machine.selection().SelectRange(request.rangeEntities);
+            break;
+        }
+        if (!changed) return;
+
         machine.ChangeState(EditorSelectState{});
         machine.hideDeleteConfirmation();
         machine.refreshSceneWindows();
@@ -162,8 +186,8 @@ namespace sage::editor
 
     void EditorSelectState::RequestDeleteSelectedEntity(EditorModeStateMachine& machine)
     {
-        if (!machine.hasSelection()) return;
-        if (machine.transformTargets().empty())
+        if (!machine.selection().HasSelection()) return;
+        if (machine.selection().Selected().empty())
         {
             ClearSceneEntitySelection(machine);
             return;
@@ -179,14 +203,14 @@ namespace sage::editor
 
     void EditorSelectState::ConfirmDeleteSelectedEntity(EditorModeStateMachine& machine)
     {
-        const auto selectedEntities = machine.selectionRoots();
+        const auto selectedEntities = machine.selection().Selected();
         if (selectedEntities.empty())
         {
             machine.hideDeleteConfirmation();
             return;
         }
 
-        machine.clearSelection();
+        machine.selection().Clear();
         machine.hideDeleteConfirmation();
         machine.deleteEntitiesAndChildren(selectedEntities);
         machine.refreshSceneWindows();
@@ -195,7 +219,7 @@ namespace sage::editor
 
     void EditorSelectState::BeginEditSelectedTransform(EditorModeStateMachine& machine)
     {
-        const auto selectedEntities = machine.transformTargets();
+        const auto selectedEntities = machine.selection().Selected();
         if (selectedEntities.empty())
         {
             ClearSceneEntitySelection(machine);
@@ -335,7 +359,7 @@ namespace sage::editor
         }
         if (!entity.has_value()) return false;
 
-        (void)machine.selectSelection(*entity);
+        (void)machine.selection().Select(*entity);
         machine.refreshSceneWindows();
         machine.focusHierarchyOnEntity(*entity);
         machine.ChangeState(EditorSelectState{});
@@ -375,7 +399,7 @@ namespace sage::editor
     {
         if (entities.empty())
         {
-            entities = machine.transformTargets();
+            entities = machine.selection().Selected();
         }
 
         std::erase_if(entities, [&machine](const entt::entity entity) {
@@ -577,7 +601,7 @@ namespace sage::editor
 
     void EditorEditState::ClearSceneEntitySelection(EditorModeStateMachine& machine)
     {
-        machine.clearSelection();
+        machine.selection().Clear();
         machine.ChangeState(EditorSelectState{});
         machine.hideDeleteConfirmation();
         machine.refreshSceneWindows();
@@ -653,39 +677,14 @@ namespace sage::editor
             GetMousePosition(), scene.placementController->GridSurfaceEntity());
     }
 
-    void EditorModeStateMachine::clearSelection()
+    EditorSelection& EditorModeStateMachine::selection()
     {
-        scene.selection->Clear();
+        return *scene.selection;
     }
 
-    bool EditorModeStateMachine::selectSelection(const entt::entity entity, const bool additive)
+    const EditorSelection& EditorModeStateMachine::selection() const
     {
-        return scene.selection->Select(entity, additive);
-    }
-
-    bool EditorModeStateMachine::hasSelection() const
-    {
-        return scene.selection->HasSelection();
-    }
-
-    std::optional<entt::entity> EditorModeStateMachine::activeTransformEntity() const
-    {
-        return scene.selection->ActiveTransformEntity();
-    }
-
-    std::vector<entt::entity> EditorModeStateMachine::selectionRoots() const
-    {
-        return scene.selection->TransformTargets();
-    }
-
-    std::vector<entt::entity> EditorModeStateMachine::selectionEffectiveEntities() const
-    {
-        return scene.selection->EffectiveEntities();
-    }
-
-    std::vector<entt::entity> EditorModeStateMachine::transformTargets() const
-    {
-        return scene.selection->TransformTargets();
+        return *scene.selection;
     }
 
     void EditorModeStateMachine::hideDeleteConfirmation() const
@@ -799,6 +798,12 @@ namespace sage::editor
     {
         ChangeState(EditorSelectState{});
         std::get<EditorSelectState>(currentState).SelectSceneEntity(*this, entity, additive);
+    }
+
+    void EditorModeStateMachine::SelectSceneFromHierarchy(const EditorGui::SceneSelectionRequest& request)
+    {
+        ChangeState(EditorSelectState{});
+        std::get<EditorSelectState>(currentState).SelectSceneFromHierarchy(*this, request);
     }
 
     bool EditorModeStateMachine::HandleEscapePressed()

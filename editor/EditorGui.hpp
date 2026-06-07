@@ -43,10 +43,19 @@ namespace sage
                 entt::entity insertBefore = entt::null;
             };
 
+            enum class SceneSelectionMode
+            {
+                Replace, // plain click: select only the clicked entity
+                Toggle,  // alt/meta click: add or remove a single entity
+                Range    // shift click: select every entity between the anchor and the clicked entity
+            };
+
             struct SceneSelectionRequest
             {
                 entt::entity entity = entt::null;
-                bool additive = false;
+                SceneSelectionMode mode = SceneSelectionMode::Replace;
+                // Populated for Range mode: the ordered entities spanning anchor..clicked.
+                std::vector<entt::entity> rangeEntities;
             };
 
             struct FlatpackEntry
@@ -96,6 +105,7 @@ namespace sage
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
             std::vector<entt::entity> selectedSceneEntities;
+            entt::entity hierarchySelectionAnchor = entt::null;
             std::optional<entt::entity> focusedHierarchyEntity;
             std::optional<entt::entity> pendingHierarchyContextEntity;
             std::string inspectorSelectedEntity = "None";
@@ -115,6 +125,9 @@ namespace sage
             void drawAssetDefaultsControls();
             void drawAssetGrid();
             void drawFlatpackGrid();
+            // Builds a selection request for a hierarchy click, reading the active
+            // keyboard modifiers (shift = range, alt/meta = toggle single).
+            [[nodiscard]] SceneSelectionRequest makeSceneSelectionRequest(entt::entity clicked) const;
 
           public:
             void StartImGui();
@@ -133,7 +146,9 @@ namespace sage
             void SetSelectedAsset(std::optional<std::size_t> index);
             void SetFlatpacks(std::vector<FlatpackEntry> entries);
             void SetHierarchy(
-                const std::vector<SceneObjectEntry>& entries, std::vector<entt::entity> selectedEntities);
+                const std::vector<SceneObjectEntry>& entries,
+                std::vector<entt::entity> selectedEntities,
+                entt::entity selectionAnchor);
             void FocusHierarchyOnEntity(entt::entity entity);
             [[nodiscard]] std::optional<entt::entity> ConsumeHierarchyContextEntity();
             void SetInspector(

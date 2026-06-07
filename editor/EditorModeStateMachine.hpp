@@ -22,6 +22,7 @@ namespace sage::editor
 {
     class EditorModeStateMachine;
     class EditorPlacementController;
+    class EditorSelection;
     class EditorTransformEditor;
 
     struct EditorSelectState
@@ -37,6 +38,8 @@ namespace sage::editor
         bool SelectSceneEntityUnderCursor(EditorModeStateMachine& machine);
         void ClearSceneEntitySelection(EditorModeStateMachine& machine);
         void SelectSceneEntity(EditorModeStateMachine& machine, entt::entity entity, bool additive);
+        void SelectSceneFromHierarchy(
+            EditorModeStateMachine& machine, const EditorGui::SceneSelectionRequest& request);
         void RequestDeleteSelectedEntity(EditorModeStateMachine& machine);
         void CancelDeleteSelectedEntity(EditorModeStateMachine& machine);
         void ConfirmDeleteSelectedEntity(EditorModeStateMachine& machine);
@@ -112,13 +115,8 @@ namespace sage::editor
         [[nodiscard]] bool isDeleteConfirmationVisible() const;
         [[nodiscard]] EditorGui::DeleteConfirmationAction consumeDeleteConfirmationAction();
         [[nodiscard]] std::optional<entt::entity> pickSceneEntityUnderCursor() const;
-        void clearSelection();
-        [[nodiscard]] bool selectSelection(entt::entity entity, bool additive = false);
-        [[nodiscard]] bool hasSelection() const;
-        [[nodiscard]] std::optional<entt::entity> activeTransformEntity() const;
-        [[nodiscard]] std::vector<entt::entity> selectionRoots() const;
-        [[nodiscard]] std::vector<entt::entity> selectionEffectiveEntities() const;
-        [[nodiscard]] std::vector<entt::entity> transformTargets() const;
+        [[nodiscard]] EditorSelection& selection();
+        [[nodiscard]] const EditorSelection& selection() const;
         void hideDeleteConfirmation() const;
         void showDeleteConfirmationForSelection() const;
         void deleteEntityAndChildren(entt::entity entity) const;
@@ -153,6 +151,7 @@ namespace sage::editor
         void SelectPlaceable(std::size_t index);
         void SelectFlatpack(std::filesystem::path path);
         void SelectSceneEntity(entt::entity entity, bool additive = false);
+        void SelectSceneFromHierarchy(const EditorGui::SceneSelectionRequest& request);
         bool HandleEscapePressed();
         void OnTransformApplied(entt::entity entity);
 

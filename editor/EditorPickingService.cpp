@@ -14,6 +14,17 @@
 
 namespace sage::editor
 {
+    namespace
+    {
+        // Editor-only convenience: the large ground/terrain mesh is tagged with "_MAPBASE_"
+        // in its transform name (see EditorMapLoader). It almost always sits under the cursor,
+        // so we deprioritise it during picking to avoid grabbing it instead of props on top.
+        bool isMapBaseTransform(const sgTransform& transform)
+        {
+            return transform.name.find("_MAPBASE_") != std::string::npos;
+        }
+    } // namespace
+
     EditorPickingService::EditorPickingService(EngineSystems* _sys) : sys(_sys)
     {
     }
@@ -68,7 +79,8 @@ namespace sage::editor
                 collision.rlCollision = closestMeshHit;
             }
 
-            if (IsNavigationLayer(collision.collisionLayer))
+            if (IsNavigationLayer(collision.collisionLayer) ||
+                isMapBaseTransform(sys->registry->get<sgTransform>(entity)))
             {
                 fallbackHits.push_back(collision);
             }

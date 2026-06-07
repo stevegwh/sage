@@ -203,7 +203,7 @@ namespace sage
 
     std::string EditorScene::describeSelectedSceneEntity() const
     {
-        const auto entities = selection->TransformTargets();
+        const auto entities = selection->Selected();
         if (entities.empty()) return "None";
         if (entities.size() == 1) return hierarchyTree->GetEntityName(entities.front());
         return std::format("{} selected", entities.size());
@@ -248,18 +248,19 @@ namespace sage
 
     void EditorScene::refreshSceneWindows() const
     {
-        const auto selectedRoots = selection->TransformTargets();
+        const auto selectedRoots = selection->Selected();
         auto inspectedComponents = !selectedRoots.empty()
                                        ? inspectorRegistry.Inspect(*sys->registry, selectedRoots)
                                        : std::vector<editor::InspectedComponent>{};
 
-        gui->SetHierarchy(hierarchyTree->CollectSceneObjectEntries(), selection->EffectiveEntities());
+        gui->SetHierarchy(
+            hierarchyTree->CollectSceneObjectEntries(), selection->SelectedWithChildren(), selection->Anchor());
         gui->SetInspector(describeSelectedSceneEntity(), inspectedComponents);
     }
 
     void EditorScene::focusSelectedObject() const
     {
-        const auto selectedEntities = selection->EffectiveEntities();
+        const auto selectedEntities = selection->SelectedWithChildren();
         if (selectedEntities.empty()) return;
 
         std::optional<BoundingBox> combinedBounds;
@@ -281,7 +282,7 @@ namespace sage
         }
         else
         {
-            const auto primary = selection->ActiveTransformEntity();
+            const auto primary = selection->Active();
             if (!primary.has_value()) return;
             target = {.position = sys->registry->get<sgTransform>(*primary).GetWorldPos()};
         }
@@ -293,7 +294,7 @@ namespace sage
 
     void EditorScene::focusSelectedObjectInHierarchy() const
     {
-        const auto selectedEntity = selection->ActiveTransformEntity();
+        const auto selectedEntity = selection->Active();
         if (!selectedEntity.has_value()) return;
         gui->FocusHierarchyOnEntity(*selectedEntity);
     }
@@ -353,7 +354,7 @@ namespace sage
         sys->lightSubSystem->DrawDebugLights();
         placementController->DrawGridAndAxes();
         editorModes->Draw3D();
-        for (const auto entity : selection->EffectiveEntities())
+        for (const auto entity : selection->SelectedWithChildren())
         {
             if (sys->registry->valid(entity) && sys->registry->any_of<Collideable>(entity))
             {
@@ -860,7 +861,7 @@ namespace sage
             [this](const std::size_t index) { editorModes->SelectPlaceable(index); },
             [this](std::filesystem::path path) { editorModes->SelectFlatpack(std::move(path)); },
             [this](const editor::EditorGui::SceneSelectionRequest& request) {
-                editorModes->SelectSceneEntity(request.entity, request.additive);
+                editorModes->SelectSceneFromHierarchy(request);
             },
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
