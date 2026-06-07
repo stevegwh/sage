@@ -21,6 +21,7 @@
 #include "engine/UserInput.hpp"
 
 #include "imgui.h"
+
 #include "imfilebrowser.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -29,6 +30,7 @@
 #include <algorithm>
 #include <format>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 namespace sage
@@ -42,7 +44,6 @@ namespace sage
         constexpr const char* DEFAULT_SAVE_FILENAME = "untitled.map";
         constexpr const char* DEFAULT_MAP_BASE_NAME = "_MAPBASE_EDITOR_BASE";
         constexpr const char* DEFAULT_MAP_BASE_MODEL_KEY = "primitive_plane";
-        constexpr const char* DEFAULT_MAP_BASE_CATEGORY = "Map";
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
         constexpr float DEFAULT_MAP_BASE_HALF_HEIGHT = 0.02f;
         constexpr float DEFAULT_LIGHT_HEIGHT_OFFSET = 6.0f;
@@ -66,18 +67,6 @@ namespace sage
             return {.position = center, .radius = std::max(1.0f, Vector3Length(halfSize))};
         }
 
-        void applyInspectorEditMode(
-            std::vector<editor::InspectedComponent>& inspectedComponents, const bool editMode)
-        {
-            for (auto& component : inspectedComponents)
-            {
-                for (auto& field : component.fields)
-                {
-                    field.editable = field.editable && editMode;
-                }
-            }
-        }
-
         std::filesystem::path ensureMapExtension(std::filesystem::path path)
         {
             if (path.extension() != ".map")
@@ -87,11 +76,21 @@ namespace sage
             return path;
         }
 
-        std::filesystem::path defaultBrowserDirectory(const std::filesystem::path& currentMapPath)
+        std::filesystem::path defaultBrowserDirectory(
+            const std::filesystem::path& currentMapPath, const EditorSettings* editorSettings)
         {
             if (!currentMapPath.empty() && !currentMapPath.parent_path().empty())
             {
                 return currentMapPath.parent_path();
+            }
+
+            if (editorSettings != nullptr && !editorSettings->lastVisitedDirectory.empty())
+            {
+                const std::filesystem::path lastVisited{editorSettings->lastVisitedDirectory};
+                if (std::filesystem::is_directory(lastVisited))
+                {
+                    return lastVisited;
+                }
             }
 
             const std::filesystem::path resources{"resources"};
@@ -109,9 +108,9 @@ namespace sage
             return stem.empty() ? UNTITLED_SCENE_NAME : stem;
         }
 
-        bool isMapBaseRenderable(const Renderable& renderable)
+        bool isMapBaseRenderable(const sgTransform& transform)
         {
-            return renderable.GetName().find("_MAPBASE_") != std::string::npos;
+            return transform.name.find("_MAPBASE_") != std::string::npos;
         }
 
         bool modelKeyAvailable(const std::string& key)
@@ -164,7 +163,7 @@ namespace sage
     std::string EditorScene::describeSelectedSceneEntity() const
     {
         const auto entity = selection->ActiveTransformEntity();
-        return entity.has_value() ? hierarchyTree->DescribeEntity(*entity) : "None";
+        return entity.has_value() ? hierarchyTree->GetEntityName(*entity) : "None";
     }
 
     void EditorScene::applyLitShaderToLoadedRenderables() const
@@ -187,18 +186,9 @@ namespace sage
             if (!sys->registry->any_of<sgTransform>(entity))
             {
                 const auto position = sys->registry->get<Light>(entity).position;
-                sys->registry->emplace<sgTransform>(entity).position.world = position;
-            }
-            if (!sys->registry->any_of<editor::EditorObjectDescriptor>(entity))
-            {
-                sys->registry->emplace<editor::EditorObjectDescriptor>(
-                    entity,
-                    editor::EditorObjectDescriptor{
-                        .name = lightLabel(entity),
-                        .category = "Light",
-                        .selectable = true,
-                        .visibleInHierarchy = true,
-                        .locked = false});
+                auto& transform = sys->registry->emplace<sgTransform>(entity);
+                transform.name = lightLabel(entity);
+                transform.position.world = position;
             }
         }
     }
@@ -219,7 +209,6 @@ namespace sage
         auto inspectedComponents = activeEntity.has_value()
                                        ? inspectorRegistry.Inspect(*sys->registry, *activeEntity)
                                        : std::vector<editor::InspectedComponent>{};
-        applyInspectorEditMode(inspectedComponents, isEditState());
 
         gui->SetHierarchy(hierarchyTree->CollectSceneObjectEntries(), activeEntity);
         gui->SetInspector(describeSelectedSceneEntity(), inspectedComponents);
@@ -278,11 +267,22 @@ namespace sage
         {
             sys->camera->ScrollEnable();
         }
+
+        const bool uiBlocksCameraControls = !viewportFullscreen && gui && gui->WantsKeyboardCapture();
+        if (uiBlocksCameraControls)
+        {
+            sys->camera->LockInput();
+        }
+        else if (!transformEditor || !transformEditor->IsGizmoDragging())
+        {
+            sys->camera->UnlockInput();
+        }
+
         sys->camera->Update();
         sys->cursor->Update();
         editorModes->RefreshPlacementTarget();
         // TODO: Should be part of some mode
-        if (!(gui && gui->WantsKeyboardCapture()))
+        if (!uiBlocksCameraControls)
         {
             if (IsKeyPressed(KEY_EQUAL))
             {
@@ -325,8 +325,12 @@ namespace sage
         if (viewportFullscreen) return;
         gui->StartImGui();
         drawMainMenuBar();
+        const bool inspectorChanged = gui->DrawInspectorWindow();
+        if (inspectorChanged)
+        {
+            refreshSceneWindows();
+        }
         gui->DrawHierarchyWindow();
-        gui->DrawInspectorWindow();
         gui->DrawAssetDrawerWindow();
         drawFileBrowsers();
         drawHierarchyContextMenu();
@@ -365,7 +369,7 @@ namespace sage
     {
         if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
 
-        const auto safeName = hierarchyTree ? hierarchyTree->DescribeEntity(entity)
+        const auto safeName = hierarchyTree ? hierarchyTree->GetEntityName(entity)
                                             : std::format("entity_{}", entt::to_integral(entity));
         const std::filesystem::path flatpacksDir{"resources/flatpacks"};
         const auto outputPath = flatpacksDir / (safeName + ".flatpack");
@@ -463,40 +467,39 @@ namespace sage
     void EditorScene::openLoadMapBrowser() const
     {
         if (!loadMapBrowser) return;
-        loadMapBrowser->SetDirectory(defaultBrowserDirectory(currentMapPath));
+        loadMapBrowser->SetDirectory(browserDirectory());
         loadMapBrowser->Open();
     }
 
     void EditorScene::openSaveMapBrowser() const
     {
         if (!saveMapBrowser) return;
-        saveMapBrowser->SetDirectory(defaultBrowserDirectory(currentMapPath));
+        saveMapBrowser->SetDirectory(browserDirectory());
         saveMapBrowser->SetInputName(
             currentMapPath.empty() ? DEFAULT_SAVE_FILENAME : currentMapPath.filename().string());
         saveMapBrowser->Open();
     }
 
+    std::filesystem::path EditorScene::browserDirectory() const
+    {
+        return defaultBrowserDirectory(currentMapPath, editorSettings);
+    }
+
     void EditorScene::addLight() const
     {
-        Vector3 position = Vector3Add(sys->camera->getRaylibCam()->target, {0.0f, DEFAULT_LIGHT_HEIGHT_OFFSET, 0.0f});
-        if (const auto snappedPosition = placementController->SnappedPlacementPosition(); snappedPosition.has_value())
+        Vector3 position =
+            Vector3Add(sys->camera->getRaylibCam()->target, {0.0f, DEFAULT_LIGHT_HEIGHT_OFFSET, 0.0f});
+        if (const auto snappedPosition = placementController->SnappedPlacementPosition();
+            snappedPosition.has_value())
         {
             position = Vector3Add(*snappedPosition, {0.0f, DEFAULT_LIGHT_HEIGHT_OFFSET, 0.0f});
         }
 
         const auto entity = sys->registry->create();
         sys->registry->emplace<editor::EditorMapEntity>(entity);
-        sys->registry->emplace<editor::EditorObjectDescriptor>(
-            entity,
-            editor::EditorObjectDescriptor{
-                .name = lightLabel(entity),
-                .category = "Light",
-                .selectable = true,
-                .visibleInHierarchy = true,
-                .locked = false});
-
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.position.world = position;
+        transform.name = lightLabel(entity);
 
         sys->registry->emplace<Light>(
             entity,
@@ -526,6 +529,7 @@ namespace sage
         if (!editor::LoadMap(sys->registry, pathString.c_str())) return;
         currentMapPath = selectedPath;
         SetSceneName(sceneNameFromPath(currentMapPath));
+        rememberCurrentMapPath();
         refreshAfterMapLoad();
     }
 
@@ -544,8 +548,48 @@ namespace sage
         ensureDefaultMapBase();
         currentMapPath = ensureMapExtension(path);
         const auto pathString = currentMapPath.string();
-        editor::SaveMap(*sys->registry, pathString.c_str());
+        std::vector<entt::entity> hierarchyOrder;
+        if (hierarchyTree)
+        {
+            const auto entries = hierarchyTree->CollectSceneObjectEntries();
+            hierarchyOrder.reserve(entries.size());
+            for (const auto& entry : entries)
+            {
+                hierarchyOrder.push_back(entry.entity);
+            }
+        }
+        editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder);
         SetSceneName(sceneNameFromPath(currentMapPath));
+        rememberCurrentMapPath();
+    }
+
+    void EditorScene::restoreLastOpenedMap() const
+    {
+        if (editorSettings == nullptr || editorSettings->lastOpenedMap.empty()) return;
+
+        const std::filesystem::path path{editorSettings->lastOpenedMap};
+        if (!std::filesystem::is_regular_file(path))
+        {
+            std::cerr << "WARNING: Last opened editor map no longer exists: " << path << std::endl;
+            return;
+        }
+
+        loadMap(path);
+    }
+
+    void EditorScene::rememberCurrentMapPath() const
+    {
+        if (editorSettings == nullptr || currentMapPath.empty()) return;
+
+        editorSettings->lastOpenedMap = currentMapPath.string();
+        if (!currentMapPath.parent_path().empty())
+        {
+            editorSettings->lastVisitedDirectory = currentMapPath.parent_path().string();
+        }
+        if (onEditorSettingsChanged)
+        {
+            onEditorSettingsChanged();
+        }
     }
 
     void EditorScene::clearCurrentMap() const
@@ -580,28 +624,19 @@ namespace sage
 
     void EditorScene::ensureDefaultMapBase() const
     {
+        // TODO: What?
         bool hasMapBase = false;
-        const auto existingBaseView = sys->registry->view<editor::EditorMapEntity, Renderable, Collideable>();
+        const auto existingBaseView =
+            sys->registry->view<editor::EditorMapEntity, sgTransform, Renderable, Collideable>();
         for (const auto entity : existingBaseView)
         {
+            auto& transform = existingBaseView.get<sgTransform>(entity);
+            if (!isMapBaseRenderable(transform)) continue;
             auto& renderable = existingBaseView.get<Renderable>(entity);
-            if (!isMapBaseRenderable(renderable)) continue;
-
             hasMapBase = true;
             if (!sys->registry->any_of<editor::EditorMapBase>(entity))
             {
                 sys->registry->emplace<editor::EditorMapBase>(entity);
-            }
-            if (!sys->registry->any_of<editor::EditorObjectDescriptor>(entity))
-            {
-                sys->registry->emplace<editor::EditorObjectDescriptor>(
-                    entity,
-                    editor::EditorObjectDescriptor{
-                        .name = renderable.GetName(),
-                        .category = DEFAULT_MAP_BASE_CATEGORY,
-                        .selectable = false,
-                        .visibleInHierarchy = true,
-                        .locked = true});
             }
             if (!sys->registry->any_of<editor::AssetReference>(entity))
             {
@@ -611,49 +646,39 @@ namespace sage
                         entity, editor::AssetReference{.assetKey = model->GetKey()});
                 }
             }
-
             auto& collideable = existingBaseView.get<Collideable>(entity);
             collideable.SetCollisionLayer(collision_layers::Background);
             collideable.isStatic = true;
             collideable.blocksNavigation = false;
             collideable.active = true;
-            renderable.active = true;
+            renderable.active = false;
         }
 
         if (hasMapBase) return;
 
         if (!modelKeyAvailable(DEFAULT_MAP_BASE_MODEL_KEY))
         {
-            std::cerr << "ERROR: Cannot create default map base. Missing model key: "
-                      << DEFAULT_MAP_BASE_MODEL_KEY << std::endl;
+            std::cerr << "ERROR: Cannot create default map base. Missing model key: " << DEFAULT_MAP_BASE_MODEL_KEY
+                      << std::endl;
             return;
         }
 
         const auto entity = sys->registry->create();
         sys->registry->emplace<editor::EditorMapEntity>(entity);
         sys->registry->emplace<editor::EditorMapBase>(entity);
-        sys->registry->emplace<editor::EditorObjectDescriptor>(
-            entity,
-            editor::EditorObjectDescriptor{
-                .name = DEFAULT_MAP_BASE_NAME,
-                .category = DEFAULT_MAP_BASE_CATEGORY,
-                .selectable = false,
-                .visibleInHierarchy = true,
-                .locked = true});
         sys->registry->emplace<editor::AssetReference>(
             entity, editor::AssetReference{.assetKey = DEFAULT_MAP_BASE_MODEL_KEY});
 
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.scale.world = {DEFAULT_MAP_BASE_SIZE, 1.0f, DEFAULT_MAP_BASE_SIZE};
+        transform.name = DEFAULT_MAP_BASE_NAME;
 
         auto model = ResourceManager::GetInstance().GetModelView(DEFAULT_MAP_BASE_MODEL_KEY);
         auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), MatrixIdentity());
-        renderable.SetName(DEFAULT_MAP_BASE_NAME);
-        renderable.active = true;
+        renderable.active = false;
 
         const BoundingBox localBounds = {
-            {-0.5f, -DEFAULT_MAP_BASE_HALF_HEIGHT, -0.5f},
-            {0.5f, DEFAULT_MAP_BASE_HALF_HEIGHT, 0.5f}};
+            {-0.5f, -DEFAULT_MAP_BASE_HALF_HEIGHT, -0.5f}, {0.5f, DEFAULT_MAP_BASE_HALF_HEIGHT, 0.5f}};
         auto& collideable = sys->registry->emplace<Collideable>(entity, localBounds, transform.GetMatrixNoRot());
         collideable.SetCollisionLayer(collision_layers::Background);
         collideable.isStatic = true;
@@ -683,11 +708,34 @@ namespace sage
         refreshSceneWindows();
     }
 
-    void EditorScene::reparentEntity(const entt::entity dragged, const entt::entity newParent) const
+    void EditorScene::moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const
     {
+        const auto dragged = request.dragged;
+        auto newParent = request.newParent;
+        auto insertBefore = request.insertBefore;
+
         if (!sys->registry->valid(dragged) || !sys->registry->any_of<sgTransform>(dragged)) return;
-        if (!sys->registry->valid(newParent) || !sys->registry->any_of<sgTransform>(newParent)) return;
+        if (newParent != entt::null &&
+            (!sys->registry->valid(newParent) || !sys->registry->any_of<sgTransform>(newParent)))
+        {
+            return;
+        }
         if (dragged == newParent) return;
+
+        if (insertBefore != entt::null)
+        {
+            if (!sys->registry->valid(insertBefore) || !sys->registry->any_of<sgTransform>(insertBefore) ||
+                insertBefore == dragged)
+            {
+                return;
+            }
+
+            const auto insertParent = sys->registry->get<sgTransform>(insertBefore).GetParent();
+            if (insertParent != newParent)
+            {
+                return;
+            }
+        }
 
         // Refuse cycles: walk newParent's ancestor chain. If dragged appears, the
         // requested parenting would put dragged below itself.
@@ -698,7 +746,8 @@ namespace sage
             cur = sys->registry->get<sgTransform>(cur).GetParent();
         }
 
-        sys->transformSystem->SetParent(dragged, newParent);
+        sys->transformSystem->SetParent(dragged, newParent, insertBefore);
+        hierarchyTree->NoteHierarchyMove(dragged, newParent, insertBefore);
         refreshSceneWindows();
     }
 
@@ -722,7 +771,14 @@ namespace sage
         gui->SetSceneName(sceneName);
     }
 
-    EditorScene::EditorScene(EngineSystems* _sys, editor::EditorDockLayout* dockLayout) : sys(_sys)
+    EditorScene::EditorScene(
+        EngineSystems* _sys,
+        editor::EditorDockLayout* dockLayout,
+        EditorSettings* _editorSettings,
+        std::function<void()> _onEditorSettingsChanged)
+        : sys(_sys),
+          editorSettings(_editorSettings),
+          onEditorSettingsChanged(std::move(_onEditorSettingsChanged))
     {
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
         assetCatalog =
@@ -756,23 +812,22 @@ namespace sage
             [this](const std::size_t index) { editorModes->SelectPlaceable(index); },
             [this](std::filesystem::path path) { editorModes->SelectFlatpack(std::move(path)); },
             [this](const entt::entity entity) { editorModes->SelectSceneEntity(entity); },
-            [this](const entt::entity dragged, const entt::entity newParent) {
-                reparentEntity(dragged, newParent);
-            },
+            [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
         SetSceneName(UNTITLED_SCENE_NAME);
+        restoreLastOpenedMap();
         refreshOverlay();
         refreshSceneWindows();
         refreshFlatpackCatalog();
         loadMapBrowser = std::make_unique<ImGui::FileBrowser>(LOAD_BROWSER_FLAGS);
         loadMapBrowser->SetTitle("Load map");
         loadMapBrowser->SetTypeFilters({".map"});
-        loadMapBrowser->SetDirectory(defaultBrowserDirectory(currentMapPath));
+        loadMapBrowser->SetDirectory(browserDirectory());
 
         saveMapBrowser = std::make_unique<ImGui::FileBrowser>(SAVE_BROWSER_FLAGS);
         saveMapBrowser->SetTitle("Save map as");
         saveMapBrowser->SetTypeFilters({".map"});
-        saveMapBrowser->SetDirectory(defaultBrowserDirectory(currentMapPath));
+        saveMapBrowser->SetDirectory(browserDirectory());
         saveMapBrowser->SetInputName(DEFAULT_SAVE_FILENAME);
     }
 

@@ -52,7 +52,7 @@ namespace sage
             i.field("Blocks Navigation", blocksNavigation);
             i.field("Collision Layer", collisionLayer);
             i.field("Local Bounds", localBoundingBox);
-            i.field("World Bounds", worldBoundingBox, false);
+            // i.field("World Bounds", worldBoundingBox, false);
         }
     };
 

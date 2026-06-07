@@ -54,12 +54,19 @@ namespace sage::editor
         }
 
         template <class T>
-        void CommitField(const LeafField<T>& field, const T& value)
+        bool CommitField(const LeafField<T>& field, const T& value)
         {
             if (field.setter)
+            {
                 field.setter(value);
+                return true;
+            }
             else if (field.data)
+            {
                 *field.data = value;
+                return true;
+            }
+            return false;
         }
 
         std::string TrimCopy(std::string_view value)
@@ -259,8 +266,8 @@ namespace sage::editor
         std::string FormatFieldValue(const FieldValue& value)
         {
             return std::visit(
-                [](const auto& field) {
-                    using T = std::decay_t<decltype(field)>;
+                []<typename T0>(const T0& field) {
+                    using T = std::decay_t<T0>;
                     if constexpr (std::is_same_v<T, EnumField>)
                         return FormatEnumValue(field);
                     else
@@ -282,13 +289,14 @@ namespace sage::editor
             return result;
         }
 
-        void DrawFieldClipboardMenu(
+        bool DrawFieldClipboardMenu(
             const std::string& value,
             const bool editable,
             const std::function<bool(std::string_view)>& paste)
         {
-            if (!ImGui::BeginPopupContextItem("field_context")) return;
+            if (!ImGui::BeginPopupContextItem("field_context")) return false;
 
+            bool changed = false;
             if (ImGui::MenuItem("Copy Value"))
             {
                 ImGui::SetClipboardText(value.c_str());
@@ -297,10 +305,11 @@ namespace sage::editor
             {
                 if (const char* clipboard = ImGui::GetClipboardText(); clipboard != nullptr && paste)
                 {
-                    (void)paste(clipboard);
+                    changed = paste(clipboard);
                 }
             }
             ImGui::EndPopup();
+            return changed;
         }
 
         void DrawTextFit(
@@ -354,163 +363,197 @@ namespace sage::editor
         template <class DrawFn>
         void DrawMaybeDisabled(const bool editable, DrawFn&& draw)
         {
+            int styleColorCount = 0;
+            if (editable)
+            {
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{0.18f, 0.38f, 0.54f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{0.24f, 0.48f, 0.68f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4{0.30f, 0.58f, 0.80f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4{0.58f, 0.78f, 0.94f, 0.90f});
+                ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4{0.82f, 0.94f, 1.00f, 1.00f});
+                styleColorCount = 5;
+            }
+            else
+            {
+                ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4{0.12f, 0.13f, 0.15f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4{0.14f, 0.15f, 0.17f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4{0.14f, 0.15f, 0.17f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_Border, ImVec4{0.24f, 0.26f, 0.30f, 0.85f});
+                ImGui::PushStyleColor(ImGuiCol_CheckMark, ImVec4{0.48f, 0.52f, 0.58f, 1.00f});
+                ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4{0.50f, 0.54f, 0.60f, 1.00f});
+                styleColorCount = 6;
+            }
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
             if (!editable) ImGui::BeginDisabled();
             draw();
             if (!editable) ImGui::EndDisabled();
+            ImGui::PopStyleVar();
+            ImGui::PopStyleColor(styleColorCount);
         }
 
-        void DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable)
         {
             bool value = field.data && *field.data;
+            bool changed = false;
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::Checkbox("##value", &value) && editable)
                 {
-                    CommitField(field, value);
+                    changed = CommitField(field, value);
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 bool parsed = false;
                 if (!ParseBool(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<int>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<int>& field, const bool editable)
         {
             int value = field.data ? *field.data : 0;
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::DragInt("##value", &value, 1.0f) && editable)
                 {
-                    CommitField(field, value);
+                    changed = CommitField(field, value);
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 int parsed = 0;
                 if (!ParseScalar(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<unsigned int>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<unsigned int>& field, const bool editable)
         {
             unsigned int value = field.data ? *field.data : 0;
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::DragScalar("##value", ImGuiDataType_U32, &value, 1.0f) && editable)
                 {
-                    CommitField(field, value);
+                    changed = CommitField(field, value);
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 unsigned int parsed = 0;
                 if (!ParseScalar(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<std::uint64_t>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<std::uint64_t>& field, const bool editable)
         {
             std::uint64_t value = field.data ? *field.data : 0;
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::InputScalar("##value", ImGuiDataType_U64, &value) && editable)
                 {
-                    CommitField(field, value);
+                    changed = CommitField(field, value);
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 std::uint64_t parsed = 0;
                 if (!ParseScalar(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<float>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<float>& field, const bool editable)
         {
             float value = field.data ? *field.data : 0.0f;
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::DragFloat("##value", &value, 0.05f, 0.0f, 0.0f, "%.3f") && editable)
                 {
-                    CommitField(field, value);
+                    changed = CommitField(field, value);
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 float parsed = 0.0f;
                 if (!ParseScalar(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<std::string>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<std::string>& field, const bool editable)
         {
             std::string value = field.data ? *field.data : std::string{};
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             const auto flags = editable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
-            if (ImGui::InputText("##value", &value, flags) && editable)
-            {
-                CommitField(field, value);
-            }
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
-                CommitField(field, std::string{text});
-                return true;
+            DrawMaybeDisabled(editable, [&]() {
+                if (ImGui::InputText("##value", &value, flags) && editable)
+                {
+                    changed = CommitField(field, value);
+                }
             });
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+                return CommitField(field, std::string{text});
+            });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<Vector2>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<Vector2>& field, const bool editable)
         {
             float value[2] = {
                 field.data ? field.data->x : 0.0f,
                 field.data ? field.data->y : 0.0f};
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::DragFloat2("##value", value, 0.05f, 0.0f, 0.0f, "%.3f") && editable)
                 {
-                    CommitField(field, Vector2{value[0], value[1]});
+                    changed = CommitField(field, Vector2{value[0], value[1]});
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 Vector2 parsed{};
                 if (!ParseVector2(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<Vector3>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<Vector3>& field, const bool editable)
         {
             float value[3] = {
                 field.data ? field.data->x : 0.0f,
                 field.data ? field.data->y : 0.0f,
                 field.data ? field.data->z : 0.0f};
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::DragFloat3("##value", value, 0.05f, 0.0f, 0.0f, "%.3f") && editable)
                 {
-                    CommitField(field, Vector3{value[0], value[1], value[2]});
+                    changed = CommitField(field, Vector3{value[0], value[1], value[2]});
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 Vector3 parsed{};
                 if (!ParseVector3(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const LeafField<::Color>& field, const bool editable)
+        bool DrawInspectorFieldWidget(const LeafField<::Color>& field, const bool editable)
         {
             float value[4] = {
                 field.data ? static_cast<float>(field.data->r) / 255.0f : 1.0f,
                 field.data ? static_cast<float>(field.data->g) / 255.0f : 1.0f,
                 field.data ? static_cast<float>(field.data->b) / 255.0f : 1.0f,
                 field.data ? static_cast<float>(field.data->a) / 255.0f : 1.0f};
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             constexpr ImGuiColorEditFlags flags =
                 ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf |
@@ -521,22 +564,25 @@ namespace sage::editor
                     const auto toByte = [](const float v) {
                         return static_cast<unsigned char>(std::clamp(v, 0.0f, 1.0f) * 255.0f);
                     };
-                    CommitField(field, Color{toByte(value[0]), toByte(value[1]), toByte(value[2]), toByte(value[3])});
+                    changed = CommitField(
+                        field,
+                        Color{toByte(value[0]), toByte(value[1]), toByte(value[2]), toByte(value[3])});
                 }
             });
-            DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                 Color parsed{};
                 if (!ParseColor(text, parsed)) return false;
-                CommitField(field, parsed);
-                return true;
+                return CommitField(field, parsed);
             });
+            return changed;
         }
 
-        void DrawInspectorFieldWidget(const EnumField& field, const bool editable)
+        bool DrawInspectorFieldWidget(const EnumField& field, const bool editable)
         {
             const auto currentIndex = field.getIndex ? field.getIndex() : 0;
             const char* currentLabel =
                 currentIndex < field.options.size() ? field.options[currentIndex].c_str() : "";
+            bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::BeginCombo("##value", currentLabel))
@@ -547,22 +593,24 @@ namespace sage::editor
                         if (ImGui::Selectable(field.options[i].c_str(), selected) && editable && field.setIndex)
                         {
                             field.setIndex(i);
+                            changed = true;
                         }
                         if (selected) ImGui::SetItemDefaultFocus();
                     }
                     ImGui::EndCombo();
                 }
             });
-            DrawFieldClipboardMenu(FormatEnumValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(FormatEnumValue(field), editable, [field](const std::string_view text) {
                 const auto pasted = TrimCopy(text);
                 const auto it = std::ranges::find(field.options, pasted);
                 if (it == field.options.end() || !field.setIndex) return false;
                 field.setIndex(static_cast<std::size_t>(std::distance(field.options.begin(), it)));
                 return true;
             });
+            return changed;
         }
 
-        void DrawInspectorFieldRow(const InspectorField& field)
+        bool DrawInspectorFieldRow(const InspectorField& field)
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -571,17 +619,20 @@ namespace sage::editor
 
             ImGui::TableSetColumnIndex(1);
             ImGui::PushID(field.label.c_str());
+            bool changed = false;
             std::visit(
                 [&](const auto& value) {
-                    DrawInspectorFieldWidget(value, field.editable);
+                    changed = DrawInspectorFieldWidget(value, field.editable);
                 },
                 field.value);
             ImGui::PopID();
+            return changed;
         }
 
-        void DrawInspectorComponent(const InspectedComponent& component)
+        bool DrawInspectorComponent(const InspectedComponent& component)
         {
             ImGui::PushID(component.displayName.c_str());
+            bool changed = false;
             const bool open = ImGui::CollapsingHeader(
                 component.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
             if (ImGui::BeginPopupContextItem("component_context"))
@@ -605,12 +656,13 @@ namespace sage::editor
                     ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.58f);
                     for (const auto& field : component.fields)
                     {
-                        DrawInspectorFieldRow(field);
+                        changed |= DrawInspectorFieldRow(field);
                     }
                     ImGui::EndTable();
                 }
             }
             ImGui::PopID();
+            return changed;
         }
 
     } // namespace
@@ -656,145 +708,223 @@ namespace sage::editor
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 12.0f});
 
         std::optional<entt::entity> sceneSelectionRequest;
-        std::optional<std::pair<entt::entity, entt::entity>> reparentRequest;
+        std::optional<HierarchyMoveRequest> hierarchyMoveRequest;
+
+        auto acceptHierarchyDrop = [&](const entt::entity newParent, const entt::entity insertBefore) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(HIERARCHY_DRAG_PAYLOAD);
+                payload != nullptr && payload->Delivery && payload->DataSize == sizeof(std::uint32_t))
+            {
+                const auto dragged = EntityFromPayloadId(*static_cast<const std::uint32_t*>(payload->Data));
+                if (dragged != newParent && dragged != insertBefore)
+                {
+                    hierarchyMoveRequest = HierarchyMoveRequest{
+                        .dragged = dragged,
+                        .newParent = newParent,
+                        .insertBefore = insertBefore};
+                }
+            }
+        };
 
         constexpr ImGuiWindowFlags windowFlags =
             ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoSavedSettings;
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
         if (ImGui::Begin("Hierarchy", nullptr, windowFlags))
         {
-            if (hierarchyEntries.empty())
+            const float resizeHandleWidth = dockLayout ? DOCK_RESIZE_HANDLE_THICKNESS : 0.0f;
+            const float resizeHandleX = windowPos.x + windowSize.x - resizeHandleWidth;
+            const ImVec2 contentRegion = ImGui::GetContentRegionAvail();
+            const ImVec2 treePos = ImGui::GetCursorScreenPos();
+            const ImVec2 treeSize{
+                dockLayout ? std::max(1.0f, resizeHandleX - treePos.x)
+                           : std::max(1.0f, contentRegion.x),
+                std::max(1.0f, contentRegion.y)};
+
+            if (ImGui::BeginChild("hierarchy_scroll", treeSize, false))
             {
-                ImGui::TextDisabled("No scene objects");
-            }
-            else
-            {
-                auto subtreeContainsEntity = [this](const std::size_t rootIndex, const entt::entity entity) {
-                    if (rootIndex >= hierarchyEntries.size()) return false;
-                    const int rootDepth = hierarchyEntries[rootIndex].depth;
-                    for (std::size_t i = rootIndex; i < hierarchyEntries.size(); ++i)
+                auto drawBlankDropTarget = [&]() {
+                    const ImVec2 available = ImGui::GetContentRegionAvail();
+                    const ImVec2 dropSize{std::max(1.0f, available.x), std::max(28.0f, available.y)};
+                    const ImVec2 dropMin = ImGui::GetCursorScreenPos();
+                    ImGui::InvisibleButton("##hierarchy_blank_drop", dropSize);
+                    bool targetActive = false;
+                    if (ImGui::BeginDragDropTarget())
                     {
-                        if (i != rootIndex && hierarchyEntries[i].depth <= rootDepth) break;
-                        if (hierarchyEntries[i].entity == entity) return true;
+                        targetActive = true;
+                        acceptHierarchyDrop(entt::null, entt::null);
+                        ImGui::EndDragDropTarget();
                     }
-                    return false;
+                    if (targetActive)
+                    {
+                        const auto color = ImGui::GetColorU32(ImVec4{0.36f, 0.58f, 0.92f, 0.85f});
+                        ImGui::GetWindowDrawList()->AddRect(
+                            dropMin,
+                            ImVec2{dropMin.x + dropSize.x, dropMin.y + dropSize.y},
+                            color,
+                            4.0f,
+                            0,
+                            2.0f);
+                    }
                 };
 
-                auto skipSubtree = [this](std::size_t& index, const int depth) {
-                    ++index;
-                    while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > depth)
-                    {
-                        ++index;
-                    }
-                };
-
-                std::function<void(std::size_t&)> drawEntry = [&](std::size_t& index) {
-                    if (index >= hierarchyEntries.size()) return;
-
-                    const std::size_t entryIndex = index;
-                    const auto& entry = hierarchyEntries[entryIndex];
-                    const bool hasChildren = entryIndex + 1 < hierarchyEntries.size() &&
-                                             hierarchyEntries[entryIndex + 1].depth > entry.depth;
-                    const bool selected = selectedSceneEntity.has_value() && *selectedSceneEntity == entry.entity;
-
-                    ImGuiTreeNodeFlags nodeFlags =
-                        ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow |
-                        ImGuiTreeNodeFlags_OpenOnDoubleClick;
-                    if (selected) nodeFlags |= ImGuiTreeNodeFlags_Selected;
-                    if (!hasChildren) nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-
-                    if (hasChildren)
-                    {
-                        if (focusedHierarchyEntity.has_value() &&
-                            subtreeContainsEntity(entryIndex, *focusedHierarchyEntity))
+                if (hierarchyEntries.empty())
+                {
+                    ImGui::TextDisabled("No scene objects");
+                    drawBlankDropTarget();
+                }
+                else
+                {
+                    auto subtreeContainsEntity = [this](const std::size_t rootIndex, const entt::entity entity) {
+                        if (rootIndex >= hierarchyEntries.size()) return false;
+                        const int rootDepth = hierarchyEntries[rootIndex].depth;
+                        for (std::size_t i = rootIndex; i < hierarchyEntries.size(); ++i)
                         {
-                            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                            if (i != rootIndex && hierarchyEntries[i].depth <= rootDepth) break;
+                            if (hierarchyEntries[i].entity == entity) return true;
+                        }
+                        return false;
+                    };
+
+                    auto drawInsertBeforeTarget = [&](const std::size_t entryIndex) {
+                        const auto& entry = hierarchyEntries[entryIndex];
+                        constexpr float targetHeight = 7.0f;
+                        const ImVec2 targetMin = ImGui::GetCursorScreenPos();
+                        const float targetWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
+
+                        ImGui::PushID(static_cast<int>(entryIndex));
+                        ImGui::InvisibleButton("##insert_before", ImVec2{targetWidth, targetHeight});
+                        bool targetActive = false;
+                        if (ImGui::BeginDragDropTarget())
+                        {
+                            targetActive = true;
+                            acceptHierarchyDrop(entry.parent, entry.entity);
+                            ImGui::EndDragDropTarget();
+                        }
+                        ImGui::PopID();
+
+                        if (targetActive)
+                        {
+                            const float indent = static_cast<float>(entry.depth) * ImGui::GetTreeNodeToLabelSpacing();
+                            const float y = targetMin.y + targetHeight * 0.5f;
+                            const auto color = ImGui::GetColorU32(ImVec4{0.36f, 0.58f, 0.92f, 1.00f});
+                            ImGui::GetWindowDrawList()->AddLine(
+                                ImVec2{targetMin.x + indent, y},
+                                ImVec2{targetMin.x + targetWidth, y},
+                                color,
+                                2.0f);
+                        }
+                    };
+
+                    auto skipSubtree = [this](std::size_t& index, const int depth) {
+                        ++index;
+                        while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > depth)
+                        {
+                            ++index;
+                        }
+                    };
+
+                    std::function<void(std::size_t&)> drawEntry = [&](std::size_t& index) {
+                        if (index >= hierarchyEntries.size()) return;
+
+                        const std::size_t entryIndex = index;
+                        const auto& entry = hierarchyEntries[entryIndex];
+                        const bool hasChildren = entryIndex + 1 < hierarchyEntries.size() &&
+                                                 hierarchyEntries[entryIndex + 1].depth > entry.depth;
+                        const bool selected = selectedSceneEntity.has_value() && *selectedSceneEntity == entry.entity;
+
+                        drawInsertBeforeTarget(entryIndex);
+
+                        ImGuiTreeNodeFlags nodeFlags =
+                            ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow |
+                            ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                        if (selected) nodeFlags |= ImGuiTreeNodeFlags_Selected;
+                        if (!hasChildren) nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+
+                        if (hasChildren)
+                        {
+                            if (focusedHierarchyEntity.has_value() &&
+                                subtreeContainsEntity(entryIndex, *focusedHierarchyEntity))
+                            {
+                                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                            }
+                            else
+                            {
+                                ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+                            }
+                        }
+
+                        const auto imguiEntityId =
+                            static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
+                        const bool open = ImGui::TreeNodeEx(
+                            reinterpret_cast<void*>(imguiEntityId), nodeFlags, "%s", entry.displayName.c_str());
+
+                        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+                        {
+                            sceneSelectionRequest = entry.entity;
+                        }
+
+                        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                        {
+                            pendingHierarchyContextEntity = entry.entity;
+                        }
+
+                        if (focusedHierarchyEntity.has_value() && *focusedHierarchyEntity == entry.entity)
+                        {
+                            ImGui::SetScrollHereY(0.5f);
+                            focusedHierarchyEntity.reset();
+                        }
+
+                        if (ImGui::BeginDragDropSource())
+                        {
+                            const std::uint32_t payload = EntityPayloadId(entry.entity);
+                            ImGui::SetDragDropPayload(HIERARCHY_DRAG_PAYLOAD, &payload, sizeof(payload));
+                            ImGui::TextUnformatted(entry.displayName.c_str());
+                            ImGui::EndDragDropSource();
+                        }
+
+                        if (ImGui::BeginDragDropTarget())
+                        {
+                            acceptHierarchyDrop(entry.entity, entt::null);
+                            ImGui::EndDragDropTarget();
+                        }
+
+                        if (!hasChildren)
+                        {
+                            ++index;
+                        }
+                        else if (open)
+                        {
+                            ++index;
+                            while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > entry.depth)
+                            {
+                                drawEntry(index);
+                            }
+                            ImGui::TreePop();
                         }
                         else
                         {
-                            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+                            skipSubtree(index, entry.depth);
                         }
-                    }
 
-                    const auto imguiEntityId =
-                        static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
-                    const bool open = ImGui::TreeNodeEx(
-                        reinterpret_cast<void*>(imguiEntityId), nodeFlags, "%s", entry.displayName.c_str());
+                    };
 
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+                    std::size_t index = 0;
+                    while (index < hierarchyEntries.size())
                     {
-                        sceneSelectionRequest = entry.entity;
+                        drawEntry(index);
                     }
-
-                    if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
-                    {
-                        pendingHierarchyContextEntity = entry.entity;
-                    }
-
-                    if (focusedHierarchyEntity.has_value() && *focusedHierarchyEntity == entry.entity)
-                    {
-                        ImGui::SetScrollHereY(0.5f);
-                        focusedHierarchyEntity.reset();
-                    }
-
-                    if (ImGui::BeginDragDropSource())
-                    {
-                        const std::uint32_t payload = EntityPayloadId(entry.entity);
-                        ImGui::SetDragDropPayload(HIERARCHY_DRAG_PAYLOAD, &payload, sizeof(payload));
-                        ImGui::TextUnformatted(entry.displayName.c_str());
-                        ImGui::EndDragDropSource();
-                    }
-
-                    if (ImGui::BeginDragDropTarget())
-                    {
-                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(HIERARCHY_DRAG_PAYLOAD);
-                            payload != nullptr && payload->Delivery &&
-                            payload->DataSize == sizeof(std::uint32_t))
-                        {
-                            const auto dragged =
-                                EntityFromPayloadId(*static_cast<const std::uint32_t*>(payload->Data));
-                            if (dragged != entry.entity)
-                            {
-                                reparentRequest = std::pair{dragged, entry.entity};
-                            }
-                        }
-                        ImGui::EndDragDropTarget();
-                    }
-
-                    if (!hasChildren)
-                    {
-                        ++index;
-                    }
-                    else if (open)
-                    {
-                        ++index;
-                        while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > entry.depth)
-                        {
-                            drawEntry(index);
-                        }
-                        ImGui::TreePop();
-                    }
-                    else
-                    {
-                        skipSubtree(index, entry.depth);
-                    }
-
-                };
-
-                std::size_t index = 0;
-                while (index < hierarchyEntries.size())
-                {
-                    drawEntry(index);
+                    drawBlankDropTarget();
                 }
             }
+            ImGui::EndChild();
 
             if (dockLayout)
             {
+                const float handleTop = windowPos.y + ImGui::GetFrameHeight();
                 dockLayoutChanged |= DrawDockResizeHandle(
                     "##hierarchy_resize",
-                    ImVec2{windowPos.x + windowSize.x - DOCK_RESIZE_HANDLE_THICKNESS, windowPos.y},
-                    ImVec2{DOCK_RESIZE_HANDLE_THICKNESS, windowSize.y},
+                    ImVec2{resizeHandleX, handleTop},
+                    ImVec2{resizeHandleWidth, std::max(1.0f, windowSize.y - ImGui::GetFrameHeight())},
                     ImGuiMouseCursor_ResizeEW,
                     [this, viewport](const ImVec2 delta) {
                         const float logicalDelta =
@@ -812,15 +942,16 @@ namespace sage::editor
         {
             onSceneObjectSelectedCb(*sceneSelectionRequest);
         }
-        if (reparentRequest.has_value() && onHierarchyReparentCb)
+        if (hierarchyMoveRequest.has_value() && onHierarchyMoveCb)
         {
-            onHierarchyReparentCb(reparentRequest->first, reparentRequest->second);
+            onHierarchyMoveCb(*hierarchyMoveRequest);
         }
     }
 
-    void EditorGui::DrawInspectorWindow()
+    bool EditorGui::DrawInspectorWindow()
     {
-        if (!settings) return;
+        if (!settings) return false;
+        bool changed = false;
 
         const auto viewportOffset = settings->GetViewportOffset();
         const auto viewport = settings->GetViewPort();
@@ -861,16 +992,17 @@ namespace sage::editor
             {
                 for (const auto& component : inspectedComponents)
                 {
-                    DrawInspectorComponent(component);
+                    changed |= DrawInspectorComponent(component);
                 }
             }
 
             if (dockLayout)
             {
+                const float handleTop = windowPos.y + ImGui::GetFrameHeight();
                 dockLayoutChanged |= DrawDockResizeHandle(
                     "##inspector_resize",
-                    windowPos,
-                    ImVec2{DOCK_RESIZE_HANDLE_THICKNESS, windowSize.y},
+                    ImVec2{windowPos.x, handleTop},
+                    ImVec2{DOCK_RESIZE_HANDLE_THICKNESS, std::max(1.0f, windowSize.y - ImGui::GetFrameHeight())},
                     ImGuiMouseCursor_ResizeEW,
                     [this, viewport](const ImVec2 delta) {
                         const float logicalDelta =
@@ -883,6 +1015,7 @@ namespace sage::editor
 
         ImGui::PopStyleVar(3);
         ImGui::PopStyleColor(5);
+        return changed;
     }
 
     void EditorGui::DrawAssetDrawerWindow()
@@ -969,9 +1102,10 @@ namespace sage::editor
 
             if (dockLayout)
             {
+                const float handleTop = windowPos.y + ImGui::GetFrameHeight();
                 dockLayoutChanged |= DrawDockResizeHandle(
                     "##asset_drawer_resize",
-                    windowPos,
+                    ImVec2{windowPos.x, handleTop},
                     ImVec2{windowSize.x, DOCK_RESIZE_HANDLE_THICKNESS},
                     ImGuiMouseCursor_ResizeNS,
                     [this, viewport](const ImVec2 delta) {
@@ -1378,14 +1512,14 @@ namespace sage::editor
         const std::function<void(std::size_t)>& onAssetSelected,
         const std::function<void(std::filesystem::path)>& onFlatpackSelected,
         const std::function<void(entt::entity)>& onSceneObjectSelected,
-        const std::function<void(entt::entity, entt::entity)>& onHierarchyReparent,
+        const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
         ModelDefaultCallbacks callbacks)
         : settings(_settings),
           dockLayout(_dockLayout),
           onAssetSelectedCb(onAssetSelected),
           onFlatpackSelectedCb(onFlatpackSelected),
           onSceneObjectSelectedCb(onSceneObjectSelected),
-          onHierarchyReparentCb(onHierarchyReparent),
+          onHierarchyMoveCb(onHierarchyMove),
           modelDefaultCallbacks(std::move(callbacks))
     {
         assetEntries = assets;

@@ -1,8 +1,8 @@
 #include "EditorHierarchyTree.hpp"
 
 #include "EditorComponents.hpp"
-#include "engine/components/sgTransform.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
 
@@ -11,35 +11,35 @@
 
 namespace sage::editor
 {
+    namespace
+    {
+        std::string entityName(const entt::entity entity)
+        {
+            return std::format("entity_{}", entt::to_integral(entity));
+        }
+    } // namespace
+
     EditorHierarchyTree::EditorHierarchyTree(EngineSystems* _sys) : sys(_sys)
     {
     }
 
-    std::string EditorHierarchyTree::DescribeEntity(const entt::entity entity) const
+    std::string EditorHierarchyTree::GetEntityName(const entt::entity entity) const
     {
         if (!sys->registry->valid(entity))
         {
-            return std::format("entity_{}", entt::to_integral(entity));
+            return entityName(entity);
         }
 
-        if (sys->registry->any_of<Renderable>(entity))
+        if (sys->registry->any_of<sgTransform>(entity))
         {
-            const auto& renderable = sys->registry->get<Renderable>(entity);
-            const auto vanityName = renderable.GetVanityName();
-            if (!vanityName.empty()) return vanityName;
-            if (!renderable.GetName().empty()) return renderable.GetName();
-        }
-
-        if (sys->registry->any_of<EditorObjectDescriptor>(entity))
-        {
-            const auto& descriptor = sys->registry->get<EditorObjectDescriptor>(entity);
-            if (!descriptor.name.empty()) return descriptor.name;
+            const auto& transform = sys->registry->get<sgTransform>(entity);
+            return transform.name.empty() ? entityName(entity) : transform.name;
         }
         if (sys->registry->any_of<Light>(entity))
         {
             return std::format("light_{}", entt::to_integral(entity));
         }
-        return std::format("entity_{}", entt::to_integral(entity));
+        return entityName(entity);
     }
 
     std::vector<EditorGui::SceneObjectEntry> EditorHierarchyTree::CollectSceneObjectEntries() const
@@ -59,31 +59,69 @@ namespace sage::editor
         std::ranges::sort(roots, [](const entt::entity lhs, const entt::entity rhs) {
             return entt::to_integral(lhs) < entt::to_integral(rhs);
         });
+        syncRootOrder(roots);
 
         std::vector<EditorGui::SceneObjectEntry> entries;
         entries.reserve(roots.size());
         for (const auto root : roots)
         {
-            appendSceneObjectEntry(entries, root, 0);
+            appendSceneObjectEntry(entries, root, entt::null, 0);
         }
         return entries;
     }
 
     void EditorHierarchyTree::appendSceneObjectEntry(
-        std::vector<EditorGui::SceneObjectEntry>& entries, const entt::entity entity, const int depth) const
+        std::vector<EditorGui::SceneObjectEntry>& entries,
+        const entt::entity entity,
+        const entt::entity parent,
+        const int depth) const
     {
         if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
 
-        entries.push_back({.entity = entity, .displayName = DescribeEntity(entity), .depth = depth});
+        entries.push_back({.entity = entity, .parent = parent, .displayName = GetEntityName(entity), .depth = depth});
 
-        auto children = sys->registry->get<sgTransform>(entity).GetChildren();
-        std::ranges::sort(children, [](const entt::entity lhs, const entt::entity rhs) {
-            return entt::to_integral(lhs) < entt::to_integral(rhs);
+        for (const auto child : sys->registry->get<sgTransform>(entity).GetChildren())
+        {
+            appendSceneObjectEntry(entries, child, entity, depth + 1);
+        }
+    }
+
+    void EditorHierarchyTree::syncRootOrder(std::vector<entt::entity>& roots) const
+    {
+        auto isCurrentRoot = [&roots](const entt::entity entity) {
+            return std::ranges::find(roots, entity) != roots.end();
+        };
+
+        std::erase_if(rootOrder, [&](const entt::entity entity) {
+            return !sys->registry->valid(entity) || !isCurrentRoot(entity);
         });
 
-        for (const auto child : children)
+        for (const auto root : roots)
         {
-            appendSceneObjectEntry(entries, child, depth + 1);
+            if (std::ranges::find(rootOrder, root) == rootOrder.end())
+            {
+                rootOrder.push_back(root);
+            }
         }
+
+        roots = rootOrder;
+    }
+
+    void EditorHierarchyTree::NoteHierarchyMove(
+        const entt::entity dragged, const entt::entity newParent, const entt::entity insertBefore)
+    {
+        std::erase(rootOrder, dragged);
+        if (newParent != entt::null) return;
+
+        if (insertBefore != entt::null)
+        {
+            const auto insertAt = std::ranges::find(rootOrder, insertBefore);
+            if (insertAt != rootOrder.end())
+            {
+                rootOrder.insert(insertAt, dragged);
+                return;
+            }
+        }
+        rootOrder.push_back(dragged);
     }
 } // namespace sage::editor

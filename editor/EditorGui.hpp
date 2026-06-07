@@ -31,8 +31,16 @@ namespace sage
             struct SceneObjectEntry
             {
                 entt::entity entity = entt::null;
+                entt::entity parent = entt::null;
                 std::string displayName;
                 int depth = 0;
+            };
+
+            struct HierarchyMoveRequest
+            {
+                entt::entity dragged = entt::null;
+                entt::entity newParent = entt::null;
+                entt::entity insertBefore = entt::null;
             };
 
             struct FlatpackEntry
@@ -76,7 +84,7 @@ namespace sage
             std::function<void(std::size_t)> onAssetSelectedCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
             std::function<void(entt::entity)> onSceneObjectSelectedCb;
-            std::function<void(entt::entity, entt::entity)> onHierarchyReparentCb;
+            std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
             BrowserTab currentTab = BrowserTab::Assets;
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
@@ -106,7 +114,7 @@ namespace sage
             void StartImGui();
             void EndImGui();
             void DrawHierarchyWindow();
-            void DrawInspectorWindow();
+            bool DrawInspectorWindow();
             void DrawAssetDrawerWindow();
             void DrawDeleteConfirmationModal();
             void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;
@@ -139,7 +147,7 @@ namespace sage
                 const std::function<void(std::size_t)>& onAssetSelected,
                 const std::function<void(std::filesystem::path)>& onFlatpackSelected,
                 const std::function<void(entt::entity)>& onSceneObjectSelected,
-                const std::function<void(entt::entity, entt::entity)>& onHierarchyReparent,
+                const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
                 ModelDefaultCallbacks callbacks);
             ~EditorGui();
         };

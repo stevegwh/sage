@@ -20,6 +20,8 @@ namespace sage
 {
     namespace
     {
+        constexpr const char* EDITOR_SETTINGS_PATH = "resources/editor-settings.xml";
+
         void ConfigureEditorSceneViewport(
             Settings& settings, editor::EditorDockLayout& dockLayout, const bool fullscreen)
         {
@@ -55,7 +57,8 @@ namespace sage
         {
             serializer::LoadAssetBinFile(registry.get(), "resources/editor-map-assets.bin");
         }
-        scene = std::make_unique<EditorScene>(systems.get(), &dockLayout);
+        scene = std::make_unique<EditorScene>(
+            systems.get(), &dockLayout, &editorSettings, [this]() { saveEditorSettings(); });
 
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
@@ -176,6 +179,11 @@ namespace sage
         refreshViewportLayout(settings->GetViewPort());
     }
 
+    void EditorApplication::saveEditorSettings() const
+    {
+        serializer::SaveClassXML<EditorSettings>(EDITOR_SETTINGS_PATH, editorSettings);
+    }
+
     void EditorApplication::handleWindowResize()
     {
         const auto screen = settings->GetScreenSize();
@@ -223,6 +231,7 @@ namespace sage
           settings(std::make_unique<Settings>(&exitWindow)),
           audioManager(std::make_unique<AudioManager>())
     {
+        serializer::DeserializeXMLFile<EditorSettings>(EDITOR_SETTINGS_PATH, editorSettings);
     }
 
     EditorApplication::~EditorApplication()

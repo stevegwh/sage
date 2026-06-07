@@ -30,31 +30,6 @@ namespace sage::editor
         }
     };
 
-    struct EditorObjectDescriptor
-    {
-        std::string name;
-        std::string category;
-        bool selectable = true;
-        bool visibleInHierarchy = true;
-        bool locked = false;
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(name, category, selectable, visibleInHierarchy, locked);
-        }
-
-        template <class Inspector>
-        void define_editor_fields(Inspector& i)
-        {
-            i.field("Name", name);
-            i.field("Category", category);
-            i.field("Selectable", selectable);
-            i.field("Visible In Hierarchy", visibleInHierarchy);
-            i.field("Locked", locked);
-        }
-    };
-
     struct AssetReference
     {
         std::string assetKey;

@@ -182,6 +182,8 @@ namespace sage
           m_transformSystem(rhs.m_transformSystem),
           m_parent(rhs.m_parent),
           m_children(rhs.m_children),
+          m_savedParentId(rhs.m_savedParentId),
+          name(rhs.name),
           direction(rhs.direction),
           movementDirectionDebugLine(rhs.movementDirectionDebugLine)
     {
@@ -191,7 +193,6 @@ namespace sage
         rotation.local.value = rhs.rotation.local.value;
         scale.world.value = rhs.scale.world.value;
         scale.local.value = rhs.scale.local.value;
-        m_savedParentId = rhs.m_savedParentId;
         rebindProxies();
     }
 
@@ -202,6 +203,8 @@ namespace sage
         m_transformSystem = rhs.m_transformSystem;
         m_parent = rhs.m_parent;
         m_children = rhs.m_children;
+        m_savedParentId = rhs.m_savedParentId;
+        name = rhs.name;
         direction = rhs.direction;
         movementDirectionDebugLine = rhs.movementDirectionDebugLine;
         position.world.value = rhs.position.world.value;
@@ -210,7 +213,7 @@ namespace sage
         rotation.local.value = rhs.rotation.local.value;
         scale.world.value = rhs.scale.world.value;
         scale.local.value = rhs.scale.local.value;
-        m_savedParentId = rhs.m_savedParentId;
+        rebindProxies();
         return *this;
     }
 
@@ -219,6 +222,8 @@ namespace sage
           m_transformSystem(rhs.m_transformSystem),
           m_parent(rhs.m_parent),
           m_children(std::move(rhs.m_children)),
+          m_savedParentId(rhs.m_savedParentId),
+          name(std::move(rhs.name)),
           direction(rhs.direction),
           movementDirectionDebugLine(rhs.movementDirectionDebugLine)
     {
@@ -230,6 +235,7 @@ namespace sage
         scale.local.value = rhs.scale.local.value;
         rhs.m_transformSystem = nullptr;
         rhs.m_entity = entt::null;
+        rhs.m_savedParentId = serializedNullId();
         rebindProxies();
     }
 
@@ -240,6 +246,8 @@ namespace sage
         m_transformSystem = rhs.m_transformSystem;
         m_parent = rhs.m_parent;
         m_children = std::move(rhs.m_children);
+        m_savedParentId = rhs.m_savedParentId;
+        name = std::move(rhs.name);
         direction = rhs.direction;
         movementDirectionDebugLine = rhs.movementDirectionDebugLine;
         position.world.value = rhs.position.world.value;
@@ -250,6 +258,8 @@ namespace sage
         scale.local.value = rhs.scale.local.value;
         rhs.m_transformSystem = nullptr;
         rhs.m_entity = entt::null;
+        rhs.m_savedParentId = serializedNullId();
+        rebindProxies();
         return *this;
     }
 } // namespace sage

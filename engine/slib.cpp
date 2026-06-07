@@ -9,6 +9,7 @@
 #include "ResourceManager.hpp"
 
 #include <cstring>
+#include <regex>
 #include <vector>
 
 namespace sage
@@ -232,10 +233,7 @@ namespace sage
     }
 
     void ModelView::Draw(
-        const Vector3& position,
-        const Vector3& rotation,
-        const Vector3& scale,
-        const Color& tint) const
+        const Vector3& position, const Vector3& rotation, const Vector3& scale, const Color& tint) const
     {
         auto model = rlmodel;
         model.transform = MatrixMultiply(model.transform, BuildSrtMatrix(position, rotation, scale));
@@ -400,6 +398,30 @@ namespace sage
     const std::string& ModelMutable::GetInstanceKey() const
     {
         return instanceKey;
+    }
+
+    std::string trim(const std::string& str)
+    {
+        const auto start = str.find_first_not_of(" \t\n\r");
+        const auto end = str.find_last_not_of(" \t\n\r");
+        return (start == std::string::npos) ? "" : str.substr(start, end - start + 1);
+    }
+
+    std::string BeautifyName(const std::string& name)
+    {
+        if (name.empty()) return "";
+        std::string vanity = name;
+        if (name[0] == '_') // Remove tag
+        {
+            if (const auto endPos = name.substr(1).find_first_of('_'); endPos != std::string::npos)
+            {
+                vanity = name.substr(endPos + 1);
+            }
+        }
+        std::ranges::replace(vanity, '_', ' ');
+        vanity = std::regex_replace(vanity, std::regex(R"(\s*\(\d+\)\s*)"), "");
+        vanity = trim(vanity);
+        return TitleCase(vanity);
     }
 
     std::string TitleCase(const std::string& A)

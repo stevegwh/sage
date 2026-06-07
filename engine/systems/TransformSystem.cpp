@@ -28,17 +28,24 @@ namespace sage
             MatrixRotateX(DEG2RAD * eulerDegrees.x));
     }
 
-    void TransformSystem::addChild(entt::entity parent, entt::entity child) const
+    void TransformSystem::addChild(entt::entity parent, entt::entity child, entt::entity insertBefore) const
     {
         if (parent == entt::null) return;
         assert(registry->valid(parent));
         assert(registry->all_of<sgTransform>(parent));
 
         auto& children = registry->get<sgTransform>(parent).m_children;
-        if (std::ranges::find(children, child) == children.end())
+        std::erase(children, child);
+        if (insertBefore != entt::null)
         {
-            children.push_back(child);
+            const auto insertAt = std::ranges::find(children, insertBefore);
+            if (insertAt != children.end())
+            {
+                children.insert(insertAt, child);
+                return;
+            }
         }
+        children.push_back(child);
     }
 
     void TransformSystem::removeChild(entt::entity parent, entt::entity child) const
@@ -191,7 +198,16 @@ namespace sage
     {
         assert(registry->valid(entity));
         assert(registry->all_of<sgTransform>(entity));
+        if (registry->get<sgTransform>(entity).m_parent == newParent) return;
+        SetParent(entity, newParent, entt::null);
+    }
+
+    void TransformSystem::SetParent(entt::entity entity, entt::entity newParent, entt::entity insertBefore)
+    {
+        assert(registry->valid(entity));
+        assert(registry->all_of<sgTransform>(entity));
         assert(newParent != entity);
+        assert(insertBefore != entity);
 
         if (newParent != entt::null)
         {
@@ -200,11 +216,9 @@ namespace sage
         }
 
         auto& transform = registry->get<sgTransform>(entity);
-        if (transform.m_parent == newParent) return;
-
         removeChild(transform.m_parent, entity);
         transform.m_parent = newParent;
-        addChild(newParent, entity);
+        addChild(newParent, entity, insertBefore);
 
         syncLocalFromWorld(entity);
         propagateChildren(entity);
@@ -231,7 +245,7 @@ namespace sage
         transform.Bind(this, entity);
         if (transform.m_parent != entt::null)
         {
-            addChild(transform.m_parent, entity);
+            addChild(transform.m_parent, entity, entt::null);
         }
     }
 

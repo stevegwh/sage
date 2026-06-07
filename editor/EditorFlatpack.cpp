@@ -194,14 +194,6 @@ namespace sage::editor
             const auto entity = created[i];
 
             destination.emplace<EditorMapEntity>(entity);
-            destination.emplace<EditorObjectDescriptor>(
-                entity,
-                EditorObjectDescriptor{
-                    .name = std::format("entity_{}", entt::to_integral(entity)),
-                    .category = record.hasRenderable ? "Flatpack" : "FlatpackNode",
-                    .selectable = true,
-                    .visibleInHierarchy = true,
-                    .locked = false});
 
             if (record.hasCollideable)
             {

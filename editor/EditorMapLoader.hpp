@@ -2,6 +2,8 @@
 
 #include "entt/entt.hpp"
 
+#include <vector>
+
 namespace sage::editor
 {
     // Loads/saves the editor-only layout map format. This is intentionally
@@ -9,4 +11,5 @@ namespace sage::editor
     [[nodiscard]] bool IsEditorLayoutMap(const char* path);
     bool LoadMap(entt::registry* destination, const char* path);
     void SaveMap(entt::registry& source, const char* path);
+    void SaveMap(entt::registry& source, const char* path, const std::vector<entt::entity>& hierarchyOrder);
 } // namespace sage::editor

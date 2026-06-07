@@ -10,11 +10,13 @@
 #include "EditorPickingService.hpp"
 #include "EditorPlacementController.hpp"
 #include "EditorSelection.hpp"
+#include "EditorSettings.hpp"
 #include "EditorTransformEditor.hpp"
 
 #include "entt/entt.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -36,6 +38,8 @@ namespace sage
         friend class editor::EditorModeStateMachine;
 
         EngineSystems* sys{};
+        EditorSettings* editorSettings{};
+        std::function<void()> onEditorSettingsChanged;
         std::unique_ptr<editor::EditorGui> gui;
         editor::InspectorRegistry inspectorRegistry;
         std::unique_ptr<editor::EditorAssetCatalog> assetCatalog;
@@ -60,15 +64,18 @@ namespace sage
         void drawFileBrowsers() const;
         void openLoadMapBrowser() const;
         void openSaveMapBrowser() const;
+        std::filesystem::path browserDirectory() const;
         void addLight() const;
         void loadMap(const std::filesystem::path& path) const;
         void saveMap() const;
         void saveMapAs(const std::filesystem::path& path) const;
+        void restoreLastOpenedMap() const;
+        void rememberCurrentMapPath() const;
         void clearCurrentMap() const;
         void ensureDefaultMapBase() const;
         void syncLightTransforms() const;
         void refreshAfterMapLoad() const;
-        void reparentEntity(entt::entity dragged, entt::entity newParent) const;
+        void moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const;
         void drawHierarchyContextMenu() const;
         void createFlatpackFromEntity(entt::entity entity) const;
         void refreshFlatpackCatalog() const;
@@ -100,7 +107,11 @@ namespace sage
         void SetViewportFullscreen(bool fullscreen);
         void SetSceneName(const std::string& sceneName) const;
 
-        EditorScene(EngineSystems* _sys, editor::EditorDockLayout* dockLayout);
+        EditorScene(
+            EngineSystems* _sys,
+            editor::EditorDockLayout* dockLayout,
+            EditorSettings* editorSettings,
+            std::function<void()> onEditorSettingsChanged);
         ~EditorScene();
     };
 } // namespace sage

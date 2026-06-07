@@ -5,10 +5,12 @@
 #pragma once
 
 #include "cereal/cereal.hpp"
+#include "cereal/types/string.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
 
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -48,8 +50,11 @@ namespace sage
         void rebindProxies();
 
       public:
+        // As the transform is the only required component to exist in the scene graph, the transform also stores
+        // the name of the 'object'
+        std::string name{"Transform"};
         // Proxy field with its cached Vector3 living inside.
-        // Assignment routes through TransformSystem (via `Write`) so dirty propagation
+        // Assignment routes through TransformSystem (vioa `Write`) so dirty propagation
         // happens automatically; reads return the cached value directly.
         template <Writer Write>
         class VectorField
@@ -141,6 +146,7 @@ namespace sage
             using traits = entt::entt_traits<entt::entity>;
             const auto parentId = traits::to_entity(m_parent);
             archive(
+                name,
                 position.world.value,
                 rotation.world.value,
                 scale.world.value,
@@ -154,6 +160,7 @@ namespace sage
         void load(Archive& archive)
         {
             archive(
+                name,
                 position.world.value,
                 rotation.world.value,
                 scale.world.value,
@@ -168,6 +175,7 @@ namespace sage
         template <class Inspector>
         void define_editor_fields(Inspector& i)
         {
+            i.field("Name", name, true);
             i.field("Position", position.local);
             i.field("Rotation", rotation.local);
             i.field("Scale", scale.local);

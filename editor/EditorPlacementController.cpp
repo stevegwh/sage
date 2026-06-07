@@ -141,16 +141,9 @@ namespace sage::editor
         const auto& placeable = assets.Selected();
         const auto entity = sys->registry->create();
         sys->registry->emplace<EditorMapEntity>(entity);
-        sys->registry->emplace<EditorObjectDescriptor>(
-            entity,
-            EditorObjectDescriptor{
-                .name = makePlacedLabel(entity),
-                .category = placeable.labelStem,
-                .selectable = true,
-                .visibleInHierarchy = true,
-                .locked = false});
         sys->registry->emplace<AssetReference>(entity, AssetReference{.assetKey = placeable.modelKey});
         auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.name = makePlacedLabel(entity);
         transform.position.world = *snappedPlacementPosition;
         transform.scale.world = {placementScale, placementScale, placementScale};
         transform.rotation.world = {0.0f, placementRotationY, 0.0f};
@@ -158,7 +151,6 @@ namespace sage::editor
         auto model = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
         auto& renderable =
             sys->registry->emplace<Renderable>(entity, std::move(model), assets.DefaultTransform(placeable));
-        renderable.SetName(sys->registry->get<EditorObjectDescriptor>(entity).name);
         auto& uber =
             sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
         uber.SetFlagAll(UberShaderComponent::Flags::Lit);

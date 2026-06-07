@@ -75,11 +75,7 @@ namespace sage
             const float rotationAngle,
             const Vector3& scale,
             const Color& tint) const;
-        void Draw(
-            const Vector3& position,
-            const Vector3& rotation,
-            const Vector3& scale,
-            const Color& tint) const;
+        void Draw(const Vector3& position, const Vector3& rotation, const Vector3& scale, const Color& tint) const;
         void DrawUber(
             UberShaderComponent* uber,
             const Vector3& position,
@@ -155,6 +151,7 @@ namespace sage
     // Use when materials are shared (e.g. owned by ResourceManager::materialMap).
     void sgUnloadModel(const Model& model);
 
+    std::string BeautifyName(const std::string& name);
     std::string TitleCase(const std::string& A);
     bool AlmostEquals(Vector3 a, Vector3 b);
     bool PointInsideRect(Rectangle rec, Vector2 point);

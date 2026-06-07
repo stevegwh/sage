@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorDockLayout.hpp"
+#include "EditorSettings.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -19,6 +20,7 @@ namespace sage
     {
         RenderTexture renderTexture{};
         editor::EditorDockLayout dockLayout{};
+        EditorSettings editorSettings{};
 
         std::unique_ptr<entt::registry> registry;
         std::unique_ptr<KeyMapping> keyMapping;
@@ -37,6 +39,7 @@ namespace sage
         void handleWindowResize();
         void handleViewportFullscreenToggle();
         void refreshViewportLayout(Vector2 previousViewport);
+        void saveEditorSettings() const;
 
       public:
         void Update();

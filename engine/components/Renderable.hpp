@@ -27,8 +27,8 @@ namespace sage
     class Renderable
     {
         std::variant<std::monostate, ModelView, ModelMutable> model;
-        std::string name = "Default";
-        std::string vanityName;
+        // std::string name = "Default";
+        // std::string vanityName;
         void setVanityName();
 
       public:
@@ -38,9 +38,9 @@ namespace sage
         std::function<void(entt::entity)> reqShaderUpdate;
         bool serializable = true;
 
-        [[nodiscard]] const std::string& GetName() const;
-        void SetName(const std::string& _name);
-        [[nodiscard]] std::string GetVanityName() const;
+        // [[nodiscard]] const std::string& GetName() const;
+        //  void SetName(const std::string& _name);
+        // [[nodiscard]] std::string GetVanityName() const;
 
         // Returns the underlying view (ModelView pointer; also valid when holding a
         // ModelMutable, since it derives from ModelView). Returns nullptr if the
@@ -85,7 +85,7 @@ namespace sage
                 kind = 1;
                 key = view->GetKey();
             }
-            archive(kind, key, name, vanityName, initialTransform);
+            archive(kind, key, initialTransform);
         }
 
         template <class Archive>
@@ -93,7 +93,7 @@ namespace sage
         {
             std::uint8_t kind = 0;
             std::string key;
-            archive(kind, key, name, vanityName, initialTransform);
+            archive(kind, key, initialTransform);
 
             if (kind == 1)
             {
@@ -120,7 +120,6 @@ namespace sage
         {
             i.field("Active", active);
             i.field("Serializable", serializable);
-            i.field("Name", name, true);
             i.field("Hint", hint);
         }
     };
