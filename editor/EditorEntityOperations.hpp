@@ -2,6 +2,7 @@
 
 #include "engine/components/Collideable.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneTags.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -41,6 +42,8 @@ namespace sage::editor
             std::string renderableBlob;
             bool hasLight = false;
             Light light{};
+            bool hasMetaData = false;
+            MetaData metaData{};
         };
 
         // One copied subtree. records are in depth-first order with the root at

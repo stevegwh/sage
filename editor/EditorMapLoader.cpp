@@ -5,6 +5,7 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/Serializer.hpp"
 
 #include "cereal/types/vector.hpp"
@@ -58,6 +59,18 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(entity);
+            }
+        };
+
+        struct EntityMetaDataRecord
+        {
+            sage::serializer::entity entity{};
+            MetaData metaData{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(entity, metaData);
             }
         };
 
@@ -149,6 +162,7 @@ namespace sage::editor
                     const auto entity = destination->create();
                     auto transform = transformWithSerializedNameFallback(record.transform, record.entity.id);
                     destination->emplace<EditorMapEntity>(entity);
+                    destination->emplace<MetaData>(entity);
                     destination->emplace<sgTransform>(entity, transform);
                     destination->emplace<Collideable>(entity, record.collideable);
                     destination->get<Collideable>(entity).isStatic = true;
@@ -180,6 +194,18 @@ namespace sage::editor
                         if (iter == idMap.end()) continue;
                     }
                 }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<EntityMetaDataRecord> entityMetaData;
+                    input(entityMetaData);
+                    for (const auto& record : entityMetaData)
+                    {
+                        const auto iter = idMap.find(record.entity.id);
+                        if (iter == idMap.end()) continue;
+                        destination->emplace_or_replace<MetaData>(iter->second, record.metaData);
+                    }
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -189,6 +215,8 @@ namespace sage::editor
                 destination->get<sgTransform>(entity).ResolveSerializedParent(idMap);
             }
         }
+
+        RebuildSceneTagIndex(*destination);
 
         std::cout << "FINISH: Loading layout map data from file (editor)." << std::endl;
         return true;
@@ -254,6 +282,19 @@ namespace sage::editor
                         EntityEditorObjectRecord{.entity = {entt::entt_traits<entt::entity>::to_entity(entity)}});
                 }
                 output(entityEditorObjects);
+
+                std::vector<EntityMetaDataRecord> entityMetaData;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, Renderable, Collideable, MetaData>())
+                {
+                    const auto& metaData = source.get<MetaData>(entity);
+                    if (metaData.tags.empty()) continue;
+
+                    entityMetaData.push_back(
+                        EntityMetaDataRecord{
+                            .entity = {entt::entt_traits<entt::entity>::to_entity(entity)},
+                            .metaData = metaData});
+                }
+                output(entityMetaData);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

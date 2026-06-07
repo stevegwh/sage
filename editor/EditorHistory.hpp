@@ -16,6 +16,7 @@
 
 #include "engine/components/Collideable.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneTags.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -114,6 +115,8 @@ namespace sage::editor
             Light light{};
             bool hasAssetReference = false;
             std::string assetKey;
+            bool hasMetaData = false;
+            MetaData metaData{};
         };
 
         struct EntityDelta

@@ -6,6 +6,7 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 
@@ -145,6 +146,11 @@ namespace sage::editor
                 record.hasLight = true;
                 record.light = sys->registry->get<Light>(entity);
             }
+            if (sys->registry->any_of<MetaData>(entity))
+            {
+                record.hasMetaData = true;
+                record.metaData = sys->registry->get<MetaData>(entity);
+            }
         }
     }
 
@@ -227,6 +233,14 @@ namespace sage::editor
             if (record.hasLight)
             {
                 sys->registry->emplace<Light>(entity, record.light);
+            }
+            if (record.hasMetaData)
+            {
+                sys->registry->emplace<MetaData>(entity, record.metaData);
+            }
+            else
+            {
+                sys->registry->emplace<MetaData>(entity);
             }
         }
 

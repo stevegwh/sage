@@ -11,6 +11,7 @@
 #include "engine/Cursor.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/ResourceManager.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 
@@ -141,6 +142,7 @@ namespace sage::editor
         const auto& placeable = assets.Selected();
         const auto entity = sys->registry->create();
         sys->registry->emplace<EditorMapEntity>(entity);
+        sys->registry->emplace<MetaData>(entity);
         sys->registry->emplace<AssetReference>(entity, AssetReference{.assetKey = placeable.modelKey});
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.name = makePlacedLabel(entity);

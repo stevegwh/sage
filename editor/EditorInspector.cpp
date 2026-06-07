@@ -7,6 +7,7 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneTags.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -248,6 +249,7 @@ namespace sage::editor
         registry.Register<sgTransform>("Transform");
         registry.Register<PersistentEntityId>("Persistent Entity Id");
         registry.Register<AssetReference>("Asset Reference");
+        registry.Register<MetaData>("Meta Data");
         registry.Register<Renderable>("Renderable");
         registry.Register<Collideable>("Collideable");
         registry.Register<Light>("Light");

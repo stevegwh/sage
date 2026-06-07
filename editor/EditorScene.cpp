@@ -16,6 +16,7 @@
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
 #include "engine/ResourceManager.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include "engine/UserInput.hpp"
@@ -1098,6 +1099,7 @@ namespace sage
 
         const auto entity = sys->registry->create();
         sys->registry->emplace<editor::EditorMapEntity>(entity);
+        sys->registry->emplace<MetaData>(entity);
         sys->registry->emplace<editor::EditorMapBase>(entity);
         sys->registry->emplace<editor::AssetReference>(
             entity, editor::AssetReference{.assetKey = DEFAULT_MAP_BASE_MODEL_KEY});

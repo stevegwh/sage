@@ -3,6 +3,7 @@
 #include "EditorComponents.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
@@ -78,6 +79,7 @@ namespace sage::editor
         if (a.hasRenderable != b.hasRenderable || a.renderableBlob != b.renderableBlob) return false;
         if (a.hasLight != b.hasLight || (a.hasLight && !lightEqual(a.light, b.light))) return false;
         if (a.hasAssetReference != b.hasAssetReference || a.assetKey != b.assetKey) return false;
+        if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
         return true;
     }
 
@@ -176,6 +178,11 @@ namespace sage::editor
         {
             s.hasAssetReference = true;
             s.assetKey = reg.get<AssetReference>(entity).assetKey;
+        }
+        if (reg.all_of<MetaData>(entity))
+        {
+            s.hasMetaData = true;
+            s.metaData = reg.get<MetaData>(entity);
         }
         return s;
     }
@@ -502,6 +509,13 @@ namespace sage::editor
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});
         else if (reg.all_of<AssetReference>(entity))
             reg.remove<AssetReference>(entity);
+
+        if (target.hasMetaData)
+            reg.emplace_or_replace<MetaData>(entity, target.metaData);
+        else if (target.isMapEntity)
+            reg.emplace_or_replace<MetaData>(entity);
+        else if (reg.all_of<MetaData>(entity))
+            reg.remove<MetaData>(entity);
 
         markNavigation(entity);
     }
