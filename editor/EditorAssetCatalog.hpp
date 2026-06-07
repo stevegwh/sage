@@ -6,6 +6,7 @@
 #include "raymath.h"
 
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -60,9 +61,11 @@ namespace sage::editor
         explicit EditorAssetCatalog(std::vector<PlaceableAsset> placeables);
 
         [[nodiscard]] static EditorAssetCatalog FromLoadedModels(bool includeGenerated = false);
+        [[nodiscard]] static std::filesystem::path AssetDefaultsPathForModelKey(const std::string& modelKey);
 
         void LoadDefaults();
         void Select(std::size_t index);
+        void RenameAsset(std::size_t index, const std::string& modelKey);
         void AdjustSelectedDefaultHeight(float amount);
         void AdjustSelectedDefaultRotation(float amount);
         void AdjustSelectedDefaultScale(float amount);

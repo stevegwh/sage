@@ -27,6 +27,15 @@ namespace sage
             {
                 std::string displayName;
                 std::string modelKey;
+                std::filesystem::path sourcePath;
+                std::filesystem::path defaultsPath;
+            };
+
+            struct AssetRenameResult
+            {
+                bool renamed = false;
+                std::string message;
+                std::optional<AssetEntry> updatedEntry;
             };
 
             struct SceneObjectEntry
@@ -108,6 +117,7 @@ namespace sage
             std::vector<SceneObjectEntry> hierarchyEntries;
             std::vector<FlatpackEntry> flatpackEntries;
             std::function<void(std::size_t)> onAssetSelectedCb;
+            std::function<AssetRenameResult(std::size_t, const std::string&)> onAssetRenameCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
             std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
@@ -118,6 +128,7 @@ namespace sage
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
+            std::optional<std::size_t> renamingAssetIndex;
             std::vector<entt::entity> selectedSceneEntities;
             entt::entity hierarchySelectionAnchor = entt::null;
             std::optional<entt::entity> focusedHierarchyEntity;
@@ -128,14 +139,19 @@ namespace sage
             std::string assetDefaultsHeight = "0.00";
             std::string assetDefaultsRotation = "0";
             std::string assetDefaultsScale = "1.00";
+            std::string assetRenameInput;
+            std::string assetRenameStatus;
             std::string deleteConfirmationPrompt = "Delete selected entity?";
             bool deleteConfirmationVisible = false;
+            bool assetRenamePopupOpenRequested = false;
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
             bool dockLayoutChanged = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
+            void openAssetRenamePopup(std::size_t index);
+            void drawAssetRenamePopup();
             void drawAssetDefaultsControls();
             void drawAssetGrid();
             void drawFlatpackGrid();
@@ -180,6 +196,7 @@ namespace sage
                 EditorDockLayout* _dockLayout,
                 const std::vector<AssetEntry>& assets,
                 const std::function<void(std::size_t)>& onAssetSelected,
+                const std::function<AssetRenameResult(std::size_t, const std::string&)>& onAssetRename,
                 const std::function<void(std::filesystem::path)>& onFlatpackSelected,
                 const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
                 const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,

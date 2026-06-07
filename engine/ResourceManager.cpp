@@ -524,6 +524,11 @@ namespace sage
     /* Non-owning view onto the shared model entry stored under viewKey. Read-only API.
     The returned ModelView's lifetime is independent of RM: it just borrows; the
     underlying entry stays alive until UnloadAll (i.e. scene tear-down). */
+    bool ResourceManager::HasModelKey(const std::string& key) const
+    {
+        return modelCopies.contains(key);
+    }
+
     std::vector<std::string> ResourceManager::GetModelKeys(const bool includeGenerated) const
     {
         std::vector<std::string> keys;
@@ -538,6 +543,35 @@ namespace sage
 
         std::sort(keys.begin(), keys.end());
         return keys;
+    }
+
+    std::string ResourceManager::GetModelSourcePath(const std::string& key) const
+    {
+        if (!modelCopies.contains(key)) return {};
+        return modelCopies.at(key).sourcePath;
+    }
+
+    bool ResourceManager::RenameModelAsset(
+        const std::string& oldKey,
+        const std::string& newKey,
+        const std::string& newSourcePath)
+    {
+        if (oldKey.empty() || newKey.empty()) return false;
+        if (!modelCopies.contains(oldKey)) return false;
+        if (oldKey != newKey && modelCopies.contains(newKey)) return false;
+
+        auto modelNode = modelCopies.extract(oldKey);
+        modelNode.key() = newKey;
+        modelNode.mapped().sourcePath = newSourcePath;
+        modelCopies.insert(std::move(modelNode));
+
+        if (auto animationNode = modelAnimations.extract(oldKey); !animationNode.empty())
+        {
+            animationNode.key() = newKey;
+            modelAnimations.insert(std::move(animationNode));
+        }
+
+        return true;
     }
 
     ModelView ResourceManager::GetModelView(const std::string& viewKey) const

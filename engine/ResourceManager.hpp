@@ -97,7 +97,13 @@ namespace sage
         Font FontLoad(const std::string& path);
         void ImageUnload(const std::string& key);
         [[nodiscard]] ImageSafe GetImage(const std::string& key);
+        [[nodiscard]] bool HasModelKey(const std::string& key) const;
         [[nodiscard]] std::vector<std::string> GetModelKeys(bool includeGenerated = false) const;
+        [[nodiscard]] std::string GetModelSourcePath(const std::string& key) const;
+        bool RenameModelAsset(
+            const std::string& oldKey,
+            const std::string& newKey,
+            const std::string& newSourcePath);
         [[nodiscard]] ModelView GetModelView(const std::string& viewKey) const;
         [[nodiscard]] ModelMutable CreateModelMutable(const std::string& viewKey);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount) const;

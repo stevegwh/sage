@@ -1,5 +1,6 @@
 #include "EditorGui.hpp"
 
+#include "engine/components/UberShaderComponent.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
 #include "imgui.h"
@@ -30,9 +31,14 @@ namespace sage::editor
         constexpr float FLATPACK_TILE_HEIGHT = 116.0f;
         constexpr float ASSET_DEFAULTS_PANEL_WIDTH = 260.0f;
         constexpr float DOCK_RESIZE_HANDLE_THICKNESS = 8.0f;
+        constexpr int PREVIEW_LIGHT_DIRECTIONAL = 0;
+        constexpr int PREVIEW_LIGHT_POINT = 1;
+        constexpr float PREVIEW_GAMMA = 1.9f;
         constexpr Color EDITOR_WINDOW_BACKGROUND = {35, 38, 43, 245};
         constexpr Color EDITOR_TEXT = {230, 234, 240, 255};
+        constexpr Color PREVIEW_LIGHT_COLOR = {255, 244, 214, 255};
         constexpr const char* HIERARCHY_DRAG_PAYLOAD = "SAGE_HIER_ENTITY";
+        constexpr const char* ASSET_RENAME_POPUP = "Rename Asset File";
 
         ImVec4 ToImGuiColor(const Color color)
         {
@@ -73,6 +79,150 @@ namespace sage::editor
         entt::entity EntityFromPayloadId(const std::uint32_t id)
         {
             return static_cast<entt::entity>(id);
+        }
+
+        Shader LoadThumbnailShader()
+        {
+            auto shader = ResourceManager::GetInstance().ShaderLoad(
+                "resources/shaders/custom/ubershader.vs", "resources/shaders/custom/ubershader.fs");
+            shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
+            return shader;
+        }
+
+        UberShaderComponent CreateThumbnailUberComponent(const ModelView& model, const Shader shader)
+        {
+            UberShaderComponent uber(static_cast<unsigned int>(model.GetMaterialCount()));
+            uber.shader = shader;
+            uber.litLoc = GetShaderLocation(shader, "lit");
+            uber.skinnedLoc = GetShaderLocation(shader, "skinned");
+            uber.hasEmissiveTexLoc = GetShaderLocation(shader, "hasEmissionTex");
+            uber.hasEmissiveColLoc = GetShaderLocation(shader, "hasEmissionCol");
+            uber.colEmissiveLoc = GetShaderLocation(shader, "colEmission");
+            uber.SetFlagAll(UberShaderComponent::Flags::Lit);
+
+            const auto& rlmodel = model.GetRlModel();
+            for (int i = 0; i < rlmodel.materialCount; ++i)
+            {
+                const auto emissionColor = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].color;
+                const auto emissionTexture = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].texture.id;
+                if (emissionColor.r != 0 || emissionColor.g != 0 || emissionColor.b != 0)
+                {
+                    uber.SetFlag(static_cast<unsigned int>(i), UberShaderComponent::Flags::EmissiveCol);
+                }
+                if (emissionTexture > 1)
+                {
+                    uber.SetFlag(static_cast<unsigned int>(i), UberShaderComponent::Flags::EmissiveTexture);
+                }
+            }
+
+            return uber;
+        }
+
+        void SetThumbnailLight(
+            const Shader shader,
+            const int index,
+            const int type,
+            const bool enabled,
+            const Vector3 position,
+            const Vector3 target,
+            const Color color,
+            const float brightness,
+            const float constant,
+            const float linear,
+            const float quadratic)
+        {
+            const int enabledInt = enabled ? 1 : 0;
+            const float positionValue[3] = {position.x, position.y, position.z};
+            const float targetValue[3] = {target.x, target.y, target.z};
+            const float colorValue[4] = {
+                static_cast<float>(color.r) / 255.0f,
+                static_cast<float>(color.g) / 255.0f,
+                static_cast<float>(color.b) / 255.0f,
+                static_cast<float>(color.a) / 255.0f};
+
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].enabled", index)),
+                &enabledInt,
+                SHADER_UNIFORM_INT);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].type", index)),
+                &type,
+                SHADER_UNIFORM_INT);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].position", index)),
+                positionValue,
+                SHADER_UNIFORM_VEC3);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].target", index)),
+                targetValue,
+                SHADER_UNIFORM_VEC3);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].color", index)),
+                colorValue,
+                SHADER_UNIFORM_VEC4);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].brightness", index)),
+                &brightness,
+                SHADER_UNIFORM_FLOAT);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].constant", index)),
+                &constant,
+                SHADER_UNIFORM_FLOAT);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].linear", index)),
+                &linear,
+                SHADER_UNIFORM_FLOAT);
+            SetShaderValue(
+                shader,
+                GetShaderLocation(shader, TextFormat("lights[%i].quadratic", index)),
+                &quadratic,
+                SHADER_UNIFORM_FLOAT);
+        }
+
+        void ConfigureThumbnailLighting(const Shader shader, const Camera3D& camera, const Vector3& center)
+        {
+            const float ambient[4] = {0.6f, 0.2f, 0.8f, 1.0f};
+            SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient, SHADER_UNIFORM_VEC4);
+
+            const int lightsCount = 2;
+            SetShaderValue(shader, GetShaderLocation(shader, "lightsCount"), &lightsCount, SHADER_UNIFORM_INT);
+            SetShaderValue(shader, GetShaderLocation(shader, "gamma"), &PREVIEW_GAMMA, SHADER_UNIFORM_FLOAT);
+
+            const float viewPos[3] = {camera.position.x, camera.position.y, camera.position.z};
+            SetShaderValue(shader, GetShaderLocation(shader, "viewPos"), viewPos, SHADER_UNIFORM_VEC3);
+
+            SetThumbnailLight(
+                shader,
+                0,
+                PREVIEW_LIGHT_POINT,
+                true,
+                camera.position,
+                center,
+                PREVIEW_LIGHT_COLOR,
+                1.17f,
+                1.0f,
+                0.0f,
+                0.0f);
+            SetThumbnailLight(
+                shader,
+                1,
+                PREVIEW_LIGHT_DIRECTIONAL,
+                true,
+                Vector3Add(center, {-3.0f, 4.0f, -4.0f}),
+                center,
+                Color{172, 202, 255, 255},
+                0.23f,
+                1.0f,
+                0.0f,
+                0.0f);
         }
 
         template <class T>
@@ -1279,6 +1429,8 @@ namespace sage::editor
                 ImGui::EndTabBar();
             }
 
+            drawAssetRenamePopup();
+
             if (dockLayout)
             {
                 const float handleTop = windowPos.y + ImGui::GetFrameHeight();
@@ -1506,6 +1658,10 @@ namespace sage::editor
     {
         auto thumbnail = LoadRenderTexture(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
         auto model = ResourceManager::GetInstance().GetModelView(asset.modelKey);
+        const auto shader = LoadThumbnailShader();
+        auto uber = CreateThumbnailUberComponent(model, shader);
+        model.SetShader(shader);
+
         const auto bounds = model.CalcLocalBoundingBox();
         const Vector3 size = Vector3Subtract(bounds.max, bounds.min);
         const Vector3 center = Vector3Scale(Vector3Add(bounds.min, bounds.max), 0.5f);
@@ -1521,11 +1677,100 @@ namespace sage::editor
         BeginTextureMode(thumbnail);
         ClearBackground(Color{244, 247, 251, 255});
         BeginMode3D(camera);
-        model.Draw(Vector3Zero(), {0.0f, 1.0f, 0.0f}, 0.0f, Vector3One(), WHITE);
+        ConfigureThumbnailLighting(shader, camera, center);
+        model.DrawUber(&uber, Vector3Zero(), {0.0f, 1.0f, 0.0f}, 0.0f, Vector3One(), WHITE);
         EndMode3D();
         EndTextureMode();
 
         return thumbnail;
+    }
+
+    void EditorGui::openAssetRenamePopup(const std::size_t index)
+    {
+        if (index >= assetEntries.size()) return;
+
+        const auto& asset = assetEntries[index];
+        const auto renamePath = !asset.sourcePath.empty() ? asset.sourcePath : asset.defaultsPath;
+        renamingAssetIndex = index;
+        assetRenameInput = renamePath.filename().string();
+        assetRenameStatus.clear();
+        assetRenamePopupOpenRequested = true;
+    }
+
+    void EditorGui::drawAssetRenamePopup()
+    {
+        if (!renamingAssetIndex.has_value()) return;
+        if (*renamingAssetIndex >= assetEntries.size())
+        {
+            renamingAssetIndex.reset();
+            return;
+        }
+
+        if (assetRenamePopupOpenRequested)
+        {
+            ImGui::OpenPopup(ASSET_RENAME_POPUP);
+            assetRenamePopupOpenRequested = false;
+        }
+
+        bool open = true;
+        ImGui::SetNextWindowSize(ImVec2{430.0f, 0.0f}, ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal(ASSET_RENAME_POPUP, &open, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            const auto index = *renamingAssetIndex;
+            const auto& asset = assetEntries[index];
+            const auto renamePath = !asset.sourcePath.empty() ? asset.sourcePath : asset.defaultsPath;
+
+            ImGui::TextWrapped("%s", asset.displayName.c_str());
+            ImGui::TextDisabled("%s", renamePath.parent_path().string().c_str());
+            ImGui::Spacing();
+
+            ImGui::SetNextItemWidth(390.0f);
+            const bool enterPressed =
+                ImGui::InputText("File name", &assetRenameInput, ImGuiInputTextFlags_EnterReturnsTrue);
+
+            if (!assetRenameStatus.empty())
+            {
+                ImGui::TextWrapped("%s", assetRenameStatus.c_str());
+            }
+
+            ImGui::Spacing();
+            const bool renamePressed = ImGui::Button("Rename", ImVec2{120.0f, 0.0f});
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
+            {
+                renamingAssetIndex.reset();
+                assetRenameInput.clear();
+                assetRenameStatus.clear();
+                assetRenamePopupOpenRequested = false;
+                ImGui::CloseCurrentPopup();
+            }
+
+            if ((enterPressed || renamePressed) && onAssetRenameCb)
+            {
+                auto result = onAssetRenameCb(index, assetRenameInput);
+                assetRenameStatus = std::move(result.message);
+                if (result.renamed)
+                {
+                    if (result.updatedEntry.has_value())
+                    {
+                        assetEntries[index] = std::move(*result.updatedEntry);
+                    }
+                    renamingAssetIndex.reset();
+                    assetRenameInput.clear();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (!open)
+        {
+            renamingAssetIndex.reset();
+            assetRenameInput.clear();
+            assetRenameStatus.clear();
+            assetRenamePopupOpenRequested = false;
+        }
     }
 
     void EditorGui::drawAssetDefaultsControls()
@@ -1660,12 +1905,24 @@ namespace sage::editor
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("%s\n%s", asset.displayName.c_str(), asset.modelKey.c_str());
+                    const auto sourcePath = asset.sourcePath.string();
+                    const auto tooltipPath = sourcePath.empty() ? asset.defaultsPath.string() : sourcePath;
+                    ImGui::SetTooltip(
+                        "%s\n%s\n%s",
+                        asset.displayName.c_str(),
+                        asset.modelKey.c_str(),
+                        tooltipPath.c_str());
                 }
                 if (ImGui::BeginPopupContextItem("asset_context"))
                 {
+                    if (ImGui::MenuItem("Rename File")) openAssetRenamePopup(i);
                     if (ImGui::MenuItem("Copy Asset Name")) ImGui::SetClipboardText(asset.displayName.c_str());
                     if (ImGui::MenuItem("Copy Model Key")) ImGui::SetClipboardText(asset.modelKey.c_str());
+                    const auto sourcePath = asset.sourcePath.string();
+                    if (!sourcePath.empty() && ImGui::MenuItem("Copy Source Path"))
+                    {
+                        ImGui::SetClipboardText(sourcePath.c_str());
+                    }
                     ImGui::EndPopup();
                 }
 
@@ -1777,6 +2034,7 @@ namespace sage::editor
         EditorDockLayout* _dockLayout,
         const std::vector<AssetEntry>& assets,
         const std::function<void(std::size_t)>& onAssetSelected,
+        const std::function<AssetRenameResult(std::size_t, const std::string&)>& onAssetRename,
         const std::function<void(std::filesystem::path)>& onFlatpackSelected,
         const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
         const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
@@ -1784,6 +2042,7 @@ namespace sage::editor
         : settings(_settings),
           dockLayout(_dockLayout),
           onAssetSelectedCb(onAssetSelected),
+          onAssetRenameCb(onAssetRename),
           onFlatpackSelectedCb(onFlatpackSelected),
           onSceneObjectSelectedCb(onSceneObjectSelected),
           onHierarchyMoveCb(onHierarchyMove),

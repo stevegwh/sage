@@ -166,6 +166,11 @@ namespace sage::editor
         return EditorAssetCatalog{std::move(placeables)};
     }
 
+    std::filesystem::path EditorAssetCatalog::AssetDefaultsPathForModelKey(const std::string& modelKey)
+    {
+        return IMPORTED_ASSETS_DIRECTORY / (SanitizeAssetFileStem(modelKey) + ".json");
+    }
+
     void EditorAssetCatalog::LoadDefaults()
     {
         std::filesystem::create_directories(IMPORTED_ASSETS_DIRECTORY);
@@ -179,6 +184,18 @@ namespace sage::editor
     {
         if (index >= assets.size()) return;
         selectedIndex = index;
+    }
+
+    void EditorAssetCatalog::RenameAsset(const std::size_t index, const std::string& modelKey)
+    {
+        if (index >= assets.size()) return;
+
+        auto& placeable = assets[index];
+        placeable.displayName = DisplayNameFromModelKey(modelKey);
+        placeable.modelKey = modelKey;
+        placeable.labelStem = LabelStemFromModelKey(modelKey);
+        placeable.modelSpaceDefaultTransform = ModelSpaceDefaultTransform(modelKey);
+        saveAssetDefaults(placeable);
     }
 
     void EditorAssetCatalog::AdjustSelectedDefaultHeight(const float amount)
@@ -256,7 +273,11 @@ namespace sage::editor
         entries.reserve(assets.size());
         for (const auto& placeable : assets)
         {
-            entries.push_back({placeable.displayName, placeable.modelKey});
+            entries.push_back(
+                {placeable.displayName,
+                 placeable.modelKey,
+                 ResourceManager::GetInstance().GetModelSourcePath(placeable.modelKey),
+                 assetDefaultsPath(placeable)});
         }
         return entries;
     }
@@ -281,7 +302,7 @@ namespace sage::editor
 
     std::string EditorAssetCatalog::assetDefaultsPath(const PlaceableAsset& placeable) const
     {
-        return (IMPORTED_ASSETS_DIRECTORY / (SanitizeAssetFileStem(placeable.modelKey) + ".json")).string();
+        return AssetDefaultsPathForModelKey(placeable.modelKey).string();
     }
 
     void EditorAssetCatalog::loadAssetDefaults(PlaceableAsset& placeable) const

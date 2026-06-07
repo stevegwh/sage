@@ -16,6 +16,7 @@
 
 #include "entt/entt.hpp"
 
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -78,6 +79,9 @@ namespace sage
         void ensureDefaultMapBase() const;
         void syncLightTransforms() const;
         void refreshAfterMapLoad() const;
+        editor::EditorGui::AssetRenameResult handleAssetFileRename(
+            std::size_t index,
+            const std::string& requestedFileName) const;
         void moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const;
         void drawHierarchyContextMenu() const;
         static void drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed);
