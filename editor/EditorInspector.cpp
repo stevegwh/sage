@@ -11,6 +11,7 @@
 #include "project/CustomSceneTags.hpp"
 
 #include <algorithm>
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -52,6 +53,34 @@ namespace sage::editor
                 field.setter(value);
             else if (field.data != nullptr)
                 *field.data = value;
+        }
+
+        // Fills the per-axis multi-selection data on a vector aggregate: a bitmask of
+        // which axes differ across the selection, and a setter that writes one axis to
+        // every selected entity while preserving each entity's other axes. `axes` are the
+        // vector's component members (e.g. {&Vector3::x, &Vector3::y, &Vector3::z}).
+        template <class VecT, std::size_t N>
+        void populateVectorAggregate(
+            LeafField<VecT>& aggregate,
+            const std::vector<LeafField<VecT>>& leafFields,
+            const std::array<float VecT::*, N>& axes)
+        {
+            for (std::size_t axis = 0; axis < N; ++axis)
+            {
+                const float base = leafFields.front().data ? leafFields.front().data->*axes[axis] : 0.0f;
+                const bool differs = std::ranges::any_of(leafFields, [&](const LeafField<VecT>& field) {
+                    return (field.data ? field.data->*axes[axis] : 0.0f) != base;
+                });
+                if (differs) aggregate.mixedComponents |= 1u << axis;
+            }
+            aggregate.componentSetter = [leafFields, axes](const std::size_t axis, const float value) {
+                for (const auto& field : leafFields)
+                {
+                    VecT v = field.data ? *field.data : VecT{};
+                    v.*axes[axis] = value;
+                    commitLeaf(field, v);
+                }
+            };
         }
 
         bool enumOptionsMatch(const EnumField& lhs, const EnumField& rhs)
@@ -140,6 +169,19 @@ namespace sage::editor
                                 commitLeaf(field, value);
                             }
                         };
+
+                        // For spatial vector fields, additionally expose per-axis info so
+                        // the inspector can show "-" only on axes that differ and edit one
+                        // axis across the whole selection without disturbing the others.
+                        if constexpr (std::is_same_v<T, LeafField<Vector3>>)
+                        {
+                            populateVectorAggregate(
+                                aggregate, leafFields, std::array{&Vector3::x, &Vector3::y, &Vector3::z});
+                        }
+                        else if constexpr (std::is_same_v<T, LeafField<Vector2>>)
+                        {
+                            populateVectorAggregate(aggregate, leafFields, std::array{&Vector2::x, &Vector2::y});
+                        }
                         return aggregate;
                     }
                 },

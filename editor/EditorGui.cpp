@@ -625,6 +625,44 @@ namespace sage::editor
             return changed;
         }
 
+        // Multi-selection editing for vector fields: one text input per axis. An axis
+        // whose values agree across the selection shows the shared number; an axis that
+        // differs shows "-". Editing one axis writes only that axis to every selected
+        // entity (via componentSetter), leaving each entity's other axes untouched.
+        bool DrawMixedVectorComponents(
+            const float* values,
+            const int count,
+            const unsigned int mixedMask,
+            const bool editable,
+            const std::function<void(std::size_t, float)>& componentSetter)
+        {
+            bool changed = false;
+            const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+            const float fullWidth = ImGui::GetContentRegionAvail().x;
+            const float itemWidth = std::max(1.0f, (fullWidth - spacing * static_cast<float>(count - 1)) / count);
+            for (int i = 0; i < count; ++i)
+            {
+                ImGui::PushID(i);
+                if (i > 0) ImGui::SameLine(0.0f, spacing);
+                ImGui::SetNextItemWidth(itemWidth);
+                std::string text = (mixedMask & (1u << i)) ? "-" : std::format("{:.3f}", values[i]);
+                DrawMaybeDisabled(editable, [&]() {
+                    constexpr ImGuiInputTextFlags flags =
+                        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
+                    const bool enterPressed = ImGui::InputText("##value", &text, flags);
+                    const bool commit = enterPressed || ImGui::IsItemDeactivatedAfterEdit();
+                    float parsed = 0.0f;
+                    if (commit && editable && text != "-" && componentSetter && ParseScalar(text, parsed))
+                    {
+                        componentSetter(static_cast<std::size_t>(i), parsed);
+                        changed = true;
+                    }
+                });
+                ImGui::PopID();
+            }
+            return changed;
+        }
+
         bool DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable, const bool mixed)
         {
             if (mixed)
@@ -786,9 +824,11 @@ namespace sage::editor
         {
             if (mixed)
             {
-                return DrawMixedTextField<Vector2>(field, editable, [](const std::string_view text, Vector2& out) {
-                    return ParseVector2(text, out);
-                });
+                const float values[2] = {
+                    field.data ? field.data->x : 0.0f,
+                    field.data ? field.data->y : 0.0f};
+                return DrawMixedVectorComponents(
+                    values, 2, field.mixedComponents, editable, field.componentSetter);
             }
 
             float value[2] = {
@@ -814,9 +854,12 @@ namespace sage::editor
         {
             if (mixed)
             {
-                return DrawMixedTextField<Vector3>(field, editable, [](const std::string_view text, Vector3& out) {
-                    return ParseVector3(text, out);
-                });
+                const float values[3] = {
+                    field.data ? field.data->x : 0.0f,
+                    field.data ? field.data->y : 0.0f,
+                    field.data ? field.data->z : 0.0f};
+                return DrawMixedVectorComponents(
+                    values, 3, field.mixedComponents, editable, field.componentSetter);
             }
 
             float value[3] = {

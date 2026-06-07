@@ -22,6 +22,13 @@ namespace sage::editor
     {
         T* data = nullptr;
         std::function<void(const T&)> setter;
+
+        // Multi-selection vector aggregates only (Vector2/Vector3); unused otherwise.
+        // mixedComponents is a bitmask where bit i is set when axis i differs across the
+        // selection. componentSetter writes a single axis to every selected entity while
+        // preserving each entity's other axes (so e.g. setting Y=0 doesn't clobber X/Z).
+        std::function<void(std::size_t axis, float value)> componentSetter;
+        unsigned int mixedComponents = 0;
     };
 
     // Holds the data + options + index getter/setter for a dropdown-rendered field.
