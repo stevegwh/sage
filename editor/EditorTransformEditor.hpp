@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "BoxColliderGizmo.hpp"
 #include "EditGizmo.hpp"
 
 #include "entt/entt.hpp"
@@ -65,7 +66,7 @@ namespace sage::editor
         [[nodiscard]] Vector3 PivotWorldPosition(const std::vector<entt::entity>& entities) const;
         [[nodiscard]] bool IsGizmoDragging() const
         {
-            return gizmo.IsDragging();
+            return gizmo.IsDragging() || boxGizmo.IsDragging();
         }
         void SetSnapToGrid(bool enabled);
 
@@ -86,6 +87,7 @@ namespace sage::editor
         EngineSystems* sys;
         OnApplied onApplied;
         EditGizmo gizmo;
+        BoxColliderGizmo boxGizmo;
         EditGizmo::Mode mode = EditGizmo::Mode::Translate;
         PivotMode pivotMode = PivotMode::LocalCenter;
         bool snapToGrid = false;
@@ -93,6 +95,12 @@ namespace sage::editor
         void updateEntityCollisionBounds(entt::entity entity) const;
         void notify(entt::entity entity) const;
         void applyPositionDelta(const std::vector<entt::entity>& entities, Vector3 worldDelta);
+
+        // Box-collider mode: the first selected entity carrying a Collideable,
+        // or entt::null. Box editing is single-target by nature.
+        [[nodiscard]] entt::entity boxEditTarget(const std::vector<entt::entity>& entities) const;
+        void updateBoxDrag(const std::vector<entt::entity>& entities);
+        void applyBoxFaceDelta(entt::entity entity, BoxColliderGizmo::Face face, float worldDelta) const;
 
         Vector3 dragUnsnappedBoundsMinPosition{};
     };

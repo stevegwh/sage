@@ -28,7 +28,12 @@ namespace sage::editor
         {
             Translate,
             Rotate,
-            Scale
+            Scale,
+            // Box-collider face editing. EditGizmo itself does not draw or hit-test
+            // this mode — EditorTransformEditor routes it to BoxColliderGizmo — but
+            // it lives in the shared Mode enum so all the editor's mode-switching
+            // plumbing (SetMode, state machine) treats it uniformly.
+            BoxCollider
         };
 
         // The result of polling a drag for one frame. Whatever the caller's

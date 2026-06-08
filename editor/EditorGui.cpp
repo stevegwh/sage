@@ -4,6 +4,7 @@
 #include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
 #include "raymath.h"
@@ -60,6 +61,21 @@ namespace sage::editor
             if (ImGui::InputTextWithHint("##filter_input", hint, filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
             {
                 filter.Build();
+            }
+            // Force Cmd/Ctrl+A to select all while the field is focused. The field's
+            // native select-all can be pre-empted by the editor's global shortcut routes,
+            // so handle it explicitly. ConfigMacOSXBehaviors swaps Cmd<>Ctrl, so testing
+            // KeyCtrl||KeySuper covers both chords on every platform.
+            if (ImGui::IsItemActive())
+            {
+                const ImGuiIO& io = ImGui::GetIO();
+                if ((io.KeyCtrl || io.KeySuper) && ImGui::IsKeyPressed(ImGuiKey_A, false))
+                {
+                    if (ImGuiInputTextState* state = ImGui::GetInputTextState(ImGui::GetItemID()))
+                    {
+                        state->ReloadUserBufAndSelectAll();
+                    }
+                }
             }
             ImGui::SameLine(0.0f, spacing);
             ImGui::BeginDisabled(!filter.IsActive());

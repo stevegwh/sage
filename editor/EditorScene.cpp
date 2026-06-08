@@ -717,12 +717,16 @@ namespace sage
 
     void EditorScene::handleFileShortcuts() const
     {
-        constexpr ImGuiInputFlags shortcutFlags = ImGuiInputFlags_RouteGlobal;
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, shortcutFlags))
+        // Save must fire no matter what currently owns the keyboard. Plain RouteGlobal
+        // yields to a focused window or an active item (e.g. a search/inspector field),
+        // so OverFocused|OverActive force Ctrl/Cmd+S to win in every context.
+        constexpr ImGuiInputFlags saveFlags = ImGuiInputFlags_RouteGlobal |
+            ImGuiInputFlags_RouteOverFocused | ImGuiInputFlags_RouteOverActive;
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, saveFlags))
         {
             saveMap();
         }
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, shortcutFlags))
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal))
         {
             openLoadMapBrowser();
         }

@@ -471,6 +471,10 @@ namespace sage::editor
         {
             machine.transformEditor.SetMode(EditGizmo::Mode::Scale);
         }
+        if (IsKeyPressed(KEY_B))
+        {
+            machine.transformEditor.SetMode(EditGizmo::Mode::BoxCollider);
+        }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell())
         {
@@ -554,6 +558,9 @@ namespace sage::editor
                 }
                 break;
             }
+            case EditGizmo::Mode::BoxCollider:
+                // Box faces are mouse-dragged only; no keyboard nudge path.
+                break;
             }
         }
 

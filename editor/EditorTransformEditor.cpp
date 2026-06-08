@@ -143,15 +143,22 @@ namespace sage::editor
 
     void EditorTransformEditor::ExitEditMode()
     {
-        if (gizmo.IsDragging())
+        if (gizmo.IsDragging() || boxGizmo.IsDragging())
         {
             sys->camera->UnlockInput();
         }
         gizmo.EndDrag();
+        boxGizmo.EndDrag();
     }
 
     void EditorTransformEditor::Update(const std::vector<entt::entity>& entities)
     {
+        if (mode == EditGizmo::Mode::BoxCollider)
+        {
+            updateBoxDrag(entities);
+            return;
+        }
+
         if (!gizmo.IsDragging()) return;
 
         if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || !HasValidTransform(*sys->registry, entities))
@@ -217,6 +224,9 @@ namespace sage::editor
         case EditGizmo::Mode::Scale:
             AdjustScale(entities, sample.projectedAxisPixels * 0.01f);
             break;
+        case EditGizmo::Mode::BoxCollider:
+            // Routed to updateBoxDrag before this switch is reached.
+            break;
         }
     }
 
@@ -229,6 +239,19 @@ namespace sage::editor
         const Camera3D camera = *sys->camera->getRaylibCam();
         const Vector2 viewport = sys->settings->GetRenderViewPort();
         const Vector2 renderMousePosition = sys->settings->ScreenToRenderViewportPosition(mousePosition);
+
+        if (mode == EditGizmo::Mode::BoxCollider)
+        {
+            const auto target = boxEditTarget(entities);
+            if (target == entt::null) return false;
+            const auto& worldBox = sys->registry->get<Collideable>(target).worldBoundingBox;
+            const auto face = boxGizmo.HitTest(camera, viewport, worldBox, renderMousePosition);
+            if (face == BoxColliderGizmo::Face::None) return false;
+            boxGizmo.BeginDrag(face, renderMousePosition);
+            sys->camera->LockInput();
+            return true;
+        }
+
         const Vector3 origin = PivotWorldPosition(entities);
 
         const auto axis = gizmo.HitTest(camera, viewport, origin, mode, renderMousePosition);
@@ -247,6 +270,15 @@ namespace sage::editor
 
         const Camera3D camera = *sys->camera->getRaylibCam();
         const Vector2 viewport = sys->settings->GetRenderViewPort();
+
+        if (mode == EditGizmo::Mode::BoxCollider)
+        {
+            const auto target = boxEditTarget(entities);
+            if (target == entt::null) return;
+            boxGizmo.Draw(camera, sys->registry->get<Collideable>(target).worldBoundingBox);
+            return;
+        }
+
         const Vector3 origin = PivotWorldPosition(entities);
         gizmo.Draw(camera, viewport, origin, mode);
     }
@@ -276,6 +308,8 @@ namespace sage::editor
             return "Rotate";
         case EditGizmo::Mode::Scale:
             return "Scale";
+        case EditGizmo::Mode::BoxCollider:
+            return "Box Collider";
         }
         return "Translate";
     }
@@ -504,6 +538,101 @@ namespace sage::editor
                 updateEntityCollisionBounds(child);
             }
         }
+    }
+
+    entt::entity EditorTransformEditor::boxEditTarget(const std::vector<entt::entity>& entities) const
+    {
+        for (const auto entity : entities)
+        {
+            if (sys->registry->valid(entity) && sys->registry->all_of<sgTransform, Collideable>(entity))
+            {
+                return entity;
+            }
+        }
+        return entt::null;
+    }
+
+    void EditorTransformEditor::updateBoxDrag(const std::vector<entt::entity>& entities)
+    {
+        if (!boxGizmo.IsDragging()) return;
+
+        const auto target = boxEditTarget(entities);
+        if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT) || target == entt::null)
+        {
+            ExitEditMode();
+            return;
+        }
+
+        const Camera3D camera = *sys->camera->getRaylibCam();
+        const Vector2 viewport = sys->settings->GetRenderViewPort();
+        const Vector2 mousePosition = sys->settings->ScreenToRenderViewportPosition(GetMousePosition());
+        const auto& worldBox = sys->registry->get<Collideable>(target).worldBoundingBox;
+
+        const auto sample = boxGizmo.SampleDrag(camera, viewport, worldBox, mousePosition);
+        if (sample.face == BoxColliderGizmo::Face::None || std::abs(sample.worldDelta) <= 0.0001f) return;
+
+        applyBoxFaceDelta(target, sample.face, sample.worldDelta);
+    }
+
+    void EditorTransformEditor::applyBoxFaceDelta(
+        const entt::entity entity, const BoxColliderGizmo::Face face, const float worldDelta) const
+    {
+        if (!sys->registry->valid(entity) || !sys->registry->all_of<sgTransform, Collideable>(entity)) return;
+
+        const auto& transform = sys->registry->get<sgTransform>(entity);
+        auto& collideable = sys->registry->get<Collideable>(entity);
+
+        // The handle is dragged in world units along the face's outward normal,
+        // but the box is authored in local space — divide out the entity's scale
+        // on that axis. Assumes an axis-aligned (unrotated) box, which holds for
+        // trigger volumes and other meshless collideables.
+        const Vector3 scale = transform.GetScale();
+        constexpr float MIN_THICKNESS = 0.05f;
+
+        if (collideable.blocksNavigation)
+        {
+            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
+        }
+
+        BoundingBox& box = collideable.localBoundingBox;
+        switch (face)
+        {
+        case BoxColliderGizmo::Face::MaxX:
+            box.max.x = std::max(box.min.x + MIN_THICKNESS, box.max.x + worldDelta / std::max(scale.x, 0.0001f));
+            break;
+        case BoxColliderGizmo::Face::MinX:
+            box.min.x = std::min(box.max.x - MIN_THICKNESS, box.min.x - worldDelta / std::max(scale.x, 0.0001f));
+            break;
+        case BoxColliderGizmo::Face::MaxY:
+            box.max.y = std::max(box.min.y + MIN_THICKNESS, box.max.y + worldDelta / std::max(scale.y, 0.0001f));
+            break;
+        case BoxColliderGizmo::Face::MinY:
+            box.min.y = std::min(box.max.y - MIN_THICKNESS, box.min.y - worldDelta / std::max(scale.y, 0.0001f));
+            break;
+        case BoxColliderGizmo::Face::MaxZ:
+            box.max.z = std::max(box.min.z + MIN_THICKNESS, box.max.z + worldDelta / std::max(scale.z, 0.0001f));
+            break;
+        case BoxColliderGizmo::Face::MinZ:
+            box.min.z = std::min(box.max.z - MIN_THICKNESS, box.min.z - worldDelta / std::max(scale.z, 0.0001f));
+            break;
+        case BoxColliderGizmo::Face::None:
+            break;
+        }
+
+        // Recompute the world box from the edited local box. Note this is the one
+        // place we don't route through updateEntityCollisionBounds: that helper
+        // re-derives localBoundingBox from a Renderable's mesh, which would
+        // immediately discard the manual edit.
+        const Matrix entityMatrix = BuildRenderableEntityMatrix(
+            transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+        collideable.worldBoundingBox = TransformBoundingBoxByCorners(box, entityMatrix);
+
+        if (collideable.blocksNavigation)
+        {
+            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
+        }
+
+        notify(entity);
     }
 
     void EditorTransformEditor::notify(const entt::entity entity) const

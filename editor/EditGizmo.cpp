@@ -16,7 +16,7 @@ namespace sage::editor
     {
         constexpr float GIZMO_MIN_SIZE = 1.5f;
         constexpr float GIZMO_MAX_SIZE = 9.0f;
-        constexpr float GIZMO_SCREEN_HIT_RADIUS = 12.0f;
+        constexpr float GIZMO_SCREEN_HIT_RADIUS = 18.0f;
         constexpr int GIZMO_RING_SEGMENTS = 72;
 
         Vector2 WorldToScreen(const Camera3D& camera, const Vector2 viewport, const Vector3 worldPosition)
@@ -242,6 +242,9 @@ namespace sage::editor
                                              ? -mouseDelta.y
                                              : ProjectedMouseDelta(camera, viewport, origin, drag.axis, mouseDelta);
             break;
+        case Mode::BoxCollider:
+            // Handled by BoxColliderGizmo, not here.
+            break;
         }
 
         return sample;
@@ -254,8 +257,8 @@ namespace sage::editor
         const Mode mode) const
     {
         const float size = SizeForCamera(camera.position, origin);
-        const float shaftRadius = size * 0.012f;
-        const float handleSize = size * 0.11f;
+        const float shaftRadius = size * 0.024f;
+        const float handleSize = size * 0.14f;
 
         DrawSphere(origin, size * 0.035f, ORANGE);
 
@@ -269,7 +272,7 @@ namespace sage::editor
             const Vector3 coneBase = Vector3Add(origin, Vector3Scale(axisVector, size * 0.78f));
             const Color color = axisColor(axis);
             DrawCylinderEx(origin, coneBase, shaftRadius, shaftRadius, 8, color);
-            DrawCylinderEx(coneBase, end, size * 0.055f, 0.0f, 12, color);
+            DrawCylinderEx(coneBase, end, size * 0.075f, 0.0f, 12, color);
         };
 
         const auto drawScaleAxis = [&](const Axis axis) {
@@ -313,6 +316,9 @@ namespace sage::editor
                 origin,
                 {handleSize * 0.9f, handleSize * 0.9f, handleSize * 0.9f},
                 drag.active && drag.axis == Axis::Uniform ? GOLD : Color{245, 245, 245, 255});
+            break;
+        case Mode::BoxCollider:
+            // Drawn by BoxColliderGizmo, not here.
             break;
         }
     }

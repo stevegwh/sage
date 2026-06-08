@@ -43,7 +43,8 @@ namespace sage
                 static_cast<float>(color.g) / static_cast<float>(255),
                 static_cast<float>(color.b) / static_cast<float>(255),
                 static_cast<float>(color.a) / static_cast<float>(255)};
-            SetShaderValue(shader, enabledLoc, &enabled, SHADER_UNIFORM_INT);
+            const int enabledValue = enabled ? 1 : 0;
+            SetShaderValue(shader, enabledLoc, &enabledValue, SHADER_UNIFORM_INT);
             SetShaderValue(shader, typeLoc, &type, SHADER_UNIFORM_INT);
             SetShaderValue(shader, positionLoc, _position, SHADER_UNIFORM_VEC3);
             SetShaderValue(shader, targetLoc, _target, SHADER_UNIFORM_VEC3);
