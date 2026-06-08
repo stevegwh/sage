@@ -43,6 +43,8 @@ namespace sage
                 entt::entity entity = entt::null;
                 entt::entity parent = entt::null;
                 std::string displayName;
+                // Font Awesome glyph (from IconsFontAwesome6.h) shown before the name in the hierarchy.
+                const char* icon = nullptr;
                 int depth = 0;
             };
 

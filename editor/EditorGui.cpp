@@ -1226,7 +1226,11 @@ namespace sage::editor
                         const auto imguiEntityId =
                             static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
                         const bool open = ImGui::TreeNodeEx(
-                            reinterpret_cast<void*>(imguiEntityId), nodeFlags, "%s", entry.displayName.c_str());
+                            reinterpret_cast<void*>(imguiEntityId),
+                            nodeFlags,
+                            "%s  %s",
+                            entry.icon ? entry.icon : "",
+                            entry.displayName.c_str());
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                         {

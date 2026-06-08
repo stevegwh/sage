@@ -30,6 +30,7 @@ namespace sage::editor
         explicit EditorHierarchyTree(EngineSystems* sys);
 
         [[nodiscard]] std::string GetEntityName(entt::entity entity) const;
+        [[nodiscard]] const char* GetEntityIcon(entt::entity entity) const;
         [[nodiscard]] std::vector<EditorGui::SceneObjectEntry> CollectSceneObjectEntries() const;
         void NoteHierarchyMove(entt::entity dragged, entt::entity newParent, entt::entity insertBefore);
     };

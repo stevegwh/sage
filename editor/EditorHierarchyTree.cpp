@@ -1,10 +1,17 @@
 #include "EditorHierarchyTree.hpp"
 
 #include "EditorComponents.hpp"
+#include "engine/components/Collideable.hpp"
+#include "engine/components/DoorBehaviorComponent.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/SpatialAudioComponent.hpp"
+#include "engine/components/Spawner.hpp"
+#include "engine/components/TriggerVolume.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
+
+#include "extras/IconsFontAwesome6.h"
 
 #include <algorithm>
 #include <format>
@@ -40,6 +47,26 @@ namespace sage::editor
             return std::format("light_{}", entt::to_integral(entity));
         }
         return entityName(entity);
+    }
+
+    const char* EditorHierarchyTree::GetEntityIcon(const entt::entity entity) const
+    {
+        if (!sys->registry->valid(entity))
+        {
+            return ICON_FA_CIRCLE;
+        }
+
+        // Ordered most-specific first: an entity may carry several of these components,
+        // and the first match wins so the icon reflects the entity's primary role.
+        if (sys->registry->any_of<Light>(entity)) return ICON_FA_LIGHTBULB;
+        if (sys->registry->any_of<DoorBehaviorComponent>(entity)) return ICON_FA_DOOR_OPEN;
+        if (sys->registry->any_of<SpatialAudioComponent>(entity)) return ICON_FA_VOLUME_HIGH;
+        if (sys->registry->any_of<Spawner>(entity)) return ICON_FA_LOCATION_DOT;
+        if (sys->registry->any_of<TriggerVolume>(entity)) return ICON_FA_VECTOR_SQUARE;
+        if (sys->registry->any_of<Renderable>(entity)) return ICON_FA_CUBE;
+        if (sys->registry->any_of<Collideable>(entity)) return ICON_FA_VECTOR_SQUARE;
+
+        return ICON_FA_CIRCLE;
     }
 
     std::vector<EditorGui::SceneObjectEntry> EditorHierarchyTree::CollectSceneObjectEntries() const
@@ -78,7 +105,12 @@ namespace sage::editor
     {
         if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
 
-        entries.push_back({.entity = entity, .parent = parent, .displayName = GetEntityName(entity), .depth = depth});
+        entries.push_back(
+            {.entity = entity,
+             .parent = parent,
+             .displayName = GetEntityName(entity),
+             .icon = GetEntityIcon(entity),
+             .depth = depth});
 
         for (const auto child : sys->registry->get<sgTransform>(entity).GetChildren())
         {
