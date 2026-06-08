@@ -1,5 +1,7 @@
 #pragma once
 
+#include "engine/components/NavigationGridSquare.hpp"
+#include "engine/components/sgTransform.hpp"
 #include "engine/raylib-cereal.hpp"
 #include "raylib.h"
 
@@ -35,4 +37,23 @@ namespace sage
             i.field("One Shot", oneShot);
         }
     };
+
+    // Returns the first trigger volume whose transform occupies the given grid square,
+    // or entt::null if none do. Templated on the grid system so this component header
+    // stays free of system dependencies; GridSystem need only provide
+    // `bool WorldToGridSpace(Vector3, GridSquare&) const`.
+    template <class GridSystem>
+    [[nodiscard]] entt::entity FindTriggerVolumeAtGridSquare(
+        entt::registry& registry, const GridSystem& grid, const GridSquare& target)
+    {
+        for (auto view = registry.view<TriggerVolume, sgTransform>(); const auto entity : view)
+        {
+            GridSquare square{};
+            if (grid.WorldToGridSpace(view.get<sgTransform>(entity).GetWorldPos(), square) && square == target)
+            {
+                return entity;
+            }
+        }
+        return entt::null;
+    }
 } // namespace sage
