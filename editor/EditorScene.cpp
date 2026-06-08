@@ -10,6 +10,8 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Spawner.hpp"
+#include "engine/components/TriggerVolume.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Cursor.hpp"
 #include "engine/EngineSystems.hpp"
@@ -57,6 +59,7 @@ namespace sage
             ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError;
         constexpr ImGuiFileBrowserFlags SAVE_BROWSER_FLAGS =
             LOAD_BROWSER_FLAGS | ImGuiFileBrowserFlags_EnterNewFilename;
+        constexpr float SAVE_FEEDBACK_SECONDS = 2.5f;
 
         struct FocusTarget
         {
@@ -299,6 +302,32 @@ namespace sage
         {
             return std::format("light_{}", entt::to_integral(entity));
         }
+
+        std::string spawnerLabel(const entt::entity entity)
+        {
+            return std::format("spawner_{}", entt::to_integral(entity));
+        }
+
+        std::string triggerLabel(const entt::entity entity)
+        {
+            return std::format("trigger_{}", entt::to_integral(entity));
+        }
+
+        Color spawnerColor(const SpawnerType type)
+        {
+            switch (type)
+            {
+            case SpawnerType::PLAYER:
+                return BLUE;
+            case SpawnerType::ENEMY:
+                return RED;
+            case SpawnerType::NPC:
+                return GREEN;
+            case SpawnerType::DIALOG_CUTSCENE:
+                return PURPLE;
+            }
+            return WHITE;
+        }
     } // namespace
 
     const editor::PlaceableAsset& EditorScene::selectedPlaceable() const
@@ -375,6 +404,7 @@ namespace sage
     {
         const auto defaultsStatus = modelDefaults->Status(describeSelectedAsset());
         gui->SetOverlayStatus(editorModes->GetStateName(), describeCursorPosition());
+        gui->SetSaveStatus(currentSaveStatus(), hasUnsavedChanges());
         gui->SetAssetDefaultsStatus(
             defaultsStatus.assetName, defaultsStatus.height, defaultsStatus.rotation, defaultsStatus.scale);
         gui->SetSelectedAsset(
@@ -436,6 +466,11 @@ namespace sage
 
     void EditorScene::Update() const
     {
+        if (saveFeedbackRemaining > 0.0f)
+        {
+            saveFeedbackRemaining = std::max(0.0f, saveFeedbackRemaining - GetFrameTime());
+        }
+
         // TODO: Fullscreen game viewport (switch state)
         sys->collisionSystem->Update();
         sys->audioManager->Update();
@@ -489,6 +524,29 @@ namespace sage
         sys->lightSubSystem->DrawDebugLights();
         placementController->DrawGridAndAxes();
         editorModes->Draw3D();
+
+        // Markers have no mesh, so draw a stand-in: a sphere per spawner (coloured by
+        // type) and a wireframe box per trigger volume (from its halfExtents).
+        for (const auto entity : sys->registry->view<Spawner, sgTransform>())
+        {
+            const auto& transform = sys->registry->get<sgTransform>(entity);
+            const auto position = transform.GetWorldPos();
+            const auto color = spawnerColor(sys->registry->get<Spawner>(entity).type);
+            DrawSphereEx(position, 0.5f, 8, 8, color);
+            // Facing line: a stick from the sphere out along the spawner's forward.
+            DrawLine3D(position, Vector3Add(position, Vector3Scale(transform.forward(), 1.5f)), color);
+        }
+        for (const auto entity : sys->registry->view<TriggerVolume, sgTransform>())
+        {
+            const auto& trigger = sys->registry->get<TriggerVolume>(entity);
+            const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
+            DrawBoundingBox(
+                BoundingBox{
+                    Vector3Subtract(position, trigger.halfExtents),
+                    Vector3Add(position, trigger.halfExtents)},
+                GREEN);
+        }
+
         for (const auto entity : selection->SelectedWithChildren())
         {
             if (sys->registry->valid(entity) && sys->registry->any_of<Collideable>(entity))
@@ -496,6 +554,34 @@ namespace sage
                 DrawBoundingBox(sys->registry->get<Collideable>(entity).worldBoundingBox, ORANGE);
             }
         }
+    }
+
+    void EditorScene::setSnapToGrid(const bool enabled) const
+    {
+        snapToGrid = enabled;
+        if (placementController) placementController->SetSnapToGrid(enabled);
+        if (transformEditor) transformEditor->SetSnapToGrid(enabled);
+        refreshOverlay();
+    }
+
+    void EditorScene::markSceneSaved(const std::filesystem::path& path) const
+    {
+        if (history) history->MarkSaved();
+        const auto fileName = path.filename().string();
+        saveFeedbackStatus = fileName.empty() ? "Saved map" : std::format("Saved {}", fileName);
+        saveFeedbackRemaining = SAVE_FEEDBACK_SECONDS;
+    }
+
+    bool EditorScene::hasUnsavedChanges() const
+    {
+        return history && history->HasUnsavedChanges();
+    }
+
+    std::string EditorScene::currentSaveStatus() const
+    {
+        if (hasUnsavedChanges()) return "Unsaved changes";
+        if (saveFeedbackRemaining > 0.0f) return saveFeedbackStatus;
+        return {};
     }
 
     void EditorScene::DrawOverlay2D() const
@@ -540,9 +626,16 @@ namespace sage
         gui->EndImGui();
     }
 
-    void EditorScene::drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed)
+    void EditorScene::drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed) const
     {
         constexpr const char* kPopupId = "Exit Editor";
+
+        if (exitRequested && !hasUnsavedChanges())
+        {
+            exitRequested = false;
+            exitConfirmed = true;
+            return;
+        }
 
         if (exitRequested && !ImGui::IsPopupOpen(kPopupId))
         {
@@ -551,18 +644,29 @@ namespace sage
 
         const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2{0.5f, 0.5f});
-        ImGui::SetNextWindowSize(ImVec2{360.0f, 0.0f}, ImGuiCond_Appearing);
+        ImGui::SetNextWindowSize(ImVec2{440.0f, 0.0f}, ImGuiCond_Appearing);
         if (ImGui::BeginPopupModal(kPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
         {
-            ImGui::TextWrapped("Are you sure you want to exit the editor?");
+            ImGui::TextWrapped("You have unsaved changes. Exit without saving? [Y/N]");
             ImGui::Spacing();
-            if (ImGui::Button("Exit", ImVec2{120.0f, 0.0f}))
+            constexpr float exitButtonWidth = 180.0f;
+            constexpr float cancelButtonWidth = 120.0f;
+            const float buttonsWidth = exitButtonWidth + cancelButtonWidth + ImGui::GetStyle().ItemSpacing.x;
+            ImGui::SetCursorPosX((ImGui::GetWindowSize().x - buttonsWidth) * 0.5f);
+            const bool confirm =
+                ImGui::Button("Exit Without Saving (Y)", ImVec2{exitButtonWidth, 0.0f}) ||
+                ImGui::IsKeyPressed(ImGuiKey_Y);
+            ImGui::SameLine();
+            const bool cancel =
+                ImGui::Button("Cancel (N)", ImVec2{cancelButtonWidth, 0.0f}) ||
+                ImGui::IsKeyPressed(ImGuiKey_N);
+            if (confirm)
             {
+                exitRequested = false;
                 exitConfirmed = true;
                 ImGui::CloseCurrentPopup();
             }
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
+            else if (cancel)
             {
                 exitRequested = false;
                 ImGui::CloseCurrentPopup();
@@ -857,6 +961,11 @@ namespace sage
             {
                 history->Redo();
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Snap To Grid", nullptr, snapToGrid))
+            {
+                setSnapToGrid(!snapToGrid);
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Add"))
@@ -864,6 +973,14 @@ namespace sage
             if (ImGui::MenuItem("Light"))
             {
                 addLight();
+            }
+            if (ImGui::MenuItem("Spawner"))
+            {
+                addSpawner();
+            }
+            if (ImGui::MenuItem("Trigger Volume"))
+            {
+                addTriggerVolume();
             }
             ImGui::EndMenu();
         }
@@ -945,6 +1062,50 @@ namespace sage
         editorModes->SelectSceneEntity(entity);
     }
 
+    void EditorScene::addSpawner() const
+    {
+        Vector3 position = sys->camera->getRaylibCam()->target;
+        if (const auto snappedPosition = placementController->SnappedPlacementPosition();
+            snappedPosition.has_value())
+        {
+            position = *snappedPosition;
+        }
+
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<editor::EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = spawnerLabel(entity);
+
+        sys->registry->emplace<Spawner>(
+            entity,
+            Spawner{.name = "", .type = SpawnerType::ENEMY, .pos = position, .rot = Vector3Zero()});
+
+        if (history) history->RecordCreate(editor::EditAction::AddSpawner, {entity});
+        editorModes->SelectSceneEntity(entity);
+    }
+
+    void EditorScene::addTriggerVolume() const
+    {
+        Vector3 position = sys->camera->getRaylibCam()->target;
+        if (const auto snappedPosition = placementController->SnappedPlacementPosition();
+            snappedPosition.has_value())
+        {
+            position = *snappedPosition;
+        }
+
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<editor::EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = triggerLabel(entity);
+
+        sys->registry->emplace<TriggerVolume>(entity);
+
+        if (history) history->RecordCreate(editor::EditAction::AddTriggerVolume, {entity});
+        editorModes->SelectSceneEntity(entity);
+    }
+
     void EditorScene::loadMap(const std::filesystem::path& path) const
     {
         const auto selectedPath = ensureMapExtension(path);
@@ -961,6 +1122,9 @@ namespace sage
         SetSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
         refreshAfterMapLoad();
+        if (history) history->MarkSaved();
+        saveFeedbackRemaining = 0.0f;
+        saveFeedbackStatus.clear();
     }
 
     void EditorScene::saveMap() const
@@ -991,6 +1155,7 @@ namespace sage
         editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder);
         SetSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
+        markSceneSaved(currentMapPath);
     }
 
     void EditorScene::restoreLastOpenedMap() const
@@ -1264,6 +1429,7 @@ namespace sage
             }
         }
 
+        if (history) history->MarkDirty();
         refreshOverlay();
         refreshSceneWindows();
 

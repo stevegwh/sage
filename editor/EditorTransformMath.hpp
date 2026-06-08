@@ -11,9 +11,22 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace sage::editor
 {
+    inline constexpr float EDITOR_GRID_SPACING = 10.0f;
+
+    inline float SnapGridCoord(const float value)
+    {
+        return std::round(value / EDITOR_GRID_SPACING) * EDITOR_GRID_SPACING;
+    }
+
+    inline Vector3 SnapToGridLines(const Vector3 worldPos)
+    {
+        return {SnapGridCoord(worldPos.x), worldPos.y, SnapGridCoord(worldPos.z)};
+    }
+
     inline BoundingBox TransformBoundingBoxByCorners(const BoundingBox& bounds, const Matrix& transform)
     {
         const std::array<Vector3, 8> corners = {

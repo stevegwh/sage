@@ -6,6 +6,7 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
+#include "engine/components/TriggerVolume.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 #include "project/CustomSceneTags.hpp"
@@ -329,5 +330,6 @@ namespace sage::editor
         registry.Register<Collideable>("Collideable");
         registry.Register<Light>("Light");
         registry.Register<Spawner>("Spawner");
+        registry.Register<TriggerVolume>("Trigger Volume");
     }
 } // namespace sage::editor

@@ -15,6 +15,8 @@
 #pragma once
 
 #include "engine/components/Collideable.hpp"
+#include "engine/components/Spawner.hpp"
+#include "engine/components/TriggerVolume.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -40,6 +42,8 @@ namespace sage::editor
         Paste,
         Delete,
         AddLight,
+        AddSpawner,
+        AddTriggerVolume,
         Transform,
         EditField,
         Reparent
@@ -86,6 +90,9 @@ namespace sage::editor
         [[nodiscard]] std::string RedoLabel() const;
         void Undo();
         void Redo();
+        void MarkDirty();
+        void MarkSaved();
+        [[nodiscard]] bool HasUnsavedChanges() const;
 
         // Drops all history (e.g. on map load). Handles stay valid; ids keep counting.
         void Clear();
@@ -113,6 +120,10 @@ namespace sage::editor
             std::string renderableBlob;
             bool hasLight = false;
             Light light{};
+            bool hasSpawner = false;
+            Spawner spawner{};
+            bool hasTriggerVolume = false;
+            TriggerVolume triggerVolume{};
             bool hasAssetReference = false;
             std::string assetKey;
             bool hasMetaData = false;
@@ -137,6 +148,7 @@ namespace sage::editor
         std::vector<HistoryEntry> undoStack;
         std::vector<HistoryEntry> redoStack;
         std::uint64_t nextPersistentId = 1;
+        bool dirty = false;
 
         bool active = false;
         EditAction activeAction{};

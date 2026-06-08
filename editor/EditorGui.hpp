@@ -147,6 +147,8 @@ namespace sage
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
+            mutable std::string saveStatus = "";
+            mutable bool sceneHasUnsavedChanges = false;
             bool dockLayoutChanged = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
@@ -167,6 +169,7 @@ namespace sage
             void DrawAssetDrawerWindow();
             void DrawDeleteConfirmationModal();
             void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;
+            void SetSaveStatus(const std::string& status, bool hasUnsavedChanges) const;
             void SetAssetDefaultsStatus(
                 const std::string& assetName,
                 const std::string& modelDefaultHeight,

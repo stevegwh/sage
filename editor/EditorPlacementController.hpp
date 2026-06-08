@@ -25,6 +25,7 @@ namespace sage::editor
         entt::entity gridPlacementSurfaceEntity = entt::null;
         float placementRotationY = 0.0f;
         float placementScale = 1.0f;
+        bool snapToGrid = false;
         std::optional<GridSquare> hoveredGridSquare;
         std::optional<Vector3> snappedPlacementPosition;
 
@@ -45,6 +46,7 @@ namespace sage::editor
         std::optional<entt::entity> PlaceSelectedMesh();
         void DrawPreview() const;
         void DrawGridAndAxes() const;
+        void SetSnapToGrid(bool enabled);
 
         [[nodiscard]] entt::entity GridSurfaceEntity() const;
         [[nodiscard]] const std::optional<GridSquare>& HoveredGridSquare() const;

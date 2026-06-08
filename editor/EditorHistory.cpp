@@ -45,6 +45,18 @@ namespace sage::editor
                    a.color.b == b.color.b && a.color.a == b.color.a && a.brightness == b.brightness &&
                    a.constant == b.constant && a.linear == b.linear && a.quadratic == b.quadratic;
         }
+
+        bool spawnerEqual(const Spawner& a, const Spawner& b)
+        {
+            return a.type == b.type && a.name == b.name && vecEqual(a.pos, b.pos) &&
+                   vecEqual(a.rot, b.rot);
+        }
+
+        bool triggerVolumeEqual(const TriggerVolume& a, const TriggerVolume& b)
+        {
+            return vecEqual(a.halfExtents, b.halfExtents) && a.event == b.event &&
+                   a.targetTag == b.targetTag && a.oneShot == b.oneShot;
+        }
     } // namespace
 
     EditorHistory::EditorHistory(EngineSystems* _sys, OnApplied _onApplied)
@@ -78,6 +90,15 @@ namespace sage::editor
         }
         if (a.hasRenderable != b.hasRenderable || a.renderableBlob != b.renderableBlob) return false;
         if (a.hasLight != b.hasLight || (a.hasLight && !lightEqual(a.light, b.light))) return false;
+        if (a.hasSpawner != b.hasSpawner || (a.hasSpawner && !spawnerEqual(a.spawner, b.spawner)))
+        {
+            return false;
+        }
+        if (a.hasTriggerVolume != b.hasTriggerVolume ||
+            (a.hasTriggerVolume && !triggerVolumeEqual(a.triggerVolume, b.triggerVolume)))
+        {
+            return false;
+        }
         if (a.hasAssetReference != b.hasAssetReference || a.assetKey != b.assetKey) return false;
         if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
         return true;
@@ -173,6 +194,16 @@ namespace sage::editor
         {
             s.hasLight = true;
             s.light = reg.get<Light>(entity);
+        }
+        if (reg.all_of<Spawner>(entity))
+        {
+            s.hasSpawner = true;
+            s.spawner = reg.get<Spawner>(entity);
+        }
+        if (reg.all_of<TriggerVolume>(entity))
+        {
+            s.hasTriggerVolume = true;
+            s.triggerVolume = reg.get<TriggerVolume>(entity);
         }
         if (reg.all_of<AssetReference>(entity))
         {
@@ -339,6 +370,7 @@ namespace sage::editor
 
         undoStack.push_back(std::move(entry));
         redoStack.clear();
+        MarkDirty();
     }
 
     // ===== Undo / redo ==============================================================
@@ -372,6 +404,7 @@ namespace sage::editor
         undoStack.pop_back();
         applyEntry(entry, /*undo=*/true);
         redoStack.push_back(std::move(entry));
+        MarkDirty();
     }
 
     void EditorHistory::Redo()
@@ -381,6 +414,22 @@ namespace sage::editor
         redoStack.pop_back();
         applyEntry(entry, /*undo=*/false);
         undoStack.push_back(std::move(entry));
+        MarkDirty();
+    }
+
+    void EditorHistory::MarkDirty()
+    {
+        dirty = true;
+    }
+
+    void EditorHistory::MarkSaved()
+    {
+        dirty = false;
+    }
+
+    bool EditorHistory::HasUnsavedChanges() const
+    {
+        return dirty || active;
     }
 
     void EditorHistory::Clear()
@@ -390,6 +439,7 @@ namespace sage::editor
         active = false;
         activeBefore.clear();
         baseline.clear();
+        MarkSaved();
     }
 
     // ===== Apply ====================================================================
@@ -504,6 +554,16 @@ namespace sage::editor
             reg.emplace_or_replace<Light>(entity, target.light);
         else if (reg.all_of<Light>(entity))
             reg.remove<Light>(entity);
+
+        if (target.hasSpawner)
+            reg.emplace_or_replace<Spawner>(entity, target.spawner);
+        else if (reg.all_of<Spawner>(entity))
+            reg.remove<Spawner>(entity);
+
+        if (target.hasTriggerVolume)
+            reg.emplace_or_replace<TriggerVolume>(entity, target.triggerVolume);
+        else if (reg.all_of<TriggerVolume>(entity))
+            reg.remove<TriggerVolume>(entity);
 
         if (target.hasAssetReference)
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});

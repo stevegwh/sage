@@ -7,9 +7,15 @@
 #include "engine/Settings.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Spawner.hpp"
+#include "engine/components/TriggerVolume.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 
+#include "raymath.h"
+
 #include <limits>
+#include <optional>
+#include <utility>
 #include <vector>
 
 namespace sage::editor
@@ -90,13 +96,39 @@ namespace sage::editor
             }
         }
 
-        auto selectClosest = [](std::vector<CollisionInfo>& hits) -> std::optional<entt::entity> {
-            if (hits.empty()) return std::nullopt;
-            CollisionSystem::SortCollisionsByDistance(hits);
-            return hits.front().collidedEntityId;
+        // Markers (spawners, trigger volumes) carry no Collideable, so test the ray
+        // against their stand-in shapes directly. Keeps the marker components as plain
+        // data instead of coupling them to the collision system.
+        std::optional<std::pair<entt::entity, float>> markerHit;
+        const auto considerMarker = [&](const entt::entity entity, const RayCollision& col) {
+            if (!col.hit || entity == ignoredEntity) return;
+            if (!markerHit || col.distance < markerHit->second) markerHit = {entity, col.distance};
         };
+        for (const auto entity : sys->registry->view<Spawner, sgTransform>())
+        {
+            const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
+            considerMarker(entity, GetRayCollisionSphere(ray, position, 0.5f));
+        }
+        for (const auto entity : sys->registry->view<TriggerVolume, sgTransform>())
+        {
+            const auto& trigger = sys->registry->get<TriggerVolume>(entity);
+            const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
+            const BoundingBox box{
+                Vector3Subtract(position, trigger.halfExtents), Vector3Add(position, trigger.halfExtents)};
+            considerMarker(entity, GetRayCollisionBox(ray, box));
+        }
 
-        if (auto object = selectClosest(objectHits); object.has_value()) return object;
-        return selectClosest(fallbackHits);
+        CollisionSystem::SortCollisionsByDistance(objectHits);
+        const float objectDistance =
+            objectHits.empty() ? std::numeric_limits<float>::max() : objectHits.front().rlCollision.distance;
+
+        // Markers win ties so small handles aren't swallowed by a surface at the same depth.
+        if (markerHit && markerHit->second <= objectDistance) return markerHit->first;
+        if (!objectHits.empty()) return objectHits.front().collidedEntityId;
+        if (markerHit) return markerHit->first;
+
+        if (fallbackHits.empty()) return std::nullopt;
+        CollisionSystem::SortCollisionsByDistance(fallbackHits);
+        return fallbackHits.front().collidedEntityId;
     }
 } // namespace sage::editor

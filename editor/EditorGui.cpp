@@ -1535,6 +1535,12 @@ namespace sage::editor
         cursorStatus = cursor;
     }
 
+    void EditorGui::SetSaveStatus(const std::string& status, const bool hasUnsavedChanges) const
+    {
+        saveStatus = status;
+        sceneHasUnsavedChanges = hasUnsavedChanges;
+    }
+
     void EditorGui::SetAssetDefaultsStatus(
         const std::string& assetName,
         const std::string& modelDefaultHeight,
@@ -1642,7 +1648,8 @@ namespace sage::editor
         const Font metaFont =
             ResourceManager::GetInstance().FontLoad("resources/fonts/FiraCode/FiraCode-SemiBold.ttf");
 
-        DrawTextFit(titleFont, sceneNameStatus, {x, y}, maxWidth, titleSize, EDITOR_TEXT);
+        const std::string title = sceneHasUnsavedChanges ? sceneNameStatus + " *" : sceneNameStatus;
+        DrawTextFit(titleFont, title, {x, y}, maxWidth, titleSize, EDITOR_TEXT);
         DrawTextFit(
             metaFont,
             "Mode: " + modeStatus + "  |  Cursor: " + cursorStatus,
@@ -1650,6 +1657,16 @@ namespace sage::editor
             maxWidth,
             metaSize,
             Color{202, 211, 224, 255});
+        if (!saveStatus.empty())
+        {
+            DrawTextFit(
+                metaFont,
+                saveStatus,
+                {x, y + settings->ScaleValueHeight(56.0f)},
+                maxWidth,
+                metaSize,
+                sceneHasUnsavedChanges ? Color{252, 211, 77, 255} : Color{134, 239, 172, 255});
+        }
     }
 
     void EditorGui::ShowDeleteConfirmation(const std::string& selectedEntity)

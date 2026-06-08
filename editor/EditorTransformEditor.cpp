@@ -87,6 +87,17 @@ namespace sage::editor
             }
         }
 
+        std::optional<BoundingBox> SelectionBounds(
+            entt::registry& registry, const std::vector<entt::entity>& entities)
+        {
+            std::optional<BoundingBox> bounds;
+            for (const auto entity : entities)
+            {
+                AppendSubtreeBounds(registry, entity, bounds);
+            }
+            return bounds;
+        }
+
         bool HasValidTransform(entt::registry& registry, const std::vector<entt::entity>& entities)
         {
             return std::ranges::any_of(entities, [&registry](const entt::entity entity) {
@@ -97,6 +108,31 @@ namespace sage::editor
         float UniformScale(const Vector3 scale)
         {
             return std::max(MIN_SCALE, (scale.x + scale.y + scale.z) / 3.0f);
+        }
+
+        Vector3 DeltaForBoundsMinSnap(
+            const Vector3 currentBoundsMin, const Vector3 desiredBoundsMin, const Vector3 movementDelta)
+        {
+            Vector3 targetBoundsMin = desiredBoundsMin;
+            if (std::abs(movementDelta.x) > 0.0001f)
+            {
+                targetBoundsMin.x = SnapGridCoord(desiredBoundsMin.x);
+            }
+            else
+            {
+                targetBoundsMin.x = currentBoundsMin.x;
+            }
+
+            if (std::abs(movementDelta.z) > 0.0001f)
+            {
+                targetBoundsMin.z = SnapGridCoord(desiredBoundsMin.z);
+            }
+            else
+            {
+                targetBoundsMin.z = currentBoundsMin.z;
+            }
+
+            return Vector3Subtract(targetBoundsMin, currentBoundsMin);
         }
     } // namespace
 
@@ -150,17 +186,27 @@ namespace sage::editor
             const float screenLength = Vector2Length(Vector2Subtract(screenEnd, screenStart));
             if (screenLength > 0.0001f)
             {
-                // Accumulate sub-grid drag motion in dragUnsnappedPosition so we don't lose
-                // precision to per-frame snap rounding, then commit the snapped result.
                 const Vector3 worldDelta =
                     Vector3Scale(axisVector, sample.projectedAxisPixels * size / screenLength);
-                dragUnsnappedPivotPosition = Vector3Add(dragUnsnappedPivotPosition, worldDelta);
-                const Vector3 snapped = snapToGridXZ(dragUnsnappedPivotPosition);
-                const Vector3 appliedDelta = Vector3Subtract(snapped, dragLastSnappedPivotPosition);
-                if (!Vector3Equals(appliedDelta, Vector3Zero()))
+                if (snapToGrid)
                 {
-                    applyPositionDelta(entities, appliedDelta);
-                    dragLastSnappedPivotPosition = snapped;
+                    const auto bounds = SelectionBounds(*sys->registry, entities);
+                    if (!bounds.has_value()) return;
+
+                    // Keep sub-grid drag motion between frames, then commit only when the
+                    // accumulated bounds min crosses a drawn grid line.
+                    dragUnsnappedBoundsMinPosition =
+                        Vector3Add(dragUnsnappedBoundsMinPosition, worldDelta);
+                    const Vector3 appliedDelta =
+                        DeltaForBoundsMinSnap(bounds->min, dragUnsnappedBoundsMinPosition, worldDelta);
+                    if (!Vector3Equals(appliedDelta, Vector3Zero()))
+                    {
+                        applyPositionDelta(entities, appliedDelta);
+                    }
+                }
+                else if (!Vector3Equals(worldDelta, Vector3Zero()))
+                {
+                    applyPositionDelta(entities, worldDelta);
                 }
             }
             break;
@@ -189,8 +235,8 @@ namespace sage::editor
         if (axis == EditGizmo::Axis::None) return false;
 
         gizmo.BeginDrag(axis, renderMousePosition);
-        dragUnsnappedPivotPosition = origin;
-        dragLastSnappedPivotPosition = snapToGridXZ(origin);
+        const auto bounds = SelectionBounds(*sys->registry, entities);
+        dragUnsnappedBoundsMinPosition = bounds.has_value() ? bounds->min : origin;
         sys->camera->LockInput();
         return true;
     }
@@ -208,6 +254,11 @@ namespace sage::editor
     void EditorTransformEditor::SetMode(const EditGizmo::Mode newMode)
     {
         mode = newMode;
+    }
+
+    void EditorTransformEditor::SetSnapToGrid(const bool enabled)
+    {
+        snapToGrid = enabled;
     }
 
     void EditorTransformEditor::TogglePivotMode()
@@ -266,11 +317,7 @@ namespace sage::editor
             return count > 0 ? Vector3Scale(sum, 1.0f / static_cast<float>(count)) : Vector3Zero();
         }
 
-        std::optional<BoundingBox> bounds;
-        for (const auto entity : entities)
-        {
-            AppendSubtreeBounds(*sys->registry, entity, bounds);
-        }
+        const auto bounds = SelectionBounds(*sys->registry, entities);
 
         if (bounds.has_value()) return BoundingBoxCenter(*bounds);
         for (const auto entity : entities)
@@ -288,22 +335,20 @@ namespace sage::editor
     {
         if (!HasValidTransform(*sys->registry, entities)) return;
 
-        const Vector3 pivot = PivotWorldPosition(entities);
-        const Vector3 snappedPivot = snapToGridXZ(Vector3Add(pivot, worldDelta));
-        const Vector3 appliedDelta = Vector3Subtract(snappedPivot, pivot);
+        if (!snapToGrid)
+        {
+            applyPositionDelta(entities, worldDelta);
+            return;
+        }
+
+        const auto bounds = SelectionBounds(*sys->registry, entities);
+        if (!bounds.has_value()) return;
+
+        const Vector3 desiredBoundsMin = Vector3Add(bounds->min, worldDelta);
+        const Vector3 appliedDelta = DeltaForBoundsMinSnap(bounds->min, desiredBoundsMin, worldDelta);
         if (Vector3Equals(appliedDelta, Vector3Zero())) return;
 
         applyPositionDelta(entities, appliedDelta);
-    }
-
-    Vector3 EditorTransformEditor::snapToGridXZ(const Vector3 worldPos) const
-    {
-        const float spacing = sys->navigationGridSystem->spacing;
-        if (spacing <= 0.0f) return worldPos;
-        return {
-            (std::floor(worldPos.x / spacing) + 0.5f) * spacing,
-            worldPos.y,
-            (std::floor(worldPos.z / spacing) + 0.5f) * spacing};
     }
 
     void EditorTransformEditor::applyPositionDelta(

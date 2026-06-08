@@ -67,6 +67,7 @@ namespace sage::editor
         {
             return gizmo.IsDragging();
         }
+        void SetSnapToGrid(bool enabled);
 
         // Keyboard / arrow-key paths driven by the state machine.
         void AdjustPosition(const std::vector<entt::entity>& entities, Vector3 worldDelta);
@@ -87,13 +88,12 @@ namespace sage::editor
         EditGizmo gizmo;
         EditGizmo::Mode mode = EditGizmo::Mode::Translate;
         PivotMode pivotMode = PivotMode::LocalCenter;
+        bool snapToGrid = false;
 
         void updateEntityCollisionBounds(entt::entity entity) const;
         void notify(entt::entity entity) const;
-        [[nodiscard]] Vector3 snapToGridXZ(Vector3 worldPos) const;
         void applyPositionDelta(const std::vector<entt::entity>& entities, Vector3 worldDelta);
 
-        Vector3 dragUnsnappedPivotPosition{};
-        Vector3 dragLastSnappedPivotPosition{};
+        Vector3 dragUnsnappedBoundsMinPosition{};
     };
 } // namespace sage::editor

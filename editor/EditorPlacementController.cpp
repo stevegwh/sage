@@ -39,6 +39,17 @@ namespace sage::editor
                 MatrixMultiply(MatrixScale(scale, scale, scale), MatrixRotateY(rotationY * DEG2RAD)),
                 MatrixTranslate(position.x, position.y, position.z));
         }
+
+        Vector3 PositionForBoundsMinSnap(
+            const Vector3 gridPosition, const BoundingBox& localBounds, const float rotationY, const float scale)
+        {
+            const BoundingBox worldBounds =
+                TransformBoundingBoxByCorners(localBounds, BuildPlacementMatrix(gridPosition, rotationY, scale));
+            return {
+                gridPosition.x + (gridPosition.x - worldBounds.min.x),
+                gridPosition.y,
+                gridPosition.z + (gridPosition.z - worldBounds.min.z)};
+        }
     } // namespace
 
     EditorPlacementController::EditorPlacementController(EngineSystems* _sys, EditorAssetCatalog& _assets)
@@ -66,13 +77,12 @@ namespace sage::editor
         if (!collision.hit) return;
 
         GridSquare square{};
-        if (!sys->navigationGridSystem->WorldToGridSpace(collision.point, square)) return;
+        if (sys->navigationGridSystem->WorldToGridSpace(collision.point, square))
+        {
+            hoveredGridSquare = square;
+        }
 
-        const auto* gridSquare = sys->navigationGridSystem->GetGridSquare(square.row, square.col);
-        if (!gridSquare) return;
-
-        hoveredGridSquare = square;
-        snappedPlacementPosition = {gridSquare->worldPosCentre.x, collision.point.y, gridSquare->worldPosCentre.z};
+        snappedPlacementPosition = snapToGrid ? SnapToGridLines(collision.point) : collision.point;
     }
 
     void EditorPlacementController::ResetTransform()
@@ -123,16 +133,12 @@ namespace sage::editor
         if (sys->navigationGridSystem->WorldToGridSpace(position, square))
         {
             hoveredGridSquare = square;
-            const auto* gridSquare = sys->navigationGridSystem->GetGridSquare(square.row, square.col);
-            snappedPlacementPosition =
-                gridSquare ? Vector3{gridSquare->worldPosCentre.x, position.y, gridSquare->worldPosCentre.z}
-                           : position;
         }
         else
         {
             hoveredGridSquare.reset();
-            snappedPlacementPosition = position;
         }
+        snappedPlacementPosition = snapToGrid ? SnapToGridLines(position) : position;
     }
 
     std::optional<entt::entity> EditorPlacementController::PlaceSelectedMesh()
@@ -146,20 +152,26 @@ namespace sage::editor
         sys->registry->emplace<AssetReference>(entity, AssetReference{.assetKey = placeable.modelKey});
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.name = makePlacedLabel(entity);
-        transform.position.world = *snappedPlacementPosition;
         transform.scale.world = {placementScale, placementScale, placementScale};
         transform.rotation.world = {0.0f, placementRotationY, 0.0f};
 
         auto model = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
+        const Matrix defaultTransform = assets.DefaultTransform(placeable);
+        model.SetTransform(defaultTransform);
+        const auto localBounds = model.CalcLocalBoundingBox();
+        const Vector3 position = snapToGrid
+                                     ? PositionForBoundsMinSnap(
+                                           *snappedPlacementPosition, localBounds, placementRotationY, placementScale)
+                                     : *snappedPlacementPosition;
+
+        transform.position.world = position;
         auto& renderable =
-            sys->registry->emplace<Renderable>(entity, std::move(model), assets.DefaultTransform(placeable));
+            sys->registry->emplace<Renderable>(entity, std::move(model), defaultTransform);
         auto& uber =
             sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
         uber.SetFlagAll(UberShaderComponent::Flags::Lit);
 
-        const auto localBounds = renderable.GetModel()->CalcLocalBoundingBox();
-        const auto placementMatrix =
-            BuildPlacementMatrix(*snappedPlacementPosition, placementRotationY, placementScale);
+        const auto placementMatrix = BuildPlacementMatrix(position, placementRotationY, placementScale);
         auto& collideable = sys->registry->emplace<Collideable>(
             entity, localBounds, sys->registry->get<sgTransform>(entity).GetMatrixNoRot());
         collideable.worldBoundingBox = TransformBoundingBoxByCorners(localBounds, placementMatrix);
@@ -178,16 +190,20 @@ namespace sage::editor
         const auto& placeable = assets.Selected();
         auto previewModel = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
         previewModel.SetTransform(assets.SelectedDefaultTransform());
+        const auto localBounds = previewModel.CalcLocalBoundingBox();
+        const Vector3 position = snapToGrid
+                                     ? PositionForBoundsMinSnap(
+                                           *snappedPlacementPosition, localBounds, placementRotationY, placementScale)
+                                     : *snappedPlacementPosition;
         previewModel.Draw(
-            *snappedPlacementPosition,
+            position,
             {0.0f, 1.0f, 0.0f},
             placementRotationY,
             {placementScale, placementScale, placementScale},
             PLACEMENT_PREVIEW_TINT);
 
         const auto previewBounds = TransformBoundingBoxByCorners(
-            previewModel.CalcLocalBoundingBox(),
-            BuildPlacementMatrix(*snappedPlacementPosition, placementRotationY, placementScale));
+            localBounds, BuildPlacementMatrix(position, placementRotationY, placementScale));
         DrawBoundingBox(previewBounds, PLACEMENT_PREVIEW_BOUNDS_COLOR);
     }
 
@@ -196,7 +212,7 @@ namespace sage::editor
         const int gridSlices = std::max(1, static_cast<int>(std::ceil(gridHalfExtent * 2.0f)));
         rlPushMatrix();
         rlTranslatef(0.0f, gridSurfaceY, 0.0f);
-        DrawGrid(gridSlices, 10.0f);
+        DrawGrid(gridSlices, EDITOR_GRID_SPACING);
         rlPopMatrix();
 
         DrawLine3D({0, 0.02f, 0}, {8, 0.02f, 0}, RED);
@@ -227,6 +243,12 @@ namespace sage::editor
     float EditorPlacementController::Scale() const
     {
         return placementScale;
+    }
+
+    void EditorPlacementController::SetSnapToGrid(const bool enabled)
+    {
+        snapToGrid = enabled;
+        RefreshTarget();
     }
 
     void EditorPlacementController::createGridPlacementSurface()

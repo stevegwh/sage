@@ -4,6 +4,8 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Spawner.hpp"
+#include "engine/components/TriggerVolume.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/Serializer.hpp"
@@ -71,6 +73,21 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(entity, metaData);
+            }
+        };
+
+        // Spawner already stores its own pos/rot, so it round-trips on its own
+        // (mirrors how lights are saved as a flat vector). Triggers take their
+        // position from the transform, so the record carries it alongside.
+        struct TriggerVolumeRecord
+        {
+            Vector3 position{};
+            TriggerVolume trigger{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(position, trigger);
             }
         };
 
@@ -206,6 +223,37 @@ namespace sage::editor
                         destination->emplace_or_replace<MetaData>(iter->second, record.metaData);
                     }
                 }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<Spawner> spawners;
+                    input(spawners);
+                    for (const auto& spawner : spawners)
+                    {
+                        const auto entity = destination->create();
+                        destination->emplace<EditorMapEntity>(entity);
+                        auto& transform = destination->emplace<sgTransform>(entity);
+                        transform.position.world = spawner.pos;
+                        transform.rotation.world = spawner.rot;
+                        transform.name = "spawner_" + spawner.name;
+                        destination->emplace<Spawner>(entity, spawner);
+                    }
+                }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<TriggerVolumeRecord> triggers;
+                    input(triggers);
+                    for (const auto& record : triggers)
+                    {
+                        const auto entity = destination->create();
+                        destination->emplace<EditorMapEntity>(entity);
+                        auto& transform = destination->emplace<sgTransform>(entity);
+                        transform.position.world = record.position;
+                        transform.name = "trigger";
+                        destination->emplace<TriggerVolume>(entity, record.trigger);
+                    }
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -295,6 +343,27 @@ namespace sage::editor
                             .metaData = metaData});
                 }
                 output(entityMetaData);
+
+                std::vector<Spawner> spawners;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, Spawner>())
+                {
+                    auto spawner = source.get<Spawner>(entity);
+                    const auto& transform = source.get<sgTransform>(entity);
+                    spawner.pos = transform.GetWorldPos();
+                    spawner.rot = transform.GetWorldRot();
+                    spawners.push_back(spawner);
+                }
+                output(spawners);
+
+                std::vector<TriggerVolumeRecord> triggers;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, TriggerVolume>())
+                {
+                    triggers.push_back(
+                        TriggerVolumeRecord{
+                            .position = source.get<sgTransform>(entity).GetWorldPos(),
+                            .trigger = source.get<TriggerVolume>(entity)});
+                }
+                output(triggers);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;
