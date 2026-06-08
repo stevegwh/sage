@@ -5,21 +5,98 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
+#include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
+#include "engine/LightManager.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 
 #include "cereal/archives/binary.hpp"
 
+#include <format>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
 
 namespace sage::editor
 {
+    namespace
+    {
+        constexpr float DEFAULT_LIGHT_BRIGHTNESS = 3.0f;
+        constexpr Color DEFAULT_LIGHT_COLOR = {255, 244, 214, 255};
+
+        std::string lightLabel(const entt::entity entity)
+        {
+            return std::format("light_{}", entt::to_integral(entity));
+        }
+
+        std::string spawnerLabel(const entt::entity entity)
+        {
+            return std::format("spawner_{}", entt::to_integral(entity));
+        }
+
+        std::string triggerLabel(const entt::entity entity)
+        {
+            return std::format("trigger_{}", entt::to_integral(entity));
+        }
+    } // namespace
+
     EditorEntityOperations::EditorEntityOperations(EngineSystems* _sys) : sys(_sys)
     {
+    }
+
+    entt::entity EditorEntityOperations::CreateLight(const Vector3 position) const
+    {
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = lightLabel(entity);
+
+        sys->registry->emplace<Light>(
+            entity,
+            Light{
+                .type = LIGHT_POINT,
+                .enabled = true,
+                .position = position,
+                .target = Vector3Zero(),
+                .color = DEFAULT_LIGHT_COLOR,
+                .brightness = DEFAULT_LIGHT_BRIGHTNESS});
+        return entity;
+    }
+
+    entt::entity EditorEntityOperations::CreateSpawner(const Vector3 position) const
+    {
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = spawnerLabel(entity);
+
+        sys->registry->emplace<Spawner>(
+            entity,
+            Spawner{.name = "", .type = SpawnerType::ENEMY, .pos = position, .rot = Vector3Zero()});
+        return entity;
+    }
+
+    entt::entity EditorEntityOperations::CreateTriggerVolume(const Vector3 position) const
+    {
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = triggerLabel(entity);
+
+        // A trigger is just a non-blocking collision box (Unity isTrigger). Left non-static
+        // so the box tracks the transform as the user drags it in the editor; the collision
+        // layer/mask can be tuned in the inspector.
+        const BoundingBox localBox{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
+        auto& collideable = sys->registry->emplace<Collideable>(entity, localBox, transform.GetMatrixNoRot());
+        collideable.isTrigger = true;
+        collideable.blocksNavigation = false;
+        collideable.isStatic = false;
+        return entity;
     }
 
     void EditorEntityOperations::DeleteEntityAndChildren(const entt::entity entity) const

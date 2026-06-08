@@ -1,9 +1,9 @@
 #include "EditorScene.hpp"
 
+#include "EditorAssetRename.hpp"
 #include "EditorComponents.hpp"
 #include "EditorFlatpack.hpp"
-#include "EditorMapLoader.hpp"
-#include "EditorTransformMath.hpp"
+#include "EditorFocus.hpp"
 #include "engine/AudioManager.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
@@ -24,7 +24,6 @@
 
 #include "imgui.h"
 
-#include "imfilebrowser.h"
 #include "raylib.h"
 #include "raymath.h"
 #include "rlImGui.h"
@@ -46,113 +45,11 @@ namespace sage
         constexpr float EDITOR_FOCUS_CAMERA_DISTANCE = 38.0f;
         constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
-        constexpr const char* DEFAULT_SAVE_FILENAME = "untitled.map";
         constexpr const char* DEFAULT_MAP_BASE_NAME = "_MAPBASE_EDITOR_BASE";
         constexpr const char* DEFAULT_MAP_BASE_MODEL_KEY = "primitive_plane";
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
         constexpr float DEFAULT_MAP_BASE_HALF_HEIGHT = 0.02f;
         constexpr float DEFAULT_LIGHT_HEIGHT_OFFSET = 6.0f;
-        constexpr float DEFAULT_LIGHT_BRIGHTNESS = 3.0f;
-        constexpr Color DEFAULT_LIGHT_COLOR = {255, 244, 214, 255};
-        constexpr ImGuiFileBrowserFlags LOAD_BROWSER_FLAGS =
-            ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError;
-        constexpr ImGuiFileBrowserFlags SAVE_BROWSER_FLAGS =
-            LOAD_BROWSER_FLAGS | ImGuiFileBrowserFlags_EnterNewFilename;
-        constexpr float SAVE_FEEDBACK_SECONDS = 2.5f;
-
-        struct FocusTarget
-        {
-            Vector3 position{};
-            float radius = 1.0f;
-        };
-
-        FocusTarget focusTargetFromBounds(const BoundingBox& bounds)
-        {
-            const Vector3 center = editor::BoundingBoxCenter(bounds);
-            const Vector3 halfSize = Vector3Scale(Vector3Subtract(bounds.max, bounds.min), 0.5f);
-            return {.position = center, .radius = std::max(1.0f, Vector3Length(halfSize))};
-        }
-
-        BoundingBox boundsFromPoint(const Vector3 point)
-        {
-            return BoundingBox{.min = point, .max = point};
-        }
-
-        void expandBounds(BoundingBox& bounds, const BoundingBox& other)
-        {
-            bounds.min.x = std::min(bounds.min.x, other.min.x);
-            bounds.min.y = std::min(bounds.min.y, other.min.y);
-            bounds.min.z = std::min(bounds.min.z, other.min.z);
-            bounds.max.x = std::max(bounds.max.x, other.max.x);
-            bounds.max.y = std::max(bounds.max.y, other.max.y);
-            bounds.max.z = std::max(bounds.max.z, other.max.z);
-        }
-
-        std::optional<BoundingBox> focusBoundsForEntity(entt::registry& registry, const entt::entity entity)
-        {
-            if (!registry.valid(entity) || !registry.any_of<sgTransform>(entity)) return std::nullopt;
-
-            if (registry.any_of<Collideable>(entity))
-            {
-                return registry.get<Collideable>(entity).worldBoundingBox;
-            }
-
-            if (registry.any_of<Renderable>(entity))
-            {
-                const auto& transform = registry.get<sgTransform>(entity);
-                const auto& renderable = registry.get<Renderable>(entity);
-                if (const auto* model = renderable.GetModel(); model != nullptr)
-                {
-                    const Matrix entityMatrix = editor::BuildRenderableEntityMatrix(
-                        transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-                    const Matrix worldMatrix = MatrixMultiply(model->GetTransform(), entityMatrix);
-                    return editor::TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), worldMatrix);
-                }
-            }
-
-            return boundsFromPoint(registry.get<sgTransform>(entity).GetWorldPos());
-        }
-
-        std::filesystem::path ensureMapExtension(std::filesystem::path path)
-        {
-            if (path.extension() != ".map")
-            {
-                path.replace_extension(".map");
-            }
-            return path;
-        }
-
-        std::filesystem::path defaultBrowserDirectory(
-            const std::filesystem::path& currentMapPath, const EditorSettings* editorSettings)
-        {
-            if (!currentMapPath.empty() && !currentMapPath.parent_path().empty())
-            {
-                return currentMapPath.parent_path();
-            }
-
-            if (editorSettings != nullptr && !editorSettings->lastVisitedDirectory.empty())
-            {
-                const std::filesystem::path lastVisited{editorSettings->lastVisitedDirectory};
-                if (std::filesystem::is_directory(lastVisited))
-                {
-                    return lastVisited;
-                }
-            }
-
-            const std::filesystem::path resources{"resources"};
-            if (std::filesystem::is_directory(resources))
-            {
-                return resources;
-            }
-
-            return std::filesystem::current_path();
-        }
-
-        std::string sceneNameFromPath(const std::filesystem::path& path)
-        {
-            const auto stem = path.stem().string();
-            return stem.empty() ? UNTITLED_SCENE_NAME : stem;
-        }
 
         bool isMapBaseRenderable(const sgTransform& transform)
         {
@@ -163,153 +60,6 @@ namespace sage
         {
             const auto keys = ResourceManager::GetInstance().GetModelKeys(true);
             return std::ranges::find(keys, key) != keys.end();
-        }
-
-        std::string ToUpperAscii(std::string value)
-        {
-            for (auto& ch : value)
-            {
-                ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
-            }
-            return value;
-        }
-
-        bool EqualsIgnoreAsciiCase(std::string lhs, std::string rhs)
-        {
-            return ToUpperAscii(std::move(lhs)) == ToUpperAscii(std::move(rhs));
-        }
-
-        bool IsReservedWindowsDeviceName(const std::string& fileName)
-        {
-            const auto dot = fileName.find('.');
-            const auto base = ToUpperAscii(fileName.substr(0, dot));
-            if (base == "CON" || base == "PRN" || base == "AUX" || base == "NUL")
-            {
-                return true;
-            }
-
-            if (base.size() == 4)
-            {
-                const auto prefix = base.substr(0, 3);
-                const auto suffix = base[3];
-                return (prefix == "COM" || prefix == "LPT") && suffix >= '1' && suffix <= '9';
-            }
-
-            return false;
-        }
-
-        std::optional<std::string> ValidatePortableFileName(const std::string& fileName)
-        {
-            if (fileName.empty()) return "File name cannot be empty.";
-            if (fileName == "." || fileName == "..") return "File name cannot be '.' or '..'.";
-            if (fileName.size() > 255) return "File name must be 255 bytes or fewer.";
-            if (fileName.back() == ' ' || fileName.back() == '.')
-            {
-                return "File name cannot end with a space or a dot.";
-            }
-            if (IsReservedWindowsDeviceName(fileName))
-            {
-                return "File name uses a reserved Windows device name.";
-            }
-
-            for (const unsigned char ch : fileName)
-            {
-                if (ch == '\0') return "File name cannot contain NUL.";
-                if (ch < 32) return "File name cannot contain control characters.";
-                switch (ch)
-                {
-                case '<':
-                case '>':
-                case ':':
-                case '"':
-                case '/':
-                case '\\':
-                case '|':
-                case '?':
-                case '*':
-                    return "File name contains a character that is illegal on Windows, macOS, or Linux.";
-                default:
-                    break;
-                }
-            }
-
-            return std::nullopt;
-        }
-
-        bool EquivalentPath(const std::filesystem::path& lhs, const std::filesystem::path& rhs)
-        {
-            std::error_code ec;
-            if (!std::filesystem::exists(lhs, ec) || ec) return false;
-            if (!std::filesystem::exists(rhs, ec) || ec) return false;
-            const bool equivalent = std::filesystem::equivalent(lhs, rhs, ec);
-            return !ec && equivalent;
-        }
-
-        std::optional<std::string> CheckTargetCollision(
-            const std::filesystem::path& source,
-            const std::filesystem::path& target)
-        {
-            std::error_code ec;
-            if (std::filesystem::exists(target, ec) && !EquivalentPath(source, target))
-            {
-                return std::format("A file named {} already exists.", target.filename().string());
-            }
-            if (ec)
-            {
-                return std::format("Could not check target path: {}", ec.message());
-            }
-            return std::nullopt;
-        }
-
-        std::filesystem::path BuildRenameTargetPath(
-            const std::filesystem::path& sourcePath,
-            const std::string& requestedFileName,
-            std::string& error)
-        {
-            if (const auto validationError = ValidatePortableFileName(requestedFileName);
-                validationError.has_value())
-            {
-                error = *validationError;
-                return {};
-            }
-
-            std::filesystem::path requestedPath{requestedFileName};
-            auto finalFileName = requestedFileName;
-            const auto requiredExtension = sourcePath.extension().string();
-            if (requestedPath.extension().empty() && !requiredExtension.empty())
-            {
-                finalFileName += requiredExtension;
-            }
-            else if (!requiredExtension.empty() &&
-                     !EqualsIgnoreAsciiCase(requestedPath.extension().string(), requiredExtension))
-            {
-                error = std::format("File extension must stay {}.", requiredExtension);
-                return {};
-            }
-
-            if (const auto validationError = ValidatePortableFileName(finalFileName);
-                validationError.has_value())
-            {
-                error = *validationError;
-                return {};
-            }
-
-            return sourcePath.parent_path() / finalFileName;
-        }
-
-        std::string lightLabel(const entt::entity entity)
-        {
-            return std::format("light_{}", entt::to_integral(entity));
-        }
-
-        std::string spawnerLabel(const entt::entity entity)
-        {
-            return std::format("spawner_{}", entt::to_integral(entity));
-        }
-
-        std::string triggerLabel(const entt::entity entity)
-        {
-            return std::format("trigger_{}", entt::to_integral(entity));
         }
 
         Color spawnerColor(const SpawnerType type)
@@ -393,7 +143,7 @@ namespace sage
             {
                 const auto position = sys->registry->get<Light>(entity).position;
                 auto& transform = sys->registry->emplace<sgTransform>(entity);
-                transform.name = lightLabel(entity);
+                transform.name = std::format("light_{}", entt::to_integral(entity));
                 transform.position.world = position;
             }
         }
@@ -403,7 +153,7 @@ namespace sage
     {
         const auto defaultsStatus = modelDefaults->Status(describeSelectedAsset());
         gui->SetOverlayStatus(editorModes->GetStateName(), describeCursorPosition());
-        gui->SetSaveStatus(currentSaveStatus(), hasUnsavedChanges());
+        gui->SetSaveStatus(mapController->CurrentSaveStatus(), mapController->HasUnsavedChanges());
         gui->SetAssetDefaultsStatus(
             defaultsStatus.assetName, defaultsStatus.height, defaultsStatus.rotation, defaultsStatus.scale);
         gui->SetSelectedAsset(
@@ -427,33 +177,17 @@ namespace sage
         const auto selectedEntities = selection->SelectedWithChildren();
         if (selectedEntities.empty()) return;
 
-        std::optional<BoundingBox> combinedBounds;
-        for (const auto entity : selectedEntities)
-        {
-            const auto bounds = focusBoundsForEntity(*sys->registry, entity);
-            if (!bounds.has_value()) continue;
-
-            if (combinedBounds.has_value())
-                expandBounds(*combinedBounds, *bounds);
-            else
-                combinedBounds = bounds;
-        }
-
-        FocusTarget target{};
-        if (combinedBounds.has_value())
-        {
-            target = focusTargetFromBounds(*combinedBounds);
-        }
-        else
+        auto target = editor::ComputeFocusTarget(*sys->registry, selectedEntities);
+        if (!target.has_value())
         {
             const auto primary = selection->Active();
             if (!primary.has_value()) return;
-            target = {.position = sys->registry->get<sgTransform>(*primary).GetWorldPos()};
+            target = editor::FocusTarget{.position = sys->registry->get<sgTransform>(*primary).GetWorldPos()};
         }
 
         const float focusDistance =
-            std::max(EDITOR_FOCUS_CAMERA_DISTANCE, target.radius * EDITOR_FOCUS_RADIUS_PADDING);
-        sys->camera->FocusPoint(target.position, focusDistance);
+            std::max(EDITOR_FOCUS_CAMERA_DISTANCE, target->radius * EDITOR_FOCUS_RADIUS_PADDING);
+        sys->camera->FocusPoint(target->position, focusDistance);
     }
 
     void EditorScene::focusSelectedObjectInHierarchy() const
@@ -465,10 +199,7 @@ namespace sage
 
     void EditorScene::Update() const
     {
-        if (saveFeedbackRemaining > 0.0f)
-        {
-            saveFeedbackRemaining = std::max(0.0f, saveFeedbackRemaining - GetFrameTime());
-        }
+        mapController->Update();
 
         // TODO: Fullscreen game viewport (switch state)
         sys->collisionSystem->Update();
@@ -560,26 +291,6 @@ namespace sage
         refreshOverlay();
     }
 
-    void EditorScene::markSceneSaved(const std::filesystem::path& path) const
-    {
-        if (history) history->MarkSaved();
-        const auto fileName = path.filename().string();
-        saveFeedbackStatus = fileName.empty() ? "Saved map" : std::format("Saved {}", fileName);
-        saveFeedbackRemaining = SAVE_FEEDBACK_SECONDS;
-    }
-
-    bool EditorScene::hasUnsavedChanges() const
-    {
-        return history && history->HasUnsavedChanges();
-    }
-
-    std::string EditorScene::currentSaveStatus() const
-    {
-        if (hasUnsavedChanges()) return "Unsaved changes";
-        if (saveFeedbackRemaining > 0.0f) return saveFeedbackStatus;
-        return {};
-    }
-
     void EditorScene::DrawOverlay2D() const
     {
         if (viewportFullscreen) return;
@@ -613,7 +324,7 @@ namespace sage
         gui->DrawHierarchyWindow();
         gui->DrawAssetDrawerWindow();
         handleFileShortcuts();
-        drawFileBrowsers();
+        mapController->DrawBrowsers();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
         drawHierarchyContextMenu();
@@ -626,7 +337,7 @@ namespace sage
     {
         constexpr const char* kPopupId = "Exit Editor";
 
-        if (exitRequested && !hasUnsavedChanges())
+        if (exitRequested && !mapController->HasUnsavedChanges())
         {
             exitRequested = false;
             exitConfirmed = true;
@@ -724,11 +435,11 @@ namespace sage
             ImGuiInputFlags_RouteOverFocused | ImGuiInputFlags_RouteOverActive;
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, saveFlags))
         {
-            saveMap();
+            mapController->SaveMap();
         }
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal))
         {
-            openLoadMapBrowser();
+            mapController->OpenLoadBrowser();
         }
     }
 
@@ -929,15 +640,15 @@ namespace sage
         {
             if (ImGui::MenuItem("Load Map", "Ctrl+O"))
             {
-                openLoadMapBrowser();
+                mapController->OpenLoadBrowser();
             }
             if (ImGui::MenuItem("Save Map", "Ctrl+S"))
             {
-                saveMap();
+                mapController->SaveMap();
             }
             if (ImGui::MenuItem("Save Map As..."))
             {
-                openSaveMapBrowser();
+                mapController->OpenSaveBrowser();
             }
             ImGui::Separator();
             if (ImGui::MenuItem("Quit"))
@@ -987,50 +698,6 @@ namespace sage
         ImGui::EndMainMenuBar();
     }
 
-    void EditorScene::drawFileBrowsers() const
-    {
-        if (loadMapBrowser)
-        {
-            loadMapBrowser->Display();
-            if (loadMapBrowser->HasSelected())
-            {
-                loadMap(loadMapBrowser->GetSelected());
-                loadMapBrowser->ClearSelected();
-            }
-        }
-
-        if (saveMapBrowser)
-        {
-            saveMapBrowser->Display();
-            if (saveMapBrowser->HasSelected())
-            {
-                saveMapAs(saveMapBrowser->GetSelected());
-                saveMapBrowser->ClearSelected();
-            }
-        }
-    }
-
-    void EditorScene::openLoadMapBrowser() const
-    {
-        if (!loadMapBrowser) return;
-        loadMapBrowser->SetDirectory(browserDirectory());
-        loadMapBrowser->Open();
-    }
-
-    void EditorScene::openSaveMapBrowser() const
-    {
-        if (!saveMapBrowser) return;
-        saveMapBrowser->SetDirectory(browserDirectory());
-        saveMapBrowser->SetInputName(
-            currentMapPath.empty() ? DEFAULT_SAVE_FILENAME : currentMapPath.filename().string());
-        saveMapBrowser->Open();
-    }
-
-    std::filesystem::path EditorScene::browserDirectory() const
-    {
-        return defaultBrowserDirectory(currentMapPath, editorSettings);
-    }
-
     void EditorScene::addLight() const
     {
         Vector3 position =
@@ -1041,22 +708,7 @@ namespace sage
             position = Vector3Add(*snappedPosition, {0.0f, DEFAULT_LIGHT_HEIGHT_OFFSET, 0.0f});
         }
 
-        const auto entity = sys->registry->create();
-        sys->registry->emplace<editor::EditorMapEntity>(entity);
-        auto& transform = sys->registry->emplace<sgTransform>(entity);
-        transform.position.world = position;
-        transform.name = lightLabel(entity);
-
-        sys->registry->emplace<Light>(
-            entity,
-            Light{
-                .type = LIGHT_POINT,
-                .enabled = true,
-                .position = position,
-                .target = Vector3Zero(),
-                .color = DEFAULT_LIGHT_COLOR,
-                .brightness = DEFAULT_LIGHT_BRIGHTNESS});
-
+        const auto entity = entityOperations->CreateLight(position);
         sys->lightSubSystem->RefreshLights();
         if (history) history->RecordCreate(editor::EditAction::AddLight, {entity});
         editorModes->SelectSceneEntity(entity);
@@ -1071,16 +723,7 @@ namespace sage
             position = *snappedPosition;
         }
 
-        const auto entity = sys->registry->create();
-        sys->registry->emplace<editor::EditorMapEntity>(entity);
-        auto& transform = sys->registry->emplace<sgTransform>(entity);
-        transform.position.world = position;
-        transform.name = spawnerLabel(entity);
-
-        sys->registry->emplace<Spawner>(
-            entity,
-            Spawner{.name = "", .type = SpawnerType::ENEMY, .pos = position, .rot = Vector3Zero()});
-
+        const auto entity = entityOperations->CreateSpawner(position);
         if (history) history->RecordCreate(editor::EditAction::AddSpawner, {entity});
         editorModes->SelectSceneEntity(entity);
     }
@@ -1094,104 +737,9 @@ namespace sage
             position = *snappedPosition;
         }
 
-        const auto entity = sys->registry->create();
-        sys->registry->emplace<editor::EditorMapEntity>(entity);
-        auto& transform = sys->registry->emplace<sgTransform>(entity);
-        transform.position.world = position;
-        transform.name = triggerLabel(entity);
-
-        // A trigger is just a non-blocking collision box (Unity isTrigger). Left non-static
-        // so the box tracks the transform as the user drags it in the editor; the collision
-        // layer/mask can be tuned in the inspector.
-        const BoundingBox localBox{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
-        auto& collideable = sys->registry->emplace<Collideable>(entity, localBox, transform.GetMatrixNoRot());
-        collideable.isTrigger = true;
-        collideable.blocksNavigation = false;
-        collideable.isStatic = false;
-
+        const auto entity = entityOperations->CreateTriggerVolume(position);
         if (history) history->RecordCreate(editor::EditAction::AddTriggerVolume, {entity});
         editorModes->SelectSceneEntity(entity);
-    }
-
-    void EditorScene::loadMap(const std::filesystem::path& path) const
-    {
-        const auto selectedPath = ensureMapExtension(path);
-        const auto pathString = selectedPath.string();
-        if (!editor::IsEditorLayoutMap(pathString.c_str()))
-        {
-            std::cerr << "ERROR: Not an editor layout map: " << pathString << std::endl;
-            return;
-        }
-
-        clearCurrentMap();
-        if (!editor::LoadMap(sys->registry, pathString.c_str())) return;
-        currentMapPath = selectedPath;
-        SetSceneName(sceneNameFromPath(currentMapPath));
-        rememberCurrentMapPath();
-        refreshAfterMapLoad();
-        if (history) history->MarkSaved();
-        saveFeedbackRemaining = 0.0f;
-        saveFeedbackStatus.clear();
-    }
-
-    void EditorScene::saveMap() const
-    {
-        if (currentMapPath.empty())
-        {
-            openSaveMapBrowser();
-            return;
-        }
-        saveMapAs(currentMapPath);
-    }
-
-    void EditorScene::saveMapAs(const std::filesystem::path& path) const
-    {
-        ensureDefaultMapBase();
-        currentMapPath = ensureMapExtension(path);
-        const auto pathString = currentMapPath.string();
-        std::vector<entt::entity> hierarchyOrder;
-        if (hierarchyTree)
-        {
-            const auto entries = hierarchyTree->CollectSceneObjectEntries();
-            hierarchyOrder.reserve(entries.size());
-            for (const auto& entry : entries)
-            {
-                hierarchyOrder.push_back(entry.entity);
-            }
-        }
-        editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder);
-        SetSceneName(sceneNameFromPath(currentMapPath));
-        rememberCurrentMapPath();
-        markSceneSaved(currentMapPath);
-    }
-
-    void EditorScene::restoreLastOpenedMap() const
-    {
-        if (editorSettings == nullptr || editorSettings->lastOpenedMap.empty()) return;
-
-        const std::filesystem::path path{editorSettings->lastOpenedMap};
-        if (!std::filesystem::is_regular_file(path))
-        {
-            std::cerr << "WARNING: Last opened editor map no longer exists: " << path << std::endl;
-            return;
-        }
-
-        loadMap(path);
-    }
-
-    void EditorScene::rememberCurrentMapPath() const
-    {
-        if (editorSettings == nullptr || currentMapPath.empty()) return;
-
-        editorSettings->lastOpenedMap = currentMapPath.string();
-        if (!currentMapPath.parent_path().empty())
-        {
-            editorSettings->lastVisitedDirectory = currentMapPath.parent_path().string();
-        }
-        if (onEditorSettingsChanged)
-        {
-            onEditorSettingsChanged();
-        }
     }
 
     void EditorScene::clearCurrentMap() const
@@ -1303,6 +851,25 @@ namespace sage
         }
     }
 
+    std::vector<entt::entity> EditorScene::collectMapHierarchyOrder() const
+    {
+        // The map base must exist before its entry is collected, so it is serialised
+        // alongside the rest of the scene. Run immediately before writing the map.
+        ensureDefaultMapBase();
+
+        std::vector<entt::entity> hierarchyOrder;
+        if (hierarchyTree)
+        {
+            const auto entries = hierarchyTree->CollectSceneObjectEntries();
+            hierarchyOrder.reserve(entries.size());
+            for (const auto& entry : entries)
+            {
+                hierarchyOrder.push_back(entry.entity);
+            }
+        }
+        return hierarchyOrder;
+    }
+
     void EditorScene::refreshAfterMapLoad() const
     {
         ensureDefaultMapBase();
@@ -1319,132 +886,19 @@ namespace sage
         const std::size_t index,
         const std::string& requestedFileName) const
     {
-        if (!assetCatalog || index >= assetCatalog->Size())
+        if (!assetCatalog)
         {
             return {.message = "Asset no longer exists."};
         }
 
-        const auto entries = assetCatalog->AssetEntries();
-        if (index >= entries.size())
+        auto result = editor::RenameAssetFile(*sys->registry, *assetCatalog, index, requestedFileName);
+        if (result.renamed)
         {
-            return {.message = "Asset no longer exists."};
+            if (history) history->MarkDirty();
+            refreshOverlay();
+            refreshSceneWindows();
         }
-
-        const auto& entry = entries[index];
-        if (entry.sourcePath.empty())
-        {
-            return {.message = "This asset has no source model file to rename."};
-        }
-
-        const auto oldSourcePath = entry.sourcePath;
-        std::error_code ec;
-        if (!std::filesystem::is_regular_file(oldSourcePath, ec))
-        {
-            return {.message = std::format("Source file is missing: {}", oldSourcePath.string())};
-        }
-
-        std::string error;
-        const auto newSourcePath = BuildRenameTargetPath(oldSourcePath, requestedFileName, error);
-        if (!error.empty())
-        {
-            return {.message = error};
-        }
-        if (EquivalentPath(oldSourcePath, newSourcePath))
-        {
-            return {.message = "File name is unchanged."};
-        }
-        if (const auto collision = CheckTargetCollision(oldSourcePath, newSourcePath); collision.has_value())
-        {
-            return {.message = *collision};
-        }
-
-        const auto oldKey = entry.modelKey;
-        const auto newKey = StripPath(newSourcePath.string());
-        if (newKey.empty())
-        {
-            return {.message = "File name must have a non-empty stem."};
-        }
-        if (oldKey != newKey && ResourceManager::GetInstance().HasModelKey(newKey))
-        {
-            return {.message = std::format("An asset named {} is already loaded.", newKey)};
-        }
-
-        const auto oldDefaultsPath = entry.defaultsPath;
-        const auto newDefaultsPath = editor::EditorAssetCatalog::AssetDefaultsPathForModelKey(newKey);
-        if (const auto collision = CheckTargetCollision(oldDefaultsPath, newDefaultsPath); collision.has_value())
-        {
-            return {.message = *collision};
-        }
-
-        std::filesystem::rename(oldSourcePath, newSourcePath, ec);
-        if (ec)
-        {
-            return {.message = std::format("Could not rename source file: {}", ec.message())};
-        }
-
-        bool movedDefaults = false;
-        if (std::filesystem::exists(oldDefaultsPath, ec) && !EquivalentPath(oldDefaultsPath, newDefaultsPath))
-        {
-            std::filesystem::rename(oldDefaultsPath, newDefaultsPath, ec);
-            if (ec)
-            {
-                std::error_code rollbackEc;
-                std::filesystem::rename(newSourcePath, oldSourcePath, rollbackEc);
-                return {.message = std::format("Could not rename defaults file: {}", ec.message())};
-            }
-            movedDefaults = true;
-        }
-
-        if (!ResourceManager::GetInstance().RenameModelAsset(oldKey, newKey, newSourcePath.string()))
-        {
-            std::error_code rollbackEc;
-            if (movedDefaults)
-            {
-                std::filesystem::rename(newDefaultsPath, oldDefaultsPath, rollbackEc);
-            }
-            std::filesystem::rename(newSourcePath, oldSourcePath, rollbackEc);
-            return {.message = "Could not update the loaded asset registry."};
-        }
-
-        assetCatalog->RenameAsset(index, newKey);
-
-        for (const auto entity : sys->registry->view<editor::AssetReference>())
-        {
-            auto& assetReference = sys->registry->get<editor::AssetReference>(entity);
-            if (assetReference.assetKey == oldKey)
-            {
-                assetReference.assetKey = newKey;
-            }
-        }
-
-        for (const auto entity : sys->registry->view<Renderable>())
-        {
-            auto& renderable = sys->registry->get<Renderable>(entity);
-            const auto* model = renderable.GetModel();
-            if (model == nullptr || model->GetKey() != oldKey) continue;
-
-            auto replacement = ResourceManager::GetInstance().GetModelView(newKey);
-            replacement.SetTransform(renderable.initialTransform);
-            renderable.SetModel(std::move(replacement));
-            if (sys->registry->any_of<UberShaderComponent>(entity))
-            {
-                auto& uber = sys->registry->get<UberShaderComponent>(entity);
-                if (auto* replacementModel = renderable.GetModel(); replacementModel != nullptr)
-                {
-                    replacementModel->SetShader(uber.shader);
-                }
-            }
-        }
-
-        if (history) history->MarkDirty();
-        refreshOverlay();
-        refreshSceneWindows();
-
-        const auto updatedEntries = assetCatalog->AssetEntries();
-        return {
-            .renamed = true,
-            .message = std::format("Renamed to {}.", newSourcePath.filename().string()),
-            .updatedEntry = updatedEntries.at(index)};
+        return result;
     }
 
     void EditorScene::moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const
@@ -1517,9 +971,7 @@ namespace sage
         editor::EditorDockLayout* dockLayout,
         EditorSettings* _editorSettings,
         std::function<void()> _onEditorSettingsChanged)
-        : sys(_sys),
-          editorSettings(_editorSettings),
-          onEditorSettingsChanged(std::move(_onEditorSettingsChanged))
+        : sys(_sys)
     {
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
         assetCatalog =
@@ -1562,21 +1014,23 @@ namespace sage
             },
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
+
+        mapController = std::make_unique<editor::EditorMapController>(
+            sys,
+            _editorSettings,
+            std::move(_onEditorSettingsChanged),
+            history.get(),
+            editor::EditorMapController::Callbacks{
+                .prepareForLoad = [this]() { clearCurrentMap(); },
+                .finishLoad = [this]() { refreshAfterMapLoad(); },
+                .setSceneName = [this](const std::string& name) { SetSceneName(name); },
+                .prepareSave = [this]() { return collectMapHierarchyOrder(); }});
+
         SetSceneName(UNTITLED_SCENE_NAME);
-        restoreLastOpenedMap();
+        mapController->RestoreLastOpenedMap();
         refreshOverlay();
         refreshSceneWindows();
         refreshFlatpackCatalog();
-        loadMapBrowser = std::make_unique<ImGui::FileBrowser>(LOAD_BROWSER_FLAGS);
-        loadMapBrowser->SetTitle("Load map");
-        loadMapBrowser->SetTypeFilters({".map"});
-        loadMapBrowser->SetDirectory(browserDirectory());
-
-        saveMapBrowser = std::make_unique<ImGui::FileBrowser>(SAVE_BROWSER_FLAGS);
-        saveMapBrowser->SetTitle("Save map as");
-        saveMapBrowser->SetTypeFilters({".map"});
-        saveMapBrowser->SetDirectory(browserDirectory());
-        saveMapBrowser->SetInputName(DEFAULT_SAVE_FILENAME);
     }
 
     EditorScene::~EditorScene() = default;

@@ -92,6 +92,11 @@ namespace sage::editor
         PivotMode pivotMode = PivotMode::LocalCenter;
         bool snapToGrid = false;
 
+        // windowHeight / renderViewportHeight — passed to the gizmos so their
+        // on-screen size tracks the window rather than the (docked-panel-shrunk)
+        // 3D render viewport. See EditGizmo::SizeForCamera.
+        [[nodiscard]] float gizmoViewportScale() const;
+
         void updateEntityCollisionBounds(entt::entity entity) const;
         void notify(entt::entity entity) const;
         void applyPositionDelta(const std::vector<entt::entity>& entities, Vector3 worldDelta);

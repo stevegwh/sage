@@ -60,11 +60,22 @@ namespace sage::editor
         static Vector3 AxisVector(Axis axis);
         static Color AxisColor(Axis axis);
         static Vector3 RotationRingPoint(Vector3 origin, float radius, Axis axis, float angleRad);
-        static float SizeForCamera(Vector3 cameraPosition, Vector3 origin);
+        // viewportScale lets callers keep the gizmo a constant fraction of the
+        // *window* rather than the render viewport: the projected pixel size of a
+        // fixed world size is proportional to the render-viewport height, so when
+        // the 3D view is a shrunken sub-rect of the window (editor docked panels)
+        // the gizmo looks small. Pass windowHeight / renderViewportHeight to undo
+        // that. Defaults to 1.0 (gizmo sized to the render viewport, no scaling).
+        static float SizeForCamera(Vector3 cameraPosition, Vector3 origin, float viewportScale = 1.0f);
 
         // Returns the axis under the cursor for the given mode, or Axis::None.
         [[nodiscard]] Axis HitTest(
-            const Camera3D& camera, Vector2 viewport, Vector3 origin, Mode mode, Vector2 mousePosition) const;
+            const Camera3D& camera,
+            Vector2 viewport,
+            Vector3 origin,
+            Mode mode,
+            Vector2 mousePosition,
+            float viewportScale = 1.0f) const;
 
         // Drag lifecycle. The caller drives these from mouse-down / mouse-up
         // events and routes SampleDrag's output back into its transform math.
@@ -85,7 +96,12 @@ namespace sage::editor
         // lastMousePosition so the next call samples the next delta.
         DragSample SampleDrag(const Camera3D& camera, Vector2 viewport, Vector3 origin, Mode mode, Vector2 mousePosition);
 
-        void Draw(const Camera3D& camera, Vector2 viewport, Vector3 origin, Mode mode) const;
+        void Draw(
+            const Camera3D& camera,
+            Vector2 viewport,
+            Vector3 origin,
+            Mode mode,
+            float viewportScale = 1.0f) const;
 
       private:
         struct DragState

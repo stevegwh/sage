@@ -66,6 +66,12 @@ namespace sage::editor
 
         void DeleteEntityAndChildren(entt::entity entity) const;
 
+        // "Add" menu factories. Each creates a tagged EditorMapEntity at the given
+        // world position and returns it; the caller records history and selects.
+        [[nodiscard]] entt::entity CreateLight(Vector3 position) const;
+        [[nodiscard]] entt::entity CreateSpawner(Vector3 position) const;
+        [[nodiscard]] entt::entity CreateTriggerVolume(Vector3 position) const;
+
         // Captures the given entities (and their descendants) into the clipboard,
         // replacing any previous contents. Entries that are descendants of another
         // given entity are skipped to avoid duplicating a subtree twice.

@@ -141,14 +141,15 @@ namespace sage::editor
         return {.face = drag.face, .worldDelta = pixels * NORMAL_REFERENCE_LENGTH / screenLength};
     }
 
-    void BoxColliderGizmo::Draw(const Camera3D& camera, const BoundingBox& worldBox) const
+    void BoxColliderGizmo::Draw(
+        const Camera3D& camera, const BoundingBox& worldBox, const float viewportScale) const
     {
         DrawBoundingBox(worldBox, drag.active ? GOLD : SKYBLUE);
 
         for (const auto face : ALL_FACES)
         {
             const Vector3 center = FaceCenter(worldBox, face);
-            const float radius = EditGizmo::SizeForCamera(camera.position, center) * 0.06f;
+            const float radius = EditGizmo::SizeForCamera(camera.position, center, viewportScale) * 0.06f;
             const Color color = drag.active && drag.face == face ? GOLD : SKYBLUE;
             DrawSphere(center, radius, color);
         }

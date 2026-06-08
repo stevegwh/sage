@@ -135,10 +135,10 @@ namespace sage::editor
         return origin;
     }
 
-    float EditGizmo::SizeForCamera(const Vector3 cameraPosition, const Vector3 origin)
+    float EditGizmo::SizeForCamera(const Vector3 cameraPosition, const Vector3 origin, const float viewportScale)
     {
         const float distance = Vector3Distance(cameraPosition, origin);
-        return std::clamp(distance * 0.075f, GIZMO_MIN_SIZE, GIZMO_MAX_SIZE);
+        return std::clamp(distance * 0.075f, GIZMO_MIN_SIZE, GIZMO_MAX_SIZE) * viewportScale;
     }
 
     EditGizmo::Axis EditGizmo::HitTest(
@@ -146,9 +146,10 @@ namespace sage::editor
         const Vector2 viewport,
         const Vector3 origin,
         const Mode mode,
-        const Vector2 mousePosition) const
+        const Vector2 mousePosition,
+        const float viewportScale) const
     {
-        const float size = SizeForCamera(camera.position, origin);
+        const float size = SizeForCamera(camera.position, origin, viewportScale);
 
         if (mode == Mode::Rotate)
         {
@@ -254,9 +255,10 @@ namespace sage::editor
         const Camera3D& camera,
         const Vector2 /*viewport*/,
         const Vector3 origin,
-        const Mode mode) const
+        const Mode mode,
+        const float viewportScale) const
     {
-        const float size = SizeForCamera(camera.position, origin);
+        const float size = SizeForCamera(camera.position, origin, viewportScale);
         const float shaftRadius = size * 0.024f;
         const float handleSize = size * 0.14f;
 

@@ -254,7 +254,7 @@ namespace sage::editor
 
         const Vector3 origin = PivotWorldPosition(entities);
 
-        const auto axis = gizmo.HitTest(camera, viewport, origin, mode, renderMousePosition);
+        const auto axis = gizmo.HitTest(camera, viewport, origin, mode, renderMousePosition, gizmoViewportScale());
         if (axis == EditGizmo::Axis::None) return false;
 
         gizmo.BeginDrag(axis, renderMousePosition);
@@ -264,23 +264,32 @@ namespace sage::editor
         return true;
     }
 
+    float EditorTransformEditor::gizmoViewportScale() const
+    {
+        const float windowHeight = sys->settings->GetScreenSize().y;
+        const float renderViewportHeight = sys->settings->GetRenderViewPort().y;
+        if (renderViewportHeight <= 1.0f) return 1.0f;
+        return windowHeight / renderViewportHeight;
+    }
+
     void EditorTransformEditor::Draw3D(const std::vector<entt::entity>& entities) const
     {
         if (!HasValidTransform(*sys->registry, entities)) return;
 
         const Camera3D camera = *sys->camera->getRaylibCam();
         const Vector2 viewport = sys->settings->GetRenderViewPort();
+        const float viewportScale = gizmoViewportScale();
 
         if (mode == EditGizmo::Mode::BoxCollider)
         {
             const auto target = boxEditTarget(entities);
             if (target == entt::null) return;
-            boxGizmo.Draw(camera, sys->registry->get<Collideable>(target).worldBoundingBox);
+            boxGizmo.Draw(camera, sys->registry->get<Collideable>(target).worldBoundingBox, viewportScale);
             return;
         }
 
         const Vector3 origin = PivotWorldPosition(entities);
-        gizmo.Draw(camera, viewport, origin, mode);
+        gizmo.Draw(camera, viewport, origin, mode, viewportScale);
     }
 
     void EditorTransformEditor::SetMode(const EditGizmo::Mode newMode)

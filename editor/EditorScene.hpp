@@ -6,6 +6,7 @@
 #include "EditorHierarchyTree.hpp"
 #include "EditorHistory.hpp"
 #include "EditorInspector.hpp"
+#include "EditorMapController.hpp"
 #include "EditorModelDefaultsController.hpp"
 #include "EditorModeStateMachine.hpp"
 #include "EditorPickingService.hpp"
@@ -23,11 +24,6 @@
 #include <string>
 #include <vector>
 
-namespace ImGui
-{
-    class FileBrowser;
-}
-
 namespace sage
 {
     class EngineSystems;
@@ -41,8 +37,6 @@ namespace sage
         friend class editor::EditorModeStateMachine;
 
         EngineSystems* sys{};
-        EditorSettings* editorSettings{};
-        std::function<void()> onEditorSettingsChanged;
         std::unique_ptr<editor::EditorGui> gui;
         editor::InspectorRegistry inspectorRegistry;
         std::unique_ptr<editor::EditorAssetCatalog> assetCatalog;
@@ -55,37 +49,22 @@ namespace sage
         std::unique_ptr<editor::EditorTransformEditor> transformEditor;
         std::unique_ptr<editor::EditorHistory> history;
         std::unique_ptr<editor::EditorModeStateMachine> editorModes;
-        std::unique_ptr<ImGui::FileBrowser> loadMapBrowser{};
-        std::unique_ptr<ImGui::FileBrowser> saveMapBrowser{};
-        mutable std::filesystem::path currentMapPath{};
+        std::unique_ptr<editor::EditorMapController> mapController;
         mutable entt::entity hierarchyContextEntity = entt::null;
         bool viewportFullscreen = false;
         mutable bool snapToGrid = false;
-        mutable float saveFeedbackRemaining = 0.0f;
-        mutable std::string saveFeedbackStatus;
         void applyLitShaderToLoadedRenderables() const;
         void giveTransformsToLights() const;
         void refreshOverlay() const;
         void refreshSceneWindows() const;
         void setSnapToGrid(bool enabled) const;
-        void markSceneSaved(const std::filesystem::path& path) const;
-        [[nodiscard]] bool hasUnsavedChanges() const;
-        [[nodiscard]] std::string currentSaveStatus() const;
         void drawMainMenuBar(bool& exitRequested) const;
-        void drawFileBrowsers() const;
-        void openLoadMapBrowser() const;
-        void openSaveMapBrowser() const;
-        std::filesystem::path browserDirectory() const;
         void addLight() const;
         void addSpawner() const;
         void addTriggerVolume() const;
-        void loadMap(const std::filesystem::path& path) const;
-        void saveMap() const;
-        void saveMapAs(const std::filesystem::path& path) const;
-        void restoreLastOpenedMap() const;
-        void rememberCurrentMapPath() const;
         void clearCurrentMap() const;
         void ensureDefaultMapBase() const;
+        [[nodiscard]] std::vector<entt::entity> collectMapHierarchyOrder() const;
         void syncLightTransforms() const;
         void refreshAfterMapLoad() const;
         editor::EditorGui::AssetRenameResult handleAssetFileRename(

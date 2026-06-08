@@ -58,7 +58,9 @@ namespace sage::editor
         DragSample SampleDrag(
             const Camera3D& camera, Vector2 viewport, const BoundingBox& worldBox, Vector2 mousePosition);
 
-        void Draw(const Camera3D& camera, const BoundingBox& worldBox) const;
+        // viewportScale keeps the face-handle dots a constant fraction of the
+        // window rather than the render viewport — see EditGizmo::SizeForCamera.
+        void Draw(const Camera3D& camera, const BoundingBox& worldBox, float viewportScale = 1.0f) const;
 
       private:
         struct DragState

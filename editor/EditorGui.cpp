@@ -586,7 +586,14 @@ namespace sage::editor
             // is submitted by the caller after this returns), so these queries refer
             // to it.
             g_fieldEditBegan |= ImGui::IsItemActivated();
-            g_fieldEditCommitted |= ImGui::IsItemDeactivatedAfterEdit();
+            // Close the transaction on *any* deactivation, not only after an edit.
+            // Activating a field (IsItemActivated) opens a transaction; if we only
+            // closed it via IsItemDeactivatedAfterEdit, focusing a field and leaving
+            // it unchanged (click away / Escape / no-op drag) would leak an open
+            // transaction, leaving history->HasActiveTransaction() stuck true and the
+            // scene permanently flagged "unsaved". Commit() discards no-op edits, so
+            // committing an unchanged field is safe and produces no history entry.
+            g_fieldEditCommitted |= ImGui::IsItemDeactivated();
             if (!editable) ImGui::EndDisabled();
             ImGui::PopStyleVar();
             ImGui::PopStyleColor(styleColorCount);
