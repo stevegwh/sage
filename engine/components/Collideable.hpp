@@ -24,6 +24,9 @@ namespace sage
         bool isStatic = false;
         bool debugDraw = false;
         bool blocksNavigation = false;
+        // Unity-style trigger: the box reports overlaps (CollisionSystem fires
+        // onTriggerEnter/Stay/Exit) but never contributes physical/navigation blocking.
+        bool isTrigger = false;
 
         Collideable() = default;
         Collideable(const BoundingBox& local, const Matrix& worldMat);
@@ -32,13 +35,13 @@ namespace sage
         template <class Archive>
         void save(Archive& archive) const
         {
-            archive(localBoundingBox, worldBoundingBox, collisionLayer);
+            archive(localBoundingBox, worldBoundingBox, collisionLayer, isTrigger);
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
-            archive(localBoundingBox, worldBoundingBox, collisionLayer);
+            archive(localBoundingBox, worldBoundingBox, collisionLayer, isTrigger);
             collisionLayer.layerName = GetCollisionLayerName(collisionLayer.bit);
             collidesWith = GetDefaultCollisionMask(collisionLayer);
         }
@@ -50,6 +53,7 @@ namespace sage
             i.field("IsStatic", isStatic);
             i.field("Debug Draw", debugDraw);
             i.field("Blocks Navigation", blocksNavigation);
+            i.field("Is Trigger", isTrigger);
             i.field("Collision Layer", collisionLayer);
             i.field("Local Bounds", localBoundingBox);
             // i.field("World Bounds", worldBoundingBox, false);

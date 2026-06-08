@@ -16,7 +16,6 @@
 
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Spawner.hpp"
-#include "engine/components/TriggerVolume.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -122,8 +121,6 @@ namespace sage::editor
             Light light{};
             bool hasSpawner = false;
             Spawner spawner{};
-            bool hasTriggerVolume = false;
-            TriggerVolume triggerVolume{};
             bool hasAssetReference = false;
             std::string assetKey;
             bool hasMetaData = false;

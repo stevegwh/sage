@@ -6,7 +6,6 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/SpatialAudioComponent.hpp"
 #include "engine/components/Spawner.hpp"
-#include "engine/components/TriggerVolume.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
@@ -62,7 +61,6 @@ namespace sage::editor
         if (sys->registry->any_of<DoorBehaviorComponent>(entity)) return ICON_FA_DOOR_OPEN;
         if (sys->registry->any_of<SpatialAudioComponent>(entity)) return ICON_FA_VOLUME_HIGH;
         if (sys->registry->any_of<Spawner>(entity)) return ICON_FA_LOCATION_DOT;
-        if (sys->registry->any_of<TriggerVolume>(entity)) return ICON_FA_VECTOR_SQUARE;
         if (sys->registry->any_of<Renderable>(entity)) return ICON_FA_CUBE;
         if (sys->registry->any_of<Collideable>(entity)) return ICON_FA_VECTOR_SQUARE;
 

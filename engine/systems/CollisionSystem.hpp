@@ -5,10 +5,13 @@
 #pragma once
 
 #include "engine/components/Collideable.hpp"
+#include "engine/Event.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace sage
@@ -27,11 +30,23 @@ namespace sage
         CollisionMask defaultQueryMask{collision_masks::DefaultQuery};
         [[nodiscard]] CollisionMask ResolveQueryMask(CollisionLayer layer) const;
 
+        // Entities overlapping each trigger Collideable last frame, for enter/exit diffing.
+        std::unordered_map<entt::entity, std::unordered_set<entt::entity>> triggerOverlaps;
+        void UpdateTriggers();
+
       public:
-        // Recomputes worldBoundingBox for every dynamic Collideable from its sgTransform.
-        // Static collideables are not visited (their world bbox is baked at construction).
-        // Call once per frame, after positions have been mutated and before any queries.
-        void Update() const;
+        // Unity-style trigger callbacks, fired by UpdateTriggers() for any Collideable with
+        // isTrigger=true. Each passes (trigger, other): the trigger entity and the entity
+        // overlapping it. Subscribe via the Event<>/Subscription pattern.
+        Event<entt::entity, entt::entity> onTriggerEnter;
+        Event<entt::entity, entt::entity> onTriggerStay;
+        Event<entt::entity, entt::entity> onTriggerExit;
+
+        // Recomputes worldBoundingBox for every dynamic Collideable from its sgTransform,
+        // then diffs trigger overlaps and fires the onTrigger* events. Static collideables
+        // are not refreshed (their world bbox is baked at construction). Call once per
+        // frame, after positions have been mutated and before any queries.
+        void Update();
 
         static void SortCollisionsByDistance(std::vector<CollisionInfo>& collisions);
         [[nodiscard]] std::vector<CollisionInfo> GetMeshCollisionsWithRay(

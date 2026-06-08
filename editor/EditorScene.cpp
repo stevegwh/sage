@@ -11,7 +11,6 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
-#include "engine/components/TriggerVolume.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Cursor.hpp"
 #include "engine/EngineSystems.hpp"
@@ -536,15 +535,12 @@ namespace sage
             // Facing line: a stick from the sphere out along the spawner's forward.
             DrawLine3D(position, Vector3Add(position, Vector3Scale(transform.forward(), 1.5f)), color);
         }
-        for (const auto entity : sys->registry->view<TriggerVolume, sgTransform>())
+        // Trigger volumes are Collideables flagged isTrigger; draw their world box so the
+        // otherwise-invisible region is visible and editable.
+        for (const auto entity : sys->registry->view<Collideable>())
         {
-            const auto& trigger = sys->registry->get<TriggerVolume>(entity);
-            const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
-            DrawBoundingBox(
-                BoundingBox{
-                    Vector3Subtract(position, trigger.halfExtents),
-                    Vector3Add(position, trigger.halfExtents)},
-                GREEN);
+            const auto& collideable = sys->registry->get<Collideable>(entity);
+            if (collideable.isTrigger) DrawBoundingBox(collideable.worldBoundingBox, GREEN);
         }
 
         for (const auto entity : selection->SelectedWithChildren())
@@ -1100,7 +1096,14 @@ namespace sage
         transform.position.world = position;
         transform.name = triggerLabel(entity);
 
-        sys->registry->emplace<TriggerVolume>(entity);
+        // A trigger is just a non-blocking collision box (Unity isTrigger). Left non-static
+        // so the box tracks the transform as the user drags it in the editor; the collision
+        // layer/mask can be tuned in the inspector.
+        const BoundingBox localBox{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
+        auto& collideable = sys->registry->emplace<Collideable>(entity, localBox, transform.GetMatrixNoRot());
+        collideable.isTrigger = true;
+        collideable.blocksNavigation = false;
+        collideable.isStatic = false;
 
         if (history) history->RecordCreate(editor::EditAction::AddTriggerVolume, {entity});
         editorModes->SelectSceneEntity(entity);

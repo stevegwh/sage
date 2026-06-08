@@ -5,11 +5,11 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
-#include "engine/components/TriggerVolume.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/Serializer.hpp"
 
+#include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
 
 #include <cstdint>
@@ -26,7 +26,7 @@ namespace sage::editor
 {
     namespace
     {
-        constexpr char kEditorLayoutMapMagic[4] = {'L', 'Q', 'E', '1'};
+        constexpr char kEditorLayoutMapMagic[4] = {'L', 'Q', 'E', '2'};
 
         struct LayoutEntityRecord
         {
@@ -76,18 +76,19 @@ namespace sage::editor
             }
         };
 
-        // Spawner already stores its own pos/rot, so it round-trips on its own
-        // (mirrors how lights are saved as a flat vector). Triggers take their
-        // position from the transform, so the record carries it alongside.
-        struct TriggerVolumeRecord
+        // A trigger is just a non-blocking Collideable with isTrigger=true and no mesh.
+        // It carries its own box, so we save the Collideable alongside the world position
+        // (taken from the transform). Must stay in sync with the game loader's TriggerRecord
+        // (LevelLayoutLoader.cpp).
+        struct TriggerRecord
         {
             Vector3 position{};
-            TriggerVolume trigger{};
+            Collideable collideable{};
 
             template <class Archive>
             void serialize(Archive& archive)
             {
-                archive(position, trigger);
+                archive(position, collideable);
             }
         };
 
@@ -242,7 +243,7 @@ namespace sage::editor
 
                 if (hasMoreSerializedData(stream))
                 {
-                    std::vector<TriggerVolumeRecord> triggers;
+                    std::vector<TriggerRecord> triggers;
                     input(triggers);
                     for (const auto& record : triggers)
                     {
@@ -251,7 +252,7 @@ namespace sage::editor
                         auto& transform = destination->emplace<sgTransform>(entity);
                         transform.position.world = record.position;
                         transform.name = "trigger";
-                        destination->emplace<TriggerVolume>(entity, record.trigger);
+                        destination->emplace<Collideable>(entity, record.collideable);
                     }
                 }
             });
@@ -355,13 +356,17 @@ namespace sage::editor
                 }
                 output(spawners);
 
-                std::vector<TriggerVolumeRecord> triggers;
-                for (const auto entity : source.view<EditorMapEntity, sgTransform, TriggerVolume>())
+                std::vector<TriggerRecord> triggers;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, Collideable>())
                 {
+                    const auto& collideable = source.get<Collideable>(entity);
+                    // Mesh-bearing triggers round-trip via the layout-entity stream (their
+                    // Collideable carries isTrigger); only meshless trigger markers go here.
+                    if (!collideable.isTrigger || source.all_of<Renderable>(entity)) continue;
                     triggers.push_back(
-                        TriggerVolumeRecord{
+                        TriggerRecord{
                             .position = source.get<sgTransform>(entity).GetWorldPos(),
-                            .trigger = source.get<TriggerVolume>(entity)});
+                            .collideable = collideable});
                 }
                 output(triggers);
             });

@@ -8,7 +8,6 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
-#include "engine/components/TriggerVolume.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 
 #include "raymath.h"
@@ -96,9 +95,10 @@ namespace sage::editor
             }
         }
 
-        // Markers (spawners, trigger volumes) carry no Collideable, so test the ray
-        // against their stand-in shapes directly. Keeps the marker components as plain
-        // data instead of coupling them to the collision system.
+        // Spawners carry no Collideable, so test the ray against their stand-in sphere
+        // directly. Keeps the marker component as plain data instead of coupling it to
+        // the collision system. (Trigger volumes are real Collideables now, so they are
+        // picked through the collision ray query above.)
         std::optional<std::pair<entt::entity, float>> markerHit;
         const auto considerMarker = [&](const entt::entity entity, const RayCollision& col) {
             if (!col.hit || entity == ignoredEntity) return;
@@ -108,14 +108,6 @@ namespace sage::editor
         {
             const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
             considerMarker(entity, GetRayCollisionSphere(ray, position, 0.5f));
-        }
-        for (const auto entity : sys->registry->view<TriggerVolume, sgTransform>())
-        {
-            const auto& trigger = sys->registry->get<TriggerVolume>(entity);
-            const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
-            const BoundingBox box{
-                Vector3Subtract(position, trigger.halfExtents), Vector3Add(position, trigger.halfExtents)};
-            considerMarker(entity, GetRayCollisionBox(ray, box));
         }
 
         CollisionSystem::SortCollisionsByDistance(objectHits);

@@ -20,7 +20,7 @@ namespace sage
         return GetDefaultCollisionMask(layer);
     }
 
-    void CollisionSystem::Update() const
+    void CollisionSystem::Update()
     {
         // Static collideables opt out via the static bool — their worldBoundingBox
         // was baked at construction and never needs recomputing unless a
@@ -32,6 +32,48 @@ namespace sage
             c.worldBoundingBox = forceRefresh ? TransformBoundingBoxByCorners(c.localBoundingBox, t.GetMatrix())
                                               : TransformBoundingBox(c.localBoundingBox, t.GetMatrixNoRot());
         });
+
+        UpdateTriggers();
+    }
+
+    void CollisionSystem::UpdateTriggers()
+    {
+        std::unordered_map<entt::entity, std::unordered_set<entt::entity>> current;
+
+        for (auto view = registry->view<Collideable>(); const auto trigger : view)
+        {
+            const auto& c = view.get<Collideable>(trigger);
+            if (!c.isTrigger || !c.active) continue;
+
+            auto& currentSet = current[trigger];
+            const auto& previousSet = triggerOverlaps[trigger];
+
+            for (const auto& hit : GetCollisionsWithBoundingBox(c.worldBoundingBox, c.collidesWith))
+            {
+                const auto other = hit.collidedEntityId;
+                if (other == trigger) continue;
+
+                currentSet.insert(other);
+                if (previousSet.contains(other))
+                    onTriggerStay.Publish(trigger, other);
+                else
+                    onTriggerEnter.Publish(trigger, other);
+            }
+        }
+
+        // Anything in a trigger's previous set but not its current set has exited (covers
+        // triggers gone inactive/invalid and entities destroyed while inside).
+        for (const auto& [trigger, previousSet] : triggerOverlaps)
+        {
+            const auto it = current.find(trigger);
+            for (const auto other : previousSet)
+            {
+                const bool stillInside = it != current.end() && it->second.contains(other);
+                if (!stillInside) onTriggerExit.Publish(trigger, other);
+            }
+        }
+
+        triggerOverlaps = std::move(current);
     }
 
     void CollisionSystem::SortCollisionsByDistance(std::vector<CollisionInfo>& collisions)

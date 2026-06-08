@@ -33,7 +33,8 @@ namespace sage::editor
         bool collideableEqual(const Collideable& a, const Collideable& b)
         {
             return a.isStatic == b.isStatic && a.blocksNavigation == b.blocksNavigation &&
-                   a.active == b.active && a.collisionLayer.bit == b.collisionLayer.bit &&
+                   a.active == b.active && a.isTrigger == b.isTrigger &&
+                   a.collisionLayer.bit == b.collisionLayer.bit &&
                    boxEqual(a.localBoundingBox, b.localBoundingBox) &&
                    boxEqual(a.worldBoundingBox, b.worldBoundingBox);
         }
@@ -52,11 +53,6 @@ namespace sage::editor
                    vecEqual(a.rot, b.rot);
         }
 
-        bool triggerVolumeEqual(const TriggerVolume& a, const TriggerVolume& b)
-        {
-            return vecEqual(a.halfExtents, b.halfExtents) && a.event == b.event &&
-                   a.targetTag == b.targetTag && a.oneShot == b.oneShot;
-        }
     } // namespace
 
     EditorHistory::EditorHistory(EngineSystems* _sys, OnApplied _onApplied)
@@ -91,11 +87,6 @@ namespace sage::editor
         if (a.hasRenderable != b.hasRenderable || a.renderableBlob != b.renderableBlob) return false;
         if (a.hasLight != b.hasLight || (a.hasLight && !lightEqual(a.light, b.light))) return false;
         if (a.hasSpawner != b.hasSpawner || (a.hasSpawner && !spawnerEqual(a.spawner, b.spawner)))
-        {
-            return false;
-        }
-        if (a.hasTriggerVolume != b.hasTriggerVolume ||
-            (a.hasTriggerVolume && !triggerVolumeEqual(a.triggerVolume, b.triggerVolume)))
         {
             return false;
         }
@@ -199,11 +190,6 @@ namespace sage::editor
         {
             s.hasSpawner = true;
             s.spawner = reg.get<Spawner>(entity);
-        }
-        if (reg.all_of<TriggerVolume>(entity))
-        {
-            s.hasTriggerVolume = true;
-            s.triggerVolume = reg.get<TriggerVolume>(entity);
         }
         if (reg.all_of<AssetReference>(entity))
         {
@@ -559,11 +545,6 @@ namespace sage::editor
             reg.emplace_or_replace<Spawner>(entity, target.spawner);
         else if (reg.all_of<Spawner>(entity))
             reg.remove<Spawner>(entity);
-
-        if (target.hasTriggerVolume)
-            reg.emplace_or_replace<TriggerVolume>(entity, target.triggerVolume);
-        else if (reg.all_of<TriggerVolume>(entity))
-            reg.remove<TriggerVolume>(entity);
 
         if (target.hasAssetReference)
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});
