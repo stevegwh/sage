@@ -72,6 +72,10 @@ namespace sage
         [[nodiscard]] Vector3 GetPosition() const;
         void CutscenePose(const sgTransform& location, const Vector3& localOffset);
         void CutsceneEnd();
+        // Orbits the camera around its target by a mouse delta (editor middle-drag).
+        void RotateByMouseDelta(Vector2 delta);
+        // Pans the camera and its target across the ground plane by a mouse delta (editor right-drag).
+        void PanByMouseDelta(Vector2 delta);
         void SetCamera(Vector3 _pos, Vector3 _target);
         void FocusPoint(Vector3 target, float distance = 0.0f);
         void FocusEntity(entt::entity entity, float distance = 0.0f);

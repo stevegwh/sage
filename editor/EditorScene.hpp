@@ -53,6 +53,8 @@ namespace sage
         mutable entt::entity hierarchyContextEntity = entt::null;
         bool viewportFullscreen = false;
         mutable bool snapToGrid = false;
+        mutable bool orbitingCamera = false;
+        mutable bool panningCamera = false;
         void applyLitShaderToLoadedRenderables() const;
         void giveTransformsToLights() const;
         void refreshOverlay() const;
@@ -84,6 +86,7 @@ namespace sage
 
         void focusSelectedObject() const;
         void focusSelectedObjectInHierarchy() const;
+        void handleMouseCameraControls() const;
 
         [[nodiscard]] const editor::PlaceableAsset& selectedPlaceable() const;
         [[nodiscard]] bool isPlaceState() const;

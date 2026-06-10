@@ -17,6 +17,10 @@ if (NOT TARGET EnTT::EnTT)
     FetchContent_MakeAvailable(entt)
 endif ()
 
+if (NOT TARGET lua_static)
+    add_subdirectory(vendor/lua)
+endif ()
+
 set(PLATFORM "Desktop" CACHE STRING "" FORCE)
 if (NOT TARGET raylib)
     add_subdirectory(vendor/raylib)

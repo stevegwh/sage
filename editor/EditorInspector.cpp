@@ -4,6 +4,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
@@ -329,5 +330,6 @@ namespace sage::editor
         registry.Register<Collideable>("Collideable");
         registry.Register<Light>("Light");
         registry.Register<Spawner>("Spawner");
+        registry.Register<ScriptComponent>("Script");
     }
 } // namespace sage::editor

@@ -245,6 +245,37 @@ namespace sage
         SetCamera(cameraSave.rlCamera.position, cameraSave.rlCamera.target);
     }
 
+    void Camera::RotateByMouseDelta(const Vector2 delta)
+    {
+        constexpr float mouseRotateSensitivity = 0.003f;
+        // Yaw around the world up; pitch around the camera's right axis, both pivoting on the target.
+        CameraYaw(&rlCamera, -delta.x * mouseRotateSensitivity, true);
+        CameraPitch(&rlCamera, -delta.y * mouseRotateSensitivity, true, true, false);
+        verticalSmoothingTargetY = rlCamera.target.y;
+        verticalSmoothingCurrentY = rlCamera.position.y;
+    }
+
+    void Camera::PanByMouseDelta(const Vector2 delta)
+    {
+        constexpr float mousePanSensitivity = 0.05f;
+
+        Vector3 right = GetCameraRight(&rlCamera);
+        right.y = 0.0f;
+        right = Vector3Normalize(right);
+
+        // Forward projected onto the ground plane so dragging moves across the floor, not into the sky.
+        Vector3 forward = GetCameraForward(&rlCamera);
+        forward.y = 0.0f;
+        forward = Vector3Normalize(forward);
+
+        const Vector3 move = Vector3Add(
+            Vector3MultiplyByValue(right, -delta.x * mousePanSensitivity),
+            Vector3MultiplyByValue(forward, delta.y * mousePanSensitivity));
+
+        rlCamera.position = Vector3Add(rlCamera.position, move);
+        rlCamera.target = Vector3Add(rlCamera.target, move);
+    }
+
     void Camera::SetCamera(Vector3 _pos, Vector3 _target)
     {
         rlCamera.position = _pos;

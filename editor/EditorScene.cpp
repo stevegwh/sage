@@ -197,6 +197,46 @@ namespace sage
         gui->FocusHierarchyOnEntity(*selectedEntity);
     }
 
+    // Middle mouse orbits the camera around its target; right mouse drags (pans) it across the
+    // ground plane. A drag may only begin while the cursor is over the render viewport and the
+    // editor UI is not capturing the mouse, but continues until the button is released so the
+    // motion is not interrupted when the cursor leaves the viewport.
+    void EditorScene::handleMouseCameraControls() const
+    {
+        const bool uiBlocksMouse = !viewportFullscreen && gui && gui->WantsMouseCapture();
+        const bool gizmoDragging = transformEditor && transformEditor->IsGizmoDragging();
+        const bool canBeginDrag = !uiBlocksMouse && !gizmoDragging &&
+                                  sys->settings->IsPointInRenderViewport(GetMousePosition());
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE) && canBeginDrag)
+        {
+            orbitingCamera = true;
+        }
+        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && canBeginDrag)
+        {
+            panningCamera = true;
+        }
+
+        if (!IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+        {
+            orbitingCamera = false;
+        }
+        if (!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+        {
+            panningCamera = false;
+        }
+
+        const Vector2 delta = GetMouseDelta();
+        if (orbitingCamera)
+        {
+            sys->camera->RotateByMouseDelta(delta);
+        }
+        if (panningCamera)
+        {
+            sys->camera->PanByMouseDelta(delta);
+        }
+    }
+
     void EditorScene::Update() const
     {
         mapController->Update();
@@ -224,6 +264,8 @@ namespace sage
         {
             sys->camera->UnlockInput();
         }
+
+        handleMouseCameraControls();
 
         sys->camera->Update();
         sys->cursor->Update();

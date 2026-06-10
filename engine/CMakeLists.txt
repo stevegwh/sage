@@ -24,6 +24,7 @@ target_link_libraries(engine
         PUBLIC
         raylib
         EnTT::EnTT
+        lua_static
 )
 
 target_include_directories(engine
@@ -35,6 +36,7 @@ target_include_directories(engine
         ${SAGE_ROOT_DIR}
         ${SAGE_ROOT_DIR}/vendor
         ${SAGE_ROOT_DIR}/vendor/magic_enum
+        ${SAGE_ROOT_DIR}/vendor/sol2/include
         # Resolves project/CustomCollisionLayers.hpp (and any future project
         # extension headers). Defaults to engine/defaults/ for standalone builds.
         ${SAGE_PROJECT_INCLUDE_DIR}
