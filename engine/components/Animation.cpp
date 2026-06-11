@@ -7,6 +7,21 @@
 namespace sage
 {
 
+    int Animation::GetClipIndex(const std::string_view clipName) const
+    {
+        for (std::size_t i = 0; i < clipNames.size(); ++i)
+        {
+            if (clipName == clipNames[i]) return static_cast<int>(i);
+        }
+        return -1;
+    }
+
+    const char* Animation::GetClipName(const unsigned int index) const
+    {
+        if (index >= clipNames.size()) return "";
+        return clipNames[index].c_str();
+    }
+
     void Animation::ChangeAnimationByParams(AnimationParams params)
     {
         if (params.oneShot)
@@ -43,6 +58,19 @@ namespace sage
         a.currentFrame = 0;
     }
 
+    bool Animation::ChangeAnimationByName(const std::string_view clipName)
+    {
+        return ChangeAnimationByName(clipName, 1);
+    }
+
+    bool Animation::ChangeAnimationByName(const std::string_view clipName, const int _animSpeed)
+    {
+        const int index = GetClipIndex(clipName);
+        if (index < 0) return false;
+        ChangeAnimation(index, _animSpeed);
+        return true;
+    }
+
     void Animation::PlayOneShot(AnimationId animationId, int _animSpeed)
     {
         PlayOneShot(animationMap.at(animationId), _animSpeed);
@@ -62,6 +90,14 @@ namespace sage
         current.lastFrame = 0;
     }
 
+    bool Animation::PlayOneShotByName(const std::string_view clipName, const int _animSpeed)
+    {
+        const int index = GetClipIndex(clipName);
+        if (index < 0) return false;
+        PlayOneShot(index, _animSpeed);
+        return true;
+    }
+
     void Animation::RestoreAfterOneShot()
     {
         oneShotMode = false;
@@ -69,9 +105,26 @@ namespace sage
         prev = {};
     }
 
-    Animation::Animation(const std::string& id)
+    void Animation::LoadAnimations()
     {
+        animations = nullptr;
         animsCount = 0;
-        animations = ResourceManager::GetInstance().GetModelAnimation(id, &animsCount);
+        clipNames.clear();
+        if (!modelKey.empty())
+        {
+            animations = ResourceManager::GetInstance().GetModelAnimation(modelKey, &animsCount);
+        }
+        clipNames.reserve(animsCount);
+        for (int i = 0; i < animsCount; ++i)
+        {
+            clipNames.emplace_back(animations[i].name);
+        }
+        // A saved clip index can outlive a model re-export; fall back to clip 0 rather than read past the array.
+        if (current.index >= static_cast<unsigned int>(animsCount)) current = {};
+    }
+
+    Animation::Animation(const std::string& id) : modelKey(id)
+    {
+        LoadAnimations();
     }
 } // namespace sage

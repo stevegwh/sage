@@ -4,6 +4,7 @@
 
 #include "ScriptSystem.hpp"
 
+#include "components/Animation.hpp"
 #include "components/Collideable.hpp"
 #include "components/ScriptComponent.hpp"
 #include "components/sgTransform.hpp"
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace sage
 {
@@ -116,6 +118,28 @@ namespace sage
                 "blocksNavigation",
                 &Collideable::blocksNavigation);
 
+            // Clip names are the GLB animation names (Blender NLA tracks). Play/PlayOneShot
+            // return false when no clip matches, so scripts can react instead of crashing.
+            lua.new_usertype<Animation>(
+                "Animation",
+                sol::no_constructor,
+                "Play",
+                sol::overload(
+                    [](Animation& a, const std::string& clip) { return a.ChangeAnimationByName(clip); },
+                    [](Animation& a, const std::string& clip, const int speed) {
+                        return a.ChangeAnimationByName(clip, speed);
+                    }),
+                "PlayOneShot",
+                sol::overload(
+                    [](Animation& a, const std::string& clip) { return a.PlayOneShotByName(clip, 1); },
+                    [](Animation& a, const std::string& clip, const int speed) {
+                        return a.PlayOneShotByName(clip, speed);
+                    }),
+                "ClipCount",
+                [](const Animation& a) { return a.animsCount; },
+                "GetClipNames",
+                [](const Animation& a) { return sol::as_table(a.clipNames); });
+
             lua.set_function(
                 "Log", [](const std::string& msg) { TraceLog(LOG_INFO, "Lua: %s", msg.c_str()); });
         }
@@ -141,6 +165,14 @@ namespace sage
                     [this, entity]() { return registry->try_get<Collideable>(entity); },
                     [this](const std::uint32_t e) {
                         return registry->try_get<Collideable>(static_cast<entt::entity>(e));
+                    }));
+
+            env.set_function(
+                "GetAnimation",
+                sol::overload(
+                    [this, entity]() { return registry->try_get<Animation>(entity); },
+                    [this](const std::uint32_t e) {
+                        return registry->try_get<Animation>(static_cast<entt::entity>(e));
                     }));
         }
 

@@ -1,6 +1,7 @@
 #include "EditorHistory.hpp"
 
 #include "EditorComponents.hpp"
+#include "engine/components/Animation.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/SceneTags.hpp"
@@ -95,6 +96,11 @@ namespace sage::editor
         if (a.hasScript != b.hasScript ||
             (a.hasScript &&
              (a.script.scriptPath != b.script.scriptPath || a.script.enabled != b.script.enabled)))
+        {
+            return false;
+        }
+        if (a.hasAnimation != b.hasAnimation ||
+            (a.hasAnimation && a.animationModelKey != b.animationModelKey))
         {
             return false;
         }
@@ -206,6 +212,11 @@ namespace sage::editor
         {
             s.hasScript = true;
             s.script = reg.get<ScriptComponent>(entity);
+        }
+        if (reg.all_of<Animation>(entity))
+        {
+            s.hasAnimation = true;
+            s.animationModelKey = reg.get<Animation>(entity).modelKey;
         }
         if (reg.all_of<MetaData>(entity))
         {
@@ -566,6 +577,22 @@ namespace sage::editor
             reg.emplace_or_replace<ScriptComponent>(entity, target.script);
         else if (reg.all_of<ScriptComponent>(entity))
             reg.remove<ScriptComponent>(entity);
+
+        if (target.hasAnimation)
+        {
+            // Animation is neither copyable nor movable (live Subscriptions hold
+            // its address), so replace by remove + emplace.
+            const auto* current = reg.try_get<Animation>(entity);
+            if (current == nullptr || current->modelKey != target.animationModelKey)
+            {
+                reg.remove<Animation>(entity);
+                reg.emplace<Animation>(entity, target.animationModelKey);
+            }
+        }
+        else if (reg.all_of<Animation>(entity))
+        {
+            reg.remove<Animation>(entity);
+        }
 
         if (target.hasMetaData)
             reg.emplace_or_replace<MetaData>(entity, target.metaData);

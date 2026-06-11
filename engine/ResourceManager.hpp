@@ -107,6 +107,7 @@ namespace sage
         [[nodiscard]] ModelView GetModelView(const std::string& viewKey) const;
         [[nodiscard]] ModelMutable CreateModelMutable(const std::string& viewKey);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount) const;
+        [[nodiscard]] bool HasModelAnimation(const std::string& key) const;
         void UnloadImages();
         void UnloadShaderFileText();
 

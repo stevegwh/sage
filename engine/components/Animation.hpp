@@ -8,12 +8,16 @@
 #include "../Event.hpp"
 #include "../ResourceManager.hpp"
 
+#include "cereal/types/string.hpp"
+#include "cereal/types/unordered_map.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace sage
 {
@@ -37,9 +41,12 @@ namespace sage
             int speed = 1;
         };
 
+        std::string modelKey;
         std::unordered_map<AnimationId, int> animationMap;
-        ModelAnimation* animations;
-        int animsCount;
+        // Derived from the GLB on load (Blender NLA track names), index-aligned with `animations`.
+        std::vector<std::string> clipNames;
+        ModelAnimation* animations = nullptr;
+        int animsCount = 0;
 
         bool oneShotMode = false;
         AnimData current{};
@@ -48,21 +55,53 @@ namespace sage
         Event<entt::entity> onAnimationStart{};
         Event<entt::entity> onAnimationUpdated{};
 
+        // Clip names come from the GLB (Blender NLA track names). Returns -1 when no clip matches.
+        [[nodiscard]] int GetClipIndex(std::string_view clipName) const;
+        [[nodiscard]] const char* GetClipName(unsigned int index) const;
+
         void ChangeAnimationByParams(AnimationParams params);
         void ChangeAnimationById(AnimationId animationId, int _animSpeed);
         void ChangeAnimationById(AnimationId animationId);
         void ChangeAnimation(int index);
         void ChangeAnimation(int index, int _animSpeed);
+        bool ChangeAnimationByName(std::string_view clipName);
+        bool ChangeAnimationByName(std::string_view clipName, int _animSpeed);
 
         void PlayOneShot(AnimationId animationId, int _animSpeed);
         void PlayOneShot(int index, int _animSpeed);
+        bool PlayOneShotByName(std::string_view clipName, int _animSpeed);
         void RestoreAfterOneShot();
 
+        template <class Archive>
+        void save(Archive& archive) const
+        {
+            archive(modelKey, animationMap, current.index, current.speed);
+        }
+
+        template <class Archive>
+        void load(Archive& archive)
+        {
+            archive(modelKey, animationMap, current.index, current.speed);
+            LoadAnimations();
+        }
+
+        template <class Inspector>
+        void define_editor_fields(Inspector& i)
+        {
+            i.field("Model Key", modelKey, false);
+            for (std::size_t n = 0; n < clipNames.size(); ++n)
+            {
+                i.field("Clip " + std::to_string(n), clipNames[n], false);
+            }
+        }
+
+        Animation() = default;
         Animation(const Animation&) = delete;
         Animation& operator=(const Animation&) = delete;
         explicit Animation(const std::string& id);
 
       private:
+        void LoadAnimations();
         AnimData prev{};
     };
 } // namespace sage

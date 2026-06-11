@@ -15,6 +15,7 @@ namespace sage
         for (const auto& view = registry->view<Animation, Renderable>(); auto& entity : view)
         {
             auto& animation = registry->get<Animation>(entity);
+            if (animation.animations == nullptr || animation.animsCount == 0) continue;
             auto& renderable = registry->get<Renderable>(entity);
             auto& animData = animation.current;
             const ModelAnimation& anim = animation.animations[animData.index];

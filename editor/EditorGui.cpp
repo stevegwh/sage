@@ -76,7 +76,7 @@ namespace sage::editor
             ImGuiWindowFlags_NoSavedSettings;
 
         InspectorComponentsResult inspectorResult;
-        bool addScriptClicked = false;
+        AddComponentClicks addClicks;
         if (ImGui::Begin("Inspector", nullptr, windowFlags))
         {
             ImGui::Text("Selected: %s", inspectorSelectedEntity.c_str());
@@ -89,7 +89,7 @@ namespace sage::editor
             else
             {
                 inspectorResult = DrawInspectorComponents(inspectedComponents);
-                addScriptClicked = drawAddComponentControls();
+                addClicks = drawAddComponentControls();
             }
 
             if (dockLayout)
@@ -115,26 +115,28 @@ namespace sage::editor
             .changed = inspectorResult.changed,
             .began = inspectorResult.began,
             .committed = inspectorResult.committed,
-            .addScriptClicked = addScriptClicked,
+            .addScriptClicked = addClicks.script,
+            .addAnimationClicked = addClicks.animation,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 
-    // "Add Component" button + popup. Only Script is addable for now; the host
-    // (EditorScene) opens a file dialog to pick the lua script.
-    bool EditorGui::drawAddComponentControls()
+    // "Add Component" button + popup. The host (EditorScene) performs the add:
+    // Script opens a file dialog, Animation attaches clips from the entity's model.
+    EditorGui::AddComponentClicks EditorGui::drawAddComponentControls()
     {
-        bool addScriptClicked = false;
+        AddComponentClicks clicks;
 
         ImGui::Spacing();
         if (ImGui::Button("Add Component", ImVec2{-FLT_MIN, 0.0f}))
         {
             ImGui::OpenPopup("##add_component");
         }
-        if (!ImGui::BeginPopup("##add_component")) return addScriptClicked;
+        if (!ImGui::BeginPopup("##add_component")) return clicks;
 
-        addScriptClicked = ImGui::MenuItem("Script");
+        clicks.script = ImGui::MenuItem("Script");
+        clicks.animation = ImGui::MenuItem("Animation");
         ImGui::EndPopup();
-        return addScriptClicked;
+        return clicks;
     }
 
     void EditorGui::DrawDeleteConfirmationModal()

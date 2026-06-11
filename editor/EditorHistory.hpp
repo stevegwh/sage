@@ -48,7 +48,9 @@ namespace sage::editor
         EditField,
         Reparent,
         AddScript,
-        RemoveScript
+        RemoveScript,
+        AddAnimation,
+        RemoveAnimation
     };
 
     class EditorHistory
@@ -130,6 +132,11 @@ namespace sage::editor
             MetaData metaData{};
             bool hasScript = false;
             ScriptComponent script{};
+            // Animation is registry-bound (raw clip pointer, non-copyable), so only
+            // its authored state — the model key — is captured; restore reconstructs
+            // the component from the ResourceManager.
+            bool hasAnimation = false;
+            std::string animationModelKey;
         };
 
         struct EntityDelta

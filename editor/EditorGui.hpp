@@ -106,6 +106,9 @@ namespace sage
                 // "Add Component > Script" was clicked; the host opens a file dialog
                 // to pick the lua script for the selection.
                 bool addScriptClicked = false;
+                // "Add Component > Animation" was clicked; the host attaches an
+                // Animation (and swaps the model to a mutable copy) on the selection.
+                bool addAnimationClicked = false;
                 // Display name of a component whose "Remove Component" was clicked.
                 std::optional<std::string> removeComponent;
             };
@@ -158,8 +161,14 @@ namespace sage
             mutable bool sceneHasUnsavedChanges = false;
             bool dockLayoutChanged = false;
 
+            struct AddComponentClicks
+            {
+                bool script = false;
+                bool animation = false;
+            };
+
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
-            bool drawAddComponentControls();
+            AddComponentClicks drawAddComponentControls();
             void openAssetRenamePopup(std::size_t index);
             void drawAssetRenamePopup();
             void drawAssetDefaultsControls();

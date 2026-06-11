@@ -90,6 +90,8 @@ namespace sage
         void drawScriptBrowser() const;
         void attachScriptToSelection(const std::filesystem::path& scriptFile) const;
         void removeScriptFromSelection() const;
+        void addAnimationToSelection() const;
+        void removeAnimationFromSelection() const;
         void onHistoryApplied(const std::vector<entt::entity>& restored) const;
         void createFlatpackFromEntity(entt::entity entity) const;
         void copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const;

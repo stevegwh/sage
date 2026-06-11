@@ -1,12 +1,14 @@
 #include "EditorMapLoader.hpp"
 
 #include "EditorComponents.hpp"
+#include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
+#include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/Serializer.hpp"
 
@@ -110,6 +112,24 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(targetKind, targetId, script);
+            }
+        };
+
+        // Attaches an Animation to an entity, addressed the same way as
+        // EntityScriptRecord. Only the model key is saved; clips are derived from
+        // packed animation data on load. Trailing section — old maps simply lack
+        // it. Must stay in sync with the game loader's EntityAnimationRecord
+        // (LevelLayoutLoader.cpp).
+        struct EntityAnimationRecord
+        {
+            std::uint8_t targetKind = 0;
+            std::uint32_t targetId = 0;
+            std::string modelKey;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(targetKind, targetId, modelKey);
             }
         };
 
@@ -309,6 +329,44 @@ namespace sage::editor
                         destination->emplace_or_replace<ScriptComponent>(target, record.script);
                     }
                 }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<EntityAnimationRecord> animations;
+                    input(animations);
+                    for (const auto& record : animations)
+                    {
+                        entt::entity target = entt::null;
+                        switch (record.targetKind)
+                        {
+                        case 0:
+                            if (const auto iter = idMap.find(record.targetId); iter != idMap.end())
+                                target = iter->second;
+                            break;
+                        case 1:
+                            if (record.targetId < loadedSpawnerEntities.size())
+                                target = loadedSpawnerEntities[record.targetId];
+                            break;
+                        case 2:
+                            if (record.targetId < loadedTriggerEntities.size())
+                                target = loadedTriggerEntities[record.targetId];
+                            break;
+                        default:
+                            break;
+                        }
+                        if (target == entt::null) continue;
+                        if (!ResourceManager::GetInstance().HasModelAnimation(record.modelKey))
+                        {
+                            std::cerr << "EditorMapLoader: no packed animation data for '"
+                                      << record.modelKey << "', skipping Animation component.\n";
+                            continue;
+                        }
+                        // Animation is neither copyable nor movable (live Subscriptions
+                        // hold its address), so replace by remove + emplace.
+                        destination->remove<Animation>(target);
+                        destination->emplace<Animation>(target, record.modelKey);
+                    }
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -449,6 +507,21 @@ namespace sage::editor
                     appendScript(triggerEntities[i], 2, static_cast<std::uint32_t>(i));
                 }
                 output(scripts);
+
+                // Animation requires a Renderable, so in practice only layout
+                // entities (kind 0) carry one; the record keeps the same addressing
+                // as scripts so the loaders stay uniform.
+                std::vector<EntityAnimationRecord> animations;
+                for (const auto entity : emittedEntities)
+                {
+                    if (!source.all_of<Animation>(entity)) continue;
+                    const auto& animation = source.get<Animation>(entity);
+                    if (animation.modelKey.empty()) continue;
+                    animations.push_back(
+                        EntityAnimationRecord{
+                            0, entt::entt_traits<entt::entity>::to_entity(entity), animation.modelKey});
+                }
+                output(animations);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

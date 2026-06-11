@@ -644,6 +644,11 @@ namespace sage
         }
     }
 
+    bool ResourceManager::HasModelAnimation(const std::string& key) const
+    {
+        return modelAnimations.contains(key);
+    }
+
     ModelAnimation* ResourceManager::GetModelAnimation(const std::string& key, int* animsCount) const
     {
         if (!modelAnimations.contains(key))

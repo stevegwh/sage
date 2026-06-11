@@ -7,6 +7,7 @@
 #include "engine/AudioManager.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
+#include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -130,12 +131,25 @@ namespace sage
     {
         for (const auto entity : sys->registry->view<Renderable>())
         {
-            if (sys->registry->any_of<UberShaderComponent>(entity)) continue;
             auto& renderable = sys->registry->get<Renderable>(entity);
             if (renderable.GetModel() == nullptr) continue;
-            auto& uber =
-                sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
-            uber.SetFlagAll(UberShaderComponent::Flags::Lit);
+            if (!sys->registry->any_of<UberShaderComponent>(entity))
+            {
+                auto& uber = sys->registry->emplace<UberShaderComponent>(
+                    entity, renderable.GetModel()->GetMaterialCount());
+                uber.SetFlagAll(UberShaderComponent::Flags::Lit);
+            }
+            // Undo/redo restores Animation and the Renderable independently of the
+            // shader component, so re-derive the Skinned flag from Animation presence.
+            auto& uber = sys->registry->get<UberShaderComponent>(entity);
+            if (sys->registry->any_of<Animation>(entity))
+            {
+                uber.SetFlagAll(UberShaderComponent::Flags::Skinned);
+            }
+            else
+            {
+                uber.ClearFlagAll(UberShaderComponent::Flags::Skinned);
+            }
         }
     }
 
@@ -549,7 +563,9 @@ namespace sage
                 scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
                 scriptBrowser->Open();
             }
+            if (result.addAnimationClicked) addAnimationToSelection();
             if (result.removeComponent == "Script") removeScriptFromSelection();
+            if (result.removeComponent == "Animation") removeAnimationFromSelection();
         }
     }
 
@@ -577,7 +593,8 @@ namespace sage
         {
             std::ofstream out{file};
             out << "-- Lifecycle callbacks are optional globals; delete the ones you don't need.\n"
-                   "-- API: entity, GetTransform([entity]), GetCollideable([entity]), Vec3(x,y,z), Log(msg)\n"
+                   "-- API: entity, GetTransform([entity]), GetCollideable([entity]), GetAnimation([entity]),\n"
+                   "--      Vec3(x,y,z), Log(msg)\n"
                    "\n"
                    "function Awake()\n"
                    "end\n"
@@ -622,6 +639,88 @@ namespace sage
         for (const auto entity : selected)
         {
             sys->registry->remove<ScriptComponent>(entity);
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::addAnimationToSelection() const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        auto& reg = *sys->registry;
+        auto& resources = ResourceManager::GetInstance();
+
+        // Only entities whose model has packed animation data qualify; the rest of
+        // the selection is left untouched rather than crashing the GetModelAnimation
+        // assert downstream.
+        std::vector<entt::entity> targets;
+        for (const auto entity : selected)
+        {
+            if (reg.any_of<Animation>(entity)) continue;
+            const auto* renderable = reg.try_get<Renderable>(entity);
+            if (renderable == nullptr || renderable->GetModel() == nullptr) continue;
+            if (!resources.HasModelAnimation(renderable->GetModel()->GetKey())) continue;
+            targets.push_back(entity);
+        }
+        if (targets.empty())
+        {
+            std::cout << "EditorScene: no selected entity has a model with animation data.\n";
+            return;
+        }
+
+        history->Begin(editor::EditAction::AddAnimation, targets);
+        for (const auto entity : targets)
+        {
+            auto& renderable = reg.get<Renderable>(entity);
+            const auto key = renderable.GetModel()->GetKey();
+
+            // Skinned animation writes the animated pose into the mesh data each
+            // frame, so the shared ModelView must become this entity's own copy.
+            if (renderable.GetMutable() == nullptr)
+            {
+                auto mutableModel = resources.CreateModelMutable(key);
+                mutableModel.SetTransform(renderable.initialTransform);
+                renderable.SetModel(std::move(mutableModel));
+            }
+            reg.emplace<Animation>(entity, key);
+            if (auto* uber = reg.try_get<UberShaderComponent>(entity))
+            {
+                uber->SetFlagAll(UberShaderComponent::Flags::Skinned);
+            }
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::removeAnimationFromSelection() const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        auto& reg = *sys->registry;
+        auto& resources = ResourceManager::GetInstance();
+
+        history->Begin(editor::EditAction::RemoveAnimation, selected);
+        for (const auto entity : selected)
+        {
+            if (!reg.any_of<Animation>(entity)) continue;
+            reg.remove<Animation>(entity);
+
+            // Return the renderable to the shared view; the private mutable copy
+            // only existed for skinning.
+            if (auto* renderable = reg.try_get<Renderable>(entity);
+                renderable != nullptr && renderable->GetMutable() != nullptr)
+            {
+                auto view = resources.GetModelView(renderable->GetModel()->GetKey());
+                view.SetTransform(renderable->initialTransform);
+                renderable->SetModel(std::move(view));
+            }
+            if (auto* uber = reg.try_get<UberShaderComponent>(entity))
+            {
+                uber->ClearFlagAll(UberShaderComponent::Flags::Skinned);
+            }
         }
         history->Commit();
         refreshSceneWindows();
