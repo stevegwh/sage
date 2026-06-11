@@ -88,6 +88,10 @@ namespace sage::editor
         std::vector<InspectorField> fields_;
         std::string labelPrefix_;
         bool editableScope_ = true;
+        // The entity being described; lets bespoke fields source options from
+        // sibling components (e.g. clipDropdown reads the entity's Animation).
+        entt::registry* contextRegistry_ = nullptr;
+        entt::entity contextEntity_ = entt::null;
 
         [[nodiscard]] std::string qualified(const std::string& label) const
         {
@@ -195,6 +199,17 @@ namespace sage::editor
         // string; picking an option replaces it. Stored as EnumField.
         void tagSet(const std::string& label, std::string& tags, bool rw = true);
 
+        // Bespoke: dropdown of the inspected entity's Animation clip names (GLB
+        // NLA tracks). Shows only "---" and writes nothing when the entity has no
+        // Animation or clips. Stored as EnumField.
+        void clipDropdown(const std::string& label, std::string& value, bool rw = true);
+
+        void SetContext(entt::registry* registry, const entt::entity entity)
+        {
+            contextRegistry_ = registry;
+            contextEntity_ = entity;
+        }
+
         // sgTransform proxy. Reads come from the cached Vector3 inside the proxy;
         // writes route through the proxy's operator=, which dispatches to TransformSystem
         // so the hierarchy stays in sync. The component author just passes the field,
@@ -297,6 +312,7 @@ namespace sage::editor
                  },
                  [](entt::registry& r, const entt::entity e) {
                      ComponentInspector ci;
+                     ci.SetContext(&r, e);
                      r.template get<T>(e).define_editor_fields(ci);
                      return std::move(ci).Take();
                  },

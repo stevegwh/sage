@@ -53,6 +53,8 @@ namespace sage
         auto& a = oneShotMode ? prev : current;
 
         if (a.index == index) return;
+        // In one-shot mode this only changes the clip restored later, not the visible pose.
+        if (!oneShotMode) StartBlend();
         a.speed = _animSpeed;
         a.index = index;
         a.currentFrame = 0;
@@ -84,6 +86,7 @@ namespace sage
             prev = current;
         }
 
+        StartBlend();
         current.index = index;
         current.speed = _animSpeed;
         current.currentFrame = 0;
@@ -101,8 +104,23 @@ namespace sage
     void Animation::RestoreAfterOneShot()
     {
         oneShotMode = false;
+        StartBlend();
         current = prev;
         prev = {};
+    }
+
+    void Animation::StartBlend()
+    {
+        if (blendDuration <= 0.0f || animsCount == 0)
+        {
+            blending = false;
+            return;
+        }
+        // Interrupting a running blend snapshots the clip we were fading to; a
+        // mid-blend mix can't be captured in AnimData, so a brief pop is possible.
+        blendFrom = current;
+        blending = true;
+        blendTimer = blendDuration;
     }
 
     void Animation::LoadAnimations()
@@ -121,6 +139,10 @@ namespace sage
         }
         // A saved clip index can outlive a model re-export; fall back to clip 0 rather than read past the array.
         if (current.index >= static_cast<unsigned int>(animsCount)) current = {};
+        // blendFrom may also point at a clip that no longer exists.
+        blending = false;
+        blendTimer = 0.0f;
+        blendFrom = {};
     }
 
     Animation::Animation(const std::string& id) : modelKey(id)

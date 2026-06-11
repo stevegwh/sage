@@ -145,11 +145,13 @@ namespace sage::editor
             std::uint32_t targetId = 0;
             float movementSpeed = 0.0f;
             std::int32_t pathfindingBounds = 0;
+            std::string moveClip;
+            std::string idleClip;
 
             template <class Archive>
             void serialize(Archive& archive)
             {
-                archive(targetKind, targetId, movementSpeed, pathfindingBounds);
+                archive(targetKind, targetId, movementSpeed, pathfindingBounds, moveClip, idleClip);
             }
         };
 
@@ -399,6 +401,8 @@ namespace sage::editor
                         auto& moveable = destination->get_or_emplace<MoveableActor>(iter->second);
                         moveable.movementSpeed = record.movementSpeed;
                         moveable.pathfindingBounds = record.pathfindingBounds;
+                        moveable.moveClip = record.moveClip;
+                        moveable.idleClip = record.idleClip;
                     }
                 }
             });
@@ -568,7 +572,9 @@ namespace sage::editor
                             0,
                             entt::entt_traits<entt::entity>::to_entity(entity),
                             moveable.movementSpeed,
-                            moveable.pathfindingBounds});
+                            moveable.pathfindingBounds,
+                            moveable.moveClip,
+                            moveable.idleClip});
                 }
                 output(moveables);
             });

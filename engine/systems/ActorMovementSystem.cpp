@@ -122,7 +122,7 @@ namespace sage
         if (!path.empty())
         {
             updateActorDirection(transform, moveable);
-            updateActorRotation(entity, transform);
+            updateActorRotation(transform, moveable);
             moveable.onStartMovement.Publish(entity);
         }
         else
@@ -284,10 +284,18 @@ namespace sage
             Vector3Normalize(Vector3Subtract(moveableActor.path.front(), transform.GetWorldPos()));
     }
 
-    void ActorMovementSystem::updateActorRotation(entt::entity entity, sgTransform& transform) const
+    void ActorMovementSystem::updateActorRotation(sgTransform& transform, const MoveableActor& moveableActor)
     {
-        // Calculate rotation angle based on direction
-        float angle = atan2f(transform.direction.x, transform.direction.z) * RAD2DEG;
+        const float target = atan2f(transform.direction.x, transform.direction.z) * RAD2DEG;
+        float angle = target;
+        if (moveableActor.turnSpeed > 0.0f)
+        {
+            const float current = transform.GetWorldRot().y;
+            // Shortest signed angular difference, mapped into [-180, 180).
+            const float delta = fmodf(target - current + 540.0f, 360.0f) - 180.0f;
+            const float maxStep = moveableActor.turnSpeed * GetFrameTime();
+            angle = current + Clamp(delta, -maxStep, maxStep);
+        }
         transform.rotation.world = {transform.GetWorldRot().x, angle, transform.GetWorldRot().z};
     }
 
@@ -309,7 +317,7 @@ namespace sage
         entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const
     {
         updateActorDirection(transform, moveableActor);
-        updateActorRotation(entity, transform);
+        updateActorRotation(transform, moveableActor);
         updateActorWorldPosition(entity);
     }
 

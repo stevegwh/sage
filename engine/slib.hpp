@@ -68,6 +68,15 @@ namespace sage
         [[nodiscard]] BoundingBox CalcLocalBoundingBox() const;
         [[nodiscard]] RayCollision GetRayMeshCollision(const Ray& ray, int meshNum, const Matrix& transform) const;
         void UpdateAnimation(const ModelAnimation& anim, unsigned int frame) const;
+        // Cross-fade: per-bone lerp/slerp between two clips' poses (t = 0 is `from`,
+        // 1 is `to`), composed into bone matrices the same way raylib's
+        // UpdateModelAnimationBones does. Both clips must share the model's skeleton.
+        void UpdateAnimationBlended(
+            const ModelAnimation& from,
+            unsigned int frameFrom,
+            const ModelAnimation& to,
+            unsigned int frameTo,
+            float t) const;
         void Draw(const Vector3& position, float scale, const Color& tint) const;
         void Draw(
             const Vector3& position,

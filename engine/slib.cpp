@@ -8,6 +8,7 @@
 #include "raymath.h"
 #include "ResourceManager.hpp"
 
+#include <cassert>
 #include <cstring>
 #include <regex>
 #include <vector>
@@ -215,6 +216,60 @@ namespace sage
     void ModelView::UpdateAnimation(const ModelAnimation& anim, unsigned int frame) const
     {
         UpdateModelAnimationBones(rlmodel, anim, static_cast<int>(frame));
+    }
+
+    void ModelView::UpdateAnimationBlended(
+        const ModelAnimation& from,
+        unsigned int frameFrom,
+        const ModelAnimation& to,
+        unsigned int frameTo,
+        const float t) const
+    {
+        if (from.frameCount <= 0 || from.framePoses == nullptr || from.bones == nullptr ||
+            to.frameCount <= 0 || to.framePoses == nullptr || to.bones == nullptr)
+            return;
+        if (from.boneCount != to.boneCount) return;
+
+        frameFrom %= from.frameCount;
+        frameTo %= to.frameCount;
+
+        for (int i = 0; i < rlmodel.meshCount; ++i)
+        {
+            if (!rlmodel.meshes[i].boneMatrices) continue;
+            assert(rlmodel.meshes[i].boneCount == to.boneCount);
+
+            for (int boneId = 0; boneId < rlmodel.meshes[i].boneCount; ++boneId)
+            {
+                const Transform& poseFrom = from.framePoses[frameFrom][boneId];
+                const Transform& poseTo = to.framePoses[frameTo][boneId];
+
+                const Vector3 outTranslation = Vector3Lerp(poseFrom.translation, poseTo.translation, t);
+                const Quaternion outRotation = QuaternionSlerp(poseFrom.rotation, poseTo.rotation, t);
+                const Vector3 outScale = Vector3Lerp(poseFrom.scale, poseTo.scale, t);
+
+                // Same bind-pose-inverse composition as raylib's UpdateModelAnimationBones.
+                const Vector3 inTranslation = rlmodel.bindPose[boneId].translation;
+                const Quaternion inRotation = rlmodel.bindPose[boneId].rotation;
+                const Vector3 inScale = rlmodel.bindPose[boneId].scale;
+
+                const Vector3 invTranslation =
+                    Vector3RotateByQuaternion(Vector3Negate(inTranslation), QuaternionInvert(inRotation));
+                const Quaternion invRotation = QuaternionInvert(inRotation);
+                const Vector3 invScale = Vector3Divide({1.0f, 1.0f, 1.0f}, inScale);
+
+                const Vector3 boneTranslation = Vector3Add(
+                    Vector3RotateByQuaternion(Vector3Multiply(outScale, invTranslation), outRotation),
+                    outTranslation);
+                const Quaternion boneRotation = QuaternionMultiply(outRotation, invRotation);
+                const Vector3 boneScale = Vector3Multiply(outScale, invScale);
+
+                rlmodel.meshes[i].boneMatrices[boneId] = MatrixMultiply(
+                    MatrixMultiply(
+                        QuaternionToMatrix(boneRotation),
+                        MatrixTranslate(boneTranslation.x, boneTranslation.y, boneTranslation.z)),
+                    MatrixScale(boneScale.x, boneScale.y, boneScale.z));
+            }
+        }
     }
 
     void ModelView::Draw(const Vector3& position, float scale, const Color& tint) const

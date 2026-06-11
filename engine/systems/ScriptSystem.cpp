@@ -15,6 +15,7 @@
 #define SOL_ALL_SAFETIES_ON 1
 #include "sol/sol.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -138,7 +139,11 @@ namespace sage
                 "ClipCount",
                 [](const Animation& a) { return a.animsCount; },
                 "GetClipNames",
-                [](const Animation& a) { return sol::as_table(a.clipNames); });
+                [](const Animation& a) { return sol::as_table(a.clipNames); },
+                "SetBlendDuration",
+                [](Animation& a, const float seconds) { a.blendDuration = std::max(0.0f, seconds); },
+                "GetBlendDuration",
+                [](const Animation& a) { return a.blendDuration; });
 
             lua.set_function(
                 "Log", [](const std::string& msg) { TraceLog(LOG_INFO, "Lua: %s", msg.c_str()); });

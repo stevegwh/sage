@@ -248,6 +248,41 @@ namespace sage::editor
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
     }
 
+    void ComponentInspector::clipDropdown(const std::string& label, std::string& value, const bool rw)
+    {
+        EnumField e{.data = &value};
+        if (contextRegistry_ != nullptr && contextEntity_ != entt::null)
+        {
+            if (const auto* animation = contextRegistry_->try_get<Animation>(contextEntity_))
+            {
+                e.options = animation->clipNames;
+            }
+        }
+
+        const bool hasClips = !e.options.empty();
+        if (!hasClips)
+        {
+            e.options.emplace_back("---");
+        }
+        else if (!value.empty() && std::ranges::find(e.options, value) == e.options.end())
+        {
+            // Keep an authored value that matches no clip visible and selected
+            // rather than silently displaying the first clip.
+            e.options.insert(e.options.begin(), value);
+        }
+
+        e.getIndex = [options = e.options, p = &value]() -> std::size_t {
+            const auto it = std::ranges::find(options, *p);
+            return it != options.end() ? static_cast<std::size_t>(std::distance(options.begin(), it)) : 0;
+        };
+        e.setIndex = [options = e.options, hasClips, p = &value](const std::size_t idx) {
+            if (!hasClips || idx >= options.size()) return;
+            *p = options[idx];
+        };
+
+        fields_.push_back({.label = qualified(label), .editable = rw && editableScope_, .value = std::move(e)});
+    }
+
     std::vector<InspectedComponent> InspectorRegistry::Inspect(
         entt::registry& registry, const entt::entity entity) const
     {

@@ -108,7 +108,9 @@ namespace sage::editor
         if (a.hasMoveableActor != b.hasMoveableActor ||
             (a.hasMoveableActor &&
              (a.moveableActorSpeed != b.moveableActorSpeed ||
-              a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds)))
+              a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds ||
+              a.moveableActorMoveClip != b.moveableActorMoveClip ||
+              a.moveableActorIdleClip != b.moveableActorIdleClip)))
         {
             return false;
         }
@@ -232,6 +234,8 @@ namespace sage::editor
             s.hasMoveableActor = true;
             s.moveableActorSpeed = moveable.movementSpeed;
             s.moveableActorPathfindingBounds = moveable.pathfindingBounds;
+            s.moveableActorMoveClip = moveable.moveClip;
+            s.moveableActorIdleClip = moveable.idleClip;
         }
         if (reg.all_of<MetaData>(entity))
         {
@@ -614,6 +618,8 @@ namespace sage::editor
             auto& moveable = reg.get_or_emplace<MoveableActor>(entity);
             moveable.movementSpeed = target.moveableActorSpeed;
             moveable.pathfindingBounds = target.moveableActorPathfindingBounds;
+            moveable.moveClip = target.moveableActorMoveClip;
+            moveable.idleClip = target.moveableActorIdleClip;
         }
         else if (reg.all_of<MoveableActor>(entity))
         {

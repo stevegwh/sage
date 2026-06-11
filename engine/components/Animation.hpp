@@ -51,6 +51,13 @@ namespace sage
         bool oneShotMode = false;
         AnimData current{};
 
+        // Clip switches cross-fade over this many seconds; 0 snaps instantly.
+        float blendDuration = 0.2f;
+        // Runtime blend state, never serialized. blendFrom keeps advancing while it fades out.
+        bool blending = false;
+        float blendTimer = 0.0f;
+        AnimData blendFrom{};
+
         Event<entt::entity> onAnimationEnd{};
         Event<entt::entity> onAnimationStart{};
         Event<entt::entity> onAnimationUpdated{};
@@ -102,6 +109,7 @@ namespace sage
 
       private:
         void LoadAnimations();
+        void StartBlend();
         AnimData prev{};
     };
 } // namespace sage
