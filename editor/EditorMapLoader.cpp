@@ -3,6 +3,7 @@
 #include "EditorComponents.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -130,6 +131,25 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(targetKind, targetId, modelKey);
+            }
+        };
+
+        // Attaches a MoveableActor to an entity, addressed the same way as
+        // EntityScriptRecord. Only the authored fields are saved; the rest of the
+        // component is runtime state. Trailing section — old maps simply lack it.
+        // Must stay in sync with the game loader's EntityMoveableActorRecord
+        // (LevelLayoutLoader.cpp).
+        struct EntityMoveableActorRecord
+        {
+            std::uint8_t targetKind = 0;
+            std::uint32_t targetId = 0;
+            float movementSpeed = 0.0f;
+            std::int32_t pathfindingBounds = 0;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(targetKind, targetId, movementSpeed, pathfindingBounds);
             }
         };
 
@@ -367,6 +387,20 @@ namespace sage::editor
                         destination->emplace<Animation>(target, record.modelKey);
                     }
                 }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<EntityMoveableActorRecord> moveables;
+                    input(moveables);
+                    for (const auto& record : moveables)
+                    {
+                        const auto iter = idMap.find(record.targetId);
+                        if (record.targetKind != 0 || iter == idMap.end()) continue;
+                        auto& moveable = destination->get_or_emplace<MoveableActor>(iter->second);
+                        moveable.movementSpeed = record.movementSpeed;
+                        moveable.pathfindingBounds = record.pathfindingBounds;
+                    }
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -522,6 +556,21 @@ namespace sage::editor
                             0, entt::entt_traits<entt::entity>::to_entity(entity), animation.modelKey});
                 }
                 output(animations);
+
+                // Like Animation, only layout entities (kind 0) carry a MoveableActor.
+                std::vector<EntityMoveableActorRecord> moveables;
+                for (const auto entity : emittedEntities)
+                {
+                    if (!source.all_of<MoveableActor>(entity)) continue;
+                    const auto& moveable = source.get<MoveableActor>(entity);
+                    moveables.push_back(
+                        EntityMoveableActorRecord{
+                            0,
+                            entt::entt_traits<entt::entity>::to_entity(entity),
+                            moveable.movementSpeed,
+                            moveable.pathfindingBounds});
+                }
+                output(moveables);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

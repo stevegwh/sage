@@ -50,7 +50,9 @@ namespace sage::editor
         AddScript,
         RemoveScript,
         AddAnimation,
-        RemoveAnimation
+        RemoveAnimation,
+        AddMoveableActor,
+        RemoveMoveableActor
     };
 
     class EditorHistory
@@ -137,6 +139,11 @@ namespace sage::editor
             // the component from the ResourceManager.
             bool hasAnimation = false;
             std::string animationModelKey;
+            // MoveableActor is mostly runtime state (path, events); only the two
+            // authored fields are captured.
+            bool hasMoveableActor = false;
+            float moveableActorSpeed = 0.0f;
+            int moveableActorPathfindingBounds = 0;
         };
 
         struct EntityDelta

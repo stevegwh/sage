@@ -9,6 +9,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -564,8 +565,10 @@ namespace sage
                 scriptBrowser->Open();
             }
             if (result.addAnimationClicked) addAnimationToSelection();
+            if (result.addMoveableActorClicked) addMoveableActorToSelection();
             if (result.removeComponent == "Script") removeScriptFromSelection();
             if (result.removeComponent == "Animation") removeAnimationFromSelection();
+            if (result.removeComponent == "Moveable Actor") removeMoveableActorFromSelection();
         }
     }
 
@@ -721,6 +724,42 @@ namespace sage
             {
                 uber->ClearFlagAll(UberShaderComponent::Flags::Skinned);
             }
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::addMoveableActorToSelection() const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        auto& reg = *sys->registry;
+        std::vector<entt::entity> targets;
+        for (const auto entity : selected)
+        {
+            if (!reg.any_of<MoveableActor>(entity)) targets.push_back(entity);
+        }
+        if (targets.empty()) return;
+
+        history->Begin(editor::EditAction::AddMoveableActor, targets);
+        for (const auto entity : targets)
+        {
+            reg.emplace<MoveableActor>(entity);
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::removeMoveableActorFromSelection() const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        history->Begin(editor::EditAction::RemoveMoveableActor, selected);
+        for (const auto entity : selected)
+        {
+            sys->registry->remove<MoveableActor>(entity);
         }
         history->Commit();
         refreshSceneWindows();

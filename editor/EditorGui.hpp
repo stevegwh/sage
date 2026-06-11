@@ -109,6 +109,9 @@ namespace sage
                 // "Add Component > Animation" was clicked; the host attaches an
                 // Animation (and swaps the model to a mutable copy) on the selection.
                 bool addAnimationClicked = false;
+                // "Add Component > Moveable Actor" was clicked; the host attaches a
+                // MoveableActor with default values on the selection.
+                bool addMoveableActorClicked = false;
                 // Display name of a component whose "Remove Component" was clicked.
                 std::optional<std::string> removeComponent;
             };
@@ -165,6 +168,7 @@ namespace sage
             {
                 bool script = false;
                 bool animation = false;
+                bool moveableActor = false;
             };
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;

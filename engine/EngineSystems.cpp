@@ -15,6 +15,7 @@
 #include "systems/ActorMovementSystem.hpp"
 #include "systems/AnimationSystem.hpp"
 #include "systems/CollisionSystem.hpp"
+#include "systems/ControllableActorSystem.hpp"
 #include "systems/NavigationGridSystem.hpp"
 #include "systems/RenderSystem.hpp"
 #include "systems/ScriptSystem.hpp"
@@ -42,6 +43,7 @@ namespace sage
           collisionSystem(std::make_unique<CollisionSystem>(_registry)),
           navigationGridSystem(std::make_unique<NavigationGridSystem>(_registry, collisionSystem.get())),
           actorMovementSystem(std::make_unique<ActorMovementSystem>(_registry, this)),
+          controllableActorSystem(std::make_unique<ControllableActorSystem>(_registry, this)),
           animationSystem(std::make_unique<AnimationSystem>(_registry)),
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayFactory(std::make_unique<FullscreenTextOverlayManager>(this)),

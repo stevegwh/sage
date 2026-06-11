@@ -2,6 +2,7 @@
 
 #include "EditorComponents.hpp"
 #include "engine/components/Animation.hpp"
+#include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/SceneTags.hpp"
@@ -101,6 +102,13 @@ namespace sage::editor
         }
         if (a.hasAnimation != b.hasAnimation ||
             (a.hasAnimation && a.animationModelKey != b.animationModelKey))
+        {
+            return false;
+        }
+        if (a.hasMoveableActor != b.hasMoveableActor ||
+            (a.hasMoveableActor &&
+             (a.moveableActorSpeed != b.moveableActorSpeed ||
+              a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds)))
         {
             return false;
         }
@@ -217,6 +225,13 @@ namespace sage::editor
         {
             s.hasAnimation = true;
             s.animationModelKey = reg.get<Animation>(entity).modelKey;
+        }
+        if (reg.all_of<MoveableActor>(entity))
+        {
+            const auto& moveable = reg.get<MoveableActor>(entity);
+            s.hasMoveableActor = true;
+            s.moveableActorSpeed = moveable.movementSpeed;
+            s.moveableActorPathfindingBounds = moveable.pathfindingBounds;
         }
         if (reg.all_of<MetaData>(entity))
         {
@@ -592,6 +607,17 @@ namespace sage::editor
         else if (reg.all_of<Animation>(entity))
         {
             reg.remove<Animation>(entity);
+        }
+
+        if (target.hasMoveableActor)
+        {
+            auto& moveable = reg.get_or_emplace<MoveableActor>(entity);
+            moveable.movementSpeed = target.moveableActorSpeed;
+            moveable.pathfindingBounds = target.moveableActorPathfindingBounds;
+        }
+        else if (reg.all_of<MoveableActor>(entity))
+        {
+            reg.remove<MoveableActor>(entity);
         }
 
         if (target.hasMetaData)

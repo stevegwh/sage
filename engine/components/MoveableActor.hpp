@@ -29,6 +29,14 @@ namespace sage
         float movementSpeed = 0.35f;
         // The max range the actor can pathfind at one time.
         int pathfindingBounds = 50;
+
+        template <class Inspector>
+        void define_editor_fields(Inspector& i)
+        {
+            i.field("Movement Speed", movementSpeed);
+            i.field("Pathfinding Bounds", pathfindingBounds);
+        }
+
         // std::optional<MoveableActorCollision> moveableActorCollision;
         entt::entity hitEntityId = entt::null;
         Vector3 hitLastPos{};

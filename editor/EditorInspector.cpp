@@ -4,6 +4,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -332,6 +333,7 @@ namespace sage::editor
         registry.Register<Light>("Light");
         registry.Register<Spawner>("Spawner");
         registry.Register<Animation>("Animation", /*removable=*/true);
+        registry.Register<MoveableActor>("Moveable Actor", /*removable=*/true);
         registry.Register<ScriptComponent>("Script", /*removable=*/true);
     }
 } // namespace sage::editor

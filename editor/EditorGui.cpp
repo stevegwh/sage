@@ -117,6 +117,7 @@ namespace sage::editor
             .committed = inspectorResult.committed,
             .addScriptClicked = addClicks.script,
             .addAnimationClicked = addClicks.animation,
+            .addMoveableActorClicked = addClicks.moveableActor,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 
@@ -135,6 +136,7 @@ namespace sage::editor
 
         clicks.script = ImGui::MenuItem("Script");
         clicks.animation = ImGui::MenuItem("Animation");
+        clicks.moveableActor = ImGui::MenuItem("Moveable Actor");
         ImGui::EndPopup();
         return clicks;
     }
