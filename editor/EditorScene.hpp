@@ -24,6 +24,11 @@
 #include <string>
 #include <vector>
 
+namespace ImGui
+{
+    class FileBrowser;
+}
+
 namespace sage
 {
     class EngineSystems;
@@ -50,6 +55,9 @@ namespace sage
         std::unique_ptr<editor::EditorHistory> history;
         std::unique_ptr<editor::EditorModeStateMachine> editorModes;
         std::unique_ptr<editor::EditorMapController> mapController;
+        // Picks the lua file for "Add Component > Script" (save-style: typing a
+        // new filename creates a template script).
+        std::unique_ptr<ImGui::FileBrowser> scriptBrowser;
         mutable entt::entity hierarchyContextEntity = entt::null;
         bool viewportFullscreen = false;
         mutable bool snapToGrid = false;
@@ -79,6 +87,9 @@ namespace sage
         void handleClipboardShortcuts() const;
         void handleHistoryShortcuts() const;
         void handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const;
+        void drawScriptBrowser() const;
+        void attachScriptToSelection(const std::filesystem::path& scriptFile) const;
+        void removeScriptFromSelection() const;
         void onHistoryApplied(const std::vector<entt::entity>& restored) const;
         void createFlatpackFromEntity(entt::entity entity) const;
         void copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const;

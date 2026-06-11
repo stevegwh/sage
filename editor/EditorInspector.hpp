@@ -269,6 +269,9 @@ namespace sage::editor
     {
         std::string displayName;
         std::vector<InspectorField> fields;
+        // Offers "Remove Component" in the component's context menu; the host
+        // (EditorScene) maps the display name back to the component type.
+        bool removable = false;
     };
 
     class InspectorRegistry
@@ -278,13 +281,14 @@ namespace sage::editor
             std::string displayName;
             std::function<bool(const entt::registry&, entt::entity)> has;
             std::function<std::vector<InspectorField>(entt::registry&, entt::entity)> describe;
+            bool removable = false;
         };
 
         std::vector<Entry> entries_;
 
       public:
         template <class T>
-        void Register(std::string displayName)
+        void Register(std::string displayName, const bool removable = false)
         {
             entries_.push_back(
                 {std::move(displayName),
@@ -295,7 +299,8 @@ namespace sage::editor
                      ComponentInspector ci;
                      r.template get<T>(e).define_editor_fields(ci);
                      return std::move(ci).Take();
-                 }});
+                 },
+                 removable});
         }
 
         [[nodiscard]] std::vector<InspectedComponent> Inspect(

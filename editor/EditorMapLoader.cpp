@@ -3,6 +3,7 @@
 #include "EditorComponents.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
@@ -89,6 +90,26 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(position, collideable);
+            }
+        };
+
+        // Attaches a ScriptComponent to an entity from one of the three entity
+        // streams above; the owner is addressed by stream + id/index because only
+        // layout entities carry a saved entity id. Trailing section — old maps
+        // simply lack it. Must stay in sync with the game loader's
+        // EntityScriptRecord (LevelLayoutLoader.cpp).
+        struct EntityScriptRecord
+        {
+            // 0 = layout entity (targetId = saved entity id), 1 = spawner / 2 =
+            // trigger (targetId = index into that section, in saved order).
+            std::uint8_t targetKind = 0;
+            std::uint32_t targetId = 0;
+            ScriptComponent script{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(targetKind, targetId, script);
             }
         };
 
@@ -225,6 +246,7 @@ namespace sage::editor
                     }
                 }
 
+                std::vector<entt::entity> loadedSpawnerEntities;
                 if (hasMoreSerializedData(stream))
                 {
                     std::vector<Spawner> spawners;
@@ -238,9 +260,11 @@ namespace sage::editor
                         transform.rotation.world = spawner.rot;
                         transform.name = "spawner_" + spawner.name;
                         destination->emplace<Spawner>(entity, spawner);
+                        loadedSpawnerEntities.push_back(entity);
                     }
                 }
 
+                std::vector<entt::entity> loadedTriggerEntities;
                 if (hasMoreSerializedData(stream))
                 {
                     std::vector<TriggerRecord> triggers;
@@ -253,6 +277,36 @@ namespace sage::editor
                         transform.position.world = record.position;
                         transform.name = "trigger";
                         destination->emplace<Collideable>(entity, record.collideable);
+                        loadedTriggerEntities.push_back(entity);
+                    }
+                }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<EntityScriptRecord> scripts;
+                    input(scripts);
+                    for (const auto& record : scripts)
+                    {
+                        entt::entity target = entt::null;
+                        switch (record.targetKind)
+                        {
+                        case 0:
+                            if (const auto iter = idMap.find(record.targetId); iter != idMap.end())
+                                target = iter->second;
+                            break;
+                        case 1:
+                            if (record.targetId < loadedSpawnerEntities.size())
+                                target = loadedSpawnerEntities[record.targetId];
+                            break;
+                        case 2:
+                            if (record.targetId < loadedTriggerEntities.size())
+                                target = loadedTriggerEntities[record.targetId];
+                            break;
+                        default:
+                            break;
+                        }
+                        if (target == entt::null) continue;
+                        destination->emplace_or_replace<ScriptComponent>(target, record.script);
                     }
                 }
             });
@@ -346,6 +400,7 @@ namespace sage::editor
                 output(entityMetaData);
 
                 std::vector<Spawner> spawners;
+                std::vector<entt::entity> spawnerEntities;
                 for (const auto entity : source.view<EditorMapEntity, sgTransform, Spawner>())
                 {
                     auto spawner = source.get<Spawner>(entity);
@@ -353,10 +408,12 @@ namespace sage::editor
                     spawner.pos = transform.GetWorldPos();
                     spawner.rot = transform.GetWorldRot();
                     spawners.push_back(spawner);
+                    spawnerEntities.push_back(entity);
                 }
                 output(spawners);
 
                 std::vector<TriggerRecord> triggers;
+                std::vector<entt::entity> triggerEntities;
                 for (const auto entity : source.view<EditorMapEntity, sgTransform, Collideable>())
                 {
                     const auto& collideable = source.get<Collideable>(entity);
@@ -367,8 +424,31 @@ namespace sage::editor
                         TriggerRecord{
                             .position = source.get<sgTransform>(entity).GetWorldPos(),
                             .collideable = collideable});
+                    triggerEntities.push_back(entity);
                 }
                 output(triggers);
+
+                std::vector<EntityScriptRecord> scripts;
+                const auto appendScript =
+                    [&](const entt::entity entity, const std::uint8_t kind, const std::uint32_t id) {
+                        if (!source.all_of<ScriptComponent>(entity)) return;
+                        const auto& script = source.get<ScriptComponent>(entity);
+                        if (script.scriptPath.empty()) return;
+                        scripts.push_back(EntityScriptRecord{kind, id, script});
+                    };
+                for (const auto entity : emittedEntities)
+                {
+                    appendScript(entity, 0, entt::entt_traits<entt::entity>::to_entity(entity));
+                }
+                for (std::size_t i = 0; i < spawnerEntities.size(); ++i)
+                {
+                    appendScript(spawnerEntities[i], 1, static_cast<std::uint32_t>(i));
+                }
+                for (std::size_t i = 0; i < triggerEntities.size(); ++i)
+                {
+                    appendScript(triggerEntities[i], 2, static_cast<std::uint32_t>(i));
+                }
+                output(scripts);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

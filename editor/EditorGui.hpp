@@ -103,6 +103,11 @@ namespace sage
                 bool changed = false;
                 bool began = false;
                 bool committed = false;
+                // "Add Component > Script" was clicked; the host opens a file dialog
+                // to pick the lua script for the selection.
+                bool addScriptClicked = false;
+                // Display name of a component whose "Remove Component" was clicked.
+                std::optional<std::string> removeComponent;
             };
 
           private:
@@ -154,6 +159,7 @@ namespace sage
             bool dockLayoutChanged = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
+            bool drawAddComponentControls();
             void openAssetRenamePopup(std::size_t index);
             void drawAssetRenamePopup();
             void drawAssetDefaultsControls();

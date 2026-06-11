@@ -9,6 +9,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/components/UberShaderComponent.hpp"
@@ -22,6 +23,7 @@
 #include "engine/systems/TransformSystem.hpp"
 #include "engine/UserInput.hpp"
 
+#include "imfilebrowser.h"
 #include "imgui.h"
 
 #include "raylib.h"
@@ -31,6 +33,7 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <system_error>
@@ -45,6 +48,7 @@ namespace sage
         constexpr float EDITOR_FOCUS_CAMERA_DISTANCE = 38.0f;
         constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
+        constexpr const char* SCRIPTS_DIRECTORY = "resources/scripts";
         constexpr const char* DEFAULT_MAP_BASE_NAME = "_MAPBASE_EDITOR_BASE";
         constexpr const char* DEFAULT_MAP_BASE_MODEL_KEY = "primitive_plane";
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
@@ -367,6 +371,7 @@ namespace sage
         gui->DrawAssetDrawerWindow();
         handleFileShortcuts();
         mapController->DrawBrowsers();
+        drawScriptBrowser();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
         drawHierarchyContextMenu();
@@ -534,6 +539,92 @@ namespace sage
         {
             history->Commit();
         }
+
+        if (!history->HasActiveTransaction())
+        {
+            if (result.addScriptClicked && scriptBrowser)
+            {
+                std::error_code ec;
+                std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);
+                scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
+                scriptBrowser->Open();
+            }
+            if (result.removeComponent == "Script") removeScriptFromSelection();
+        }
+    }
+
+    void EditorScene::drawScriptBrowser() const
+    {
+        if (!scriptBrowser) return;
+        scriptBrowser->Display();
+        if (scriptBrowser->HasSelected())
+        {
+            attachScriptToSelection(scriptBrowser->GetSelected());
+            scriptBrowser->ClearSelected();
+        }
+    }
+
+    void EditorScene::attachScriptToSelection(const std::filesystem::path& scriptFile) const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        auto file = scriptFile;
+        if (file.extension() != ".lua") file += ".lua";
+
+        // Typed as a new filename in the dialog: write a template script there.
+        if (!std::filesystem::exists(file))
+        {
+            std::ofstream out{file};
+            out << "-- Lifecycle callbacks are optional globals; delete the ones you don't need.\n"
+                   "-- API: entity, GetTransform([entity]), GetCollideable([entity]), Vec3(x,y,z), Log(msg)\n"
+                   "\n"
+                   "function Awake()\n"
+                   "end\n"
+                   "\n"
+                   "function Start()\n"
+                   "end\n"
+                   "\n"
+                   "function Update(dt)\n"
+                   "end\n";
+        }
+
+        // ScriptSystem resolves paths against the working directory, so store the
+        // path relative to it (forward slashes); keep the absolute path only if
+        // the file lives outside the project tree.
+        std::error_code ec;
+        auto relative = std::filesystem::relative(file, std::filesystem::current_path(), ec);
+        const bool outsideProject = ec || relative.empty() || relative.native().starts_with("..");
+        const auto path = outsideProject ? file.generic_string() : relative.generic_string();
+
+        history->Begin(editor::EditAction::AddScript, selected);
+        for (const auto entity : selected)
+        {
+            if (sys->registry->any_of<ScriptComponent>(entity))
+            {
+                sys->registry->get<ScriptComponent>(entity).scriptPath = path;
+            }
+            else
+            {
+                sys->registry->emplace<ScriptComponent>(entity, path);
+            }
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::removeScriptFromSelection() const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        history->Begin(editor::EditAction::RemoveScript, selected);
+        for (const auto entity : selected)
+        {
+            sys->registry->remove<ScriptComponent>(entity);
+        }
+        history->Commit();
+        refreshSceneWindows();
     }
 
     void EditorScene::onHistoryApplied(const std::vector<entt::entity>& restored) const
@@ -1056,6 +1147,12 @@ namespace sage
             },
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
+
+        scriptBrowser = std::make_unique<ImGui::FileBrowser>(
+            ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError |
+            ImGuiFileBrowserFlags_EnterNewFilename);
+        scriptBrowser->SetTitle("Select script");
+        scriptBrowser->SetTypeFilters({".lua"});
 
         mapController = std::make_unique<editor::EditorMapController>(
             sys,

@@ -253,7 +253,7 @@ namespace sage::editor
         for (const auto& entry : entries_)
         {
             if (!entry.has(registry, entity)) continue;
-            result.push_back({entry.displayName, entry.describe(registry, entity)});
+            result.push_back({entry.displayName, entry.describe(registry, entity), entry.removable});
         }
         return result;
     }
@@ -281,7 +281,7 @@ namespace sage::editor
                 describedFields.push_back(entry.describe(registry, entity));
             }
 
-            InspectedComponent component{.displayName = entry.displayName};
+            InspectedComponent component{.displayName = entry.displayName, .removable = entry.removable};
             for (const auto& firstField : describedFields.front())
             {
                 std::vector<InspectorField> matchingFields;
@@ -330,6 +330,6 @@ namespace sage::editor
         registry.Register<Collideable>("Collideable");
         registry.Register<Light>("Light");
         registry.Register<Spawner>("Spawner");
-        registry.Register<ScriptComponent>("Script");
+        registry.Register<ScriptComponent>("Script", /*removable=*/true);
     }
 } // namespace sage::editor

@@ -92,6 +92,12 @@ namespace sage::editor
         }
         if (a.hasAssetReference != b.hasAssetReference || a.assetKey != b.assetKey) return false;
         if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
+        if (a.hasScript != b.hasScript ||
+            (a.hasScript &&
+             (a.script.scriptPath != b.script.scriptPath || a.script.enabled != b.script.enabled)))
+        {
+            return false;
+        }
         return true;
     }
 
@@ -195,6 +201,11 @@ namespace sage::editor
         {
             s.hasAssetReference = true;
             s.assetKey = reg.get<AssetReference>(entity).assetKey;
+        }
+        if (reg.all_of<ScriptComponent>(entity))
+        {
+            s.hasScript = true;
+            s.script = reg.get<ScriptComponent>(entity);
         }
         if (reg.all_of<MetaData>(entity))
         {
@@ -550,6 +561,11 @@ namespace sage::editor
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});
         else if (reg.all_of<AssetReference>(entity))
             reg.remove<AssetReference>(entity);
+
+        if (target.hasScript)
+            reg.emplace_or_replace<ScriptComponent>(entity, target.script);
+        else if (reg.all_of<ScriptComponent>(entity))
+            reg.remove<ScriptComponent>(entity);
 
         if (target.hasMetaData)
             reg.emplace_or_replace<MetaData>(entity, target.metaData);

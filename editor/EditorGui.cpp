@@ -9,6 +9,7 @@
 #include "rlImGui.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <utility>
 
 namespace sage::editor
@@ -75,6 +76,7 @@ namespace sage::editor
             ImGuiWindowFlags_NoSavedSettings;
 
         InspectorComponentsResult inspectorResult;
+        bool addScriptClicked = false;
         if (ImGui::Begin("Inspector", nullptr, windowFlags))
         {
             ImGui::Text("Selected: %s", inspectorSelectedEntity.c_str());
@@ -87,6 +89,7 @@ namespace sage::editor
             else
             {
                 inspectorResult = DrawInspectorComponents(inspectedComponents);
+                addScriptClicked = drawAddComponentControls();
             }
 
             if (dockLayout)
@@ -111,7 +114,27 @@ namespace sage::editor
         return {
             .changed = inspectorResult.changed,
             .began = inspectorResult.began,
-            .committed = inspectorResult.committed};
+            .committed = inspectorResult.committed,
+            .addScriptClicked = addScriptClicked,
+            .removeComponent = std::move(inspectorResult.removeComponent)};
+    }
+
+    // "Add Component" button + popup. Only Script is addable for now; the host
+    // (EditorScene) opens a file dialog to pick the lua script.
+    bool EditorGui::drawAddComponentControls()
+    {
+        bool addScriptClicked = false;
+
+        ImGui::Spacing();
+        if (ImGui::Button("Add Component", ImVec2{-FLT_MIN, 0.0f}))
+        {
+            ImGui::OpenPopup("##add_component");
+        }
+        if (!ImGui::BeginPopup("##add_component")) return addScriptClicked;
+
+        addScriptClicked = ImGui::MenuItem("Script");
+        ImGui::EndPopup();
+        return addScriptClicked;
     }
 
     void EditorGui::DrawDeleteConfirmationModal()

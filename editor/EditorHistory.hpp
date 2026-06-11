@@ -15,6 +15,7 @@
 #pragma once
 
 #include "engine/components/Collideable.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
@@ -45,7 +46,9 @@ namespace sage::editor
         AddTriggerVolume,
         Transform,
         EditField,
-        Reparent
+        Reparent,
+        AddScript,
+        RemoveScript
     };
 
     class EditorHistory
@@ -125,6 +128,8 @@ namespace sage::editor
             std::string assetKey;
             bool hasMetaData = false;
             MetaData metaData{};
+            bool hasScript = false;
+            ScriptComponent script{};
         };
 
         struct EntityDelta
