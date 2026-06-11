@@ -19,7 +19,6 @@ namespace sage
         BoundingBox localBoundingBox{};
         BoundingBox worldBoundingBox{};
         CollisionLayer collisionLayer = sage::collision_layers::Default;
-        CollisionMask collidesWith = GetDefaultCollisionMask(sage::collision_layers::Default);
         bool active = true;
         bool isStatic = false;
         bool debugDraw = false;
@@ -30,7 +29,9 @@ namespace sage
 
         Collideable() = default;
         Collideable(const BoundingBox& local, const Matrix& worldMat);
-        void SetCollisionLayer(CollisionLayer layer, CollisionMask mask = CollisionMask{});
+        // What a layer collides with is decided globally by CollisionSystem's
+        // CollisionMatrix, not per-collideable.
+        void SetCollisionLayer(CollisionLayer layer);
 
         template <class Archive>
         void save(Archive& archive) const
@@ -43,7 +44,6 @@ namespace sage
         {
             archive(localBoundingBox, worldBoundingBox, collisionLayer, isTrigger);
             collisionLayer.layerName = GetCollisionLayerName(collisionLayer.bit);
-            collidesWith = GetDefaultCollisionMask(collisionLayer);
         }
 
         template <class Inspector>

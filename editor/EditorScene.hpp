@@ -61,6 +61,8 @@ namespace sage
         mutable entt::entity hierarchyContextEntity = entt::null;
         bool viewportFullscreen = false;
         mutable bool snapToGrid = false;
+        mutable bool collisionMatrixWindowOpen = false;
+        mutable std::string newCollisionLayerName;
         mutable bool orbitingCamera = false;
         mutable bool panningCamera = false;
         void applyLitShaderToLoadedRenderables() const;
@@ -69,6 +71,7 @@ namespace sage
         void refreshSceneWindows() const;
         void setSnapToGrid(bool enabled) const;
         void drawMainMenuBar(bool& exitRequested) const;
+        void drawCollisionMatrixWindow() const;
         void addLight() const;
         void addSpawner() const;
         void addTriggerVolume() const;

@@ -4,6 +4,7 @@
 
 #include "ScriptSystem.hpp"
 
+#include "CollisionSystem.hpp"
 #include "components/Animation.hpp"
 #include "components/Collideable.hpp"
 #include "components/ScriptComponent.hpp"
@@ -34,6 +35,9 @@ namespace sage
             sol::protected_function update;
             sol::protected_function onEnable;
             sol::protected_function onDisable;
+            sol::protected_function onTriggerEnter;
+            sol::protected_function onTriggerUpdate;
+            sol::protected_function onTriggerLeave;
             bool started = false;
             bool wasEnabled = false;
             // Set on load or runtime error (after logging once); the instance is halted
@@ -47,12 +51,39 @@ namespace sage
         sol::state lua;
         std::unordered_map<entt::entity, ScriptInstance> instances;
         entt::registry* registry;
+        Subscription triggerEnterSub;
+        Subscription triggerStaySub;
+        Subscription triggerExitSub;
 
-        explicit Impl(entt::registry* _registry) : registry(_registry)
+        Impl(entt::registry* _registry, CollisionSystem* _collisionSystem) : registry(_registry)
         {
             lua.open_libraries(
                 sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::os);
             bindCoreTypes();
+
+            triggerEnterSub = _collisionSystem->onTriggerEnter.Subscribe(
+                [this](const entt::entity trigger, const entt::entity other) {
+                    callTriggerCallback(trigger, other, &ScriptInstance::onTriggerEnter);
+                });
+            triggerStaySub = _collisionSystem->onTriggerStay.Subscribe(
+                [this](const entt::entity trigger, const entt::entity other) {
+                    callTriggerCallback(trigger, other, &ScriptInstance::onTriggerUpdate);
+                });
+            triggerExitSub = _collisionSystem->onTriggerExit.Subscribe(
+                [this](const entt::entity trigger, const entt::entity other) {
+                    callTriggerCallback(trigger, other, &ScriptInstance::onTriggerLeave);
+                });
+        }
+
+        // Routes a CollisionSystem trigger event to the trigger entity's script, passing
+        // the overlapping entity's id. Instances are created lazily in Update(), so events
+        // fired before the script's first tick (or while it is disabled) are dropped.
+        void callTriggerCallback(
+            const entt::entity trigger, const entt::entity other, sol::protected_function ScriptInstance::*fn)
+        {
+            const auto it = instances.find(trigger);
+            if (it == instances.end() || !it->second.wasEnabled) return;
+            call(it->second, it->second.*fn, static_cast<std::uint32_t>(other));
         }
 
         // Usertypes and free functions shared by every script.
@@ -215,6 +246,9 @@ namespace sage
             instance.update = instance.env["Update"];
             instance.onEnable = instance.env["OnEnable"];
             instance.onDisable = instance.env["OnDisable"];
+            instance.onTriggerEnter = instance.env["OnTriggerEnter"];
+            instance.onTriggerUpdate = instance.env["OnTriggerUpdate"];
+            instance.onTriggerLeave = instance.env["OnTriggerLeave"];
 
             call(instance, instance.awake);
             return instance;
@@ -279,8 +313,8 @@ namespace sage
         impl->destroyInstance(entity);
     }
 
-    ScriptSystem::ScriptSystem(entt::registry* _registry)
-        : impl(std::make_unique<Impl>(_registry)), registry(_registry)
+    ScriptSystem::ScriptSystem(entt::registry* _registry, CollisionSystem* _collisionSystem)
+        : impl(std::make_unique<Impl>(_registry, _collisionSystem)), registry(_registry)
     {
         registry->on_destroy<ScriptComponent>().connect<&ScriptSystem::onScriptComponentDestroyed>(this);
     }

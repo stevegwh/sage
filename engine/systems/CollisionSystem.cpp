@@ -16,8 +16,7 @@ namespace sage
 {
     CollisionMask CollisionSystem::ResolveQueryMask(const CollisionLayer layer) const
     {
-        if (layer == collision_layers::Default) return defaultQueryMask;
-        return GetDefaultCollisionMask(layer);
+        return matrix.GetMask(layer);
     }
 
     void CollisionSystem::Update()
@@ -48,7 +47,7 @@ namespace sage
             auto& currentSet = current[trigger];
             const auto& previousSet = triggerOverlaps[trigger];
 
-            for (const auto& hit : GetCollisionsWithBoundingBox(c.worldBoundingBox, c.collidesWith))
+            for (const auto& hit : GetCollisionsWithBoundingBox(c.worldBoundingBox, matrix.GetMask(c.collisionLayer)))
             {
                 const auto other = hit.collidedEntityId;
                 if (other == trigger) continue;
@@ -300,12 +299,8 @@ namespace sage
         return false;
     }
 
-    void CollisionSystem::SetDefaultQueryMask(const CollisionMask mask)
-    {
-        defaultQueryMask = mask;
-    }
-
     CollisionSystem::CollisionSystem(entt::registry* _registry) : registry(_registry)
     {
+        matrix.Load();
     }
 } // namespace sage

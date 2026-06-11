@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "engine/CollisionMatrix.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/Event.hpp"
 
@@ -27,7 +28,6 @@ namespace sage
     class CollisionSystem
     {
         entt::registry* registry;
-        CollisionMask defaultQueryMask{collision_masks::DefaultQuery};
         [[nodiscard]] CollisionMask ResolveQueryMask(CollisionLayer layer) const;
 
         // Entities overlapping each trigger Collideable last frame, for enter/exit diffing.
@@ -35,6 +35,11 @@ namespace sage
         void UpdateTriggers();
 
       public:
+        // Unity-style layer collision matrix, loaded from CollisionMatrix::DEFAULT_PATH
+        // at construction. Layer-based queries and trigger overlap checks resolve their
+        // masks through it; the editor's Collision Matrix window edits and saves it.
+        CollisionMatrix matrix;
+
         // Unity-style trigger callbacks, fired by UpdateTriggers() for any Collideable with
         // isTrigger=true. Each passes (trigger, other): the trigger entity and the entity
         // overlapping it. Subscribe via the Event<>/Subscription pattern.
@@ -72,7 +77,6 @@ namespace sage
         bool GetFirstCollisionBB(entt::entity caller, BoundingBox bb, CollisionLayer layer, CollisionInfo& out);
         bool GetFirstCollisionBB(
             entt::entity caller, BoundingBox bb, CollisionMask mask, CollisionInfo& out) const;
-        void SetDefaultQueryMask(CollisionMask mask);
         void DrawDebug() const;
         explicit CollisionSystem(entt::registry* _registry);
     };

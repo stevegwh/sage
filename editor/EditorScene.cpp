@@ -21,12 +21,14 @@
 #include "engine/LightManager.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
+#include "engine/systems/CollisionSystem.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include "engine/UserInput.hpp"
 
 #include "imfilebrowser.h"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 
 #include "raylib.h"
 #include "raymath.h"
@@ -387,6 +389,7 @@ namespace sage
         handleFileShortcuts();
         mapController->DrawBrowsers();
         drawScriptBrowser();
+        drawCollisionMatrixWindow();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
         drawHierarchyContextMenu();
@@ -966,7 +969,116 @@ namespace sage
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Project"))
+        {
+            if (ImGui::MenuItem("Collision Matrix", nullptr, collisionMatrixWindowOpen))
+            {
+                collisionMatrixWindowOpen = !collisionMatrixWindowOpen;
+            }
+            ImGui::EndMenu();
+        }
         ImGui::EndMainMenuBar();
+    }
+
+    void EditorScene::drawCollisionMatrixWindow() const
+    {
+        if (!collisionMatrixWindowOpen) return;
+
+        bool open = collisionMatrixWindowOpen;
+        ImGui::SetNextWindowSize(ImVec2(640, 480), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Collision Matrix", &open))
+        {
+            auto& matrix = sys->collisionSystem->matrix;
+            const auto& layers = GetCollisionLayers();
+            const int count = static_cast<int>(layers.size());
+
+            ImGui::TextWrapped(
+                "Layers only interact where their checkbox is ticked (the matrix is "
+                "symmetric). Trigger volumes detect the ticked layers; Default governs "
+                "what mouse picking and movement queries hit. Changes save immediately.");
+            ImGui::Spacing();
+
+            // Unity-style triangular grid: one row per layer, columns in reverse
+            // order, the redundant half omitted.
+            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingFixedFit |
+                                                   ImGuiTableFlags_BordersInner | ImGuiTableFlags_ScrollX |
+                                                   ImGuiTableFlags_ScrollY |
+                                                   ImGuiTableFlags_HighlightHoveredColumn;
+            const float gridHeight =
+                ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing() * 2.0f;
+            if (ImGui::BeginTable("##collisionMatrix", count + 1, tableFlags, ImVec2(0.0f, gridHeight)))
+            {
+                ImGui::TableSetupColumn(
+                    "", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHeaderLabel);
+                for (int c = 0; c < count; ++c)
+                {
+                    const std::string header{layers[count - 1 - c].layerName};
+                    ImGui::TableSetupColumn(
+                        header.c_str(), ImGuiTableColumnFlags_AngledHeader | ImGuiTableColumnFlags_WidthFixed);
+                }
+                ImGui::TableSetupScrollFreeze(1, 1);
+                ImGui::TableAngledHeadersRow();
+
+                bool changed = false;
+                for (int r = 0; r < count; ++r)
+                {
+                    const auto rowLayer = layers[r];
+                    ImGui::TableNextRow();
+                    ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(std::string{rowLayer.layerName}.c_str());
+                    for (int c = 0; c < count - r; ++c)
+                    {
+                        const auto colLayer = layers[count - 1 - c];
+                        if (!ImGui::TableSetColumnIndex(c + 1)) continue;
+                        ImGui::PushID(r * MAX_COLLISION_LAYERS + c);
+                        bool collides = matrix.GetPair(rowLayer, colLayer);
+                        if (ImGui::Checkbox("##cell", &collides))
+                        {
+                            matrix.SetPair(rowLayer, colLayer, collides);
+                            changed = true;
+                        }
+                        if (ImGui::IsItemHovered())
+                        {
+                            ImGui::SetTooltip(
+                                "%.*s / %.*s",
+                                static_cast<int>(rowLayer.layerName.size()),
+                                rowLayer.layerName.data(),
+                                static_cast<int>(colLayer.layerName.size()),
+                                colLayer.layerName.data());
+                        }
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndTable();
+                if (changed) matrix.Save();
+            }
+
+            ImGui::Spacing();
+            ImGui::SetNextItemWidth(220.0f);
+            const bool submitted = ImGui::InputTextWithHint(
+                "##newCollisionLayer",
+                "New layer name",
+                &newCollisionLayerName,
+                ImGuiInputTextFlags_EnterReturnsTrue);
+            ImGui::SameLine();
+            if (ImGui::Button("Add Layer") || submitted)
+            {
+                if (const auto layer = matrix.AddUserLayer(newCollisionLayerName); layer.IsValid())
+                {
+                    newCollisionLayerName.clear();
+                    matrix.Save();
+                }
+                else
+                {
+                    TraceLog(
+                        LOG_WARNING,
+                        "Collision Matrix: cannot add layer '%s' (empty, duplicate, or no free bits)",
+                        newCollisionLayerName.c_str());
+                }
+            }
+        }
+        ImGui::End();
+        collisionMatrixWindowOpen = open;
     }
 
     void EditorScene::addLight() const

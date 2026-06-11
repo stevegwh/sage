@@ -4,7 +4,9 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <deque>
 #include <functional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -134,12 +136,6 @@ namespace sage
     {
         return layer == collision_layers::GeometryComplex || layer == collision_layers::Stairs;
     }
-
-    [[nodiscard]] constexpr CollisionMask GetDefaultCollisionMask(const CollisionLayer layer)
-    {
-        if (layer == collision_layers::Default) return collision_masks::DefaultQuery;
-        return collision_masks::None;
-    }
 } // namespace sage
 
 template <>
@@ -160,20 +156,66 @@ struct std::hash<sage::CollisionLayer>
 
 namespace sage
 {
+    namespace detail
+    {
+        inline std::vector<CollisionLayer>& MutableCollisionLayers()
+        {
+            static std::vector<CollisionLayer> layers = []() {
+                std::vector<CollisionLayer> v = {
+                    collision_layers::Default,
+                    collision_layers::GeometrySimple,
+                    collision_layers::GeometryComplex,
+                    collision_layers::Background,
+                    collision_layers::Stairs,
+                    collision_layers::Obstacle,
+                };
+                for (const auto& l : CustomCollisionLayers) v.push_back(l);
+                return v;
+            }();
+            return layers;
+        }
+
+        // Owns the names of layers created at runtime (the compile-time tables back
+        // their names with string literals). A deque never relocates elements, so the
+        // string_views handed out stay valid as more layers are added.
+        inline std::deque<std::string>& UserCollisionLayerNames()
+        {
+            static std::deque<std::string> names;
+            return names;
+        }
+    } // namespace detail
+
     [[nodiscard]] inline const std::vector<CollisionLayer>& GetCollisionLayers()
     {
-        static const std::vector<CollisionLayer> layers = []() {
-            std::vector<CollisionLayer> v = {
-                collision_layers::Default,
-                collision_layers::GeometrySimple,
-                collision_layers::GeometryComplex,
-                collision_layers::Background,
-                collision_layers::Stairs,
-                collision_layers::Obstacle,
-            };
-            for (const auto& l : CustomCollisionLayers) v.push_back(l);
-            return v;
-        }();
-        return layers;
+        return detail::MutableCollisionLayers();
+    }
+
+    // Registers a user-created layer (e.g. authored in the editor's collision matrix
+    // window) at the given bit index. Returns the already-registered layer when the
+    // bit is taken, so re-loading settings is idempotent.
+    inline CollisionLayer RegisterUserCollisionLayer(const std::string& layerName, const std::uint8_t index)
+    {
+        assert(index < MAX_COLLISION_LAYERS && "Exceeded maximum allowed number of collision layers.");
+        auto& layers = detail::MutableCollisionLayers();
+        const std::uint64_t bit = 1ull << index;
+        for (const auto& l : layers)
+        {
+            if (l.bit == bit) return l;
+        }
+        const auto& storedName = detail::UserCollisionLayerNames().emplace_back(layerName);
+        layers.emplace_back(std::string_view{storedName}, bit);
+        return layers.back();
+    }
+
+    // Lowest bit index with no registered layer, or -1 when all 64 are taken.
+    [[nodiscard]] inline int FindFreeCollisionLayerIndex()
+    {
+        std::uint64_t used = 0;
+        for (const auto& l : GetCollisionLayers()) used |= l.bit;
+        for (int i = 0; i < MAX_COLLISION_LAYERS; ++i)
+        {
+            if ((used & (1ull << i)) == 0) return i;
+        }
+        return -1;
     }
 } // namespace sage

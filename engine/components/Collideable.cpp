@@ -52,9 +52,8 @@ namespace sage
         worldBoundingBox = TransformBoundingBox(local, worldMat);
     }
 
-    void Collideable::SetCollisionLayer(const CollisionLayer layer, const CollisionMask mask)
+    void Collideable::SetCollisionLayer(const CollisionLayer layer)
     {
         collisionLayer = layer;
-        collidesWith = mask.IsEmpty() ? GetDefaultCollisionMask(layer) : mask;
     }
 } // namespace sage

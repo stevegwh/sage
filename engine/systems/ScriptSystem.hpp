@@ -10,6 +10,8 @@
 
 namespace sage
 {
+    class CollisionSystem;
+
     // Runs Lua scripts attached to entities via ScriptComponent.
     //
     // Lifecycle (Unity-style), driven from Update():
@@ -18,6 +20,13 @@ namespace sage
     //   Start()      — once, before the first Update() while enabled.
     //   Update(dt)   — every frame while enabled.
     //   OnDisable()  — whenever enabled transitions to false, and on destruction.
+    //
+    // Trigger callbacks, driven by CollisionSystem's onTrigger* events when the script's
+    // own entity is a trigger Collideable (isTrigger=true). Each receives the overlapping
+    // entity's id. Only fire while the script is enabled and has ticked at least once.
+    //   OnTriggerEnter(other)   — an entity started overlapping this trigger.
+    //   OnTriggerUpdate(other)  — every frame an entity remains inside.
+    //   OnTriggerLeave(other)   — an entity stopped overlapping (or was destroyed).
     //
     // All callbacks are optional globals in the script file. Each script gets its own
     // environment (globals don't leak between scripts) with `entity` plus accessors
@@ -37,7 +46,7 @@ namespace sage
 
       public:
         void Update();
-        explicit ScriptSystem(entt::registry* _registry);
+        ScriptSystem(entt::registry* _registry, CollisionSystem* _collisionSystem);
         ~ScriptSystem();
     };
 } // namespace sage
