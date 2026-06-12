@@ -483,7 +483,24 @@ namespace sage::editor
         }
         if (IsKeyPressed(KEY_B))
         {
-            machine.transformEditor.SetMode(EditGizmo::Mode::BoxCollider);
+            // A mesh-collision layer's box is the derived broad-phase, not the
+            // collider itself; hand-resizing it would desync it from the meshes.
+            const auto& registry = machine.registry();
+            const bool meshCollider = std::ranges::any_of(entities, [&registry](const entt::entity entity) {
+                return registry.valid(entity) && registry.all_of<Collideable>(entity) &&
+                       RequiresMeshCollision(registry.get<Collideable>(entity).collisionLayer);
+            });
+            if (meshCollider)
+            {
+                TraceLog(
+                    LOG_WARNING,
+                    "Box collider editing is disabled: the collision layer uses mesh collision, so the box is "
+                    "derived from the meshes.");
+            }
+            else
+            {
+                machine.transformEditor.SetMode(EditGizmo::Mode::BoxCollider);
+            }
         }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell())

@@ -83,6 +83,14 @@ namespace sage::editor
             updateEntityCollisionBounds(entity);
         }
 
+        // Rebuilds collision bounds for `entity` alone. Used when an inspector
+        // edit invalidates one entity's box (e.g. switching its layer to mesh
+        // collision) without touching descendants' possibly hand-authored boxes.
+        void RefreshCollisionBounds(entt::entity entity) const
+        {
+            refitEntityCollisionBounds(entity);
+        }
+
       private:
         EngineSystems* sys;
         OnApplied onApplied;
@@ -97,6 +105,7 @@ namespace sage::editor
         // 3D render viewport. See EditGizmo::SizeForCamera.
         [[nodiscard]] float gizmoViewportScale() const;
 
+        void refitEntityCollisionBounds(entt::entity entity) const;
         void updateEntityCollisionBounds(entt::entity entity) const;
         void notify(entt::entity entity) const;
         void applyPositionDelta(const std::vector<entt::entity>& entities, Vector3 worldDelta);

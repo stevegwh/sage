@@ -239,7 +239,9 @@ namespace sage::editor
             return std::visit(
                 []<typename T0>(const T0& field) {
                     using T = std::decay_t<T0>;
-                    if constexpr (std::is_same_v<T, EnumField>)
+                    if constexpr (std::is_same_v<T, NoteField>)
+                        return field.text;
+                    else if constexpr (std::is_same_v<T, EnumField>)
                         return FormatEnumValue(field);
                     else
                         return FormatLeafValue(field);
@@ -675,6 +677,13 @@ namespace sage::editor
                 return CommitField(field, parsed);
             });
             return changed;
+        }
+
+        bool DrawInspectorFieldWidget(const NoteField& field, const bool, const bool mixed)
+        {
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("%s", mixed ? "-" : field.text.c_str());
+            return false;
         }
 
         bool DrawInspectorFieldWidget(const EnumField& field, const bool editable, const bool mixed)

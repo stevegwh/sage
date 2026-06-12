@@ -505,7 +505,7 @@ namespace sage::editor
         notify(notifiedEntity);
     }
 
-    void EditorTransformEditor::updateEntityCollisionBounds(const entt::entity entity) const
+    void EditorTransformEditor::refitEntityCollisionBounds(const entt::entity entity) const
     {
         if (!sys->registry->valid(entity)) return;
 
@@ -536,6 +536,13 @@ namespace sage::editor
                 sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
             }
         }
+    }
+
+    void EditorTransformEditor::updateEntityCollisionBounds(const entt::entity entity) const
+    {
+        if (!sys->registry->valid(entity)) return;
+
+        refitEntityCollisionBounds(entity);
 
         // Descendant transforms get propagated by TransformSystem::propagateChildren,
         // but their collideables don't refresh themselves — recurse so child bounds

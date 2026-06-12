@@ -1,7 +1,6 @@
 #pragma once
 
 #include "engine/components/NavigationGridSquare.hpp"
-#include "engine/slib.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -42,13 +41,6 @@ namespace sage
         //---------------------------------------------------------
         void calculateHeightAndNormalsFromTerrain(const entt::entity& entity);
         //---------------------------------------------------------
-        std::pair<float, float> getHeightBounds(float slices);
-        //---------------------------------------------------------
-        void loadTerrainNormalMap(const ImageSafe& normalMap);
-        //---------------------------------------------------------
-        void loadTerrainHeightMap(const ImageSafe& heightMap);
-        //---------------------------------------------------------
-
       public:
         float spacing{};
         int slices{};
@@ -57,12 +49,6 @@ namespace sage
         void Init(int _slices, float _spacing);
         //---------------------------------------------------------
         void InitGridHeightAndNormals();
-        //---------------------------------------------------------
-        void GenerateNormalMap(ImageSafe& image);
-        //---------------------------------------------------------
-        void GenerateHeightMap(ImageSafe& image);
-        //---------------------------------------------------------
-        void PopulateGrid(const ImageSafe& heightMap, const ImageSafe& normalMap);
         //---------------------------------------------------------
         bool GetPathfindRange(
             const entt::entity& actorId, int bounds, GridSquare& minRange, GridSquare& maxRange) const;

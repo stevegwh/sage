@@ -94,6 +94,7 @@ namespace sage
         void handleFileShortcuts() const;
         void handleClipboardShortcuts() const;
         void handleHistoryShortcuts() const;
+        void refitMeshColliderBounds() const;
         void handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const;
         void drawScriptBrowser() const;
         void attachScriptToSelection(const std::filesystem::path& scriptFile) const;

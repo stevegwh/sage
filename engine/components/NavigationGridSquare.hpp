@@ -80,9 +80,6 @@ namespace sage
         {
             return height;
         }
-
-        // Allow navigation grid system to set the inner height without a check.
-        friend class NavigationGridSystem;
     };
     struct NavigationGridSquare
     {

@@ -49,13 +49,19 @@ namespace sage
         template <class Inspector>
         void define_editor_fields(Inspector& i)
         {
+            // Derived from the layer, not stored: GeometryComplex/Stairs rays
+            // refine against the model's meshes; the box is only the broad-phase.
+            const bool meshCollider = RequiresMeshCollision(collisionLayer);
+            i.note("Collider", meshCollider ? "Mesh (from layer; box is broad-phase)" : "Box");
             i.field("Active", active);
             i.field("IsStatic", isStatic);
             i.field("Debug Draw", debugDraw);
             i.field("Blocks Navigation", blocksNavigation);
             i.field("Is Trigger", isTrigger);
             i.field("Collision Layer", collisionLayer);
-            i.field("Local Bounds", localBoundingBox);
+            // A mesh collider's box must enclose the meshes or rays never reach
+            // them, so hand edits are disabled.
+            i.field("Local Bounds", localBoundingBox, !meshCollider);
             // i.field("World Bounds", worldBoundingBox, false);
         }
     };

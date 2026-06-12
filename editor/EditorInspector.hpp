@@ -42,6 +42,14 @@ namespace sage::editor
         std::function<void(std::size_t)> setIndex;
     };
 
+    // A read-only informational row with no underlying data — for derived state
+    // a component wants to surface (e.g. Collideable's "Collider: Box/Mesh").
+    // Never editable, never participates in edit transactions.
+    struct NoteField
+    {
+        std::string text;
+    };
+
     // The variant alternative *is* the kind. Leaf overloads on ComponentInspector
     // construct one alternative each; the renderer dispatches via std::visit into
     // overloaded createFieldView/Update functions.
@@ -55,7 +63,8 @@ namespace sage::editor
         LeafField<Vector2>,
         LeafField<Vector3>,
         LeafField<::Color>,
-        EnumField>;
+        EnumField,
+        NoteField>;
 
     struct InspectorField
     {
@@ -117,6 +126,13 @@ namespace sage::editor
         }
 
       public:
+        // --- Informational row ---------------------------------------------------------
+        void note(const std::string& label, std::string text)
+        {
+            fields_.push_back(
+                {.label = qualified(label), .editable = false, .value = NoteField{std::move(text)}});
+        }
+
         // --- Leaf overloads ------------------------------------------------------------
         void field(std::string label, bool& v, bool rw = true)
         {

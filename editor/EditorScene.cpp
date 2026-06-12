@@ -9,6 +9,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -34,6 +35,7 @@
 
 #include "raylib.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include "rlImGui.h"
 
 #include <algorithm>
@@ -357,9 +359,44 @@ namespace sage
 
         for (const auto entity : selection->SelectedWithChildren())
         {
-            if (sys->registry->valid(entity) && sys->registry->any_of<Collideable>(entity))
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<Collideable>(entity)) continue;
+            const auto& collideable = sys->registry->get<Collideable>(entity);
+
+            // A mesh collider is the render mesh itself, so visualize it by
+            // re-drawing the same GPU buffers in wireframe (selection-only, so
+            // cheap); its box is only the broad-phase, shown de-emphasised.
+            if (RequiresMeshCollision(collideable.collisionLayer) &&
+                sys->registry->any_of<sgTransform>(entity))
             {
-                DrawBoundingBox(sys->registry->get<Collideable>(entity).worldBoundingBox, ORANGE);
+                const auto& transform = sys->registry->get<sgTransform>(entity);
+                rlEnableWireMode();
+                if (sys->registry->any_of<Renderable>(entity))
+                {
+                    if (auto* model = sys->registry->get<Renderable>(entity).GetModel(); model != nullptr)
+                    {
+                        model->Draw(
+                            transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), GREEN);
+                    }
+                }
+                else if (sys->registry->any_of<DynamicRenderable>(entity))
+                {
+                    const auto& renderable = sys->registry->get<DynamicRenderable>(entity);
+                    if (renderable.GetModel() != nullptr)
+                    {
+                        renderable.Draw(
+                            transform.GetWorldPos(),
+                            {0.0f, 1.0f, 0.0f},
+                            transform.GetWorldRot().y,
+                            transform.GetScale(),
+                            GREEN);
+                    }
+                }
+                rlDisableWireMode();
+                DrawBoundingBox(collideable.worldBoundingBox, Fade(ORANGE, 0.35f));
+            }
+            else
+            {
+                DrawBoundingBox(collideable.worldBoundingBox, ORANGE);
             }
         }
     }
@@ -579,6 +616,29 @@ namespace sage
         }
     }
 
+    // A mesh collider's box is the derived broad-phase, so whenever an inspector
+    // edit leaves a selected Collideable on a mesh-collision layer (e.g. the
+    // layer was just switched to GeometryComplex), refit the box from the meshes
+    // so rays keep reaching them. Idempotent, and it runs inside the active edit
+    // transaction so the refit undoes together with the field change.
+    void EditorScene::refitMeshColliderBounds() const
+    {
+        for (const auto entity : selection->Selected())
+        {
+            if (!sys->registry->valid(entity) || !sys->registry->all_of<Collideable>(entity)) continue;
+            if (!RequiresMeshCollision(sys->registry->get<Collideable>(entity).collisionLayer)) continue;
+
+            if (sys->registry->all_of<Terrain>(entity))
+            {
+                UpdateTerrainCollideableBounds(*sys->registry, entity);
+            }
+            else if (transformEditor)
+            {
+                transformEditor->RefreshCollisionBounds(entity);
+            }
+        }
+    }
+
     void EditorScene::handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const
     {
         if (!history) return;
@@ -589,6 +649,7 @@ namespace sage
         }
         if (result.changed)
         {
+            refitMeshColliderBounds();
             refreshSceneWindows();
         }
         if (result.committed && history->HasActiveTransaction())
