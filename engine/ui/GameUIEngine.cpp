@@ -7,8 +7,8 @@
 #include "../Cursor.hpp"
 #include "../EngineSystems.hpp"
 #include "../Settings.hpp"
-#include "../UserInput.hpp"
 #include "../slib.hpp"
+#include "../UserInput.hpp"
 
 #include "raylib.h"
 
@@ -33,37 +33,6 @@ namespace sage
     void GameUIEngine::CreateErrorMessage(const std::string& msg)
     {
         errorMessage.emplace(settings, msg);
-    }
-
-    TooltipWindow* GameUIEngine::CreateTooltipWindow(std::unique_ptr<TooltipWindow> _tooltipWindow)
-    {
-        tooltipWindow = std::move(_tooltipWindow);
-        tooltipWindow->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
-            [this](Vector2 prev, Vector2 current) { tooltipWindow->OnWindowUpdate(prev, current); });
-
-        tooltipWindow->InitLayout();
-        // FinalizeLayout called externally
-        return tooltipWindow.get();
-    }
-
-    Window* GameUIEngine::CreateWindow(std::unique_ptr<Window> _window)
-    {
-        windows.push_back(std::move(_window));
-        auto* window = windows.back().get();
-        window->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
-            [window](Vector2 prev, Vector2 current) { window->OnWindowUpdate(prev, current); });
-        window->InitLayout();
-        return window;
-    }
-
-    WindowDocked* GameUIEngine::CreateWindowDocked(std::unique_ptr<WindowDocked> _windowDocked)
-    {
-        windows.push_back(std::move(_windowDocked));
-        auto* window = dynamic_cast<WindowDocked*>(windows.back().get());
-        window->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
-            [window](Vector2 prev, Vector2 current) { window->OnWindowUpdate(prev, current); });
-        window->InitLayout();
-        return window;
     }
 
     bool GameUIEngine::ObjectBeingDragged() const

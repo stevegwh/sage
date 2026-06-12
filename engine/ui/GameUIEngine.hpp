@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "../UserInput.hpp"
 #include "UIBase.hpp"
 #include "UIWindow.hpp"
 
@@ -15,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace sage
@@ -51,9 +53,42 @@ namespace sage
 
         void BringClickedWindowToFront(Window* clicked);
         void CreateErrorMessage(const std::string& msg);
-        TooltipWindow* CreateTooltipWindow(std::unique_ptr<TooltipWindow> _tooltipWindow);
-        Window* CreateWindow(std::unique_ptr<Window> _window);
-        WindowDocked* CreateWindowDocked(std::unique_ptr<WindowDocked> _windowDocked);
+
+        template <typename T = TooltipWindow, typename... Args>
+        T* CreateTooltipWindow(Args&&... args)
+        {
+            auto window = std::make_unique<T>(std::forward<Args>(args)...);
+            auto* created = window.get();
+            tooltipWindow = std::move(window);
+            created->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
+                [created](Vector2 prev, Vector2 current) { created->OnWindowUpdate(prev, current); });
+            created->InitLayout();
+            return created;
+        }
+
+        template <typename T = Window, typename... Args>
+        T* CreateWindow(Args&&... args)
+        {
+            auto window = std::make_unique<T>(std::forward<Args>(args)...);
+            auto* created = window.get();
+            windows.push_back(std::move(window));
+            created->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
+                [created](Vector2 prev, Vector2 current) { created->OnWindowUpdate(prev, current); });
+            created->InitLayout();
+            return created;
+        }
+
+        template <typename T = WindowDocked, typename... Args>
+        T* CreateWindowDocked(Args&&... args)
+        {
+            auto window = std::make_unique<T>(std::forward<Args>(args)...);
+            auto* created = window.get();
+            windows.push_back(std::move(window));
+            created->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
+                [created](Vector2 prev, Vector2 current) { created->OnWindowUpdate(prev, current); });
+            created->InitLayout();
+            return created;
+        }
 
         [[nodiscard]] static Rectangle GetOverlap(Rectangle rec1, Rectangle rec2);
         [[nodiscard]] bool ObjectBeingDragged() const;

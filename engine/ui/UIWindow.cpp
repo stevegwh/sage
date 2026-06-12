@@ -287,25 +287,16 @@ namespace sage
         Settings* _settings,
         const Texture& _tex,
         const TextureStretchMode _stretchMode,
-        const float x,
-        const float y,
-        const float width,
-        const float height,
+        const Rectangle _rect,
         const Padding _padding)
-        : TableElement(nullptr, x, y, width, height, _padding), settings(_settings)
+        : TableElement(nullptr, _rect.x, _rect.y, _rect.width, _rect.height, _padding), settings(_settings)
     {
         tex = _tex;
         textureStretchMode = _stretchMode;
     }
 
-    Window::Window(
-        Settings* _settings,
-        const float x,
-        const float y,
-        const float width,
-        const float height,
-        const Padding _padding)
-        : TableElement(nullptr, x, y, width, height, _padding), settings(_settings)
+    Window::Window(Settings* _settings, const Rectangle _rect, const Padding _padding)
+        : TableElement(nullptr, _rect.x, _rect.y, _rect.width, _rect.height, _padding), settings(_settings)
     {
     }
 
@@ -379,12 +370,9 @@ namespace sage
         Window* parentWindow,
         const Texture& _tex,
         TextureStretchMode _stretchMode,
-        const float x,
-        const float y,
-        const float width,
-        const float height,
+        const Rectangle _rect,
         const Padding _padding)
-        : Window(_settings, x, y, width, height, _padding)
+        : Window(_settings, _rect, _padding)
     {
         if (parentWindow)
         {

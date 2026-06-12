@@ -635,6 +635,7 @@ namespace sage
         element = std::move(_checkbox);
         auto* checkbox = dynamic_cast<Checkbox*>(element.value().get());
         InitLayout();
+        InitLayout();
         return checkbox;
     }
 

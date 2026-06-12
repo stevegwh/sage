@@ -80,12 +80,9 @@ namespace sage
             Settings* _settings,
             const Texture& _tex,
             TextureStretchMode _stretchMode,
-            float x,
-            float y,
-            float width,
-            float height,
+            Rectangle _rect,
             Padding _padding = {0, 0, 0, 0});
-        Window(Settings* _settings, float x, float y, float width, float height, Padding _padding = {0, 0, 0, 0});
+        Window(Settings* _settings, Rectangle _rect, Padding _padding = {0, 0, 0, 0});
 
         friend class TitleBar;
         friend class GameUIEngine;
@@ -104,10 +101,7 @@ namespace sage
             Window* parentWindow,
             const Texture& _tex,
             TextureStretchMode _stretchMode,
-            float x,
-            float y,
-            float width,
-            float height,
+            Rectangle _rect,
             Padding _padding = {0, 0, 0, 0});
         friend class GameUIEngine;
     };
