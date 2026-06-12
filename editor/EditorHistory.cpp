@@ -2,9 +2,11 @@
 
 #include "EditorComponents.hpp"
 #include "engine/components/Animation.hpp"
+#include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
@@ -111,6 +113,13 @@ namespace sage::editor
               a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds ||
               a.moveableActorMoveClip != b.moveableActorMoveClip ||
               a.moveableActorIdleClip != b.moveableActorIdleClip)))
+        {
+            return false;
+        }
+        if (a.hasTerrain != b.hasTerrain ||
+            (a.hasTerrain &&
+             (a.terrainResolution != b.terrainResolution || a.terrainCellSize != b.terrainCellSize ||
+              a.terrainHeights != b.terrainHeights)))
         {
             return false;
         }
@@ -236,6 +245,14 @@ namespace sage::editor
             s.moveableActorPathfindingBounds = moveable.pathfindingBounds;
             s.moveableActorMoveClip = moveable.moveClip;
             s.moveableActorIdleClip = moveable.idleClip;
+        }
+        if (reg.all_of<Terrain>(entity))
+        {
+            const auto& terrain = reg.get<Terrain>(entity);
+            s.hasTerrain = true;
+            s.terrainResolution = terrain.resolution;
+            s.terrainCellSize = terrain.cellSize;
+            s.terrainHeights = terrain.heights;
         }
         if (reg.all_of<MetaData>(entity))
         {
@@ -624,6 +641,21 @@ namespace sage::editor
         else if (reg.all_of<MoveableActor>(entity))
         {
             reg.remove<MoveableActor>(entity);
+        }
+
+        if (target.hasTerrain)
+        {
+            auto& terrain = reg.get_or_emplace<Terrain>(entity);
+            terrain.resolution = target.terrainResolution;
+            terrain.cellSize = target.terrainCellSize;
+            terrain.heights = target.terrainHeights;
+            // The derived DynamicRenderable is rebuilt by the OnApplied callback
+            // (EditorScene::onHistoryApplied).
+        }
+        else if (reg.all_of<Terrain>(entity))
+        {
+            reg.remove<Terrain>(entity);
+            if (reg.all_of<DynamicRenderable>(entity)) reg.remove<DynamicRenderable>(entity);
         }
 
         if (target.hasMetaData)

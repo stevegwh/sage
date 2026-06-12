@@ -2,6 +2,7 @@
 
 #include "EditorAssetCatalog.hpp"
 #include "EditorEntityOperations.hpp"
+#include "EditorFlatpackEditSession.hpp"
 #include "EditorGui.hpp"
 #include "EditorHierarchyTree.hpp"
 #include "EditorHistory.hpp"
@@ -55,6 +56,7 @@ namespace sage
         std::unique_ptr<editor::EditorHistory> history;
         std::unique_ptr<editor::EditorModeStateMachine> editorModes;
         std::unique_ptr<editor::EditorMapController> mapController;
+        std::unique_ptr<editor::EditorFlatpackEditSession> flatpackSession;
         // Picks the lua file for "Add Component > Script" (save-style: typing a
         // new filename creates a template script).
         std::unique_ptr<ImGui::FileBrowser> scriptBrowser;
@@ -75,6 +77,9 @@ namespace sage
         void addLight() const;
         void addSpawner() const;
         void addTriggerVolume() const;
+        void addTerrain() const;
+        // Brush settings panel, shown only while terrain sculpting is active.
+        void drawTerrainBrushWindow() const;
         void clearCurrentMap() const;
         void ensureDefaultMapBase() const;
         [[nodiscard]] std::vector<entt::entity> collectMapHierarchyOrder() const;
@@ -101,6 +106,13 @@ namespace sage
         void createFlatpackFromEntity(entt::entity entity) const;
         void copyEntitiesToClipboard(const std::vector<entt::entity>& roots) const;
         void refreshFlatpackCatalog() const;
+        editor::EditorGui::FlatpackRenameResult renameFlatpackFile(
+            const std::filesystem::path& path, const std::string& requestedName) const;
+        void deleteFlatpackFile(const std::filesystem::path& path) const;
+        // While a flatpack is open for editing, new top-level entities are
+        // parented under the session root so the save (which walks the root
+        // subtree) doesn't silently drop them.
+        void adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const;
 
         void focusSelectedObject() const;
         void focusSelectedObjectInHierarchy() const;

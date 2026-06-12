@@ -16,6 +16,7 @@
 namespace sage
 {
     class EditorScene;
+    class EngineSystems;
 }
 
 namespace sage::editor
@@ -88,13 +89,39 @@ namespace sage::editor
         void OnTransformApplied(EditorModeStateMachine& machine, entt::entity entity);
     };
 
+    // Paints raise/lower strokes onto one terrain entity's height field. The
+    // whole stroke (mouse press to release) is a single history transaction.
+    struct EditorTerrainSculptState
+    {
+        static std::string GetName(const EditorModeStateMachine& machine);
+        entt::entity terrain = entt::null;
+        float brushRadius = 6.0f;
+        // World units per second applied at the brush centre.
+        float brushStrength = 6.0f;
+
+        void OnEnter(EditorModeStateMachine& machine);
+        void OnExit(EditorModeStateMachine& machine);
+        void Update(EditorModeStateMachine& machine);
+        void Draw3D(const EditorModeStateMachine& machine) const;
+        [[nodiscard]] bool HandleEscape(EditorModeStateMachine& machine);
+        void OnTransformApplied(EditorModeStateMachine& machine, entt::entity entity);
+
+      private:
+        std::optional<Vector3> cursorHit;
+        bool stroking = false;
+        void applyBrushStroke(EditorModeStateMachine& machine) const;
+        void finishStroke(EditorModeStateMachine& machine, bool keepChanges);
+    };
+
     class EditorModeStateMachine final
     {
-        using State = std::variant<EditorSelectState, EditorPlaceState, EditorEditState>;
+        using State =
+            std::variant<EditorSelectState, EditorPlaceState, EditorEditState, EditorTerrainSculptState>;
 
         friend struct EditorSelectState;
         friend struct EditorPlaceState;
         friend struct EditorEditState;
+        friend struct EditorTerrainSculptState;
 
         EditorScene& scene;
         EditorTransformEditor& transformEditor;
@@ -113,6 +140,7 @@ namespace sage::editor
         void showDeleteConfirmationForSelection() const;
         void deleteEntityAndChildren(entt::entity entity) const;
         void deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const;
+        void adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const;
         void focusHierarchyOnEntity(entt::entity entity) const;
         void focusSelectedObject() const;
         void focusSelectedObjectInHierarchy() const;
@@ -123,6 +151,10 @@ namespace sage::editor
         [[nodiscard]] EditorPlacementController& placement();
         [[nodiscard]] const EditorPlacementController& placement() const;
         [[nodiscard]] EditorHistory& history() const;
+        [[nodiscard]] entt::registry& registry() const;
+        // Mouse ray through the render viewport; nullopt when the cursor is
+        // outside it.
+        [[nodiscard]] std::optional<Ray> viewportMouseRay() const;
         void enableCollideableStaticOverride(entt::entity entity) const;
         void disableCollideableStaticOverride(entt::entity entity) const;
         void enableCollideableStaticOverride(const std::vector<entt::entity>& entities) const;
@@ -148,11 +180,17 @@ namespace sage::editor
         bool HandleEscapePressed();
         void OnTransformApplied(entt::entity entity);
 
+        // Enters terrain sculpting when exactly one entity is selected and it
+        // has a Terrain component; no-op otherwise.
+        void BeginTerrainSculptOnSelection();
+        [[nodiscard]] bool CanBeginTerrainSculpt() const;
+
         [[nodiscard]] bool IsPlaceMode() const;
         [[nodiscard]] bool IsEditMode() const;
         [[nodiscard]] std::string GetStateName() const;
         [[nodiscard]] EditorEditState* CurrentEditState();
         [[nodiscard]] const EditorEditState* CurrentEditState() const;
+        [[nodiscard]] EditorTerrainSculptState* CurrentTerrainSculptState();
 
         EditorModeStateMachine(EditorScene& scene, EditorTransformEditor& transformEditor);
     };

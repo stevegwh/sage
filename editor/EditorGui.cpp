@@ -235,6 +235,65 @@ namespace sage::editor
         }
     }
 
+    void EditorGui::SetSceneTabs(SceneTabState state)
+    {
+        sceneTabs = std::move(state);
+    }
+
+    EditorGui::SceneTabBarResult EditorGui::DrawSceneTabBar()
+    {
+        SceneTabBarResult result;
+        if (!settings) return result;
+
+        const auto renderViewport = settings->GetRenderViewportScreenRect();
+        ImGui::SetNextWindowPos(
+            ImVec2{renderViewport.x + renderViewport.width * 0.5f, renderViewport.y},
+            ImGuiCond_Always,
+            ImVec2{0.5f, 0.0f});
+        ImGui::SetNextWindowBgAlpha(0.85f);
+        constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_AlwaysAutoResize |
+                                                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+                                                 ImGuiWindowFlags_NoSavedSettings |
+                                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+        if (ImGui::Begin("##sceneTabs", nullptr, windowFlags))
+        {
+            if (ImGui::BeginTabBar("##sceneTabBar"))
+            {
+                ImGuiTabItemFlags mapFlags =
+                    sceneTabs.mapDirty ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None;
+                if (!sceneTabs.flatpackOpen) mapFlags |= ImGuiTabItemFlags_SetSelected;
+                const std::string mapLabel =
+                    (sceneTabs.mapLabel.empty() ? "Map" : sceneTabs.mapLabel) + "###mapTab";
+                if (ImGui::BeginTabItem(mapLabel.c_str(), nullptr, mapFlags))
+                {
+                    ImGui::EndTabItem();
+                }
+                // While a flatpack owns the scene its tab is force-selected, so a
+                // click on the map tab is read directly off the item instead.
+                if (sceneTabs.flatpackOpen && ImGui::IsItemClicked())
+                {
+                    result.mapSelected = true;
+                }
+
+                if (sceneTabs.flatpackOpen)
+                {
+                    bool keepOpen = true;
+                    ImGuiTabItemFlags flatpackFlags = ImGuiTabItemFlags_SetSelected;
+                    if (sceneTabs.flatpackDirty) flatpackFlags |= ImGuiTabItemFlags_UnsavedDocument;
+                    const std::string flatpackLabel = sceneTabs.flatpackLabel + "###flatpackTab";
+                    if (ImGui::BeginTabItem(flatpackLabel.c_str(), &keepOpen, flatpackFlags))
+                    {
+                        ImGui::EndTabItem();
+                    }
+                    if (!keepOpen) result.flatpackCloseRequested = true;
+                }
+                ImGui::EndTabBar();
+            }
+        }
+        ImGui::End();
+        return result;
+    }
+
     void EditorGui::ShowDeleteConfirmation(const std::string& selectedEntity)
     {
         deleteConfirmationPrompt = "Delete " + selectedEntity + "?";
@@ -282,6 +341,10 @@ namespace sage::editor
         const std::function<void(std::size_t)>& onAssetSelected,
         const std::function<AssetRenameResult(std::size_t, const std::string&)>& onAssetRename,
         const std::function<void(std::filesystem::path)>& onFlatpackSelected,
+        const std::function<void(std::filesystem::path)>& onFlatpackEdit,
+        const std::function<FlatpackRenameResult(const std::filesystem::path&, const std::string&)>&
+            onFlatpackRename,
+        const std::function<void(const std::filesystem::path&)>& onFlatpackDelete,
         const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
         const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
         ModelDefaultCallbacks callbacks)
@@ -290,6 +353,9 @@ namespace sage::editor
           onAssetSelectedCb(onAssetSelected),
           onAssetRenameCb(onAssetRename),
           onFlatpackSelectedCb(onFlatpackSelected),
+          onFlatpackEditCb(onFlatpackEdit),
+          onFlatpackRenameCb(onFlatpackRename),
+          onFlatpackDeleteCb(onFlatpackDelete),
           onSceneObjectSelectedCb(onSceneObjectSelected),
           onHierarchyMoveCb(onHierarchyMove),
           modelDefaultCallbacks(std::move(callbacks))

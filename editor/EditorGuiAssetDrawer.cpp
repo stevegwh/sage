@@ -36,6 +36,8 @@ namespace sage::editor
         constexpr float PREVIEW_GAMMA = 1.9f;
         constexpr Color PREVIEW_LIGHT_COLOR = {255, 244, 214, 255};
         constexpr const char* ASSET_RENAME_POPUP = "Rename Asset File";
+        constexpr const char* FLATPACK_RENAME_POPUP = "Rename Flatpack";
+        constexpr const char* FLATPACK_DELETE_POPUP = "Delete Flatpack";
 
         Shader LoadThumbnailShader()
         {
@@ -267,6 +269,8 @@ namespace sage::editor
             }
 
             drawAssetRenamePopup();
+            drawFlatpackRenamePopup();
+            drawFlatpackDeleteConfirmation();
 
             if (dockLayout)
             {
@@ -430,6 +434,149 @@ namespace sage::editor
             assetRenameInput.clear();
             assetRenameStatus.clear();
             assetRenamePopupOpenRequested = false;
+        }
+    }
+
+    void EditorGui::openFlatpackRenamePopup(const std::size_t index)
+    {
+        if (index >= flatpackEntries.size()) return;
+
+        renamingFlatpackIndex = index;
+        flatpackRenameInput = flatpackEntries[index].displayName;
+        flatpackRenameStatus.clear();
+        flatpackRenamePopupOpenRequested = true;
+    }
+
+    void EditorGui::drawFlatpackRenamePopup()
+    {
+        if (!renamingFlatpackIndex.has_value()) return;
+        if (*renamingFlatpackIndex >= flatpackEntries.size())
+        {
+            renamingFlatpackIndex.reset();
+            return;
+        }
+
+        if (flatpackRenamePopupOpenRequested)
+        {
+            ImGui::OpenPopup(FLATPACK_RENAME_POPUP);
+            flatpackRenamePopupOpenRequested = false;
+        }
+
+        bool open = true;
+        ImGui::SetNextWindowSize(ImVec2{430.0f, 0.0f}, ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal(FLATPACK_RENAME_POPUP, &open, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            const auto& flatpack = flatpackEntries[*renamingFlatpackIndex];
+
+            ImGui::TextWrapped("%s", flatpack.displayName.c_str());
+            ImGui::TextDisabled("%s", flatpack.path.parent_path().string().c_str());
+            ImGui::Spacing();
+
+            ImGui::SetNextItemWidth(390.0f);
+            const bool enterPressed =
+                ImGui::InputText("New name", &flatpackRenameInput, ImGuiInputTextFlags_EnterReturnsTrue);
+
+            if (!flatpackRenameStatus.empty())
+            {
+                ImGui::TextWrapped("%s", flatpackRenameStatus.c_str());
+            }
+
+            ImGui::Spacing();
+            const bool renamePressed = ImGui::Button("Rename", ImVec2{120.0f, 0.0f});
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
+            {
+                renamingFlatpackIndex.reset();
+                flatpackRenameInput.clear();
+                flatpackRenameStatus.clear();
+                ImGui::CloseCurrentPopup();
+            }
+
+            if ((enterPressed || renamePressed) && onFlatpackRenameCb)
+            {
+                // The rename callback refreshes the catalog (SetFlatpacks swaps
+                // out flatpackEntries), so copy the path before invoking.
+                const auto path = flatpack.path;
+                auto result = onFlatpackRenameCb(path, flatpackRenameInput);
+                flatpackRenameStatus = std::move(result.message);
+                if (result.renamed)
+                {
+                    renamingFlatpackIndex.reset();
+                    flatpackRenameInput.clear();
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (!open)
+        {
+            renamingFlatpackIndex.reset();
+            flatpackRenameInput.clear();
+            flatpackRenameStatus.clear();
+            flatpackRenamePopupOpenRequested = false;
+        }
+    }
+
+    void EditorGui::openFlatpackDeleteConfirmation(const std::size_t index)
+    {
+        if (index >= flatpackEntries.size()) return;
+
+        deletingFlatpackIndex = index;
+        flatpackDeletePopupOpenRequested = true;
+    }
+
+    void EditorGui::drawFlatpackDeleteConfirmation()
+    {
+        if (!deletingFlatpackIndex.has_value()) return;
+        if (*deletingFlatpackIndex >= flatpackEntries.size())
+        {
+            deletingFlatpackIndex.reset();
+            return;
+        }
+
+        if (flatpackDeletePopupOpenRequested)
+        {
+            ImGui::OpenPopup(FLATPACK_DELETE_POPUP);
+            flatpackDeletePopupOpenRequested = false;
+        }
+
+        bool open = true;
+        ImGui::SetNextWindowSize(ImVec2{430.0f, 0.0f}, ImGuiCond_Appearing);
+        if (ImGui::BeginPopupModal(FLATPACK_DELETE_POPUP, &open, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            const auto& flatpack = flatpackEntries[*deletingFlatpackIndex];
+
+            ImGui::TextWrapped(
+                "Delete '%s'? The file is removed from disk. Instances already placed in maps are unaffected.",
+                flatpack.displayName.c_str());
+            ImGui::TextDisabled("%s", flatpack.path.string().c_str());
+            ImGui::Spacing();
+
+            if (ImGui::Button("Delete", ImVec2{120.0f, 0.0f}))
+            {
+                // The delete callback refreshes the catalog (SetFlatpacks swaps
+                // out flatpackEntries), so copy the path before invoking.
+                const auto path = flatpack.path;
+                deletingFlatpackIndex.reset();
+                ImGui::CloseCurrentPopup();
+                if (onFlatpackDeleteCb) onFlatpackDeleteCb(path);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
+            {
+                deletingFlatpackIndex.reset();
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
+        if (!open)
+        {
+            deletingFlatpackIndex.reset();
+            flatpackDeletePopupOpenRequested = false;
         }
     }
 
@@ -663,17 +810,38 @@ namespace sage::editor
                 ImGui::PushID(static_cast<int>(i));
                 ImGui::BeginGroup();
                 const bool clicked = ImGui::Button("Flatpack", ImVec2{ASSET_TILE_WIDTH, 56.0f});
-                if (clicked && onFlatpackSelectedCb)
+                const bool doubleClicked =
+                    ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+                if (doubleClicked && onFlatpackEditCb)
+                {
+                    onFlatpackEditCb(flatpack.path);
+                }
+                else if (clicked && onFlatpackSelectedCb)
                 {
                     onFlatpackSelectedCb(flatpack.path);
                 }
                 if (ImGui::IsItemHovered())
                 {
-                    ImGui::SetTooltip("%s", flatpack.path.string().c_str());
+                    ImGui::SetTooltip("%s\nClick: place  |  Double-click: edit", flatpack.path.string().c_str());
                 }
                 if (ImGui::BeginPopupContextItem("flatpack_context"))
                 {
                     const auto path = flatpack.path.string();
+                    if (ImGui::MenuItem("Edit Flatpack") && onFlatpackEditCb) onFlatpackEditCb(flatpack.path);
+                    ImGui::Separator();
+                    // The open flatpack's file is in use by the edit session, so
+                    // renaming or deleting it from the browser is blocked.
+                    const bool openForEdit =
+                        sceneTabs.flatpackOpen && sceneTabs.flatpackLabel == flatpack.displayName;
+                    if (ImGui::MenuItem("Rename...", nullptr, false, !openForEdit))
+                    {
+                        openFlatpackRenamePopup(i);
+                    }
+                    if (ImGui::MenuItem("Delete", nullptr, false, !openForEdit))
+                    {
+                        openFlatpackDeleteConfirmation(i);
+                    }
+                    ImGui::Separator();
                     if (ImGui::MenuItem("Copy Flatpack Name")) ImGui::SetClipboardText(flatpack.displayName.c_str());
                     if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
                     ImGui::EndPopup();

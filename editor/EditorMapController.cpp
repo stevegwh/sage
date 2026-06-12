@@ -241,4 +241,9 @@ namespace sage::editor
         if (saveFeedbackRemaining > 0.0f) return saveFeedbackStatus;
         return {};
     }
+
+    std::string EditorMapController::CurrentSceneName() const
+    {
+        return sceneNameFromPath(currentMapPath);
+    }
 } // namespace sage::editor

@@ -5,6 +5,7 @@
 #include "components/NavigationGridSquare.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
+#include "components/Terrain.hpp"
 #include <Serializer.hpp>
 
 #include <iostream>
@@ -369,6 +370,44 @@ namespace sage
         // Otherwise, calculate a cost based on the angle
         // This will return 1.0 for flat ground, and increase as the slope increases
         return 1.0f + (angle / maxSlopeAngle);
+    }
+
+    void NavigationGridSystem::calculateHeightAndNormalsFromTerrain(const entt::entity& entity)
+    {
+        const auto& terrain = registry->get<Terrain>(entity);
+        if (!terrain.IsValid()) return;
+
+        const auto origin = registry->get<sgTransform>(entity).GetWorldPos();
+        const float worldSize = terrain.WorldSize();
+
+        GridSquare topLeftIndex{}, bottomRightIndex{};
+        if (!WorldToGridSpace(origin, topLeftIndex) ||
+            !WorldToGridSpace({origin.x + worldSize, origin.y, origin.z + worldSize}, bottomRightIndex))
+        {
+            return;
+        }
+
+        const int min_col = std::max(0, std::min(topLeftIndex.col, bottomRightIndex.col));
+        const int max_col = std::min(
+            static_cast<int>(gridSquares[0].size()) - 1, std::max(topLeftIndex.col, bottomRightIndex.col));
+        const int min_row = std::max(0, std::min(topLeftIndex.row, bottomRightIndex.row));
+        const int max_row =
+            std::min(static_cast<int>(gridSquares.size()) - 1, std::max(topLeftIndex.row, bottomRightIndex.row));
+
+        for (int row = min_row; row <= max_row; ++row)
+        {
+            for (int col = min_col; col <= max_col; ++col)
+            {
+                const float localX = gridSquares[row][col].worldPosMin.x - origin.x;
+                const float localZ = gridSquares[row][col].worldPosMin.z - origin.z;
+                if (localX < 0.0f || localX > worldSize || localZ < 0.0f || localZ > worldSize) continue;
+
+                const int terrainRow = static_cast<int>(std::lround(localZ / terrain.cellSize));
+                const int terrainCol = static_cast<int>(std::lround(localX / terrain.cellSize));
+                gridSquares[row][col].heightMap.Set(
+                    origin.y + terrain.SampleHeight(localX, localZ), terrain.GetNormal(terrainRow, terrainCol));
+            }
+        }
     }
 
     void NavigationGridSystem::calculateTerrainHeightAndNormals(const entt::entity& entity)
@@ -1135,6 +1174,15 @@ namespace sage
             {
                 calculateTerrainHeightAndNormals(entity);
             }
+        }
+        // Height-field terrains sample exactly (no raycasts). Pass order is
+        // irrelevant: TerrainTile::Set keeps the highest height per square, so
+        // wherever terrain overlaps other walkable geometry the taller surface
+        // wins — which also means a terrain valley dug below an overlapping
+        // floor mesh will not register in the grid.
+        for (const auto& entity : registry->view<Terrain, sgTransform>())
+        {
+            calculateHeightAndNormalsFromTerrain(entity);
         }
         std::cout << "FINISH: Initialising grid height and normals \n";
     }

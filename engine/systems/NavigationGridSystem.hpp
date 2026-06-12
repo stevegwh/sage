@@ -40,6 +40,8 @@ namespace sage
         //---------------------------------------------------------
         void calculateTerrainHeightAndNormals(const entt::entity& entity);
         //---------------------------------------------------------
+        void calculateHeightAndNormalsFromTerrain(const entt::entity& entity);
+        //---------------------------------------------------------
         std::pair<float, float> getHeightBounds(float slices);
         //---------------------------------------------------------
         void loadTerrainNormalMap(const ImageSafe& normalMap);

@@ -8,6 +8,7 @@
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/Light.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
@@ -131,6 +132,27 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(targetKind, targetId, modelKey);
+            }
+        };
+
+        // A terrain is its authored height field plus a world anchor (the field's
+        // min corner) and its Collideable (the layer is authored in the
+        // inspector); the mesh, shader and collision bounds are derived on load
+        // (AttachTerrainRenderable). Trailing section — old maps simply lack it.
+        // Must stay in sync with the game loader's TerrainRecord
+        // (LevelLayoutLoader.cpp).
+        struct TerrainRecord
+        {
+            Vector3 position{};
+            std::int32_t resolution = 0;
+            float cellSize = 1.0f;
+            Collideable collideable{};
+            std::vector<float> heights;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(position, resolution, cellSize, collideable, heights);
             }
         };
 
@@ -405,6 +427,47 @@ namespace sage::editor
                         moveable.idleClip = record.idleClip;
                     }
                 }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    // Guarded: this is the final section, so a short/incompatible
+                    // terrain stream (pre-Collideable format) degrades to "no
+                    // terrains" instead of failing the whole map.
+                    try
+                    {
+                        std::vector<TerrainRecord> terrains;
+                        input(terrains);
+                        for (auto& record : terrains)
+                        {
+                            Terrain terrain;
+                            terrain.resolution = record.resolution;
+                            terrain.cellSize = record.cellSize;
+                            terrain.heights = std::move(record.heights);
+                            if (!terrain.IsValid())
+                            {
+                                std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
+                                continue;
+                            }
+
+                            const auto entity = destination->create();
+                            destination->emplace<EditorMapEntity>(entity);
+                            auto& transform = destination->emplace<sgTransform>(entity);
+                            transform.position.world = record.position;
+                            transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
+                            destination->emplace<Terrain>(entity, std::move(terrain));
+                            auto& collideable =
+                                destination->emplace<Collideable>(entity, record.collideable);
+                            collideable.isStatic = true;
+                            // The mesh, shader and collision bounds are derived after
+                            // load (EditorScene::refreshAfterMapLoad).
+                        }
+                    }
+                    catch (const cereal::Exception& e)
+                    {
+                        std::cerr << "EditorMapLoader: could not read terrain section (" << e.what()
+                                  << "), skipping.\n";
+                    }
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -577,6 +640,22 @@ namespace sage::editor
                             moveable.idleClip});
                 }
                 output(moveables);
+
+                std::vector<TerrainRecord> terrains;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, Terrain>())
+                {
+                    const auto& terrain = source.get<Terrain>(entity);
+                    Collideable collideable{};
+                    if (const auto* existing = source.try_get<Collideable>(entity)) collideable = *existing;
+                    terrains.push_back(
+                        TerrainRecord{
+                            source.get<sgTransform>(entity).GetWorldPos(),
+                            terrain.resolution,
+                            terrain.cellSize,
+                            collideable,
+                            terrain.heights});
+                }
+                output(terrains);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

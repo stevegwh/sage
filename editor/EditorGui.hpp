@@ -76,6 +76,31 @@ namespace sage
                 std::filesystem::path path;
             };
 
+            struct FlatpackRenameResult
+            {
+                bool renamed = false;
+                std::string message;
+            };
+
+            // What the scene tab bar shows: the map tab is always present; the
+            // flatpack tab appears while a flatpack is open for editing.
+            struct SceneTabState
+            {
+                std::string mapLabel;
+                bool mapDirty = false;
+                bool flatpackOpen = false;
+                std::string flatpackLabel;
+                bool flatpackDirty = false;
+            };
+
+            // Result of drawing the scene tab bar for one frame. Either flag asks
+            // the host to close the open flatpack (returning to the map).
+            struct SceneTabBarResult
+            {
+                bool mapSelected = false;
+                bool flatpackCloseRequested = false;
+            };
+
             struct ModelDefaultCallbacks
             {
                 std::function<void()> heightDown;
@@ -132,6 +157,10 @@ namespace sage
             std::function<void(std::size_t)> onAssetSelectedCb;
             std::function<AssetRenameResult(std::size_t, const std::string&)> onAssetRenameCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
+            std::function<void(std::filesystem::path)> onFlatpackEditCb;
+            std::function<FlatpackRenameResult(const std::filesystem::path&, const std::string&)>
+                onFlatpackRenameCb;
+            std::function<void(const std::filesystem::path&)> onFlatpackDeleteCb;
             std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
             BrowserTab currentTab = BrowserTab::Assets;
@@ -142,6 +171,8 @@ namespace sage
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
             std::optional<std::size_t> selectedAssetIndex;
             std::optional<std::size_t> renamingAssetIndex;
+            std::optional<std::size_t> renamingFlatpackIndex;
+            std::optional<std::size_t> deletingFlatpackIndex;
             std::vector<entt::entity> selectedSceneEntities;
             entt::entity hierarchySelectionAnchor = entt::null;
             std::optional<entt::entity> focusedHierarchyEntity;
@@ -154,9 +185,14 @@ namespace sage
             std::string assetDefaultsScale = "1.00";
             std::string assetRenameInput;
             std::string assetRenameStatus;
+            std::string flatpackRenameInput;
+            std::string flatpackRenameStatus;
             std::string deleteConfirmationPrompt = "Delete selected entity?";
             bool deleteConfirmationVisible = false;
             bool assetRenamePopupOpenRequested = false;
+            bool flatpackRenamePopupOpenRequested = false;
+            bool flatpackDeletePopupOpenRequested = false;
+            SceneTabState sceneTabs;
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
@@ -175,6 +211,10 @@ namespace sage
             AddComponentClicks drawAddComponentControls();
             void openAssetRenamePopup(std::size_t index);
             void drawAssetRenamePopup();
+            void openFlatpackRenamePopup(std::size_t index);
+            void drawFlatpackRenamePopup();
+            void openFlatpackDeleteConfirmation(std::size_t index);
+            void drawFlatpackDeleteConfirmation();
             void drawAssetDefaultsControls();
             void drawAssetGrid();
             void drawFlatpackGrid();
@@ -199,6 +239,8 @@ namespace sage
             void SetSceneName(const std::string& sceneName) const;
             void SetSelectedAsset(std::optional<std::size_t> index);
             void SetFlatpacks(std::vector<FlatpackEntry> entries);
+            void SetSceneTabs(SceneTabState state);
+            [[nodiscard]] SceneTabBarResult DrawSceneTabBar();
             void SetHierarchy(
                 const std::vector<SceneObjectEntry>& entries,
                 std::vector<entt::entity> selectedEntities,
@@ -222,6 +264,10 @@ namespace sage
                 const std::function<void(std::size_t)>& onAssetSelected,
                 const std::function<AssetRenameResult(std::size_t, const std::string&)>& onAssetRename,
                 const std::function<void(std::filesystem::path)>& onFlatpackSelected,
+                const std::function<void(std::filesystem::path)>& onFlatpackEdit,
+                const std::function<FlatpackRenameResult(const std::filesystem::path&, const std::string&)>&
+                    onFlatpackRename,
+                const std::function<void(const std::filesystem::path&)>& onFlatpackDelete,
                 const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
                 const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
                 ModelDefaultCallbacks callbacks);

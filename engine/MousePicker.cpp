@@ -1,6 +1,7 @@
 #include "MousePicker.hpp"
 
 #include "Camera.hpp"
+#include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 #include "EngineSystems.hpp"
@@ -89,6 +90,33 @@ namespace sage
                     hitInfo.rlCollision = meshCollision;
                     return true;
                 }
+            }
+            return false;
+        }
+
+        // Runtime-generated geometry (e.g. terrain) lives in a DynamicRenderable.
+        if (registry->any_of<DynamicRenderable>(hitInfo.collidedEntityId))
+        {
+            const auto& renderable = registry->get<DynamicRenderable>(hitInfo.collidedEntityId);
+            const auto& transform = registry->get<sgTransform>(hitInfo.collidedEntityId);
+            const auto* model = renderable.GetModel();
+            if (model == nullptr) return false;
+
+            const Matrix worldMatrix = MatrixMultiply(model->transform, transform.GetMatrix());
+            RayCollision closest{};
+            closest.distance = std::numeric_limits<float>::max();
+            for (int i = 0; i < model->meshCount; ++i)
+            {
+                if (const auto meshCollision = GetRayCollisionMesh(ray, model->meshes[i], worldMatrix);
+                    meshCollision.hit && meshCollision.distance < closest.distance)
+                {
+                    closest = meshCollision;
+                }
+            }
+            if (closest.hit)
+            {
+                hitInfo.rlCollision = closest;
+                return true;
             }
         }
         return false;

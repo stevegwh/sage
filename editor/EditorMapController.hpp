@@ -66,6 +66,7 @@ namespace sage
 
             [[nodiscard]] bool HasUnsavedChanges() const;
             [[nodiscard]] std::string CurrentSaveStatus() const;
+            [[nodiscard]] std::string CurrentSceneName() const;
 
           private:
             void saveMapAs(const std::filesystem::path& path);

@@ -6,14 +6,18 @@
 #include "EditorTransformEditor.hpp"
 #include "engine/Camera.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Settings.hpp"
+#include "engine/TerrainMesh.hpp"
 #include "engine/UserInput.hpp"
 
 #include "raylib.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace sage::editor
 {
@@ -113,6 +117,11 @@ namespace sage::editor
         if (IsKeyPressed(KEY_TAB))
         {
             BeginEditSelectedTransform(machine);
+        }
+
+        if (IsKeyPressed(KEY_G))
+        {
+            machine.BeginTerrainSculptOnSelection();
         }
     }
 
@@ -360,6 +369,7 @@ namespace sage::editor
         }
         if (!entity.has_value()) return false;
 
+        machine.adoptIntoFlatpackRoot({*entity});
         machine.history().RecordCreate(EditAction::Place, {*entity});
         (void)machine.selection().Select(*entity);
         machine.refreshSceneWindows();
@@ -646,6 +656,151 @@ namespace sage::editor
         machine.refreshSceneWindows();
     }
 
+    // ===== Terrain Sculpt Mode =====================================================
+
+    std::string EditorTerrainSculptState::GetName(const EditorModeStateMachine&)
+    {
+        return "Sculpt Terrain";
+    }
+
+    void EditorTerrainSculptState::OnEnter(EditorModeStateMachine& machine)
+    {
+        machine.refreshOverlay();
+    }
+
+    void EditorTerrainSculptState::OnExit(EditorModeStateMachine& machine)
+    {
+        finishStroke(machine, /*keepChanges=*/true);
+    }
+
+    void EditorTerrainSculptState::Update(EditorModeStateMachine& machine)
+    {
+        auto& registry = machine.registry();
+        if (!registry.valid(terrain) || !registry.all_of<Terrain, sgTransform, DynamicRenderable>(terrain))
+        {
+            machine.ChangeState(EditorSelectState{});
+            return;
+        }
+
+        if (machine.isKeyboardEditing()) return;
+
+        if (IsKeyPressedOrRepeated(KEY_LEFT_BRACKET))
+        {
+            brushRadius = std::max(0.5f, brushRadius - 0.5f);
+        }
+        if (IsKeyPressedOrRepeated(KEY_RIGHT_BRACKET))
+        {
+            brushRadius = std::min(50.0f, brushRadius + 0.5f);
+        }
+
+        cursorHit.reset();
+        if (const auto ray = machine.viewportMouseRay(); ray.has_value() && !machine.isMouseOverUiCell())
+        {
+            const auto& terrainData = registry.get<Terrain>(terrain);
+            const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+            cursorHit = GetTerrainRayHit(terrainData, origin, *ray);
+        }
+
+        const bool brushDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+        if (!stroking && cursorHit.has_value() && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            stroking = true;
+            machine.history().Begin(EditAction::SculptTerrain, {terrain});
+        }
+        if (stroking && brushDown && cursorHit.has_value())
+        {
+            applyBrushStroke(machine);
+        }
+        if (stroking && !brushDown)
+        {
+            finishStroke(machine, /*keepChanges=*/true);
+        }
+
+        if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_G))
+        {
+            machine.ChangeState(EditorSelectState{});
+        }
+    }
+
+    void EditorTerrainSculptState::applyBrushStroke(EditorModeStateMachine& machine) const
+    {
+        auto& registry = machine.registry();
+        auto& terrainData = registry.get<Terrain>(terrain);
+        const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+
+        const bool lower = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+        const float delta = (lower ? -1.0f : 1.0f) * brushStrength * GetFrameTime();
+        const Vector2 localCenter = {cursorHit->x - origin.x, cursorHit->z - origin.z};
+
+        const auto region = ApplyTerrainBrush(terrainData, localCenter, brushRadius, delta);
+        auto& renderable = registry.get<DynamicRenderable>(terrain);
+        if (auto* model = renderable.GetModel())
+        {
+            UpdateTerrainModelRegion(*model, terrainData, region);
+        }
+        UpdateTerrainCollideableBounds(registry, terrain);
+    }
+
+    void EditorTerrainSculptState::finishStroke(EditorModeStateMachine& machine, const bool keepChanges)
+    {
+        if (!stroking) return;
+        stroking = false;
+        if (!machine.history().HasActiveTransaction()) return;
+
+        if (keepChanges)
+        {
+            machine.history().Commit();
+        }
+        else
+        {
+            // Rollback restores the height field and fires the OnApplied
+            // callback, which rebuilds the derived mesh and bounds.
+            machine.history().Rollback();
+        }
+    }
+
+    void EditorTerrainSculptState::Draw3D(const EditorModeStateMachine& machine) const
+    {
+        if (!cursorHit.has_value()) return;
+
+        auto& registry = machine.registry();
+        if (!registry.valid(terrain) || !registry.all_of<Terrain, sgTransform>(terrain)) return;
+        const auto& terrainData = registry.get<Terrain>(terrain);
+        const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+
+        // Height-conformed brush ring.
+        constexpr int segments = 48;
+        constexpr float ringLift = 0.15f;
+        Vector3 previous{};
+        for (int i = 0; i <= segments; ++i)
+        {
+            const float angle = static_cast<float>(i) / segments * 2.0f * PI;
+            const float x = cursorHit->x + std::cos(angle) * brushRadius;
+            const float z = cursorHit->z + std::sin(angle) * brushRadius;
+            const Vector3 point = {
+                x, origin.y + terrainData.SampleHeight(x - origin.x, z - origin.z) + ringLift, z};
+            if (i > 0) DrawLine3D(previous, point, GOLD);
+            previous = point;
+        }
+        DrawSphere({cursorHit->x, cursorHit->y + ringLift, cursorHit->z}, 0.12f, GOLD);
+    }
+
+    bool EditorTerrainSculptState::HandleEscape(EditorModeStateMachine& machine)
+    {
+        if (stroking)
+        {
+            finishStroke(machine, /*keepChanges=*/false);
+        }
+        machine.ChangeState(EditorSelectState{});
+        machine.refreshOverlay();
+        machine.refreshSceneWindows();
+        return true;
+    }
+
+    void EditorTerrainSculptState::OnTransformApplied(EditorModeStateMachine&, entt::entity)
+    {
+    }
+
     // ===== Controller actions =========================================================
 
     void EditorModeStateMachine::refreshOverlay() const
@@ -723,11 +878,25 @@ namespace sage::editor
 
     void EditorModeStateMachine::deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const
     {
-        history().RecordDestroy(EditAction::Delete, entities);
-        for (const auto entity : entities)
+        auto deletable = entities;
+        // The flatpack session root anchors the open flatpack; deleting it would
+        // leave nothing to save back, so it is protected while the session runs.
+        if (scene.flatpackSession && scene.flatpackSession->IsActive())
+        {
+            std::erase(deletable, scene.flatpackSession->Root());
+        }
+        if (deletable.empty()) return;
+
+        history().RecordDestroy(EditAction::Delete, deletable);
+        for (const auto entity : deletable)
         {
             deleteEntityAndChildren(entity);
         }
+    }
+
+    void EditorModeStateMachine::adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const
+    {
+        scene.adoptIntoFlatpackRoot(roots);
     }
 
     void EditorModeStateMachine::focusHierarchyOnEntity(const entt::entity entity) const
@@ -778,6 +947,23 @@ namespace sage::editor
     EditorHistory& EditorModeStateMachine::history() const
     {
         return *scene.history;
+    }
+
+    entt::registry& EditorModeStateMachine::registry() const
+    {
+        return *scene.sys->registry;
+    }
+
+    std::optional<Ray> EditorModeStateMachine::viewportMouseRay() const
+    {
+        const auto mouse = GetMousePosition();
+        auto* settings = scene.sys->settings;
+        if (!settings->IsPointInRenderViewport(mouse)) return std::nullopt;
+
+        const auto viewport = settings->GetRenderViewPort();
+        const auto renderPosition = settings->ScreenToRenderViewportPosition(mouse);
+        return GetScreenToWorldRayEx(
+            renderPosition, *scene.sys->camera->getRaylibCam(), viewport.x, viewport.y);
     }
 
     void EditorModeStateMachine::enableCollideableStaticOverride(const entt::entity entity) const
@@ -853,6 +1039,21 @@ namespace sage::editor
         std::visit([this](const auto& current) { current.Draw3D(*this); }, currentState);
     }
 
+    bool EditorModeStateMachine::CanBeginTerrainSculpt() const
+    {
+        const auto& selected = scene.selection->Selected();
+        return selected.size() == 1 && scene.sys->registry->valid(selected.front()) &&
+               scene.sys->registry->all_of<Terrain>(selected.front());
+    }
+
+    void EditorModeStateMachine::BeginTerrainSculptOnSelection()
+    {
+        if (!CanBeginTerrainSculpt()) return;
+        EditorTerrainSculptState sculpt;
+        sculpt.terrain = selection().Selected().front();
+        ChangeState(std::move(sculpt));
+    }
+
     bool EditorModeStateMachine::IsPlaceMode() const
     {
         return std::holds_alternative<EditorPlaceState>(currentState);
@@ -876,6 +1077,11 @@ namespace sage::editor
     const EditorEditState* EditorModeStateMachine::CurrentEditState() const
     {
         return std::get_if<EditorEditState>(&currentState);
+    }
+
+    EditorTerrainSculptState* EditorModeStateMachine::CurrentTerrainSculptState()
+    {
+        return std::get_if<EditorTerrainSculptState>(&currentState);
     }
 
     EditorModeStateMachine::EditorModeStateMachine(EditorScene& scene, EditorTransformEditor& transformEditor)

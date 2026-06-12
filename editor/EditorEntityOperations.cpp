@@ -4,10 +4,12 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
+#include "engine/TerrainMesh.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
@@ -39,6 +41,11 @@ namespace sage::editor
         std::string triggerLabel(const entt::entity entity)
         {
             return std::format("trigger_{}", entt::to_integral(entity));
+        }
+
+        std::string terrainLabel(const entt::entity entity)
+        {
+            return std::format("terrain_{}", entt::to_integral(entity));
         }
     } // namespace
 
@@ -96,6 +103,21 @@ namespace sage::editor
         collideable.isTrigger = true;
         collideable.blocksNavigation = false;
         collideable.isStatic = false;
+        return entity;
+    }
+
+    entt::entity EditorEntityOperations::CreateTerrain(const Vector3 position) const
+    {
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        const auto& terrain = sys->registry->emplace<Terrain>(entity);
+        // The height field's local origin is its min corner; centre it on the
+        // requested position.
+        const float halfSize = terrain.WorldSize() * 0.5f;
+        transform.position.world = {position.x - halfSize, position.y, position.z - halfSize};
+        transform.name = terrainLabel(entity);
+        AttachTerrainRenderable(*sys->registry, entity, *sys->lightSubSystem);
         return entity;
     }
 

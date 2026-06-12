@@ -14,6 +14,7 @@
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Cursor.hpp"
 #include "engine/EngineSystems.hpp"
@@ -21,6 +22,7 @@
 #include "engine/LightManager.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
+#include "engine/TerrainMesh.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
@@ -174,7 +176,22 @@ namespace sage
     {
         const auto defaultsStatus = modelDefaults->Status(describeSelectedAsset());
         gui->SetOverlayStatus(editorModes->GetStateName(), describeCursorPosition());
-        gui->SetSaveStatus(mapController->CurrentSaveStatus(), mapController->HasUnsavedChanges());
+        const bool flatpackOpen = flatpackSession && flatpackSession->IsActive();
+        if (flatpackOpen)
+        {
+            gui->SetSaveStatus(flatpackSession->CurrentSaveStatus(), flatpackSession->HasUnsavedChanges());
+        }
+        else
+        {
+            gui->SetSaveStatus(mapController->CurrentSaveStatus(), mapController->HasUnsavedChanges());
+        }
+        gui->SetSceneTabs(
+            {.mapLabel = mapController->CurrentSceneName(),
+             .mapDirty = flatpackOpen ? flatpackSession->StashedMapHadUnsavedChanges()
+                                      : mapController->HasUnsavedChanges(),
+             .flatpackOpen = flatpackOpen,
+             .flatpackLabel = flatpackOpen ? flatpackSession->FlatpackName() : std::string{},
+             .flatpackDirty = flatpackOpen && flatpackSession->HasUnsavedChanges()});
         gui->SetAssetDefaultsStatus(
             defaultsStatus.assetName, defaultsStatus.height, defaultsStatus.rotation, defaultsStatus.scale);
         gui->SetSelectedAsset(
@@ -261,6 +278,7 @@ namespace sage
     void EditorScene::Update() const
     {
         mapController->Update();
+        flatpackSession->Update();
 
         // TODO: Fullscreen game viewport (switch state)
         sys->collisionSystem->Update();
@@ -386,10 +404,17 @@ namespace sage
 
         gui->DrawHierarchyWindow();
         gui->DrawAssetDrawerWindow();
+        const auto sceneTabAction = gui->DrawSceneTabBar();
+        if (sceneTabAction.mapSelected || sceneTabAction.flatpackCloseRequested)
+        {
+            flatpackSession->RequestClose();
+        }
+        flatpackSession->DrawCloseConfirmationModal();
         handleFileShortcuts();
         mapController->DrawBrowsers();
         drawScriptBrowser();
         drawCollisionMatrixWindow();
+        drawTerrainBrushWindow();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
         drawHierarchyContextMenu();
@@ -402,7 +427,12 @@ namespace sage
     {
         constexpr const char* kPopupId = "Exit Editor";
 
-        if (exitRequested && !mapController->HasUnsavedChanges())
+        // While a flatpack is open the live history belongs to it, and the map's
+        // own dirty flag is parked in the session stash — check both.
+        const bool hasUnsavedChanges = mapController->HasUnsavedChanges() ||
+                                       flatpackSession->HasUnsavedChanges() ||
+                                       flatpackSession->StashedMapHadUnsavedChanges();
+        if (exitRequested && !hasUnsavedChanges)
         {
             exitRequested = false;
             exitConfirmed = true;
@@ -500,9 +530,17 @@ namespace sage
             ImGuiInputFlags_RouteOverFocused | ImGuiInputFlags_RouteOverActive;
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, saveFlags))
         {
-            mapController->SaveMap();
+            if (flatpackSession->IsActive())
+            {
+                flatpackSession->Save();
+            }
+            else
+            {
+                mapController->SaveMap();
+            }
         }
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal))
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal) &&
+            !flatpackSession->IsActive())
         {
             mapController->OpenLoadBrowser();
         }
@@ -773,6 +811,15 @@ namespace sage
         // Mirror the post-load/post-paste fixups: re-hook the lit shader and re-derive
         // collision bounds from the restored world transforms.
         applyLitShaderToLoadedRenderables();
+        // Terrain restores only the authored height field; rebuild the derived
+        // mesh and bounds.
+        for (const auto entity : restored)
+        {
+            if (sys->registry->valid(entity) && sys->registry->all_of<Terrain, sgTransform>(entity))
+            {
+                AttachTerrainRenderable(*sys->registry, entity, *sys->lightSubSystem);
+            }
+        }
         if (transformEditor)
         {
             for (const auto entity : restored)
@@ -839,6 +886,7 @@ namespace sage
                 transformEditor->RefreshCollisionBoundsRecursive(root);
             }
         }
+        adoptIntoFlatpackRoot(newRoots);
 
         if (history) history->RecordCreate(editor::EditAction::Paste, newRoots);
 
@@ -892,6 +940,67 @@ namespace sage
         if (gui) gui->SetFlatpacks(std::move(entries));
     }
 
+    editor::EditorGui::FlatpackRenameResult EditorScene::renameFlatpackFile(
+        const std::filesystem::path& path, const std::string& requestedName) const
+    {
+        // The new name is the display name (file stem); a typed ".flatpack"
+        // extension is tolerated rather than doubled up.
+        std::filesystem::path newName{requestedName};
+        if (newName.extension() == ".flatpack") newName = newName.stem();
+        const auto stem = newName.string();
+        if (stem.empty())
+        {
+            return {.message = "Name cannot be empty."};
+        }
+        if (stem.find('/') != std::string::npos || stem.find('\\') != std::string::npos)
+        {
+            return {.message = "Name cannot contain path separators."};
+        }
+        if (flatpackSession->IsActive() && flatpackSession->Path() == path)
+        {
+            return {.message = "Close the flatpack before renaming it."};
+        }
+
+        const auto target = path.parent_path() / (stem + ".flatpack");
+        if (target == path)
+        {
+            return {.renamed = true, .message = "Name unchanged."};
+        }
+        if (std::filesystem::exists(target))
+        {
+            return {.message = std::format("'{}' already exists.", stem)};
+        }
+
+        std::error_code error;
+        std::filesystem::rename(path, target, error);
+        if (error)
+        {
+            return {.message = std::format("Rename failed: {}", error.message())};
+        }
+
+        refreshFlatpackCatalog();
+        return {.renamed = true};
+    }
+
+    void EditorScene::deleteFlatpackFile(const std::filesystem::path& path) const
+    {
+        // The browser disables Delete for the open flatpack, but guard anyway:
+        // the session would recreate the file on its next save.
+        if (flatpackSession->IsActive() && flatpackSession->Path() == path)
+        {
+            std::cerr << "ERROR: Cannot delete a flatpack that is open for editing: " << path << std::endl;
+            return;
+        }
+
+        std::error_code error;
+        if (!std::filesystem::remove(path, error) || error)
+        {
+            std::cerr << "ERROR: Failed to delete flatpack: " << path
+                      << (error ? " (" + error.message() + ")" : "") << std::endl;
+        }
+        refreshFlatpackCatalog();
+    }
+
     std::optional<entt::entity> EditorScene::PlaceFlatpackAt(
         const std::filesystem::path& path, const Vector3 anchor) const
     {
@@ -907,20 +1016,48 @@ namespace sage
         return root;
     }
 
+    void EditorScene::adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const
+    {
+        if (!flatpackSession || !flatpackSession->IsActive()) return;
+
+        const auto sessionRoot = flatpackSession->Root();
+        for (const auto entity : roots)
+        {
+            if (entity == sessionRoot) continue;
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+            auto& transform = sys->registry->get<sgTransform>(entity);
+            if (transform.GetParent() != entt::null) continue;
+            transform.SetParent(sessionRoot);
+        }
+    }
+
     void EditorScene::drawMainMenuBar(bool& exitRequested) const
     {
         if (!ImGui::BeginMainMenuBar()) return;
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Load Map", "Ctrl+O"))
+            const bool flatpackOpen = flatpackSession->IsActive();
+            if (flatpackOpen)
+            {
+                if (ImGui::MenuItem("Save Flatpack", "Ctrl+S"))
+                {
+                    flatpackSession->Save();
+                }
+                if (ImGui::MenuItem("Close Flatpack"))
+                {
+                    flatpackSession->RequestClose();
+                }
+                ImGui::Separator();
+            }
+            if (ImGui::MenuItem("Load Map", "Ctrl+O", false, !flatpackOpen))
             {
                 mapController->OpenLoadBrowser();
             }
-            if (ImGui::MenuItem("Save Map", "Ctrl+S"))
+            if (ImGui::MenuItem("Save Map", flatpackOpen ? nullptr : "Ctrl+S", false, !flatpackOpen))
             {
                 mapController->SaveMap();
             }
-            if (ImGui::MenuItem("Save Map As..."))
+            if (ImGui::MenuItem("Save Map As...", nullptr, false, !flatpackOpen))
             {
                 mapController->OpenSaveBrowser();
             }
@@ -951,6 +1088,11 @@ namespace sage
             {
                 setSnapToGrid(!snapToGrid);
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Sculpt Terrain", "G", false, editorModes->CanBeginTerrainSculpt()))
+            {
+                editorModes->BeginTerrainSculptOnSelection();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Add"))
@@ -959,13 +1101,20 @@ namespace sage
             {
                 addLight();
             }
-            if (ImGui::MenuItem("Spawner"))
+            // Spawners, trigger volumes and terrains persist via map-only
+            // streams, so a flatpack can't carry them — keep them map-only.
+            const bool flatpackOpen = flatpackSession->IsActive();
+            if (ImGui::MenuItem("Spawner", nullptr, false, !flatpackOpen))
             {
                 addSpawner();
             }
-            if (ImGui::MenuItem("Trigger Volume"))
+            if (ImGui::MenuItem("Trigger Volume", nullptr, false, !flatpackOpen))
             {
                 addTriggerVolume();
+            }
+            if (ImGui::MenuItem("Terrain", nullptr, false, !flatpackOpen))
+            {
+                addTerrain();
             }
             ImGui::EndMenu();
         }
@@ -1081,6 +1230,23 @@ namespace sage
         collisionMatrixWindowOpen = open;
     }
 
+    void EditorScene::drawTerrainBrushWindow() const
+    {
+        auto* sculpt = editorModes->CurrentTerrainSculptState();
+        if (sculpt == nullptr) return;
+
+        ImGui::SetNextWindowSize(ImVec2{280.0f, 0.0f}, ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Terrain Brush"))
+        {
+            ImGui::SliderFloat("Radius", &sculpt->brushRadius, 0.5f, 50.0f, "%.1f");
+            ImGui::SliderFloat("Strength", &sculpt->brushStrength, 0.5f, 30.0f, "%.1f");
+            ImGui::Spacing();
+            ImGui::TextUnformatted("LMB raise - Shift+LMB lower");
+            ImGui::TextUnformatted("[ / ] adjust radius - Esc to finish");
+        }
+        ImGui::End();
+    }
+
     void EditorScene::addLight() const
     {
         Vector3 position =
@@ -1092,6 +1258,7 @@ namespace sage
         }
 
         const auto entity = entityOperations->CreateLight(position);
+        adoptIntoFlatpackRoot({entity});
         sys->lightSubSystem->RefreshLights();
         if (history) history->RecordCreate(editor::EditAction::AddLight, {entity});
         editorModes->SelectSceneEntity(entity);
@@ -1108,6 +1275,20 @@ namespace sage
 
         const auto entity = entityOperations->CreateSpawner(position);
         if (history) history->RecordCreate(editor::EditAction::AddSpawner, {entity});
+        editorModes->SelectSceneEntity(entity);
+    }
+
+    void EditorScene::addTerrain() const
+    {
+        Vector3 position = sys->camera->getRaylibCam()->target;
+        if (const auto snappedPosition = placementController->SnappedPlacementPosition();
+            snappedPosition.has_value())
+        {
+            position = *snappedPosition;
+        }
+
+        const auto entity = entityOperations->CreateTerrain(position);
+        if (history) history->RecordCreate(editor::EditAction::AddTerrain, {entity});
         editorModes->SelectSceneEntity(entity);
     }
 
@@ -1257,6 +1438,11 @@ namespace sage
     {
         ensureDefaultMapBase();
         applyLitShaderToLoadedRenderables();
+        // The map only stores terrain height fields; build their meshes.
+        for (const auto entity : sys->registry->view<Terrain, sgTransform>())
+        {
+            AttachTerrainRenderable(*sys->registry, entity, *sys->lightSubSystem);
+        }
         giveTransformsToLights();
         placementController->Initialize();
         selection->Clear();
@@ -1289,6 +1475,18 @@ namespace sage
         const auto dragged = request.dragged;
         auto newParent = request.newParent;
         auto insertBefore = request.insertBefore;
+
+        if (flatpackSession && flatpackSession->IsActive())
+        {
+            // The session root anchors the open flatpack: it stays at the top,
+            // and anything dropped at the top level belongs under it.
+            if (dragged == flatpackSession->Root()) return;
+            if (newParent == entt::null)
+            {
+                newParent = flatpackSession->Root();
+                insertBefore = entt::null;
+            }
+        }
 
         if (!sys->registry->valid(dragged) || !sys->registry->any_of<sgTransform>(dragged)) return;
         if (newParent != entt::null &&
@@ -1392,6 +1590,13 @@ namespace sage
                 return handleAssetFileRename(index, requestedFileName);
             },
             [this](std::filesystem::path path) { editorModes->SelectFlatpack(std::move(path)); },
+            [this](std::filesystem::path path) {
+                if (flatpackSession) flatpackSession->Open(std::move(path));
+            },
+            [this](const std::filesystem::path& path, const std::string& requestedName) {
+                return renameFlatpackFile(path, requestedName);
+            },
+            [this](const std::filesystem::path& path) { deleteFlatpackFile(path); },
             [this](const editor::EditorGui::SceneSelectionRequest& request) {
                 editorModes->SelectSceneFromHierarchy(request);
             },
@@ -1414,6 +1619,28 @@ namespace sage
                 .finishLoad = [this]() { refreshAfterMapLoad(); },
                 .setSceneName = [this](const std::string& name) { SetSceneName(name); },
                 .prepareSave = [this]() { return collectMapHierarchyOrder(); }});
+
+        flatpackSession = std::make_unique<editor::EditorFlatpackEditSession>(
+            sys,
+            history.get(),
+            editor::EditorFlatpackEditSession::Callbacks{
+                .clearScene = [this]() { clearCurrentMap(); },
+                .loadFlatpack =
+                    [this](const std::filesystem::path& path) {
+                        return PlaceFlatpackAt(path, Vector3{0.0f, 0.0f, 0.0f}).value_or(entt::null);
+                    },
+                // The flatpack scene needs the same fixups as a freshly loaded
+                // map: default base (placement raycast target), shaders, light
+                // transforms, placement grid, selection/mode reset.
+                .finishOpen = [this]() { refreshAfterMapLoad(); },
+                .prepareMapStash = [this]() { return collectMapHierarchyOrder(); },
+                .finishMapRestore =
+                    [this]() {
+                        refreshAfterMapLoad();
+                        SetSceneName(mapController->CurrentSceneName());
+                    },
+                .setSceneName = [this](const std::string& name) { SetSceneName(name); },
+                .catalogChanged = [this]() { refreshFlatpackCatalog(); }});
 
         SetSceneName(UNTITLED_SCENE_NAME);
         mapController->RestoreLastOpenedMap();

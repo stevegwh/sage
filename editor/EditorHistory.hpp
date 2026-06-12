@@ -52,7 +52,9 @@ namespace sage::editor
         AddAnimation,
         RemoveAnimation,
         AddMoveableActor,
-        RemoveMoveableActor
+        RemoveMoveableActor,
+        AddTerrain,
+        SculptTerrain
     };
 
     class EditorHistory
@@ -146,6 +148,12 @@ namespace sage::editor
             int moveableActorPathfindingBounds = 0;
             std::string moveableActorMoveClip;
             std::string moveableActorIdleClip;
+            // Terrain is its authored height field; the DynamicRenderable mesh is
+            // derived, so restore rebuilds it (EditorScene::onHistoryApplied).
+            bool hasTerrain = false;
+            int terrainResolution = 0;
+            float terrainCellSize = 1.0f;
+            std::vector<float> terrainHeights;
         };
 
         struct EntityDelta
