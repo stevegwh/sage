@@ -16,6 +16,7 @@
 namespace sage
 {
     class TextBox;
+    class Button;
     class Checkbox;
     class DropdownList;
     class TitleBar;
@@ -85,6 +86,7 @@ namespace sage
       public:
         // TODO: use polymorphism for any duplicates
         TextBox* CreateTextbox(std::unique_ptr<TextBox> _textBox, const std::string& _content);
+        Button* CreateButton(std::unique_ptr<Button> _button, const std::string& _label);
         Checkbox* CreateCheckbox(std::unique_ptr<Checkbox> _checkbox);
         DropdownList* CreateDropdownList(std::unique_ptr<DropdownList> _dropdown);
         TitleBar* CreateTitleBar(std::unique_ptr<TitleBar> _titleBar, const std::string& _title);

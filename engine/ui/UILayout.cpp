@@ -630,6 +630,15 @@ namespace sage
         return textbox;
     }
 
+    Button* TableCell::CreateButton(std::unique_ptr<Button> _button, const std::string& _label)
+    {
+        element = std::move(_button);
+        auto* button = dynamic_cast<Button*>(element.value().get());
+        button->SetContent(_label);
+        InitLayout();
+        return button;
+    }
+
     Checkbox* TableCell::CreateCheckbox(std::unique_ptr<Checkbox> _checkbox)
     {
         element = std::move(_checkbox);

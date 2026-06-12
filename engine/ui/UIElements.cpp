@@ -430,6 +430,111 @@ namespace sage
     {
     }
 
+    Rectangle Button::buttonRect() const
+    {
+        return {
+            parent->GetRec().x + parent->padding.left,
+            parent->GetRec().y + parent->padding.up,
+            std::max(0.0f, parent->GetRec().width - parent->padding.left - parent->padding.right),
+            std::max(0.0f, parent->GetRec().height - parent->padding.up - parent->padding.down)};
+    }
+
+    Vector2 Button::textPosition(const Vector2 textSize) const
+    {
+        float x = rec.x + engine->settings->ScaleValueMaintainRatio(textPadding);
+        float y = rec.y + engine->settings->ScaleValueMaintainRatio(4.0f);
+
+        if (horiAlignment == HoriAlignment::CENTER || horiAlignment == HoriAlignment::WINDOW_CENTER)
+        {
+            x = rec.x + (rec.width - textSize.x) * 0.5f;
+        }
+        else if (horiAlignment == HoriAlignment::RIGHT)
+        {
+            x = rec.x + rec.width - textSize.x - engine->settings->ScaleValueMaintainRatio(textPadding);
+        }
+
+        if (vertAlignment == VertAlignment::MIDDLE)
+        {
+            y = rec.y + (rec.height - textSize.y) * 0.5f;
+        }
+        else if (vertAlignment == VertAlignment::BOTTOM)
+        {
+            y = rec.y + rec.height - textSize.y - engine->settings->ScaleValueMaintainRatio(4.0f);
+        }
+
+        return {x, y};
+    }
+
+    void Button::SetOnPress(std::function<void()> callback)
+    {
+        onPressCallback = std::move(callback);
+    }
+
+    void Button::OnClick()
+    {
+        TextBox::OnClick();
+        onPressed.Publish();
+        if (onPressCallback)
+        {
+            onPressCallback();
+        }
+    }
+
+    void Button::UpdateDimensions()
+    {
+        UpdateFontScaling();
+        rec = buttonRect();
+    }
+
+    void Button::Draw2D()
+    {
+        const bool hovered =
+            std::holds_alternative<HoverState>(state) || std::holds_alternative<DragDelayState>(state);
+        const bool pressed =
+            hovered && IsMouseButtonDown(MOUSE_BUTTON_LEFT) && PointInsideRect(rec, engine->ViewportMousePosition());
+
+        DrawRectangleRec(rec, pressed ? CONTROL_SELECTED_BG : hovered ? CONTROL_HOVER_BG : CONTROL_BG);
+        DrawRectangleLinesEx(
+            rec,
+            hovered || pressed ? 2.0f : 1.0f,
+            hovered || pressed ? CONTROL_BORDER_ACTIVE : CONTROL_BORDER);
+
+        const float sidePadding = engine->settings->ScaleValueMaintainRatio(textPadding * 2.0f);
+        const float availableTextWidth = std::max(0.0f, rec.width - sidePadding);
+        const float availableTextHeight = std::max(0.0f, rec.height - engine->settings->ScaleValueMaintainRatio(8.0f));
+        float renderFontSize = fontInfo.fontSize;
+        Vector2 textSize = MeasureTextEx(fontInfo.font, content.c_str(), renderFontSize, fontInfo.fontSpacing);
+
+        while ((textSize.x > availableTextWidth || textSize.y > availableTextHeight) &&
+               renderFontSize > fontInfo.minFontSize)
+        {
+            renderFontSize -= 1.0f;
+            textSize = MeasureTextEx(fontInfo.font, content.c_str(), renderFontSize, fontInfo.fontSpacing);
+        }
+
+        const ScissorScope scissor{rec};
+        DrawTextEx(
+            fontInfo.font,
+            content.c_str(),
+            textPosition(textSize),
+            renderFontSize,
+            fontInfo.fontSpacing,
+            fontInfo.color);
+    }
+
+    Button::Button(
+        GameUIEngine* _engine,
+        TableCell* _parent,
+        std::function<void()> _onPressCallback,
+        const FontInfo& _fontInfo,
+        const VertAlignment _vertAlignment,
+        const HoriAlignment _horiAlignment)
+        : TextBox(_engine, _parent, _fontInfo, _vertAlignment, _horiAlignment),
+          onPressCallback(std::move(_onPressCallback))
+    {
+        fontInfo.color = CONTROL_TEXT;
+    }
+
     void Checkbox::SetChecked(const bool _checked)
     {
         checked = _checked;

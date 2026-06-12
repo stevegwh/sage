@@ -1,6 +1,6 @@
 //
-// Concrete CellElement subclasses: TextBox, TextInput, Checkbox, DropdownList,
-// TitleBar, ImageBox, GameWindowButton, CloseButton.
+// Concrete CellElement subclasses: TextBox, TextInput, Button, Checkbox,
+// DropdownList, TitleBar, ImageBox, GameWindowButton, CloseButton.
 //
 
 #pragma once
@@ -108,6 +108,31 @@ namespace sage
             const FontInfo& _fontInfo = FontInfo(),
             VertAlignment _vertAlignment = VertAlignment::TOP,
             HoriAlignment _horiAlignment = HoriAlignment::LEFT);
+    };
+
+    class Button final : public TextBox
+    {
+        std::function<void()> onPressCallback;
+        float textPadding = 12.0f;
+
+        [[nodiscard]] Rectangle buttonRect() const;
+        [[nodiscard]] Vector2 textPosition(Vector2 textSize) const;
+
+      public:
+        Event<> onPressed;
+
+        void SetOnPress(std::function<void()> callback);
+        void OnClick() override;
+        void UpdateDimensions() override;
+        void Draw2D() override;
+
+        Button(
+            GameUIEngine* _engine,
+            TableCell* _parent,
+            std::function<void()> _onPressCallback = {},
+            const FontInfo& _fontInfo = FontInfo(),
+            VertAlignment _vertAlignment = VertAlignment::MIDDLE,
+            HoriAlignment _horiAlignment = HoriAlignment::CENTER);
     };
 
     class Checkbox final : public CellElement
