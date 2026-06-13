@@ -157,21 +157,21 @@ namespace sage
         const bool deniedTarget = cursorTarget != nullptr && cursorTarget->deniesNavigation;
         if (OutOfRange() || invalidNavigation || deniedTarget)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Denied));
+            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Denied});
             currentColor = invalidColor;
             return;
         }
         if (cursorTarget != nullptr)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(cursorTarget->cursor));
+            currentTex = ResourceManager::GetInstance().TextureLoad(cursorTarget->cursor);
         }
         else if (navigationHit)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Move));
+            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Move});
         }
         else
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Regular));
+            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular});
         }
     }
 
@@ -198,7 +198,7 @@ namespace sage
     void Cursor::Update()
     {
         sys->picker->Update();
-        currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Regular));
+        currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular});
         currentColor = defaultColor;
 
         const auto& hitInfo = getMouseHitInfo();
@@ -271,7 +271,7 @@ namespace sage
         Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
         // TODO: Awful hack below
         if (currentTex.id !=
-            ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Regular)).id)
+            ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular}).id)
         {
             pos = Vector2Subtract(
                 pos, {static_cast<float>(currentTex.width / 2), static_cast<float>(currentTex.height / 2)});

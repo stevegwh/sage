@@ -249,6 +249,12 @@ namespace sage::editor
         // Animation or clips. Stored as EnumField.
         void clipDropdown(const std::string& label, std::string& value, bool rw = true);
 
+        // Bespoke: dropdown of cursor keys — the engine's own cursors plus the
+        // project's (sage::CustomCursors) — for a CursorTarget::cursor key. Sourced
+        // like tagSet; the current value stays selectable even if unlisted. Stored
+        // as EnumField.
+        void cursorDropdown(const std::string& label, std::string& value, bool rw = true);
+
         void SetContext(entt::registry* registry, const entt::entity entity)
         {
             contextRegistry_ = registry;

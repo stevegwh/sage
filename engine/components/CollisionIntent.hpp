@@ -1,8 +1,12 @@
 #pragma once
 
 #include "engine/CollisionLayers.hpp"
+#include "engine/CursorTypes.hpp"
+
+#include "cereal/types/string.hpp"
 
 #include <cstdint>
+#include <string>
 
 namespace sage
 {
@@ -84,74 +88,28 @@ namespace sage
     };
 
     // The cursor image shown while hovering an entity that carries a CursorTarget.
-    // Each value maps to a ResourceManager texture key via CursorTypeTextureKey;
-    // that function is the single source of truth for the actual asset names.
-    enum class CursorType : std::uint8_t
-    {
-        Regular,
-        Move,
-        Talk,
-        Attack,
-        Pickup,
-        Door,
-        Interact,
-        Lock,
-        Denied
-    };
-
-    [[nodiscard]] constexpr const char* CursorTypeTextureKey(const CursorType type)
-    {
-        switch (type)
-        {
-        case CursorType::Move:
-            return "cursor_move";
-        case CursorType::Talk:
-            return "cursor_talk";
-        case CursorType::Attack:
-            return "cursor_attack";
-        case CursorType::Pickup:
-            return "cursor_pickup";
-        case CursorType::Door:
-            return "cursor_door";
-        case CursorType::Interact:
-            return "cursor_interact";
-        case CursorType::Lock:
-            return "cursor_lock";
-        case CursorType::Denied:
-            return "cursor_denied";
-        case CursorType::Regular:
-            break;
-        }
-        return "cursor_regular";
-    }
-
+    // `cursor` is an opaque CursorKey (a ResourceManager texture key); the engine
+    // resolves it directly and never enumerates the project's cursor vocabulary.
+    // The engine's own cursors live in engine/CursorTypes.hpp; game cursors are
+    // declared in project/CustomCursors.hpp.
     struct CursorTarget
     {
-        CursorType cursor = CursorType::Regular;
+        std::string cursor{cursors::Regular};
         bool hoverable = false;
         bool allowNavigationClickThrough = true;
         bool deniesNavigation = false;
 
         template <class Archive>
-        void save(Archive& archive) const
+        void serialize(Archive& archive)
         {
-            const auto cursorValue = static_cast<std::uint8_t>(cursor);
-            archive(cursorValue, hoverable, allowNavigationClickThrough, deniesNavigation);
-        }
-
-        template <class Archive>
-        void load(Archive& archive)
-        {
-            std::uint8_t cursorValue = 0;
-            archive(cursorValue, hoverable, allowNavigationClickThrough, deniesNavigation);
-            cursor = static_cast<CursorType>(cursorValue);
+            archive(cursor, hoverable, allowNavigationClickThrough, deniesNavigation);
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Collideable>();
-            i.field("Cursor", cursor);
+            i.cursorDropdown("Cursor", cursor);
             i.field("Hoverable", hoverable);
             i.field("Allow Navigation Click Through", allowNavigationClickThrough);
             i.field("Denies Navigation", deniesNavigation);

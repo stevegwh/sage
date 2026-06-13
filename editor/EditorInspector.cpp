@@ -11,7 +11,9 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
+#include "engine/CursorTypes.hpp"
 #include "engine/SceneTags.hpp"
+#include "project/CustomCursors.hpp"
 #include "project/CustomSceneTags.hpp"
 
 #include <algorithm>
@@ -258,6 +260,34 @@ namespace sage::editor
                 p->clear();
             else
                 *p = options[idx];
+        };
+
+        fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
+    }
+
+    void ComponentInspector::cursorDropdown(const std::string& label, std::string& value, const bool ed)
+    {
+        // A cursor key chosen from the engine's own cursors plus the project's
+        // (sage::CustomCursors), rendered as a dropdown via EnumField (same path as
+        // tagSet). The current value is appended if it isn't one of the known keys,
+        // so saved values stay selectable.
+        EnumField e{.data = &value};
+        const auto addOption = [&e](const std::string_view key) {
+            if (std::ranges::find(e.options, key) == e.options.end()) e.options.emplace_back(key);
+        };
+        addOption(cursors::Regular);
+        addOption(cursors::Move);
+        addOption(cursors::Denied);
+        for (const auto& key : CustomCursors)
+            addOption(key);
+        if (!value.empty()) addOption(value);
+
+        e.getIndex = [options = e.options, p = &value]() -> std::size_t {
+            const auto it = std::ranges::find(options, *p);
+            return it != options.end() ? static_cast<std::size_t>(std::distance(options.begin(), it)) : 0;
+        };
+        e.setIndex = [options = e.options, p = &value](const std::size_t idx) {
+            if (idx < options.size()) *p = options[idx];
         };
 
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
