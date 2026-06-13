@@ -306,10 +306,59 @@ namespace sage::editor
         return it != entries_.end() ? &*it : nullptr;
     }
 
-    ComponentRemovalState InspectorRegistry::CanRemove(
-        entt::registry& registry, const EditorComponentId componentId, const entt::entity entity) const
+    std::vector<InspectorRegistry::DescribedEntry> InspectorRegistry::describeEntity(
+        entt::registry& registry, const entt::entity entity) const
     {
-        return CanRemove(registry, componentId, std::vector<entt::entity>{entity});
+        std::vector<DescribedEntry> result;
+        for (const auto& entry : entries_)
+        {
+            if (!entry.has(registry, entity)) continue;
+            result.push_back({.entry = &entry, .description = entry.describe(registry, entity)});
+        }
+        return result;
+    }
+
+    InspectorRegistry::DescribedEntry* InspectorRegistry::findDescribed(
+        std::vector<DescribedEntry>& described, const Entry& entry)
+    {
+        const auto it = std::ranges::find_if(described, [&entry](const DescribedEntry& candidate) {
+            return candidate.entry == &entry;
+        });
+        return it != described.end() ? &*it : nullptr;
+    }
+
+    const InspectorRegistry::DescribedEntry* InspectorRegistry::findDescribed(
+        const std::vector<DescribedEntry>& described, const Entry& entry)
+    {
+        const auto it = std::ranges::find_if(described, [&entry](const DescribedEntry& candidate) {
+            return candidate.entry == &entry;
+        });
+        return it != described.end() ? &*it : nullptr;
+    }
+
+    ComponentRemovalState InspectorRegistry::canRemoveFromDescription(
+        const Entry& target, const std::vector<DescribedEntry>& described, const bool multiSelection) const
+    {
+        if (!target.removable) return {.allowed = false, .blockedReason = "Component is protected"};
+
+        for (const auto& dependent : described)
+        {
+            if (dependent.entry->componentId == target.componentId) continue;
+
+            for (const auto requiredComponentId : dependent.description.requirements)
+            {
+                if (requiredComponentId != target.componentId) continue;
+
+                auto reason = "Required by " + dependent.entry->displayName;
+                if (multiSelection)
+                {
+                    reason += " on one or more selected entities";
+                }
+                return {.allowed = false, .blockedReason = std::move(reason)};
+            }
+        }
+
+        return {.allowed = true};
     }
 
     ComponentRemovalState InspectorRegistry::CanRemove(
@@ -319,7 +368,6 @@ namespace sage::editor
     {
         const auto* target = findEntry(componentId);
         if (target == nullptr) return {.allowed = false, .blockedReason = "Unknown component"};
-        if (!target->removable) return {.allowed = false, .blockedReason = "Component is protected"};
 
         bool presentOnAnyEntity = false;
         for (const auto entity : entities)
@@ -327,23 +375,9 @@ namespace sage::editor
             if (!registry.valid(entity) || !target->has(registry, entity)) continue;
             presentOnAnyEntity = true;
 
-            for (const auto& dependent : entries_)
-            {
-                if (dependent.componentId == target->componentId || !dependent.has(registry, entity)) continue;
-
-                for (const auto& requirement : dependent.options(registry, entity))
-                {
-                    if (requirement.componentId != target->componentId) continue;
-                    if (requirement.applies && !requirement.applies(registry, entity)) continue;
-
-                    auto reason = "Required by " + dependent.displayName;
-                    if (entities.size() > 1)
-                    {
-                        reason += " on one or more selected entities";
-                    }
-                    return {.allowed = false, .blockedReason = std::move(reason)};
-                }
-            }
+            const auto described = describeEntity(registry, entity);
+            const auto removal = canRemoveFromDescription(*target, described, entities.size() > 1);
+            if (!removal.allowed) return removal;
         }
 
         if (!presentOnAnyEntity) return {.allowed = false, .blockedReason = "Component is not present"};
@@ -354,15 +388,16 @@ namespace sage::editor
         entt::registry& registry, const entt::entity entity) const
     {
         std::vector<InspectedComponent> result;
-        for (const auto& entry : entries_)
+        const auto described = describeEntity(registry, entity);
+        result.reserve(described.size());
+        for (auto& component : described)
         {
-            if (!entry.has(registry, entity)) continue;
-            const auto removal = CanRemove(registry, entry.componentId, entity);
+            const auto removal = canRemoveFromDescription(*component.entry, described, false);
             result.push_back(
-                {.componentId = entry.componentId,
-                 .displayName = entry.displayName,
-                 .fields = entry.describe(registry, entity),
-                 .removable = entry.removable,
+                {.componentId = component.entry->componentId,
+                 .displayName = component.entry->displayName,
+                 .fields = std::move(component.description.fields),
+                 .removable = component.entry->removable,
                  .removeAllowed = removal.allowed,
                  .removeBlockedReason = removal.blockedReason});
         }
@@ -375,11 +410,18 @@ namespace sage::editor
         if (entities.empty()) return {};
         if (entities.size() == 1) return Inspect(registry, entities.front());
 
+        std::vector<std::vector<DescribedEntry>> describedByEntity;
+        describedByEntity.reserve(entities.size());
+        for (const auto entity : entities)
+        {
+            describedByEntity.push_back(describeEntity(registry, entity));
+        }
+
         std::vector<InspectedComponent> result;
         for (const auto& entry : entries_)
         {
-            if (!std::ranges::all_of(entities, [&registry, &entry](const entt::entity entity) {
-                    return entry.has(registry, entity);
+            if (!std::ranges::all_of(describedByEntity, [&entry](const std::vector<DescribedEntry>& described) {
+                    return findDescribed(described, entry) != nullptr;
                 }))
             {
                 continue;
@@ -387,12 +429,17 @@ namespace sage::editor
 
             std::vector<std::vector<InspectorField>> describedFields;
             describedFields.reserve(entities.size());
-            for (const auto entity : entities)
+            ComponentRemovalState removal{.allowed = true};
+            for (auto& described : describedByEntity)
             {
-                describedFields.push_back(entry.describe(registry, entity));
+                auto* component = findDescribed(described, entry);
+                describedFields.push_back(std::move(component->description.fields));
+                if (removal.allowed)
+                {
+                    removal = canRemoveFromDescription(entry, described, true);
+                }
             }
 
-            const auto removal = CanRemove(registry, entry.componentId, entities);
             InspectedComponent component{
                 .componentId = entry.componentId,
                 .displayName = entry.displayName,
@@ -441,17 +488,17 @@ namespace sage::editor
         // Keep the editor identity first; it is the user's primary handle for scene objects.
         registry.Register<sgTransform>("Transform");
         registry.Register<PersistentEntityId>("Persistent Entity Id");
-        registry.Register<AssetReference>("Asset Reference", ComponentRegistrationOptions{.removable = true});
+        registry.Register<AssetReference>("Asset Reference", true);
         registry.Register<MetaData>("Meta Data");
-        registry.Register<Renderable>("Renderable", ComponentRegistrationOptions{.removable = true});
-        registry.Register<Collideable>("Collideable", ComponentRegistrationOptions{.removable = true});
-        registry.Register<NavigationSurface>("Navigation Surface", ComponentRegistrationOptions{.removable = true});
-        registry.Register<NavigationObstacle>("Navigation Obstacle", ComponentRegistrationOptions{.removable = true});
-        registry.Register<TriggerVolume>("Trigger Volume", ComponentRegistrationOptions{.removable = true});
-        registry.Register<CursorTarget>("Cursor Target", ComponentRegistrationOptions{.removable = true});
-        registry.Register<Light>("Light", ComponentRegistrationOptions{.removable = true});
-        registry.Register<Spawner>("Spawner", ComponentRegistrationOptions{.removable = true});
-        registry.Register<Animation>("Animation", ComponentRegistrationOptions{.removable = true});
+        registry.Register<Renderable>("Renderable", true);
+        registry.Register<Collideable>("Collideable", true);
+        registry.Register<NavigationSurface>("Navigation Surface", true);
+        registry.Register<NavigationObstacle>("Navigation Obstacle", true);
+        registry.Register<TriggerVolume>("Trigger Volume", true);
+        registry.Register<CursorTarget>("Cursor Target", true);
+        registry.Register<Light>("Light", true);
+        registry.Register<Spawner>("Spawner", true);
+        registry.Register<Animation>("Animation", true);
         registry.Register<MoveableActor>("Moveable Actor", /*removable=*/true);
         registry.Register<ScriptComponent>("Script", /*removable=*/true);
     }

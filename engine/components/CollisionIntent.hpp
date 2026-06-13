@@ -2,10 +2,7 @@
 
 #include "engine/CollisionLayers.hpp"
 
-#include "cereal/types/string.hpp"
-
 #include <cstdint>
-#include <string>
 
 namespace sage
 {

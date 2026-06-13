@@ -25,30 +25,6 @@ namespace sage::editor
         return entt::type_hash<std::remove_cvref_t<T>>::value();
     }
 
-    struct ComponentRequirement
-    {
-        EditorComponentId componentId{};
-        std::function<bool(const entt::registry&, entt::entity)> applies;
-    };
-
-    template <class T>
-    struct RequiresComponent
-    {
-        std::function<bool(const entt::registry&, entt::entity)> when;
-
-        [[nodiscard]] operator ComponentRequirement() const
-        {
-            return ComponentRequirement{
-                .componentId = ComponentIdOf<T>(),
-                .applies = when};
-        }
-    };
-
-    struct ComponentRegistrationOptions
-    {
-        bool removable = false;
-    };
-
     struct ComponentRemovalState
     {
         bool allowed = false;
@@ -112,6 +88,12 @@ namespace sage::editor
         FieldValue value;
     };
 
+    struct ComponentDescription
+    {
+        std::vector<InspectorField> fields;
+        std::vector<EditorComponentId> requirements;
+    };
+
     namespace detail
     {
         template <class T>
@@ -135,7 +117,7 @@ namespace sage::editor
     class ComponentInspector
     {
         std::vector<InspectorField> fields_;
-        std::vector<ComponentRequirement> requirements_;
+        std::vector<EditorComponentId> requirements_;
         std::string labelPrefix_;
         bool editableScope_ = true;
         // The entity being described; lets bespoke fields source options from
@@ -167,23 +149,10 @@ namespace sage::editor
         }
 
       public:
-        void requiresComponent(ComponentRequirement requirement)
-        {
-            requirements_.push_back(std::move(requirement));
-        }
-
         template <class T>
-        void requiresComponent(std::function<bool(const entt::registry&, entt::entity)> when = {})
+        void requiresComponent()
         {
-            requirements_.push_back(ComponentRequirement{
-                .componentId = ComponentIdOf<T>(),
-                .applies = std::move(when)});
-        }
-
-        template <class T>
-        void require(std::function<bool(const entt::registry&, entt::entity)> when = {})
-        {
-            requiresComponent<T>(std::move(when));
+            requirements_.push_back(ComponentIdOf<T>());
         }
 
         // --- Informational row ---------------------------------------------------------
@@ -350,14 +319,11 @@ namespace sage::editor
             editableScope_ = savedScope;
         }
 
-        [[nodiscard]] std::vector<InspectorField> Take() &&
+        [[nodiscard]] ComponentDescription Take() &&
         {
-            return std::move(fields_);
-        }
-
-        [[nodiscard]] std::vector<ComponentRequirement> TakeRequirements() &&
-        {
-            return std::move(requirements_);
+            return ComponentDescription{
+                .fields = std::move(fields_),
+                .requirements = std::move(requirements_)};
         }
     };
 
@@ -381,18 +347,31 @@ namespace sage::editor
             EditorComponentId componentId{};
             std::string displayName;
             std::function<bool(const entt::registry&, entt::entity)> has;
-            std::function<std::vector<InspectorField>(entt::registry&, entt::entity)> describe;
-            std::function<std::vector<ComponentRequirement>(entt::registry&, entt::entity)> options;
+            std::function<ComponentDescription(entt::registry&, entt::entity)> describe;
             bool removable = false;
+        };
+
+        struct DescribedEntry
+        {
+            const Entry* entry = nullptr;
+            ComponentDescription description;
         };
 
         std::vector<Entry> entries_;
 
         [[nodiscard]] const Entry* findEntry(EditorComponentId componentId) const;
+        [[nodiscard]] std::vector<DescribedEntry> describeEntity(entt::registry& registry, entt::entity entity)
+            const;
+        [[nodiscard]] static DescribedEntry* findDescribed(
+            std::vector<DescribedEntry>& described, const Entry& entry);
+        [[nodiscard]] static const DescribedEntry* findDescribed(
+            const std::vector<DescribedEntry>& described, const Entry& entry);
+        [[nodiscard]] ComponentRemovalState canRemoveFromDescription(
+            const Entry& target, const std::vector<DescribedEntry>& described, bool multiSelection) const;
 
       public:
         template <class T>
-        void Register(std::string displayName, ComponentRegistrationOptions options = {})
+        void Register(std::string displayName, bool removable = false)
         {
             entries_.push_back(
                 {ComponentIdOf<T>(),
@@ -406,23 +385,9 @@ namespace sage::editor
                      r.template get<T>(e).define_editor_options(ci);
                      return std::move(ci).Take();
                  },
-                 [](entt::registry& r, const entt::entity e) {
-                     ComponentInspector ci;
-                     ci.SetContext(&r, e);
-                     r.template get<T>(e).define_editor_options(ci);
-                     return std::move(ci).TakeRequirements();
-                 },
-                 options.removable});
+                 removable});
         }
 
-        template <class T>
-        void Register(std::string displayName, const bool removable)
-        {
-            Register<T>(std::move(displayName), ComponentRegistrationOptions{.removable = removable});
-        }
-
-        [[nodiscard]] ComponentRemovalState CanRemove(
-            entt::registry& registry, EditorComponentId componentId, entt::entity entity) const;
         [[nodiscard]] ComponentRemovalState CanRemove(
             entt::registry& registry, EditorComponentId componentId, const std::vector<entt::entity>& entities)
             const;
