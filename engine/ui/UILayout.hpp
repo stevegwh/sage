@@ -6,23 +6,18 @@
 #pragma once
 
 #include "UIBase.hpp"
+#include "UIElements.hpp"
 
 #include "raylib.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace sage
 {
-    class TextBox;
-    class Button;
-    class Checkbox;
-    class DropdownList;
-    class TitleBar;
-    class ImageBox;
-    class GameWindowButton;
-    class CloseButton;
     class TableGrid;
     class TableCell;
     class TableRow;
@@ -83,19 +78,62 @@ namespace sage
         float requestedWidth{};
         bool autoSize = true;
 
+        // Attaches el as this cell's single element and lays it out.
+        template <typename T>
+        T* attachElement(std::unique_ptr<T> el)
+        {
+            T* raw = el.get();
+            element = std::move(el);
+            InitLayout();
+            return raw;
+        }
+
       public:
-        // TODO: use polymorphism for any duplicates
-        TextBox* CreateTextbox(std::unique_ptr<TextBox> _textBox, const std::string& _content);
-        Button* CreateButton(std::unique_ptr<Button> _button, const std::string& _label);
-        Checkbox* CreateCheckbox(std::unique_ptr<Checkbox> _checkbox);
-        DropdownList* CreateDropdownList(std::unique_ptr<DropdownList> _dropdown);
-        TitleBar* CreateTitleBar(std::unique_ptr<TitleBar> _titleBar, const std::string& _title);
-        ImageBox* CreateImagebox(std::unique_ptr<ImageBox> _imageBox);
-        CloseButton* CreateCloseButton(std::unique_ptr<CloseButton> _closeButton);
-        GameWindowButton* CreateGameWindowButton(std::unique_ptr<GameWindowButton> _button);
+        // The engine that owns this cell's window. Valid for windows created
+        // through GameUIEngine::CreateWindow* (asserts otherwise).
+        [[nodiscard]] GameUIEngine* GetEngine();
+
+        // Constructs a CellElement subclass in place as this cell's element:
+        // T(engine, this, args...). Use this for element types without a
+        // dedicated Create* method below (e.g. game-side subclasses).
+        template <typename T, typename... Args>
+        T* CreateElement(Args&&... args)
+        {
+            return attachElement(std::make_unique<T>(GetEngine(), this, std::forward<Args>(args)...));
+        }
+
+        TextBox* CreateTextbox(
+            const std::string& _content,
+            const TextBox::FontInfo& _fontInfo = {},
+            VertAlignment _vertAlignment = VertAlignment::TOP,
+            HoriAlignment _horiAlignment = HoriAlignment::LEFT);
+        Button* CreateButton(
+            const std::string& _label,
+            std::function<void()> _onPress = {},
+            const TextBox::FontInfo& _fontInfo = {},
+            VertAlignment _vertAlignment = VertAlignment::MIDDLE,
+            HoriAlignment _horiAlignment = HoriAlignment::CENTER);
+        Checkbox* CreateCheckbox(
+            bool _checked = false,
+            VertAlignment _vertAlignment = VertAlignment::MIDDLE,
+            HoriAlignment _horiAlignment = HoriAlignment::CENTER);
+        DropdownList* CreateDropdownList(
+            std::vector<std::string> _options = {},
+            std::size_t _selectedIndex = 0,
+            const TextBox::FontInfo& _fontInfo = {},
+            VertAlignment _vertAlignment = VertAlignment::MIDDLE,
+            HoriAlignment _horiAlignment = HoriAlignment::LEFT);
+        TitleBar* CreateTitleBar(const std::string& _title, const TextBox::FontInfo& _fontInfo = {});
+        ImageBox* CreateImagebox(
+            const Texture& _tex,
+            ImageBox::OverflowBehaviour _behaviour = ImageBox::OverflowBehaviour::SHRINK_TO_FIT,
+            VertAlignment _vertAlignment = VertAlignment::TOP,
+            HoriAlignment _horiAlignment = HoriAlignment::LEFT);
+        CloseButton* CreateCloseButton(const Texture& _tex, bool _closeDeletesWindow = false);
+        GameWindowButton* CreateGameWindowButton(const Texture& _tex, Window* _toOpen);
         TableGrid* CreateTableGrid(int rows, int cols, float cellSpacing = 0, Padding _padding = {0, 0, 0, 0});
         Table* CreateTable(Padding _padding = {0, 0, 0, 0});
-        Table* CreateTable(float _requestedHeight, Padding _padding = {0, 0, 0, 0});
+        Table* CreateTable(Percent _requestedHeight, Padding _padding = {0, 0, 0, 0});
         void InitLayout() override;
         ~TableCell() override = default;
         explicit TableCell(TableRow* _parent, Padding _padding = {0, 0, 0, 0});
@@ -109,7 +147,7 @@ namespace sage
 
       public:
         TableCell* CreateTableCell(Padding _padding = {0, 0, 0, 0});
-        TableCell* CreateTableCell(float _requestedWidth, Padding _padding = {0, 0, 0, 0});
+        TableCell* CreateTableCell(Percent _requestedWidth, Padding _padding = {0, 0, 0, 0});
         void InitLayout() override;
         ~TableRow() override = default;
         explicit TableRow(Table* _parent, Padding _padding = {0, 0, 0, 0});
@@ -134,7 +172,7 @@ namespace sage
       public:
         TableRowGrid* CreateTableRowGrid(int cols, float cellSpacing, Padding _padding);
         TableRow* CreateTableRow(Padding _padding = {0, 0, 0, 0});
-        TableRow* CreateTableRow(float _requestedHeight, Padding _padding = {0, 0, 0, 0});
+        TableRow* CreateTableRow(Percent _requestedHeight, Padding _padding = {0, 0, 0, 0});
         void InitLayout() override;
         ~Table() override = default;
         explicit Table(Window* _parent, Padding _padding = {0, 0, 0, 0});

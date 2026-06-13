@@ -326,11 +326,12 @@ namespace sage
         return table;
     }
 
-    Table* Window::CreateTable(const float _requestedHeight, const Padding _padding)
+    Table* Window::CreateTable(const Percent _requestedHeight, const Padding _padding)
     {
+        assert(_requestedHeight.value <= 100 && _requestedHeight.value >= 0);
         const auto table = CreateTable(_padding);
         table->autoSize = false;
-        table->requestedHeight = _requestedHeight;
+        table->requestedHeight = _requestedHeight.value;
         InitLayout();
         return table;
     }

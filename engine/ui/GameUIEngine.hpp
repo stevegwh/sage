@@ -7,6 +7,7 @@
 
 #include "../UserInput.hpp"
 #include "UIBase.hpp"
+#include "UITheme.hpp"
 #include "UIWindow.hpp"
 
 #include "entt/entt.hpp"
@@ -24,6 +25,7 @@ namespace sage
     class EngineSystems;
     class UserInput;
     class Cursor;
+    class UIBuilder;
     struct Settings;
 
     class GameUIEngine
@@ -48,8 +50,16 @@ namespace sage
         UserInput* userInput;
         Cursor* cursor;
         Settings* settings;
+        UITheme theme;
         GameUIEngine(entt::registry* _registry, const EngineSystems* _sys);
         virtual ~GameUIEngine() = default;
+
+        // Mutable access so consumers can load chrome textures / tweak defaults.
+        [[nodiscard]] UITheme& Theme() { return theme; }
+        [[nodiscard]] const UITheme& Theme() const { return theme; }
+
+        // Entry point for the fluent layout API: engine->Build().Window(...)...
+        [[nodiscard]] UIBuilder Build();
 
         void BringClickedWindowToFront(Window* clicked);
         void CreateErrorMessage(const std::string& msg);
@@ -60,6 +70,7 @@ namespace sage
             auto window = std::make_unique<T>(std::forward<Args>(args)...);
             auto* created = window.get();
             tooltipWindow = std::move(window);
+            created->uiEngine = this;
             created->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
                 [created](Vector2 prev, Vector2 current) { created->OnWindowUpdate(prev, current); });
             created->InitLayout();
@@ -72,6 +83,7 @@ namespace sage
             auto window = std::make_unique<T>(std::forward<Args>(args)...);
             auto* created = window.get();
             windows.push_back(std::move(window));
+            created->uiEngine = this;
             created->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
                 [created](Vector2 prev, Vector2 current) { created->OnWindowUpdate(prev, current); });
             created->InitLayout();
@@ -84,6 +96,7 @@ namespace sage
             auto window = std::make_unique<T>(std::forward<Args>(args)...);
             auto* created = window.get();
             windows.push_back(std::move(window));
+            created->uiEngine = this;
             created->windowUpdateSub = userInput->onWindowUpdate.Subscribe(
                 [created](Vector2 prev, Vector2 current) { created->OnWindowUpdate(prev, current); });
             created->InitLayout();

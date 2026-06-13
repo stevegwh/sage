@@ -554,19 +554,13 @@ namespace sage
         return row;
     }
 
-    /**
-     *
-     * @param _requestedHeight The desired height of the cell as a percent (0-100)
-     * @param _padding
-     * @return
-     */
-    TableRow* Table::CreateTableRow(const float _requestedHeight, Padding _padding)
+    TableRow* Table::CreateTableRow(const Percent _requestedHeight, Padding _padding)
     {
-        assert(_requestedHeight <= 100 && _requestedHeight >= 0);
+        assert(_requestedHeight.value <= 100 && _requestedHeight.value >= 0);
         children.push_back(std::make_unique<TableRow>(this, _padding));
         const auto& row = dynamic_cast<TableRow*>(children.back().get());
         row->autoSize = false;
-        row->requestedHeight = _requestedHeight;
+        row->requestedHeight = _requestedHeight.value;
         InitLayout();
         return row;
     }
@@ -579,19 +573,13 @@ namespace sage
         return cell;
     }
 
-    /**
-     *
-     * @param _requestedWidth The desired width of the cell as a percent (0-100)
-     * @param _padding
-     * @return
-     */
-    TableCell* TableRow::CreateTableCell(float _requestedWidth, Padding _padding)
+    TableCell* TableRow::CreateTableCell(const Percent _requestedWidth, Padding _padding)
     {
-        assert(_requestedWidth <= 100 && _requestedWidth >= 0);
+        assert(_requestedWidth.value <= 100 && _requestedWidth.value >= 0);
         children.push_back(std::make_unique<TableCell>(this, _padding));
         const auto& cell = dynamic_cast<TableCell*>(children.back().get());
         cell->autoSize = false;
-        cell->requestedWidth = _requestedWidth;
+        cell->requestedWidth = _requestedWidth.value;
         InitLayout();
         return cell;
     }
@@ -604,72 +592,77 @@ namespace sage
     {
     }
 
-    TitleBar* TableCell::CreateTitleBar(std::unique_ptr<TitleBar> _titleBar, const std::string& _title)
+    GameUIEngine* TableCell::GetEngine()
     {
-        element = std::move(_titleBar);
-        auto* titleBar = dynamic_cast<TitleBar*>(element.value().get());
+        auto* engine = GetWindow()->uiEngine;
+        assert(engine != nullptr); // window must be created through GameUIEngine::CreateWindow*
+        return engine;
+    }
+
+    TitleBar* TableCell::CreateTitleBar(const std::string& _title, const TextBox::FontInfo& _fontInfo)
+    {
+        auto* titleBar = CreateElement<TitleBar>(_fontInfo);
         titleBar->SetContent(_title);
-        InitLayout();
         return titleBar;
     }
 
-    CloseButton* TableCell::CreateCloseButton(std::unique_ptr<CloseButton> _closeButton)
+    CloseButton* TableCell::CreateCloseButton(const Texture& _tex, const bool _closeDeletesWindow)
     {
-        element = std::move(_closeButton);
-        auto* closeButton = dynamic_cast<CloseButton*>(element.value().get());
-        InitLayout();
-        return closeButton;
+        return CreateElement<CloseButton>(_tex, _closeDeletesWindow);
     }
 
-    TextBox* TableCell::CreateTextbox(std::unique_ptr<TextBox> _textBox, const std::string& _content)
+    TextBox* TableCell::CreateTextbox(
+        const std::string& _content,
+        const TextBox::FontInfo& _fontInfo,
+        const VertAlignment _vertAlignment,
+        const HoriAlignment _horiAlignment)
     {
-        element = std::move(_textBox);
-        auto* textbox = dynamic_cast<TextBox*>(element.value().get());
+        auto* textbox = CreateElement<TextBox>(_fontInfo, _vertAlignment, _horiAlignment);
         textbox->SetContent(_content);
-        InitLayout();
         return textbox;
     }
 
-    Button* TableCell::CreateButton(std::unique_ptr<Button> _button, const std::string& _label)
+    Button* TableCell::CreateButton(
+        const std::string& _label,
+        std::function<void()> _onPress,
+        const TextBox::FontInfo& _fontInfo,
+        const VertAlignment _vertAlignment,
+        const HoriAlignment _horiAlignment)
     {
-        element = std::move(_button);
-        auto* button = dynamic_cast<Button*>(element.value().get());
+        auto* button = CreateElement<Button>(std::move(_onPress), _fontInfo, _vertAlignment, _horiAlignment);
         button->SetContent(_label);
-        InitLayout();
         return button;
     }
 
-    Checkbox* TableCell::CreateCheckbox(std::unique_ptr<Checkbox> _checkbox)
+    Checkbox* TableCell::CreateCheckbox(
+        const bool _checked, const VertAlignment _vertAlignment, const HoriAlignment _horiAlignment)
     {
-        element = std::move(_checkbox);
-        auto* checkbox = dynamic_cast<Checkbox*>(element.value().get());
-        InitLayout();
-        InitLayout();
-        return checkbox;
+        return CreateElement<Checkbox>(_checked, _vertAlignment, _horiAlignment);
     }
 
-    DropdownList* TableCell::CreateDropdownList(std::unique_ptr<DropdownList> _dropdown)
+    DropdownList* TableCell::CreateDropdownList(
+        std::vector<std::string> _options,
+        const std::size_t _selectedIndex,
+        const TextBox::FontInfo& _fontInfo,
+        const VertAlignment _vertAlignment,
+        const HoriAlignment _horiAlignment)
     {
-        element = std::move(_dropdown);
-        auto* dropdown = dynamic_cast<DropdownList*>(element.value().get());
-        InitLayout();
-        return dropdown;
+        return CreateElement<DropdownList>(
+            std::move(_options), _selectedIndex, _fontInfo, _vertAlignment, _horiAlignment);
     }
 
-    ImageBox* TableCell::CreateImagebox(std::unique_ptr<ImageBox> _imageBox)
+    ImageBox* TableCell::CreateImagebox(
+        const Texture& _tex,
+        const ImageBox::OverflowBehaviour _behaviour,
+        const VertAlignment _vertAlignment,
+        const HoriAlignment _horiAlignment)
     {
-        element = std::move(_imageBox);
-        auto* image = dynamic_cast<ImageBox*>(element.value().get());
-        InitLayout();
-        return image;
+        return CreateElement<ImageBox>(_tex, _behaviour, _vertAlignment, _horiAlignment);
     }
 
-    GameWindowButton* TableCell::CreateGameWindowButton(std::unique_ptr<GameWindowButton> _button)
+    GameWindowButton* TableCell::CreateGameWindowButton(const Texture& _tex, Window* _toOpen)
     {
-        element = std::move(_button);
-        auto* button = dynamic_cast<GameWindowButton*>(element.value().get());
-        InitLayout();
-        return button;
+        return CreateElement<GameWindowButton>(_tex, _toOpen);
     }
 
     TableGrid* TableCell::CreateTableGrid(
@@ -699,11 +692,12 @@ namespace sage
         return table;
     }
 
-    Table* TableCell::CreateTable(const float _requestedHeight, const Padding _padding)
+    Table* TableCell::CreateTable(const Percent _requestedHeight, const Padding _padding)
     {
+        assert(_requestedHeight.value <= 100 && _requestedHeight.value >= 0);
         const auto table = CreateTable(_padding);
         table->autoSize = false;
-        table->requestedHeight = _requestedHeight;
+        table->requestedHeight = _requestedHeight.value;
         InitLayout();
         return table;
     }

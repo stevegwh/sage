@@ -57,6 +57,28 @@ namespace sage
         float right = 0;
     };
 
+    // A percentage (0-100) of the parent's size along one axis. Wrapping the
+    // float stops percent-based Create* overloads being confused with the
+    // Padding overloads at the call site.
+    struct Percent
+    {
+        float value = 0;
+    };
+
+    // Spelling `20_pct` for Percent{20} at call sites. Bring into scope with
+    // `using namespace sage::literals;`.
+    inline namespace literals
+    {
+        constexpr Percent operator""_pct(unsigned long long v)
+        {
+            return Percent{static_cast<float>(v)};
+        }
+        constexpr Percent operator""_pct(long double v)
+        {
+            return Percent{static_cast<float>(v)};
+        }
+    } // namespace literals
+
     class UIElement
     {
       protected:

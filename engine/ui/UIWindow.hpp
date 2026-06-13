@@ -17,6 +17,7 @@
 
 namespace sage
 {
+    class GameUIEngine;
     class Scrollbar;
     struct Settings;
 
@@ -52,7 +53,8 @@ namespace sage
         Event<> onShow;
         Subscription windowUpdateSub{};
         bool mouseHover = false;
-        Settings* settings{}; // for screen width/height
+        Settings* settings{};       // for screen width/height
+        GameUIEngine* uiEngine{};   // set by GameUIEngine::CreateWindow*; lets cells reach the engine
 
         void SetPos(float x, float y) override;
         void FinalizeLayout() override;
@@ -63,7 +65,7 @@ namespace sage
         void Update() override;
         TableGrid* CreateTableGrid(int rows, int cols, float cellSpacing = 0, Padding _padding = {0, 0, 0, 0});
         Table* CreateTable(Padding _padding = {0, 0, 0, 0});
-        Table* CreateTable(float _requestedHeight, Padding _padding = {0, 0, 0, 0});
+        Table* CreateTable(Percent _requestedHeight, Padding _padding = {0, 0, 0, 0});
         void ToggleHide();
         void Show();
         void Hide();
