@@ -177,6 +177,23 @@ namespace sage::editor
             }
         };
 
+        // Restores Collideable::blocksNavigation without changing the serialized
+        // Collideable blob layout. targetKind: 0 = layout entity, 2 = trigger,
+        // 3 = terrain index. Trailing section — old maps simply lack it. Must
+        // stay in sync with the game loader's EntityNavigationBlockRecord
+        // (LevelLayoutLoader.cpp).
+        struct EntityNavigationBlockRecord
+        {
+            std::uint8_t targetKind = 0;
+            std::uint32_t targetId = 0;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(targetKind, targetId);
+            }
+        };
+
         bool hasMoreSerializedData(std::istream& stream)
         {
             return stream.peek() != std::char_traits<char>::eof();
@@ -428,11 +445,12 @@ namespace sage::editor
                     }
                 }
 
+                std::vector<entt::entity> loadedTerrainEntities;
                 if (hasMoreSerializedData(stream))
                 {
-                    // Guarded: this is the final section, so a short/incompatible
-                    // terrain stream (pre-Collideable format) degrades to "no
-                    // terrains" instead of failing the whole map.
+                    // Guarded so a short/incompatible terrain stream
+                    // (pre-Collideable format) degrades to "no terrains"
+                    // instead of failing the whole map.
                     try
                     {
                         std::vector<TerrainRecord> terrains;
@@ -460,12 +478,42 @@ namespace sage::editor
                             collideable.isStatic = true;
                             // The mesh, shader and collision bounds are derived after
                             // load (EditorScene::refreshAfterMapLoad).
+                            loadedTerrainEntities.push_back(entity);
                         }
                     }
                     catch (const cereal::Exception& e)
                     {
                         std::cerr << "EditorMapLoader: could not read terrain section (" << e.what()
                                   << "), skipping.\n";
+                    }
+                }
+
+                if (hasMoreSerializedData(stream))
+                {
+                    std::vector<EntityNavigationBlockRecord> navigationBlockers;
+                    input(navigationBlockers);
+                    for (const auto& record : navigationBlockers)
+                    {
+                        entt::entity target = entt::null;
+                        switch (record.targetKind)
+                        {
+                        case 0:
+                            if (const auto iter = idMap.find(record.targetId); iter != idMap.end())
+                                target = iter->second;
+                            break;
+                        case 2:
+                            if (record.targetId < loadedTriggerEntities.size())
+                                target = loadedTriggerEntities[record.targetId];
+                            break;
+                        case 3:
+                            if (record.targetId < loadedTerrainEntities.size())
+                                target = loadedTerrainEntities[record.targetId];
+                            break;
+                        default:
+                            break;
+                        }
+                        if (target == entt::null || !destination->all_of<Collideable>(target)) continue;
+                        destination->get<Collideable>(target).blocksNavigation = true;
                     }
                 }
             });
@@ -642,11 +690,13 @@ namespace sage::editor
                 output(moveables);
 
                 std::vector<TerrainRecord> terrains;
+                std::vector<entt::entity> terrainEntities;
                 for (const auto entity : source.view<EditorMapEntity, sgTransform, Terrain>())
                 {
                     const auto& terrain = source.get<Terrain>(entity);
                     Collideable collideable{};
                     if (const auto* existing = source.try_get<Collideable>(entity)) collideable = *existing;
+                    terrainEntities.push_back(entity);
                     terrains.push_back(
                         TerrainRecord{
                             source.get<sgTransform>(entity).GetWorldPos(),
@@ -656,6 +706,27 @@ namespace sage::editor
                             terrain.heights});
                 }
                 output(terrains);
+
+                std::vector<EntityNavigationBlockRecord> navigationBlockers;
+                const auto appendNavigationBlocker =
+                    [&](const entt::entity entity, const std::uint8_t kind, const std::uint32_t id) {
+                        const auto* collideable = source.try_get<Collideable>(entity);
+                        if (collideable == nullptr || !collideable->blocksNavigation) return;
+                        navigationBlockers.push_back(EntityNavigationBlockRecord{kind, id});
+                    };
+                for (const auto entity : emittedEntities)
+                {
+                    appendNavigationBlocker(entity, 0, entt::entt_traits<entt::entity>::to_entity(entity));
+                }
+                for (std::size_t i = 0; i < triggerEntities.size(); ++i)
+                {
+                    appendNavigationBlocker(triggerEntities[i], 2, static_cast<std::uint32_t>(i));
+                }
+                for (std::size_t i = 0; i < terrainEntities.size(); ++i)
+                {
+                    appendNavigationBlocker(terrainEntities[i], 3, static_cast<std::uint32_t>(i));
+                }
+                output(navigationBlockers);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

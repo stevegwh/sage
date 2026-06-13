@@ -88,18 +88,37 @@ namespace sage
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        // Game UI shares the (docked) render viewport so it scales to and centres
+        // in the same area as the game's 3D view.
+        gameUiTexture =
+            LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         rlImGuiSetup(true);
     }
 
     void EditorApplication::draw()
     {
+        const bool playing = scene->IsPlaying();
+
         BeginTextureMode(renderTexture);
         ClearBackground(BLANK);
-        BeginMode3D(*systems->camera->getRaylibCam());
+        // ActiveCamera() is the running game's camera during play, the editor's
+        // otherwise.
+        BeginMode3D(*scene->ActiveCamera());
         scene->Draw3D();
         EndMode3D();
         DrawViewportFpsCounter(*settings);
         EndTextureMode();
+
+        if (playing)
+        {
+            // Render the game UI into a viewport-sized texture at viewport-local
+            // coords (so its scissor clipping stays consistent), then blit it at
+            // the viewport offset where the game's mouse mapping expects it.
+            BeginTextureMode(gameUiTexture);
+            ClearBackground(BLANK);
+            scene->DrawGame2D();
+            EndTextureMode();
+        }
 
         BeginDrawing();
         ClearBackground(BLACK);
@@ -113,6 +132,15 @@ namespace sage
             {0, 0, renderViewport.x, -renderViewport.y},
             {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
             WHITE);
+
+        if (playing)
+        {
+            DrawTextureRec(
+                gameUiTexture.texture,
+                {0, 0, renderViewport.x, -renderViewport.y},
+                {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
+                WHITE);
+        }
 
         scene->DrawOverlay2D();
         scene->DrawImGui(exitWindowRequested, exitWindow);
@@ -175,6 +203,10 @@ namespace sage
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+
+        UnloadRenderTexture(gameUiTexture);
+        gameUiTexture =
+            LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
     }
 
     void EditorApplication::handleViewportFullscreenToggle()
@@ -236,6 +268,7 @@ namespace sage
     {
         rlImGuiShutdown();
         UnloadRenderTexture(renderTexture);
+        UnloadRenderTexture(gameUiTexture);
         CloseWindow();
     }
 } // namespace sage

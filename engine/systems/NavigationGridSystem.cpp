@@ -8,7 +8,10 @@
 #include "components/Terrain.hpp"
 #include <Serializer.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <limits>
 #include <queue>
 
 Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
@@ -24,6 +27,13 @@ Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
 
 namespace sage
 {
+    namespace
+    {
+        bool isNavigationBlocker(const Collideable& collideable)
+        {
+            return collideable.blocksNavigation;
+        }
+    } // namespace
 
     inline double heuristic(GridSquare a, GridSquare b)
     {
@@ -156,22 +166,22 @@ namespace sage
     void NavigationGridSystem::MarkSquareAreaOccupied(
         const BoundingBox& occupant, bool occupied, entt::entity occupantEntity)
     {
-        GridSquare topLeftIndex{};
-        GridSquare bottomRightIndex{};
-        if (!WorldToGridSpace(occupant.min, topLeftIndex) || !WorldToGridSpace(occupant.max, bottomRightIndex))
+        GridSquare minRange{};
+        GridSquare maxRange{};
+        if (!getGridRangeForBounds(occupant, minRange, maxRange))
         {
             return;
         }
 
-        int min_col = std::min(topLeftIndex.col, bottomRightIndex.col);
-        int max_col = std::max(topLeftIndex.col, bottomRightIndex.col);
-        int min_row = std::min(topLeftIndex.row, bottomRightIndex.row);
-        int max_row = std::max(topLeftIndex.row, bottomRightIndex.row);
-
-        for (int row = min_row; row <= max_row; ++row)
+        for (int row = minRange.row; row <= maxRange.row; ++row)
         {
-            for (int col = min_col; col <= max_col; ++col)
+            for (int col = minRange.col; col <= maxRange.col; ++col)
             {
+                if (!occupied && occupantEntity != entt::null && gridSquares[row][col].occupant != occupantEntity)
+                {
+                    continue;
+                }
+
                 gridSquares[row][col].occupied = occupied;
                 gridSquares[row][col].drawDebug = occupied;
                 if (occupied)
@@ -229,13 +239,28 @@ namespace sage
      */
     bool NavigationGridSystem::CheckBoundingBoxAreaUnoccupied(Vector3 worldPos, const BoundingBox& bb) const
     {
-        GridSquare gridPos{};
-        if (!WorldToGridSpace(worldPos, gridPos))
+        const Vector3 center = {
+            (bb.min.x + bb.max.x) * 0.5f,
+            (bb.min.y + bb.max.y) * 0.5f,
+            (bb.min.z + bb.max.z) * 0.5f};
+        const Vector3 offset = Vector3Subtract(worldPos, center);
+        const BoundingBox translated = {Vector3Add(bb.min, offset), Vector3Add(bb.max, offset)};
+
+        GridSquare minRange{};
+        GridSquare maxRange{};
+        if (!getGridRangeForBounds(translated, minRange, maxRange))
         {
             return false;
         }
 
-        return CheckBoundingBoxAreaUnoccupied(gridPos, bb);
+        for (int row = minRange.row; row <= maxRange.row; ++row)
+        {
+            for (int col = minRange.col; col <= maxRange.col; ++col)
+            {
+                if (gridSquares[row][col].occupied) return false;
+            }
+        }
+        return true;
     }
 
     bool NavigationGridSystem::CheckBoundingBoxAreaUnoccupied(GridSquare square, const BoundingBox& bb) const
@@ -251,6 +276,14 @@ namespace sage
             extents -= bb_min;
         }
         return checkExtents(square, extents);
+    }
+
+    bool NavigationGridSystem::CheckEntityAreaUnoccupied(const entt::entity entity, const Vector3 worldPos) const
+    {
+        GridSquare square{};
+        BoundingBox footprintOffsets{};
+        return WorldToGridSpace(worldPos, square) && getFootprintOffsets(entity, footprintOffsets) &&
+               checkFootprint(square, footprintOffsets);
     }
 
     entt::entity NavigationGridSystem::CheckSingleSquareOccupant(Vector3 worldPos) const
@@ -542,6 +575,62 @@ namespace sage
         return true;
     }
 
+    bool NavigationGridSystem::getGridRangeForBounds(
+        const BoundingBox& bounds, GridSquare& minRange, GridSquare& maxRange) const
+    {
+        if (gridSquares.empty() || gridSquares.front().empty()) return false;
+
+        const float minX = std::min(bounds.min.x, bounds.max.x);
+        const float minZ = std::min(bounds.min.z, bounds.max.z);
+        const float maxX = std::max(bounds.min.x, bounds.max.x);
+        const float maxZ = std::max(bounds.min.z, bounds.max.z);
+
+        // Treat max edges as exclusive so a box ending exactly on a grid line
+        // does not occupy the cell on the other side of that line.
+        const Vector3 minPoint{minX, 0.0f, minZ};
+        const Vector3 maxPoint{
+            std::nextafter(maxX, minX),
+            0.0f,
+            std::nextafter(maxZ, minZ)};
+
+        GridSquare minIndex{};
+        GridSquare maxIndex{};
+        WorldToGridSpace(minPoint, minIndex);
+        WorldToGridSpace(maxPoint, maxIndex);
+
+        const int rawMinCol = std::min(minIndex.col, maxIndex.col);
+        const int rawMaxCol = std::max(minIndex.col, maxIndex.col);
+        const int rawMinRow = std::min(minIndex.row, maxIndex.row);
+        const int rawMaxRow = std::max(minIndex.row, maxIndex.row);
+
+        const int gridWidth = static_cast<int>(gridSquares.front().size());
+        const int gridHeight = static_cast<int>(gridSquares.size());
+        if (rawMaxCol < 0 || rawMaxRow < 0 || rawMinCol >= gridWidth || rawMinRow >= gridHeight)
+        {
+            return false;
+        }
+
+        minRange = {std::max(0, rawMinRow), std::max(0, rawMinCol)};
+        maxRange = {std::min(gridHeight - 1, rawMaxRow), std::min(gridWidth - 1, rawMaxCol)};
+        return minRange.row <= maxRange.row && minRange.col <= maxRange.col;
+    }
+
+    bool NavigationGridSystem::getFootprintOffsets(const entt::entity entity, BoundingBox& offsets) const
+    {
+        if (!registry->valid(entity) || !registry->all_of<Collideable, sgTransform>(entity))
+        {
+            return false;
+        }
+
+        const auto& collideable = registry->get<Collideable>(entity);
+        const auto& transform = registry->get<sgTransform>(entity);
+        const Vector3 origin = transform.GetWorldPos();
+        offsets = {
+            Vector3Subtract(collideable.worldBoundingBox.min, origin),
+            Vector3Subtract(collideable.worldBoundingBox.max, origin)};
+        return true;
+    }
+
     bool NavigationGridSystem::GetPathfindRange(
         const entt::entity& actorId, int bounds, GridSquare& minRange, GridSquare& maxRange) const
     {
@@ -593,7 +682,8 @@ namespace sage
         {
             return false;
         }
-        out = gridSquares[gridPos.row][gridPos.col].worldPosMin; // Not centre?
+        out = gridSquares[gridPos.row][gridPos.col].worldPosCentre;
+        out.y = gridSquares[gridPos.row][gridPos.col].heightMap.GetHeight();
         return true;
     }
 
@@ -639,7 +729,7 @@ namespace sage
         const std::vector<std::vector<GridSquare>>& came_from, const GridSquare& start, const GridSquare& finish)
     {
         auto combineWorldPosTerrainHeight = [this](auto gridPos) {
-            Vector3 worldPos = gridSquares[gridPos.row][gridPos.col].worldPosMin;
+            Vector3 worldPos = gridSquares[gridPos.row][gridPos.col].worldPosCentre;
             worldPos.y = gridSquares[gridPos.row][gridPos.col].heightMap.GetHeight();
             return worldPos;
         };
@@ -725,6 +815,36 @@ namespace sage
         return true;
     }
 
+    bool NavigationGridSystem::checkFootprint(const GridSquare square, const BoundingBox& footprintOffsets) const
+    {
+        if (!CheckWithinGridBounds(square)) return false;
+
+        const Vector3 origin = gridSquares[square.row][square.col].worldPosCentre;
+        const BoundingBox footprint = {
+            Vector3Add(origin, footprintOffsets.min),
+            Vector3Add(origin, footprintOffsets.max)};
+
+        GridSquare minRange{};
+        GridSquare maxRange{};
+        if (!getGridRangeForBounds(footprint, minRange, maxRange))
+        {
+            return false;
+        }
+
+        for (int row = minRange.row; row <= maxRange.row; ++row)
+        {
+            for (int col = minRange.col; col <= maxRange.col; ++col)
+            {
+                if (gridSquares[row][col].occupied)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     NavigationGridSquare* NavigationGridSystem::CastRay(
         int currentRow, int currentCol, Vector2 direction, float distance, std::vector<GridSquare>& debugLines)
     {
@@ -757,8 +877,8 @@ namespace sage
 
     GridSquare NavigationGridSystem::FindNextBestLocation(entt::entity entity, GridSquare target) const
     {
-        GridSquare extents{};
-        if (!getExtents(entity, extents))
+        BoundingBox footprintOffsets{};
+        if (!getFootprintOffsets(entity, footprintOffsets))
         {
             return {};
         }
@@ -775,7 +895,7 @@ namespace sage
             return {};
         }
 
-        return FindNextBestLocation(currentPos, target, minRange, maxRange, extents);
+        return FindNextBestLocation(currentPos, target, minRange, maxRange, footprintOffsets);
     }
 
     GridSquare NavigationGridSystem::FindNextBestLocation(
@@ -783,7 +903,7 @@ namespace sage
         GridSquare target,
         const GridSquare minRange,
         const GridSquare maxRange,
-        const GridSquare extents) const
+        const BoundingBox& footprintOffsets) const
     {
         struct Compare
         {
@@ -807,7 +927,7 @@ namespace sage
             auto current = currentPair.second;
 
             // Check if this is a valid and better square
-            if (checkExtents(current, extents))
+            if (checkFootprint(current, footprintOffsets))
             {
                 int score = heuristic(current, target);
                 if (score < bestScore)
@@ -858,17 +978,17 @@ namespace sage
     {
         GridSquare startGridSquare{};
         GridSquare finishGridSquare{};
-        GridSquare extents{};
+        BoundingBox footprintOffsets{};
 
         if (!WorldToGridSpace(startPos, startGridSquare) || !WorldToGridSpace(finishPos, finishGridSquare) ||
-            !getExtents(entity, extents))
+            !getFootprintOffsets(entity, footprintOffsets))
             return {};
 
-        if (!checkExtents(finishGridSquare, extents))
+        if (!checkFootprint(finishGridSquare, footprintOffsets))
         {
             // TODO: Should try to find next best location to "original" destination
             finishGridSquare =
-                FindNextBestLocation(startGridSquare, finishGridSquare, minRange, maxRange, extents);
+                FindNextBestLocation(startGridSquare, finishGridSquare, minRange, maxRange, footprintOffsets);
         }
 
         struct Compare
@@ -911,7 +1031,7 @@ namespace sage
                 const auto next_cost = gridSquares[next.row][next.col].pathfindingCost;
                 const double new_cost = current_cost + next_cost;
 
-                if (CheckWithinBounds(next, minRange, maxRange) && checkExtents(next, extents) &&
+                if (CheckWithinBounds(next, minRange, maxRange) && checkFootprint(next, footprintOffsets) &&
                     (!visited[next.row][next.col] ||
                      (visited[next.row][next.col] && new_cost < cost_so_far[next.row][next.col])) &&
                     !gridSquares.at(next.row).at(next.col).occupied)
@@ -969,16 +1089,16 @@ namespace sage
     {
         GridSquare start{};
         GridSquare finish{};
-        GridSquare extents{};
+        BoundingBox footprintOffsets{};
         if (!WorldToGridSpace(startPos, start) || !WorldToGridSpace(finishPos, finish) ||
-            !getExtents(entity, extents))
+            !getFootprintOffsets(entity, footprintOffsets))
             return {};
 
-        if (!checkExtents(finish, extents))
+        if (!checkFootprint(finish, footprintOffsets))
         {
             // TODO: Should actually try to find next best location to original
             // destination
-            finish = FindNextBestLocation(start, finish, minRange, maxRange, extents);
+            finish = FindNextBestLocation(start, finish, minRange, maxRange, footprintOffsets);
         }
 
         std::vector<std::vector<bool>> visited(maxRange.row, std::vector<bool>(maxRange.col, false));
@@ -1007,7 +1127,7 @@ namespace sage
             {
                 if (GridSquare next = {current.row + dirX, current.col + dirY};
                     CheckWithinBounds(next, minRange, maxRange) && !visited[next.row][next.col] &&
-                    checkExtents(next, extents) && !gridSquares[next.row][next.col].occupied)
+                    checkFootprint(next, footprintOffsets) && !gridSquares[next.row][next.col].occupied)
                 {
                     frontier.emplace(next);
                     visited[next.row][next.col] = true;
@@ -1045,6 +1165,14 @@ namespace sage
         for (const auto& entity : registry->view<Terrain, sgTransform>())
         {
             calculateHeightAndNormalsFromTerrain(entity);
+        }
+        for (const auto& entity : registry->view<Collideable>(entt::exclude<MoveableActor>))
+        {
+            const auto& collideable = registry->get<Collideable>(entity);
+            if (isNavigationBlocker(collideable))
+            {
+                MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
+            }
         }
         std::cout << "FINISH: Initialising grid height and normals \n";
     }

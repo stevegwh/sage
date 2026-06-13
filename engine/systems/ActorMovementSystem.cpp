@@ -94,7 +94,7 @@ namespace sage
         }
 
         const auto& collideable = registry->get<Collideable>(entity);
-        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false);
+        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
 
         const auto& actorTrans = registry->get<sgTransform>(entity);
         //        const auto path =
@@ -172,10 +172,9 @@ namespace sage
     }
 
     bool ActorMovementSystem::isNextPointOccupied(
-        const MoveableActor& moveableActor, const Collideable& collideable) const
+        const entt::entity entity, const MoveableActor& moveableActor) const
     {
-        return !sys->navigationGridSystem->CheckBoundingBoxAreaUnoccupied(
-            moveableActor.path.front(), collideable.worldBoundingBox);
+        return !sys->navigationGridSystem->CheckEntityAreaUnoccupied(entity, moveableActor.path.front());
     }
 
     void ActorMovementSystem::recalculatePath(
@@ -212,7 +211,7 @@ namespace sage
         sys->navigationGridSystem->WorldToGridSpace(moveableActor.path.front(), targetGridPos);
         const auto square = sys->navigationGridSystem->GetGridSquare(targetGridPos.row, targetGridPos.col);
         registry->get<sgTransform>(entity).position.world =
-            {square->worldPosMin.x, square->heightMap.GetHeight(), square->worldPosMin.z};
+            {square->worldPosCentre.x, square->heightMap.GetHeight(), square->worldPosCentre.z};
     }
 
     void ActorMovementSystem::handleDestinationReached(const entt::entity entity, MoveableActor& moveableActor)
@@ -329,7 +328,7 @@ namespace sage
             return;
         }
 
-        if (isNextPointOccupied(moveableActor, collideable))
+        if (isNextPointOccupied(entity, moveableActor))
         {
             // std::cout << std::format(// "Entity {}: Next point occupied, rerouting \n",
             // static_cast<int>(entity));
@@ -374,13 +373,13 @@ namespace sage
         auto fullView = registry->view<MoveableActor, sgTransform, Collideable>();
         for (auto [entity, moveableActor, transform, collideable] : fullView.each())
         {
-            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false);
+            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
             updateActor(entity, moveableActor, transform, collideable);
             // updateActor mutated the transform; refresh the world bbox so the re-mark
             // uses the post-move position (CollisionSystem::Update only runs once per frame).
             collideable.worldBoundingBox =
                 TransformBoundingBox(collideable.localBoundingBox, transform.GetMatrixNoRot());
-            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true);
+            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
         }
 
         // Process entities without Collideable component (e.g., some abilities etc)

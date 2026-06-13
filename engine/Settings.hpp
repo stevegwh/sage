@@ -30,6 +30,12 @@ namespace sage
         int renderViewportOffsetY = 0;
         bool preserveAspectRatio = true;
 
+        // Play-in-editor: the game's viewport is a sub-rectangle of the window
+        // (the editor's docked scene view), so its offset isn't centred. When
+        // set, this overrides the centred GetViewportOffset() calculation.
+        bool useViewportOffsetOverride = false;
+        Vector2 viewportOffsetOverride{};
+
         // Serialized settings (loaded from settings.xml)
         int screenWidthUser{};
         int screenHeightUser{};
@@ -108,9 +114,23 @@ namespace sage
 
         [[nodiscard]] Vector2 GetViewportOffset() const
         {
+            if (useViewportOffsetOverride) return viewportOffsetOverride;
             return {
                 std::floor((static_cast<float>(screenWidth) - static_cast<float>(viewportWidth)) * 0.5f),
                 std::floor((static_cast<float>(screenHeight) - static_cast<float>(viewportHeight)) * 0.5f)};
+        }
+
+        // Pins the viewport to an explicit screen rectangle (used by play-in-editor
+        // so the game's UI scales to, centres in, and hit-tests against the
+        // editor's docked scene view rather than the whole window). The render
+        // viewport is collapsed onto this viewport (no further offset).
+        void SetPlayViewport(const Rectangle screenRect)
+        {
+            viewportWidth = std::max(1, static_cast<int>(screenRect.width));
+            viewportHeight = std::max(1, static_cast<int>(screenRect.height));
+            useViewportOffsetOverride = true;
+            viewportOffsetOverride = {screenRect.x, screenRect.y};
+            ResetRenderViewportToAppViewport();
         }
 
         [[nodiscard]] Rectangle GetViewportScreenRect() const

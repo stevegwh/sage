@@ -7,6 +7,7 @@
 #include "EngineSystems.hpp"
 #include "MousePicker.hpp"
 #include "ResourceManager.hpp"
+#include "Settings.hpp"
 #include "systems/CollisionSystem.hpp"
 #include "systems/NavigationGridSystem.hpp"
 
@@ -264,7 +265,7 @@ namespace sage
     {
         if (hideCursor) return;
         if (currentTex.id == 0) return;
-        Vector2 pos = GetMousePosition();
+        Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
         // TODO: Awful hack below
         if (currentTex.id != ResourceManager::GetInstance().TextureLoad("cursor_regular").id)
         {

@@ -33,7 +33,13 @@ namespace sage
         //---------------------------------------------------------
         bool getExtents(entt::entity entity, GridSquare& extents) const;
         //---------------------------------------------------------
+        bool getGridRangeForBounds(const BoundingBox& bounds, GridSquare& minRange, GridSquare& maxRange) const;
+        //---------------------------------------------------------
+        bool getFootprintOffsets(entt::entity entity, BoundingBox& offsets) const;
+        //---------------------------------------------------------
         [[nodiscard]] bool checkExtents(GridSquare square, GridSquare extents) const;
+        //---------------------------------------------------------
+        [[nodiscard]] bool checkFootprint(GridSquare square, const BoundingBox& footprintOffsets) const;
         //---------------------------------------------------------
         bool getExtents(Vector3 worldPos, GridSquare& extents) const;
         //---------------------------------------------------------
@@ -71,7 +77,7 @@ namespace sage
             GridSquare target,
             GridSquare minRange,
             GridSquare maxRange,
-            GridSquare extents) const;
+            const BoundingBox& footprintOffsets) const;
         //---------------------------------------------------------
         [[nodiscard]] NavigationGridSquare* CastRay(
             int currentRow,
@@ -134,6 +140,8 @@ namespace sage
         [[nodiscard]] bool CheckBoundingBoxAreaUnoccupied(Vector3 worldPos, const BoundingBox& bb) const;
         //---------------------------------------------------------
         [[nodiscard]] bool CheckBoundingBoxAreaUnoccupied(GridSquare square, const BoundingBox& bb) const;
+        //---------------------------------------------------------
+        [[nodiscard]] bool CheckEntityAreaUnoccupied(entt::entity entity, Vector3 worldPos) const;
         //---------------------------------------------------------
         [[nodiscard]] entt::entity CheckSingleSquareOccupant(Vector3 worldPos) const;
         //---------------------------------------------------------

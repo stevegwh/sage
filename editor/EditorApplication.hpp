@@ -19,6 +19,10 @@ namespace sage
     class EditorApplication
     {
         RenderTexture renderTexture{};
+        // Game UI is rendered into this (sized to the app viewport) during play
+        // and blitted at the viewport offset, mirroring the game's own 2D
+        // compositing so its mouse mapping and scissor clipping stay consistent.
+        RenderTexture gameUiTexture{};
         editor::EditorDockLayout dockLayout{};
         EditorSettings editorSettings{};
 

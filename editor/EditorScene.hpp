@@ -30,9 +30,15 @@ namespace ImGui
     class FileBrowser;
 }
 
+// raylib structs; forward-declared so the header stays light (only a Camera3D
+// pointer and a by-value Rectangle are exposed).
+struct Camera3D;
+struct Rectangle;
+
 namespace sage
 {
     class EngineSystems;
+    class IGameRuntime;
     namespace editor
     {
         struct EditorDockLayout;
@@ -57,6 +63,9 @@ namespace sage
         std::unique_ptr<editor::EditorModeStateMachine> editorModes;
         std::unique_ptr<editor::EditorMapController> mapController;
         std::unique_ptr<editor::EditorFlatpackEditSession> flatpackSession;
+        // Non-null only while play-in-editor is running. Owns its own registry,
+        // so Play/Stop never touches the authored scene (see startPlay/stopPlay).
+        mutable std::unique_ptr<IGameRuntime> gameRuntime;
         // Picks the lua file for "Add Component > Script" (save-style: typing a
         // new filename creates a template script).
         std::unique_ptr<ImGui::FileBrowser> scriptBrowser;
@@ -73,6 +82,14 @@ namespace sage
         void refreshSceneWindows() const;
         void setSnapToGrid(bool enabled) const;
         void drawMainMenuBar(bool& exitRequested) const;
+        // Play-in-editor (items 2-4): snapshot the authored scene to a temp map,
+        // spin up a game runtime on its own registry, tear it down on stop.
+        void drawPlayStopButton() const;
+        void startPlay() const;
+        void stopPlay() const;
+        // The docked scene-view rectangle in window coords; the game's viewport
+        // is pinned to this so its UI lines up with the play area.
+        [[nodiscard]] Rectangle gameViewportScreenRect() const;
         void drawCollisionMatrixWindow() const;
         void addLight() const;
         void addSpawner() const;
@@ -130,8 +147,17 @@ namespace sage
         void Update() const;
         void Draw3D() const;
         void DrawOverlay2D() const;
+        // The running game's 2D UI. Rendered by EditorApplication into a
+        // viewport-sized texture during play; a no-op when not playing.
+        void DrawGame2D() const;
         void DrawImGui(bool& exitRequested, bool& exitConfirmed) const;
         [[nodiscard]] bool HandleEscapePressed() const;
+
+        // True while play-in-editor is running.
+        [[nodiscard]] bool IsPlaying() const;
+        // The camera the viewport should render through: the running game's while
+        // playing, the editor's otherwise.
+        [[nodiscard]] Camera3D* ActiveCamera() const;
         [[nodiscard]] bool ConsumeDockLayoutChanged() const;
 
         // Instantiates a flatpack at the given world anchor. Returns the root

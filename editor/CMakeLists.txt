@@ -7,6 +7,11 @@ endif ()
 file(GLOB EDITOR_HEADERS *.hpp)
 file(GLOB EDITOR_SOURCES *.cpp)
 
+# main.cpp is the standalone-editor entry point; keep it out of the library so
+# the game project can provide its own entry point that registers the lq game
+# runtime (play-in-editor).
+list(REMOVE_ITEM EDITOR_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp)
+
 set(IMGUI_DIR ${SAGE_ROOT_DIR}/vendor/imgui)
 
 add_library(imgui_raylib STATIC
@@ -31,12 +36,27 @@ target_link_libraries(imgui_raylib
         raylib
 )
 
-add_executable(editor main.cpp ${EDITOR_SOURCES} ${EDITOR_HEADERS})
+# Editor as a library so a consuming project (the game) can link it into its own
+# executable and register a game runtime for play-in-editor.
+add_library(sage_editor STATIC ${EDITOR_SOURCES} ${EDITOR_HEADERS})
+
+target_include_directories(sage_editor
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(sage_editor
+        PUBLIC
+        engine
+        imgui_raylib
+)
+
+# Standalone editor: no game runtime registered, so Play mode is inert.
+add_executable(editor main.cpp)
 
 target_link_libraries(editor
         PRIVATE
-        engine
-        imgui_raylib
+        sage_editor
 )
 
 # Symbolic link for resources folder

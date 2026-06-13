@@ -4,7 +4,9 @@
 #include "EditorComponents.hpp"
 #include "EditorFlatpack.hpp"
 #include "EditorFocus.hpp"
+#include "EditorMapLoader.hpp"
 #include "engine/AudioManager.hpp"
+#include "engine/IGameRuntime.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
@@ -57,6 +59,9 @@ namespace sage
         constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
         constexpr const char* SCRIPTS_DIRECTORY = "resources/scripts";
+        // Temp map the editor snapshots the authored scene into when entering
+        // play mode; the game runtime loads it, and Stop deletes it.
+        constexpr const char* kPlaySessionMapPath = "resources/.play_session.map";
         constexpr const char* DEFAULT_MAP_BASE_NAME = "_MAPBASE_EDITOR_BASE";
         constexpr const char* DEFAULT_MAP_BASE_MODEL_KEY = "primitive_plane";
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
@@ -279,6 +284,17 @@ namespace sage
 
     void EditorScene::Update() const
     {
+        // While playing, the game runtime drives its own registry; the editor's
+        // own systems are idle so the two worlds don't fight over input/state.
+        if (gameRuntime)
+        {
+            // Keep the game's viewport pinned to the (possibly resized/redocked)
+            // scene view so its UI stays aligned with the play area.
+            gameRuntime->SetViewport(gameViewportScreenRect());
+            gameRuntime->Update();
+            return;
+        }
+
         mapController->Update();
         flatpackSession->Update();
 
@@ -333,6 +349,12 @@ namespace sage
 
     void EditorScene::Draw3D() const
     {
+        if (gameRuntime)
+        {
+            gameRuntime->Draw3D();
+            return;
+        }
+
         sys->renderSystem->Draw();
         sys->lightSubSystem->DrawDebugLights();
         placementController->DrawGridAndAxes();
@@ -411,8 +433,16 @@ namespace sage
 
     void EditorScene::DrawOverlay2D() const
     {
+        // During play the game's 2D UI is composited separately (DrawGame2D into
+        // a viewport-sized texture), so skip the editor's scene-view overlay.
+        if (gameRuntime) return;
         if (viewportFullscreen) return;
         gui->DrawSceneViewInfo();
+    }
+
+    void EditorScene::DrawGame2D() const
+    {
+        if (gameRuntime) gameRuntime->Draw2D();
     }
 
     void EditorScene::DrawImGui(bool& exitRequested, bool& exitConfirmed) const
@@ -1187,7 +1217,42 @@ namespace sage
             }
             ImGui::EndMenu();
         }
+        drawPlayStopButton();
         ImGui::EndMainMenuBar();
+    }
+
+    void EditorScene::drawPlayStopButton() const
+    {
+        const bool playing = IsPlaying();
+        // No factory means this is the standalone editor (no game linked in);
+        // a flatpack edit session is its own isolated scene, so disallow play.
+        const bool canPlay = HasGameRuntimeFactory() && !flatpackSession->IsActive();
+
+        // F5 toggles play (Unity-style), ignored while typing in a field.
+        if (ImGui::IsKeyPressed(ImGuiKey_F5, false) && !ImGui::GetIO().WantTextInput)
+        {
+            if (playing)
+                stopPlay();
+            else if (canPlay)
+                startPlay();
+        }
+
+        constexpr float buttonWidth = 80.0f;
+        ImGui::SameLine(ImGui::GetWindowWidth() - buttonWidth - 8.0f);
+        const bool disabled = !playing && !canPlay;
+        if (disabled) ImGui::BeginDisabled();
+        if (ImGui::Button(playing ? "Stop" : "Play", ImVec2(buttonWidth, 0.0f)))
+        {
+            if (playing)
+                stopPlay();
+            else
+                startPlay();
+        }
+        if (disabled) ImGui::EndDisabled();
+        if (ImGui::IsItemHovered() && !disabled)
+        {
+            ImGui::SetTooltip(playing ? "Stop play session (Esc/F5)" : "Play this map in-engine (F5)");
+        }
     }
 
     void EditorScene::drawCollisionMatrixWindow() const
@@ -1624,7 +1689,69 @@ namespace sage
 
     bool EditorScene::HandleEscapePressed() const
     {
+        // Esc exits a play session first; otherwise it cancels editor modes.
+        if (gameRuntime)
+        {
+            stopPlay();
+            return true;
+        }
         return editorModes->HandleEscapePressed();
+    }
+
+    bool EditorScene::IsPlaying() const
+    {
+        return gameRuntime != nullptr;
+    }
+
+    Camera3D* EditorScene::ActiveCamera() const
+    {
+        if (gameRuntime) return gameRuntime->GetCamera();
+        return sys->camera->getRaylibCam();
+    }
+
+    void EditorScene::startPlay() const
+    {
+        if (gameRuntime) return;
+        if (!HasGameRuntimeFactory())
+        {
+            TraceLog(LOG_WARNING, "Play: no game runtime registered (standalone editor build).");
+            return;
+        }
+
+        // Snapshot the authored scene (including unsaved edits) to a temp map the
+        // runtime loads into its own registry. collectMapHierarchyOrder() also
+        // ensures the default map base exists before serialising.
+        const auto hierarchyOrder = collectMapHierarchyOrder();
+        editor::SaveMap(*sys->registry, kPlaySessionMapPath, hierarchyOrder);
+
+        GameRuntimeContext context;
+        context.audioManager = sys->audioManager;
+        context.windowSize = sys->settings->GetScreenSize();
+        context.viewportScreenRect = gameViewportScreenRect();
+        context.mapPath = kPlaySessionMapPath;
+        gameRuntime = CreateGameRuntime(context);
+        if (!gameRuntime)
+        {
+            TraceLog(LOG_WARNING, "Play: failed to create game runtime; staying in edit mode.");
+        }
+    }
+
+    void EditorScene::stopPlay() const
+    {
+        if (!gameRuntime) return;
+        // The runtime owned its own registry, so tearing it down leaves the
+        // editor's authored scene exactly as it was — no restore needed.
+        gameRuntime.reset();
+        std::error_code ec;
+        std::filesystem::remove(kPlaySessionMapPath, ec);
+    }
+
+    Rectangle EditorScene::gameViewportScreenRect() const
+    {
+        const auto offset = sys->settings->GetViewportOffset();
+        const auto renderOffset = sys->settings->GetRenderViewportOffset();
+        const auto renderSize = sys->settings->GetRenderViewPort();
+        return {offset.x + renderOffset.x, offset.y + renderOffset.y, renderSize.x, renderSize.y};
     }
 
     bool EditorScene::ConsumeDockLayoutChanged() const

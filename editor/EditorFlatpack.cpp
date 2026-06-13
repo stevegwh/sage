@@ -109,6 +109,17 @@ namespace sage::editor
             }
         };
 
+        struct FlatpackNavigationBlockRecord
+        {
+            std::uint32_t localId = 0;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(localId);
+            }
+        };
+
         bool hasMoreSerializedData(std::istream& stream)
         {
             return stream.peek() != std::char_traits<char>::eof();
@@ -156,6 +167,7 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
+        std::vector<FlatpackNavigationBlockRecord> navigationBlockers;
         records.reserve(subtreeOrder.size());
         names.reserve(subtreeOrder.size());
         for (const auto entity : subtreeOrder)
@@ -198,6 +210,10 @@ namespace sage::editor
             {
                 record.hasCollideable = true;
                 record.collideable = source.get<Collideable>(entity);
+                if (record.collideable.blocksNavigation)
+                {
+                    navigationBlockers.push_back(FlatpackNavigationBlockRecord{localId});
+                }
             }
             if (source.any_of<Renderable>(entity))
             {
@@ -226,6 +242,7 @@ namespace sage::editor
             output(scripts);
             output(animations);
             output(moveables);
+            output(navigationBlockers);
         });
 
         return true;
@@ -245,6 +262,7 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
+        std::vector<FlatpackNavigationBlockRecord> navigationBlockers;
         sage::serializer::ReadCompressedBinary(
             path, kFlatpackMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
                 input(records);
@@ -252,6 +270,7 @@ namespace sage::editor
                 if (hasMoreSerializedData(stream)) input(scripts);
                 if (hasMoreSerializedData(stream)) input(animations);
                 if (hasMoreSerializedData(stream)) input(moveables);
+                if (hasMoreSerializedData(stream)) input(navigationBlockers);
             });
         if (records.empty()) return entt::null;
 
@@ -312,6 +331,15 @@ namespace sage::editor
                 // (which was 0) into the destination world frame.
                 light.position = Vector3Add(light.position, anchorWorldPos);
                 destination.emplace<Light>(entity, light);
+            }
+        }
+
+        for (const auto& record : navigationBlockers)
+        {
+            if (record.localId >= created.size()) continue;
+            if (auto* collideable = destination.try_get<Collideable>(created[record.localId]))
+            {
+                collideable->blocksNavigation = true;
             }
         }
 
