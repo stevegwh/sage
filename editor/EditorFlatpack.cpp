@@ -3,6 +3,7 @@
 #include "EditorComponents.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -43,6 +44,14 @@ namespace sage::editor
             Vector3 worldScale{1.0f, 1.0f, 1.0f};
             bool hasCollideable = false;
             Collideable collideable{};
+            bool hasNavigationSurface = false;
+            NavigationSurface navigationSurface{};
+            bool hasNavigationObstacle = false;
+            NavigationObstacle navigationObstacle{};
+            bool hasTriggerVolume = false;
+            TriggerVolume triggerVolume{};
+            bool hasCursorTarget = false;
+            CursorTarget cursorTarget{};
             bool hasRenderable = false;
             Renderable renderable{};
             bool hasLight = false;
@@ -54,6 +63,14 @@ namespace sage::editor
                 archive(parentLocalId, worldPos, worldRot, worldScale);
                 archive(hasCollideable);
                 if (hasCollideable) archive(collideable);
+                archive(hasNavigationSurface);
+                if (hasNavigationSurface) archive(navigationSurface);
+                archive(hasNavigationObstacle);
+                if (hasNavigationObstacle) archive(navigationObstacle);
+                archive(hasTriggerVolume);
+                if (hasTriggerVolume) archive(triggerVolume);
+                archive(hasCursorTarget);
+                if (hasCursorTarget) archive(cursorTarget);
                 archive(hasRenderable);
                 if (hasRenderable) archive(renderable);
                 archive(hasLight);
@@ -109,17 +126,6 @@ namespace sage::editor
             }
         };
 
-        struct FlatpackNavigationBlockRecord
-        {
-            std::uint32_t localId = 0;
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(localId);
-            }
-        };
-
         bool hasMoreSerializedData(std::istream& stream)
         {
             return stream.peek() != std::char_traits<char>::eof();
@@ -167,7 +173,6 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
-        std::vector<FlatpackNavigationBlockRecord> navigationBlockers;
         records.reserve(subtreeOrder.size());
         names.reserve(subtreeOrder.size());
         for (const auto entity : subtreeOrder)
@@ -210,10 +215,26 @@ namespace sage::editor
             {
                 record.hasCollideable = true;
                 record.collideable = source.get<Collideable>(entity);
-                if (record.collideable.blocksNavigation)
-                {
-                    navigationBlockers.push_back(FlatpackNavigationBlockRecord{localId});
-                }
+            }
+            if (source.any_of<NavigationSurface>(entity))
+            {
+                record.hasNavigationSurface = true;
+                record.navigationSurface = source.get<NavigationSurface>(entity);
+            }
+            if (source.any_of<NavigationObstacle>(entity))
+            {
+                record.hasNavigationObstacle = true;
+                record.navigationObstacle = source.get<NavigationObstacle>(entity);
+            }
+            if (source.any_of<TriggerVolume>(entity))
+            {
+                record.hasTriggerVolume = true;
+                record.triggerVolume = source.get<TriggerVolume>(entity);
+            }
+            if (source.any_of<CursorTarget>(entity))
+            {
+                record.hasCursorTarget = true;
+                record.cursorTarget = source.get<CursorTarget>(entity);
             }
             if (source.any_of<Renderable>(entity))
             {
@@ -242,7 +263,6 @@ namespace sage::editor
             output(scripts);
             output(animations);
             output(moveables);
-            output(navigationBlockers);
         });
 
         return true;
@@ -262,7 +282,6 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
-        std::vector<FlatpackNavigationBlockRecord> navigationBlockers;
         sage::serializer::ReadCompressedBinary(
             path, kFlatpackMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
                 input(records);
@@ -270,7 +289,6 @@ namespace sage::editor
                 if (hasMoreSerializedData(stream)) input(scripts);
                 if (hasMoreSerializedData(stream)) input(animations);
                 if (hasMoreSerializedData(stream)) input(moveables);
-                if (hasMoreSerializedData(stream)) input(navigationBlockers);
             });
         if (records.empty()) return entt::null;
 
@@ -320,6 +338,22 @@ namespace sage::editor
             {
                 destination.emplace<Collideable>(entity, record.collideable);
             }
+            if (record.hasNavigationSurface)
+            {
+                destination.emplace<NavigationSurface>(entity, record.navigationSurface);
+            }
+            if (record.hasNavigationObstacle)
+            {
+                destination.emplace<NavigationObstacle>(entity, record.navigationObstacle);
+            }
+            if (record.hasTriggerVolume)
+            {
+                destination.emplace<TriggerVolume>(entity, record.triggerVolume);
+            }
+            if (record.hasCursorTarget)
+            {
+                destination.emplace<CursorTarget>(entity, record.cursorTarget);
+            }
             if (record.hasRenderable)
             {
                 destination.emplace<Renderable>(entity, record.renderable);
@@ -331,15 +365,6 @@ namespace sage::editor
                 // (which was 0) into the destination world frame.
                 light.position = Vector3Add(light.position, anchorWorldPos);
                 destination.emplace<Light>(entity, light);
-            }
-        }
-
-        for (const auto& record : navigationBlockers)
-        {
-            if (record.localId >= created.size()) continue;
-            if (auto* collideable = destination.try_get<Collideable>(created[record.localId]))
-            {
-                collideable->blocksNavigation = true;
             }
         }
 

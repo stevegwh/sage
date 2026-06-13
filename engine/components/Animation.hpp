@@ -21,6 +21,7 @@
 
 namespace sage
 {
+    struct Renderable;
 
     struct AnimationParams
     {
@@ -93,8 +94,9 @@ namespace sage
         }
 
         template <class Inspector>
-        void define_editor_fields(Inspector& i)
+        void define_editor_options(Inspector& i)
         {
+            i.template requiresComponent<Renderable>();
             i.field("Model Key", modelKey, false);
             for (std::size_t n = 0; n < clipNames.size(); ++n)
             {

@@ -2,11 +2,13 @@
 
 #include "EditorComponents.hpp"
 #include "engine/components/Animation.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
+#include "engine/components/UberShaderComponent.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
@@ -36,11 +38,32 @@ namespace sage::editor
 
         bool collideableEqual(const Collideable& a, const Collideable& b)
         {
-            return a.isStatic == b.isStatic && a.blocksNavigation == b.blocksNavigation &&
-                   a.active == b.active && a.isTrigger == b.isTrigger &&
+            return a.isStatic == b.isStatic && a.active == b.active && a.shape == b.shape &&
                    a.collisionLayer.bit == b.collisionLayer.bit &&
                    boxEqual(a.localBoundingBox, b.localBoundingBox) &&
                    boxEqual(a.worldBoundingBox, b.worldBoundingBox);
+        }
+
+        bool navigationSurfaceEqual(const NavigationSurface& a, const NavigationSurface& b)
+        {
+            return a.active == b.active && a.heightSource == b.heightSource;
+        }
+
+        bool navigationObstacleEqual(const NavigationObstacle& a, const NavigationObstacle& b)
+        {
+            return a.active == b.active;
+        }
+
+        bool triggerVolumeEqual(const TriggerVolume& a, const TriggerVolume& b)
+        {
+            return a.active == b.active && a.overlapMask == b.overlapMask;
+        }
+
+        bool cursorTargetEqual(const CursorTarget& a, const CursorTarget& b)
+        {
+            return a.cursorTexture == b.cursorTexture && a.hoverable == b.hoverable &&
+                   a.allowNavigationClickThrough == b.allowNavigationClickThrough &&
+                   a.deniesNavigation == b.deniesNavigation;
         }
 
         bool lightEqual(const Light& a, const Light& b)
@@ -85,6 +108,26 @@ namespace sage::editor
         if (a.isMapEntity != b.isMapEntity || a.isMapBase != b.isMapBase) return false;
         if (a.hasCollideable != b.hasCollideable ||
             (a.hasCollideable && !collideableEqual(a.collideable, b.collideable)))
+        {
+            return false;
+        }
+        if (a.hasNavigationSurface != b.hasNavigationSurface ||
+            (a.hasNavigationSurface && !navigationSurfaceEqual(a.navigationSurface, b.navigationSurface)))
+        {
+            return false;
+        }
+        if (a.hasNavigationObstacle != b.hasNavigationObstacle ||
+            (a.hasNavigationObstacle && !navigationObstacleEqual(a.navigationObstacle, b.navigationObstacle)))
+        {
+            return false;
+        }
+        if (a.hasTriggerVolume != b.hasTriggerVolume ||
+            (a.hasTriggerVolume && !triggerVolumeEqual(a.triggerVolume, b.triggerVolume)))
+        {
+            return false;
+        }
+        if (a.hasCursorTarget != b.hasCursorTarget ||
+            (a.hasCursorTarget && !cursorTargetEqual(a.cursorTarget, b.cursorTarget)))
         {
             return false;
         }
@@ -201,6 +244,26 @@ namespace sage::editor
         {
             s.hasCollideable = true;
             s.collideable = reg.get<Collideable>(entity);
+        }
+        if (reg.all_of<NavigationSurface>(entity))
+        {
+            s.hasNavigationSurface = true;
+            s.navigationSurface = reg.get<NavigationSurface>(entity);
+        }
+        if (reg.all_of<NavigationObstacle>(entity))
+        {
+            s.hasNavigationObstacle = true;
+            s.navigationObstacle = reg.get<NavigationObstacle>(entity);
+        }
+        if (reg.all_of<TriggerVolume>(entity))
+        {
+            s.hasTriggerVolume = true;
+            s.triggerVolume = reg.get<TriggerVolume>(entity);
+        }
+        if (reg.all_of<CursorTarget>(entity))
+        {
+            s.hasCursorTarget = true;
+            s.cursorTarget = reg.get<CursorTarget>(entity);
         }
         if (reg.all_of<Renderable>(entity))
         {
@@ -579,6 +642,26 @@ namespace sage::editor
         else if (reg.all_of<Collideable>(entity))
             reg.remove<Collideable>(entity);
 
+        if (target.hasNavigationSurface)
+            reg.emplace_or_replace<NavigationSurface>(entity, target.navigationSurface);
+        else if (reg.all_of<NavigationSurface>(entity))
+            reg.remove<NavigationSurface>(entity);
+
+        if (target.hasNavigationObstacle)
+            reg.emplace_or_replace<NavigationObstacle>(entity, target.navigationObstacle);
+        else if (reg.all_of<NavigationObstacle>(entity))
+            reg.remove<NavigationObstacle>(entity);
+
+        if (target.hasTriggerVolume)
+            reg.emplace_or_replace<TriggerVolume>(entity, target.triggerVolume);
+        else if (reg.all_of<TriggerVolume>(entity))
+            reg.remove<TriggerVolume>(entity);
+
+        if (target.hasCursorTarget)
+            reg.emplace_or_replace<CursorTarget>(entity, target.cursorTarget);
+        else if (reg.all_of<CursorTarget>(entity))
+            reg.remove<CursorTarget>(entity);
+
         if (target.hasRenderable)
         {
             std::istringstream stream(target.renderableBlob, std::ios::binary);
@@ -592,6 +675,11 @@ namespace sage::editor
         else if (reg.all_of<Renderable>(entity))
         {
             reg.remove<Renderable>(entity);
+            if (reg.all_of<UberShaderComponent>(entity)) reg.remove<UberShaderComponent>(entity);
+        }
+        else if (reg.all_of<UberShaderComponent>(entity))
+        {
+            reg.remove<UberShaderComponent>(entity);
         }
 
         if (target.hasLight)
@@ -712,7 +800,8 @@ namespace sage::editor
         auto& reg = registry();
         if (!reg.valid(entity) || !reg.all_of<Collideable>(entity)) return;
         const auto& collideable = reg.get<Collideable>(entity);
-        if (collideable.blocksNavigation)
+        const auto* obstacle = reg.try_get<NavigationObstacle>(entity);
+        if (obstacle != nullptr && obstacle->active)
         {
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
         }
@@ -723,7 +812,8 @@ namespace sage::editor
         auto& reg = registry();
         if (!reg.valid(entity) || !reg.all_of<Collideable>(entity)) return;
         const auto& collideable = reg.get<Collideable>(entity);
-        if (collideable.blocksNavigation)
+        const auto* obstacle = reg.try_get<NavigationObstacle>(entity);
+        if (obstacle != nullptr && obstacle->active)
         {
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
         }

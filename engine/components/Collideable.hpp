@@ -12,20 +12,25 @@
 #include "raylib.h"
 #include "raymath.h"
 
+#include <cstdint>
+
 namespace sage
 {
+    enum class ColliderShape
+    {
+        Box,
+        RenderMesh
+    };
+
     struct Collideable
     {
         BoundingBox localBoundingBox{};
         BoundingBox worldBoundingBox{};
         CollisionLayer collisionLayer = sage::collision_layers::Default;
+        ColliderShape shape = ColliderShape::Box;
         bool active = true;
         bool isStatic = false;
         bool debugDraw = false;
-        bool blocksNavigation = false;
-        // Unity-style trigger: the box reports overlaps (CollisionSystem fires
-        // onTriggerEnter/Stay/Exit) but never contributes physical/navigation blocking.
-        bool isTrigger = false;
 
         Collideable() = default;
         Collideable(const BoundingBox& local, const Matrix& worldMat);
@@ -36,28 +41,27 @@ namespace sage
         template <class Archive>
         void save(Archive& archive) const
         {
-            archive(localBoundingBox, worldBoundingBox, collisionLayer, isTrigger);
+            const auto shapeValue = static_cast<std::uint8_t>(shape);
+            archive(localBoundingBox, worldBoundingBox, collisionLayer, shapeValue);
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
-            archive(localBoundingBox, worldBoundingBox, collisionLayer, isTrigger);
+            std::uint8_t shapeValue = 0;
+            archive(localBoundingBox, worldBoundingBox, collisionLayer, shapeValue);
+            shape = static_cast<ColliderShape>(shapeValue);
             collisionLayer.layerName = GetCollisionLayerName(collisionLayer.bit);
         }
 
         template <class Inspector>
-        void define_editor_fields(Inspector& i)
+        void define_editor_options(Inspector& i)
         {
-            // Derived from the layer, not stored: GeometryComplex/Stairs rays
-            // refine against the model's meshes; the box is only the broad-phase.
-            const bool meshCollider = RequiresMeshCollision(collisionLayer);
-            i.note("Collider", meshCollider ? "Mesh (from layer; box is broad-phase)" : "Box");
+            const bool meshCollider = shape == ColliderShape::RenderMesh;
             i.field("Active", active);
             i.field("IsStatic", isStatic);
             i.field("Debug Draw", debugDraw);
-            i.field("Blocks Navigation", blocksNavigation);
-            i.field("Is Trigger", isTrigger);
+            i.field("Shape", shape);
             i.field("Collision Layer", collisionLayer);
             // A mesh collider's box must enclose the meshes or rays never reach
             // them, so hand edits are disabled.

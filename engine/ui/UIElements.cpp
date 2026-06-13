@@ -4,9 +4,11 @@
 
 #include "UIElements.hpp"
 
-#include "../GameUiEngine.hpp" // for Window/TableCell/TooltipWindow full defs
 #include "../Settings.hpp"
 #include "../slib.hpp"
+#include "GameUIEngine.hpp"
+#include "UILayout.hpp"
+#include "UIWindow.hpp"
 
 #include "raylib.h"
 

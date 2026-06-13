@@ -9,7 +9,6 @@
 #include "Camera.hpp"
 #include "Cursor.hpp"
 #include "FullscreenTextOverlayManager.hpp"
-#include "GameUiEngine.hpp"
 #include "LightManager.hpp"
 #include "MousePicker.hpp"
 #include "systems/ActorMovementSystem.hpp"
@@ -22,6 +21,7 @@
 #include "systems/SpatialAudioSystem.hpp"
 #include "systems/TransformSystem.hpp"
 #include "systems/UberShaderSystem.hpp"
+#include "ui/GameUIEngine.hpp"
 #include "UserInput.hpp"
 
 #include <cassert>

@@ -4,9 +4,9 @@
 
 #include "UIWindow.hpp"
 
-#include "../GameUiEngine.hpp"
 #include "../ResourceManager.hpp"
 #include "../Settings.hpp"
+#include "GameUIEngine.hpp"
 #include "Scrollbar.hpp"
 #include "UIElements.hpp"
 

@@ -1,6 +1,7 @@
 #include "TerrainMesh.hpp"
 
 #include "components/Collideable.hpp"
+#include "components/CollisionIntent.hpp"
 #include "components/DynamicRenderable.hpp"
 #include "components/sgTransform.hpp"
 #include "components/Terrain.hpp"
@@ -425,17 +426,17 @@ namespace sage
         lightManager.LinkShaderToLights(lighting);
         renderable.SetShader(lighting);
 
-        // Only seed defaults on first creation — the layer (and other flags) are
-        // authored in the inspector and persist with the map, so rebuilds must
-        // not stomp them. GeometryComplex gives mesh-accurate cursor hits on the
-        // sculpted surface (the nav grid samples the height field either way).
         if (!registry.all_of<Collideable>(entity))
         {
             auto& collideable = registry.emplace<Collideable>(entity);
-            collideable.SetCollisionLayer(collision_layers::GeometryComplex);
+            collideable.shape = ColliderShape::RenderMesh;
             collideable.isStatic = true;
-            collideable.blocksNavigation = false;
         }
+        auto& surface = registry.get_or_emplace<NavigationSurface>(entity);
+        surface.heightSource = NavigationHeightSource::TerrainHeightField;
+        auto& cursorTarget = registry.get_or_emplace<CursorTarget>(entity);
+        cursorTarget.cursorTexture = "cursor_move";
+        cursorTarget.allowNavigationClickThrough = true;
         UpdateTerrainCollideableBounds(registry, entity);
     }
 

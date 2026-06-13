@@ -11,6 +11,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
@@ -27,6 +28,7 @@
 #include "engine/SceneTags.hpp"
 #include "engine/TerrainMesh.hpp"
 #include "engine/systems/CollisionSystem.hpp"
+#include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include "engine/UserInput.hpp"
@@ -47,6 +49,7 @@
 #include <iostream>
 #include <optional>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -371,12 +374,12 @@ namespace sage
             // Facing line: a stick from the sphere out along the spawner's forward.
             DrawLine3D(position, Vector3Add(position, Vector3Scale(transform.forward(), 1.5f)), color);
         }
-        // Trigger volumes are Collideables flagged isTrigger; draw their world box so the
+        // Trigger volumes are Collideables with TriggerVolume intent; draw their world box so the
         // otherwise-invisible region is visible and editable.
-        for (const auto entity : sys->registry->view<Collideable>())
+        for (const auto entity : sys->registry->view<Collideable, TriggerVolume>())
         {
             const auto& collideable = sys->registry->get<Collideable>(entity);
-            if (collideable.isTrigger) DrawBoundingBox(collideable.worldBoundingBox, GREEN);
+            DrawBoundingBox(collideable.worldBoundingBox, GREEN);
         }
 
         for (const auto entity : selection->SelectedWithChildren())
@@ -387,8 +390,7 @@ namespace sage
             // A mesh collider is the render mesh itself, so visualize it by
             // re-drawing the same GPU buffers in wireframe (selection-only, so
             // cheap); its box is only the broad-phase, shown de-emphasised.
-            if (RequiresMeshCollision(collideable.collisionLayer) &&
-                sys->registry->any_of<sgTransform>(entity))
+            if (collideable.shape == ColliderShape::RenderMesh && sys->registry->any_of<sgTransform>(entity))
             {
                 const auto& transform = sys->registry->get<sgTransform>(entity);
                 rlEnableWireMode();
@@ -647,8 +649,7 @@ namespace sage
     }
 
     // A mesh collider's box is the derived broad-phase, so whenever an inspector
-    // edit leaves a selected Collideable on a mesh-collision layer (e.g. the
-    // layer was just switched to GeometryComplex), refit the box from the meshes
+    // edit leaves a selected Collideable using mesh collision, refit the box from the meshes
     // so rays keep reaching them. Idempotent, and it runs inside the active edit
     // transaction so the refit undoes together with the field change.
     void EditorScene::refitMeshColliderBounds() const
@@ -656,7 +657,7 @@ namespace sage
         for (const auto entity : selection->Selected())
         {
             if (!sys->registry->valid(entity) || !sys->registry->all_of<Collideable>(entity)) continue;
-            if (!RequiresMeshCollision(sys->registry->get<Collideable>(entity).collisionLayer)) continue;
+            if (sys->registry->get<Collideable>(entity).shape != ColliderShape::RenderMesh) continue;
 
             if (sys->registry->all_of<Terrain>(entity))
             {
@@ -698,9 +699,142 @@ namespace sage
             }
             if (result.addAnimationClicked) addAnimationToSelection();
             if (result.addMoveableActorClicked) addMoveableActorToSelection();
-            if (result.removeComponent == "Script") removeScriptFromSelection();
-            if (result.removeComponent == "Animation") removeAnimationFromSelection();
-            if (result.removeComponent == "Moveable Actor") removeMoveableActorFromSelection();
+            const auto addIntentComponent = [&]<class Component>() {
+                const auto selected = selection->Selected();
+                if (selected.empty()) return;
+                history->Begin(editor::EditAction::EditField, selected);
+                for (const auto entity : selected)
+                {
+                    if (!sys->registry->valid(entity) || sys->registry->any_of<Component>(entity)) continue;
+                    auto& component = sys->registry->emplace<Component>(entity);
+                    if constexpr (std::is_same_v<Component, NavigationObstacle>)
+                    {
+                        if (const auto* collideable = sys->registry->try_get<Collideable>(entity);
+                            collideable != nullptr && component.active)
+                        {
+                            sys->navigationGridSystem->MarkSquareAreaOccupied(
+                                collideable->worldBoundingBox, true, entity);
+                        }
+                    }
+                }
+                history->Commit();
+                refreshSceneWindows();
+            };
+            if (result.addNavigationSurfaceClicked) addIntentComponent.template operator()<NavigationSurface>();
+            if (result.addNavigationObstacleClicked) addIntentComponent.template operator()<NavigationObstacle>();
+            if (result.addTriggerVolumeClicked) addIntentComponent.template operator()<TriggerVolume>();
+            if (result.addCursorTargetClicked) addIntentComponent.template operator()<CursorTarget>();
+
+            const auto removeSelectedComponent = [&](const editor::EditorComponentId componentId) {
+                const auto selected = selection->Selected();
+                if (selected.empty()) return;
+
+                const auto availability = inspectorRegistry.CanRemove(*sys->registry, componentId, selected);
+                if (!availability.allowed)
+                {
+                    if (!availability.blockedReason.empty())
+                    {
+                        std::cout << "EditorScene: cannot remove component: " << availability.blockedReason << '\n';
+                    }
+                    return;
+                }
+
+                if (componentId == editor::ComponentIdOf<ScriptComponent>())
+                {
+                    removeScriptFromSelection();
+                    return;
+                }
+                if (componentId == editor::ComponentIdOf<Animation>())
+                {
+                    removeAnimationFromSelection();
+                    return;
+                }
+                if (componentId == editor::ComponentIdOf<MoveableActor>())
+                {
+                    removeMoveableActorFromSelection();
+                    return;
+                }
+
+                const auto removeRegisteredComponent = [&]<class Component>() {
+                    history->Begin(editor::EditAction::RemoveComponent, selected);
+                    for (const auto entity : selected)
+                    {
+                        if (!sys->registry->valid(entity) || !sys->registry->any_of<Component>(entity)) continue;
+
+                        if constexpr (
+                            std::is_same_v<Component, Collideable> ||
+                            std::is_same_v<Component, NavigationObstacle>)
+                        {
+                            if (const auto* collideable = sys->registry->try_get<Collideable>(entity);
+                                collideable != nullptr)
+                            {
+                                if (const auto* obstacle = sys->registry->try_get<NavigationObstacle>(entity);
+                                    obstacle != nullptr && obstacle->active)
+                                {
+                                    sys->navigationGridSystem->MarkSquareAreaOccupied(
+                                        collideable->worldBoundingBox, false, entity);
+                                }
+                            }
+                        }
+
+                        if constexpr (std::is_same_v<Component, Renderable>)
+                        {
+                            if (sys->registry->any_of<UberShaderComponent>(entity))
+                            {
+                                sys->registry->remove<UberShaderComponent>(entity);
+                            }
+                        }
+
+                        sys->registry->remove<Component>(entity);
+                    }
+
+                    if constexpr (std::is_same_v<Component, Light>)
+                    {
+                        if (sys->lightSubSystem) sys->lightSubSystem->RefreshLights();
+                    }
+                    history->Commit();
+                    refreshSceneWindows();
+                };
+
+                if (componentId == editor::ComponentIdOf<editor::AssetReference>())
+                {
+                    removeRegisteredComponent.template operator()<editor::AssetReference>();
+                }
+                else if (componentId == editor::ComponentIdOf<Renderable>())
+                {
+                    removeRegisteredComponent.template operator()<Renderable>();
+                }
+                else if (componentId == editor::ComponentIdOf<Collideable>())
+                {
+                    removeRegisteredComponent.template operator()<Collideable>();
+                }
+                else if (componentId == editor::ComponentIdOf<NavigationSurface>())
+                {
+                    removeRegisteredComponent.template operator()<NavigationSurface>();
+                }
+                else if (componentId == editor::ComponentIdOf<NavigationObstacle>())
+                {
+                    removeRegisteredComponent.template operator()<NavigationObstacle>();
+                }
+                else if (componentId == editor::ComponentIdOf<TriggerVolume>())
+                {
+                    removeRegisteredComponent.template operator()<TriggerVolume>();
+                }
+                else if (componentId == editor::ComponentIdOf<CursorTarget>())
+                {
+                    removeRegisteredComponent.template operator()<CursorTarget>();
+                }
+                else if (componentId == editor::ComponentIdOf<Light>())
+                {
+                    removeRegisteredComponent.template operator()<Light>();
+                }
+                else if (componentId == editor::ComponentIdOf<Spawner>())
+                {
+                    removeRegisteredComponent.template operator()<Spawner>();
+                }
+            };
+
+            if (result.removeComponent.has_value()) removeSelectedComponent(*result.removeComponent);
         }
     }
 
@@ -1527,7 +1661,6 @@ namespace sage
             auto& collideable = existingBaseView.get<Collideable>(entity);
             collideable.SetCollisionLayer(collision_layers::Background);
             collideable.isStatic = true;
-            collideable.blocksNavigation = false;
             collideable.active = true;
             renderable.active = false;
         }
@@ -1561,7 +1694,6 @@ namespace sage
         auto& collideable = sys->registry->emplace<Collideable>(entity, localBounds, transform.GetMatrixNoRot());
         collideable.SetCollisionLayer(collision_layers::Background);
         collideable.isStatic = true;
-        collideable.blocksNavigation = false;
         collideable.active = true;
     }
 

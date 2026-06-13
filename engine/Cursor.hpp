@@ -13,7 +13,6 @@
 #include <functional>
 #include <optional>
 #include <string>
-#include <unordered_map>
 
 namespace sage
 {
@@ -35,8 +34,6 @@ namespace sage
         std::optional<HoverInfo> m_hoverInfo{};
 
         Texture2D currentTex{};
-        std::unordered_map<CollisionLayer, std::string> cursorTextureMap{};
-        CollisionMask cursorHoverMask{};
         std::function<bool(Vector3)> navigationRangeProvider{};
         std::function<bool(Vector3)> navigationValidityProvider{};
 
@@ -55,7 +52,7 @@ namespace sage
         void onMouseRightClick() const;
         void onMouseLeftDown();
         void onMouseRightDown() const;
-        void changeCursors(CollisionLayer collisionLayer);
+        void changeCursors(const CollisionInfo& hitInfo);
         [[nodiscard]] bool shouldPublishNavigationClick(const CollisionInfo& mouseHitInfo) const;
 
       public:
@@ -82,8 +79,6 @@ namespace sage
         void Disable();
         void Hide();
         void Show();
-        void SetCursorTexture(CollisionLayer layer, std::string textureKey);
-        void SetCursorHoverMask(CollisionMask mask);
         void SetNavigationRangeProvider(std::function<bool(Vector3)> provider);
         void SetNavigationValidityProvider(std::function<bool(Vector3)> provider);
         [[nodiscard]] bool OutOfRange() const;

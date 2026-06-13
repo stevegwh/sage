@@ -1,6 +1,7 @@
 #include "MousePicker.hpp"
 
 #include "Camera.hpp"
+#include "components/CollisionIntent.hpp"
 #include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
@@ -24,11 +25,12 @@ namespace sage
         const auto viewport = sys->settings->GetRenderViewPort();
         const auto renderMousePosition = sys->settings->ScreenToRenderViewportPosition(mousePosition);
         ray = GetScreenToWorldRayEx(renderMousePosition, *sys->camera->getRaylibCam(), viewport.x, viewport.y);
-        auto collisions = sys->collisionSystem->GetCollisionsWithRay(ray);
+        auto collisions = sys->collisionSystem->GetCollisionsWithRay(ray, CollisionMask{~0ull});
 
         for (auto it = collisions.begin(); it != collisions.end();)
         {
-            if (RequiresMeshCollision(it->collisionLayer))
+            const auto* collideable = registry->try_get<Collideable>(it->collidedEntityId);
+            if (collideable != nullptr && collideable->shape == ColliderShape::RenderMesh)
             {
                 if (!findMeshCollision(*it))
                 {
@@ -45,15 +47,18 @@ namespace sage
         CollisionSystem::SortCollisionsByDistance(collisions);
         mouseHitInfo = collisions[0];
 
-        if (IsNavigationLayer(mouseHitInfo.collisionLayer))
+        auto isNavigationSurface = [this](const CollisionInfo& coll) {
+            const auto* surface = registry->try_get<NavigationSurface>(coll.collidedEntityId);
+            return surface != nullptr && surface->active;
+        };
+
+        if (isNavigationSurface(mouseHitInfo))
         {
             navigationHitInfo = mouseHitInfo;
         }
         else
         {
-            const auto navIt = std::find_if(collisions.begin(), collisions.end(), [](const CollisionInfo& coll) {
-                return IsNavigationLayer(coll.collisionLayer);
-            });
+            const auto navIt = std::find_if(collisions.begin(), collisions.end(), isNavigationSurface);
 
             if (navIt != collisions.end())
             {

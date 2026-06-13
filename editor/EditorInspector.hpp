@@ -17,6 +17,44 @@
 
 namespace sage::editor
 {
+    using EditorComponentId = entt::id_type;
+
+    template <class T>
+    [[nodiscard]] constexpr EditorComponentId ComponentIdOf() noexcept
+    {
+        return entt::type_hash<std::remove_cvref_t<T>>::value();
+    }
+
+    struct ComponentRequirement
+    {
+        EditorComponentId componentId{};
+        std::function<bool(const entt::registry&, entt::entity)> applies;
+    };
+
+    template <class T>
+    struct RequiresComponent
+    {
+        std::function<bool(const entt::registry&, entt::entity)> when;
+
+        [[nodiscard]] operator ComponentRequirement() const
+        {
+            return ComponentRequirement{
+                .componentId = ComponentIdOf<T>(),
+                .applies = when};
+        }
+    };
+
+    struct ComponentRegistrationOptions
+    {
+        bool removable = false;
+    };
+
+    struct ComponentRemovalState
+    {
+        bool allowed = false;
+        std::string blockedReason;
+    };
+
     template <class T>
     struct LeafField
     {
@@ -80,14 +118,16 @@ namespace sage::editor
         inline constexpr bool always_false_v = false;
     }
 
-    // Component-side authors declare a templated `define_editor_fields(Inspector&)` method
-    // (or a free `define_editor_fields(Inspector&, T&)` for foreign types) and inside it
-    // call `i.field(label, value)` for each member. Dispatch mirrors cereal's archive overloads:
+    // Component-side authors declare a templated `define_editor_options(Inspector&)` method
+    // (or a free `define_editor_options(Inspector&, T&)` for foreign types). Inside it,
+    // call `i.field(label, value)` for editable/readable fields and
+    // `i.requiresComponent<T>()` for entity-level component requirements.
+    // Dispatch mirrors cereal's archive overloads:
     //
     //   - Concrete overloads handle "leaf" types (primitives, raylib Vec2/3/Color, …) and
     //     record one InspectorField row per call.
     //   - The enum template handles any `std::is_enum_v<E>` as an Enum-kind row.
-    //   - The composite template recurses into the value's own `define_editor_fields()`
+    //   - The composite template recurses into the value's own `define_editor_options()`
     //     (member or ADL free function), pushing a label prefix and propagating editability.
     //     Labels of sub-fields become "<parent> <child>" (e.g. "Local Bounds Min").
     //
@@ -95,6 +135,7 @@ namespace sage::editor
     class ComponentInspector
     {
         std::vector<InspectorField> fields_;
+        std::vector<ComponentRequirement> requirements_;
         std::string labelPrefix_;
         bool editableScope_ = true;
         // The entity being described; lets bespoke fields source options from
@@ -126,6 +167,25 @@ namespace sage::editor
         }
 
       public:
+        void requiresComponent(ComponentRequirement requirement)
+        {
+            requirements_.push_back(std::move(requirement));
+        }
+
+        template <class T>
+        void requiresComponent(std::function<bool(const entt::registry&, entt::entity)> when = {})
+        {
+            requirements_.push_back(ComponentRequirement{
+                .componentId = ComponentIdOf<T>(),
+                .applies = std::move(when)});
+        }
+
+        template <class T>
+        void require(std::function<bool(const entt::registry&, entt::entity)> when = {})
+        {
+            requiresComponent<T>(std::move(when));
+        }
+
         // --- Informational row ---------------------------------------------------------
         void note(const std::string& label, std::string text)
         {
@@ -276,15 +336,15 @@ namespace sage::editor
             labelPrefix_ = qualified(label);
             editableScope_ = editableScope_ && rw;
 
-            if constexpr (requires { v.define_editor_fields(*this); })
-                v.define_editor_fields(*this);
-            else if constexpr (requires { define_editor_fields(*this, v); })
-                define_editor_fields(*this, v);
+            if constexpr (requires { v.define_editor_options(*this); })
+                v.define_editor_options(*this);
+            else if constexpr (requires { define_editor_options(*this, v); })
+                define_editor_options(*this, v);
             else
                 static_assert(
                     detail::always_false_v<T>,
-                    "ComponentInspector::field: type has no leaf overload, member define_editor_fields(), or ADL "
-                    "define_editor_fields()");
+                    "ComponentInspector::field: type has no leaf overload, member define_editor_options(), or ADL "
+                    "define_editor_options()");
 
             labelPrefix_ = savedPrefix;
             editableScope_ = savedScope;
@@ -294,47 +354,78 @@ namespace sage::editor
         {
             return std::move(fields_);
         }
+
+        [[nodiscard]] std::vector<ComponentRequirement> TakeRequirements() &&
+        {
+            return std::move(requirements_);
+        }
     };
 
     struct InspectedComponent
     {
+        EditorComponentId componentId{};
         std::string displayName;
         std::vector<InspectorField> fields;
-        // Offers "Remove Component" in the component's context menu; the host
-        // (EditorScene) maps the display name back to the component type.
+        // Offers "Remove Component" in the component's context menu. Removal can
+        // still be disabled when another present component declares this component
+        // as a requirement.
         bool removable = false;
+        bool removeAllowed = false;
+        std::string removeBlockedReason;
     };
 
     class InspectorRegistry
     {
         struct Entry
         {
+            EditorComponentId componentId{};
             std::string displayName;
             std::function<bool(const entt::registry&, entt::entity)> has;
             std::function<std::vector<InspectorField>(entt::registry&, entt::entity)> describe;
+            std::function<std::vector<ComponentRequirement>(entt::registry&, entt::entity)> options;
             bool removable = false;
         };
 
         std::vector<Entry> entries_;
 
+        [[nodiscard]] const Entry* findEntry(EditorComponentId componentId) const;
+
       public:
         template <class T>
-        void Register(std::string displayName, const bool removable = false)
+        void Register(std::string displayName, ComponentRegistrationOptions options = {})
         {
             entries_.push_back(
-                {std::move(displayName),
+                {ComponentIdOf<T>(),
+                 std::move(displayName),
                  [](const entt::registry& r, const entt::entity e) {
                      return r.valid(e) && r.template any_of<T>(e);
                  },
                  [](entt::registry& r, const entt::entity e) {
                      ComponentInspector ci;
                      ci.SetContext(&r, e);
-                     r.template get<T>(e).define_editor_fields(ci);
+                     r.template get<T>(e).define_editor_options(ci);
                      return std::move(ci).Take();
                  },
-                 removable});
+                 [](entt::registry& r, const entt::entity e) {
+                     ComponentInspector ci;
+                     ci.SetContext(&r, e);
+                     r.template get<T>(e).define_editor_options(ci);
+                     return std::move(ci).TakeRequirements();
+                 },
+                 options.removable});
         }
 
+        template <class T>
+        void Register(std::string displayName, const bool removable)
+        {
+            Register<T>(std::move(displayName), ComponentRegistrationOptions{.removable = removable});
+        }
+
+        [[nodiscard]] ComponentRemovalState CanRemove(
+            entt::registry& registry, EditorComponentId componentId, entt::entity entity) const;
+        [[nodiscard]] ComponentRemovalState CanRemove(
+            entt::registry& registry, EditorComponentId componentId, const std::vector<entt::entity>& entities)
+            const;
         [[nodiscard]] std::vector<InspectedComponent> Inspect(
             entt::registry& registry, entt::entity entity) const;
         [[nodiscard]] std::vector<InspectedComponent> Inspect(
@@ -344,13 +435,13 @@ namespace sage::editor
     void RegisterDefaultInspectorComponents(InspectorRegistry& registry);
 } // namespace sage::editor
 
-// --- ADL-discoverable define_editor_fields overloads for raylib types --------
+// --- ADL-discoverable define_editor_options overloads for raylib types --------
 // Pattern mirrors engine/raylib-cereal.hpp: free functions in global namespace
-// so unqualified `define_editor_fields(i, value)` finds them via ADL when the user
-// composes a raylib type inside their component's define_editor_fields().
+// so unqualified `define_editor_options(i, value)` finds them via ADL when the user
+// composes a raylib type inside their component's define_editor_options().
 
 template <class Inspector>
-void define_editor_fields(Inspector& i, BoundingBox& bb)
+void define_editor_options(Inspector& i, BoundingBox& bb)
 {
     i.field("Min", bb.min);
     i.field("Max", bb.max);

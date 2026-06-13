@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -38,6 +39,14 @@ namespace sage::editor
             Vector3 worldScale{1.0f, 1.0f, 1.0f};
             bool hasCollideable = false;
             Collideable collideable{};
+            bool hasNavigationSurface = false;
+            NavigationSurface navigationSurface{};
+            bool hasNavigationObstacle = false;
+            NavigationObstacle navigationObstacle{};
+            bool hasTriggerVolume = false;
+            TriggerVolume triggerVolume{};
+            bool hasCursorTarget = false;
+            CursorTarget cursorTarget{};
             bool hasRenderable = false;
             std::string renderableBlob;
             bool hasLight = false;

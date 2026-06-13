@@ -4,10 +4,11 @@
 
 #include "UILayout.hpp"
 
-#include "../GameUiEngine.hpp" // for full Window / TextBox / ImageBox / etc.
 #include "../Settings.hpp"
 #include "../slib.hpp"
+#include "GameUIEngine.hpp"
 #include "UIElements.hpp"
+#include "UIWindow.hpp"
 
 #include "raylib.h"
 

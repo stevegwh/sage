@@ -5,6 +5,7 @@
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/UberShaderComponent.hpp"
@@ -175,9 +176,12 @@ namespace sage::editor
         auto& collideable = sys->registry->emplace<Collideable>(
             entity, localBounds, sys->registry->get<sgTransform>(entity).GetMatrixNoRot());
         collideable.worldBoundingBox = TransformBoundingBoxByCorners(localBounds, placementMatrix);
-        collideable.SetCollisionLayer(collision_layers::Obstacle);
-        collideable.blocksNavigation = true;
         collideable.isStatic = true;
+        sys->registry->emplace<NavigationObstacle>(entity);
+        auto& cursorTarget = sys->registry->emplace<CursorTarget>(entity);
+        cursorTarget.cursorTexture = "cursor_denied";
+        cursorTarget.allowNavigationClickThrough = false;
+        cursorTarget.deniesNavigation = true;
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
 
         return entity;
@@ -262,8 +266,11 @@ namespace sage::editor
         collideable.worldBoundingBox = {
             {-gridHalfExtent, gridSurfaceY - GRID_PLACEMENT_SURFACE_HALF_HEIGHT, -gridHalfExtent},
             {gridHalfExtent, gridSurfaceY + GRID_PLACEMENT_SURFACE_HALF_HEIGHT, gridHalfExtent}};
-        collideable.SetCollisionLayer(collision_layers::GeometrySimple);
         collideable.isStatic = true;
+        sys->registry->emplace<NavigationSurface>(gridPlacementSurfaceEntity);
+        auto& cursorTarget = sys->registry->emplace<CursorTarget>(gridPlacementSurfaceEntity);
+        cursorTarget.cursorTexture = "cursor_move";
+        cursorTarget.allowNavigationClickThrough = true;
     }
 
     void EditorPlacementController::sizeGridToLoadedScene()

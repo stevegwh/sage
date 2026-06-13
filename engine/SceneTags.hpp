@@ -24,7 +24,7 @@ namespace sage
         }
 
         template <class Inspector>
-        void define_editor_fields(Inspector& i)
+        void define_editor_options(Inspector& i)
         {
             // Dropdown sourced from the project's scene tags
             // (sage::CustomSceneTags) rather than free-text entry.

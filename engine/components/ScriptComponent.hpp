@@ -30,7 +30,7 @@ namespace sage
         }
 
         template <class Inspector>
-        void define_editor_fields(Inspector& i)
+        void define_editor_options(Inspector& i)
         {
             i.field("Script Path", scriptPath);
             i.field("Enabled", enabled);

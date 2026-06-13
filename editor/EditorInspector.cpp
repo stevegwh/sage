@@ -4,6 +4,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -297,6 +298,58 @@ namespace sage::editor
         fields_.push_back({.label = qualified(label), .editable = rw && editableScope_, .value = std::move(e)});
     }
 
+    const InspectorRegistry::Entry* InspectorRegistry::findEntry(const EditorComponentId componentId) const
+    {
+        const auto it = std::ranges::find_if(entries_, [componentId](const Entry& entry) {
+            return entry.componentId == componentId;
+        });
+        return it != entries_.end() ? &*it : nullptr;
+    }
+
+    ComponentRemovalState InspectorRegistry::CanRemove(
+        entt::registry& registry, const EditorComponentId componentId, const entt::entity entity) const
+    {
+        return CanRemove(registry, componentId, std::vector<entt::entity>{entity});
+    }
+
+    ComponentRemovalState InspectorRegistry::CanRemove(
+        entt::registry& registry,
+        const EditorComponentId componentId,
+        const std::vector<entt::entity>& entities) const
+    {
+        const auto* target = findEntry(componentId);
+        if (target == nullptr) return {.allowed = false, .blockedReason = "Unknown component"};
+        if (!target->removable) return {.allowed = false, .blockedReason = "Component is protected"};
+
+        bool presentOnAnyEntity = false;
+        for (const auto entity : entities)
+        {
+            if (!registry.valid(entity) || !target->has(registry, entity)) continue;
+            presentOnAnyEntity = true;
+
+            for (const auto& dependent : entries_)
+            {
+                if (dependent.componentId == target->componentId || !dependent.has(registry, entity)) continue;
+
+                for (const auto& requirement : dependent.options(registry, entity))
+                {
+                    if (requirement.componentId != target->componentId) continue;
+                    if (requirement.applies && !requirement.applies(registry, entity)) continue;
+
+                    auto reason = "Required by " + dependent.displayName;
+                    if (entities.size() > 1)
+                    {
+                        reason += " on one or more selected entities";
+                    }
+                    return {.allowed = false, .blockedReason = std::move(reason)};
+                }
+            }
+        }
+
+        if (!presentOnAnyEntity) return {.allowed = false, .blockedReason = "Component is not present"};
+        return {.allowed = true};
+    }
+
     std::vector<InspectedComponent> InspectorRegistry::Inspect(
         entt::registry& registry, const entt::entity entity) const
     {
@@ -304,7 +357,14 @@ namespace sage::editor
         for (const auto& entry : entries_)
         {
             if (!entry.has(registry, entity)) continue;
-            result.push_back({entry.displayName, entry.describe(registry, entity), entry.removable});
+            const auto removal = CanRemove(registry, entry.componentId, entity);
+            result.push_back(
+                {.componentId = entry.componentId,
+                 .displayName = entry.displayName,
+                 .fields = entry.describe(registry, entity),
+                 .removable = entry.removable,
+                 .removeAllowed = removal.allowed,
+                 .removeBlockedReason = removal.blockedReason});
         }
         return result;
     }
@@ -332,7 +392,13 @@ namespace sage::editor
                 describedFields.push_back(entry.describe(registry, entity));
             }
 
-            InspectedComponent component{.displayName = entry.displayName, .removable = entry.removable};
+            const auto removal = CanRemove(registry, entry.componentId, entities);
+            InspectedComponent component{
+                .componentId = entry.componentId,
+                .displayName = entry.displayName,
+                .removable = entry.removable,
+                .removeAllowed = removal.allowed,
+                .removeBlockedReason = removal.blockedReason};
             for (const auto& firstField : describedFields.front())
             {
                 std::vector<InspectorField> matchingFields;
@@ -375,13 +441,17 @@ namespace sage::editor
         // Keep the editor identity first; it is the user's primary handle for scene objects.
         registry.Register<sgTransform>("Transform");
         registry.Register<PersistentEntityId>("Persistent Entity Id");
-        registry.Register<AssetReference>("Asset Reference");
+        registry.Register<AssetReference>("Asset Reference", ComponentRegistrationOptions{.removable = true});
         registry.Register<MetaData>("Meta Data");
-        registry.Register<Renderable>("Renderable");
-        registry.Register<Collideable>("Collideable");
-        registry.Register<Light>("Light");
-        registry.Register<Spawner>("Spawner");
-        registry.Register<Animation>("Animation", /*removable=*/true);
+        registry.Register<Renderable>("Renderable", ComponentRegistrationOptions{.removable = true});
+        registry.Register<Collideable>("Collideable", ComponentRegistrationOptions{.removable = true});
+        registry.Register<NavigationSurface>("Navigation Surface", ComponentRegistrationOptions{.removable = true});
+        registry.Register<NavigationObstacle>("Navigation Obstacle", ComponentRegistrationOptions{.removable = true});
+        registry.Register<TriggerVolume>("Trigger Volume", ComponentRegistrationOptions{.removable = true});
+        registry.Register<CursorTarget>("Cursor Target", ComponentRegistrationOptions{.removable = true});
+        registry.Register<Light>("Light", ComponentRegistrationOptions{.removable = true});
+        registry.Register<Spawner>("Spawner", ComponentRegistrationOptions{.removable = true});
+        registry.Register<Animation>("Animation", ComponentRegistrationOptions{.removable = true});
         registry.Register<MoveableActor>("Moveable Actor", /*removable=*/true);
         registry.Register<ScriptComponent>("Script", /*removable=*/true);
     }

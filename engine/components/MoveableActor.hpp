@@ -39,7 +39,7 @@ namespace sage
         float turnSpeed = 240.0f;
 
         template <class Inspector>
-        void define_editor_fields(Inspector& i)
+        void define_editor_options(Inspector& i)
         {
             i.field("Movement Speed", movementSpeed);
             i.field("Pathfinding Bounds", pathfindingBounds);

@@ -3,6 +3,7 @@
 //
 #include "CollisionSystem.hpp"
 
+#include "components/CollisionIntent.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 #include <Serializer.hpp>
@@ -39,15 +40,16 @@ namespace sage
     {
         std::unordered_map<entt::entity, std::unordered_set<entt::entity>> current;
 
-        for (auto view = registry->view<Collideable>(); const auto trigger : view)
+        for (auto view = registry->view<Collideable, TriggerVolume>(); const auto trigger : view)
         {
             const auto& c = view.get<Collideable>(trigger);
-            if (!c.isTrigger || !c.active) continue;
+            const auto& triggerVolume = view.get<TriggerVolume>(trigger);
+            if (!triggerVolume.active || !c.active) continue;
 
             auto& currentSet = current[trigger];
             const auto& previousSet = triggerOverlaps[trigger];
 
-            for (const auto& hit : GetCollisionsWithBoundingBox(c.worldBoundingBox, matrix.GetMask(c.collisionLayer)))
+            for (const auto& hit : GetCollisionsWithBoundingBox(c.worldBoundingBox, triggerVolume.overlapMask))
             {
                 const auto other = hit.collidedEntityId;
                 if (other == trigger) continue;
@@ -197,7 +199,7 @@ namespace sage
         const auto view = registry->view<Collideable>();
         view.each([&](auto entity, const auto& c) {
             if (!c.active || entity == caster) return;
-            if (mask.Contains(c.collisionLayer))
+            if (c.shape == ColliderShape::RenderMesh && mask.Contains(c.collisionLayer))
             {
                 if (registry->any_of<Renderable>(entity))
                 {
@@ -227,14 +229,14 @@ namespace sage
         {
             const auto& c = registry->get<Collideable>(entity);
             if (!c.active) continue;
-            if (collision_masks::Navigation.Contains(c.collisionLayer))
+            const bool draw =
+                c.debugDraw || registry->any_of<NavigationSurface, NavigationObstacle, TriggerVolume>(entity);
+            if (draw)
             {
-                auto col = YELLOW;
-                if (c.collisionLayer == collision_layers::GeometryComplex ||
-                    c.collisionLayer == collision_layers::GeometrySimple)
-                {
-                    col = GREEN;
-                }
+                auto col = ORANGE;
+                if (registry->any_of<NavigationSurface>(entity)) col = GREEN;
+                if (registry->any_of<NavigationObstacle>(entity)) col = YELLOW;
+                if (registry->any_of<TriggerVolume>(entity)) col = BLUE;
                 DrawBoundingBox(c.worldBoundingBox, col);
             }
         }

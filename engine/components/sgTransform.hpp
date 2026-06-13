@@ -173,7 +173,7 @@ namespace sage
         // Inspector authors get the proxy fields straight — assignment in the inspector
         // routes through TransformSystem via the VectorField overload of `field()`.
         template <class Inspector>
-        void define_editor_fields(Inspector& i)
+        void define_editor_options(Inspector& i)
         {
             i.field("Name", name, true);
             i.field("Position", position.local);

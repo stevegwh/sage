@@ -1,6 +1,8 @@
 #include "NavigationGridSystem.hpp"
 
 #include "CollisionSystem.hpp"
+#include "components/CollisionIntent.hpp"
+#include "components/DynamicRenderable.hpp"
 #include "components/MoveableActor.hpp"
 #include "components/NavigationGridSquare.hpp"
 #include "components/Renderable.hpp"
@@ -27,14 +29,6 @@ Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
 
 namespace sage
 {
-    namespace
-    {
-        bool isNavigationBlocker(const Collideable& collideable)
-        {
-            return collideable.blocksNavigation;
-        }
-    } // namespace
-
     inline double heuristic(GridSquare a, GridSquare b)
     {
         return std::abs(a.row - b.row) + std::abs(a.col - b.col);
@@ -471,9 +465,7 @@ namespace sage
             return; // entirely off-grid
         }
 
-        const auto& renderable = registry->get<Renderable>(entity);
-        const auto& transform = registry->get<sgTransform>(entity);
-        const auto& collideable = registry->get<Collideable>(entity);
+        const auto& surface = registry->get<NavigationSurface>(entity);
 
         const int min_col = std::max(0, std::min(topLeftIndex.col, bottomRightIndex.col));
         const int max_col = std::min(
@@ -486,7 +478,7 @@ namespace sage
         {
             for (int col = min_col; col <= max_col; ++col)
             {
-                if (collideable.collisionLayer == collision_layers::Stairs)
+                if (surface.heightSource == NavigationHeightSource::Ramp)
                 {
                     float relativeX =
                         (gridSquares[row][col].worldPosMin.x - area.min.x) / (area.max.x - area.min.x);
@@ -498,11 +490,11 @@ namespace sage
                     gridSquares[row][col].heightMap.Set(
                         interpolatedHeight, Vector3Normalize(Vector3{-stairDirection.x, 1, -stairDirection.z}));
                 }
-                else if (collideable.collisionLayer == collision_layers::GeometrySimple)
+                else if (surface.heightSource == NavigationHeightSource::FlatTop)
                 {
                     gridSquares[row][col].heightMap.Set(area.max.y, {0, 1, 0});
                 }
-                else if (collideable.collisionLayer == collision_layers::GeometryComplex)
+                else if (surface.heightSource == NavigationHeightSource::RenderMesh)
                 {
                     Vector3 gridCenter = {
                         (gridSquares[row][col].worldPosMin.x + gridSquares[row][col].worldPosMax.x) * 0.5f,
@@ -511,8 +503,36 @@ namespace sage
 
                     Ray ray = {gridCenter, {0, -1, 0}}; // Cast ray down
 
-                    RayCollision getFirstCollision =
-                        renderable.GetModel()->GetRayMeshCollision(ray, 0, transform.GetMatrix());
+                    RayCollision getFirstCollision{};
+                    if (registry->any_of<Renderable>(entity))
+                    {
+                        const auto& renderable = registry->get<Renderable>(entity);
+                        if (renderable.GetModel() != nullptr && registry->any_of<sgTransform>(entity))
+                        {
+                            const auto& transform = registry->get<sgTransform>(entity);
+                            getFirstCollision = renderable.GetModel()->GetRayMeshCollision(ray, 0, transform.GetMatrix());
+                        }
+                    }
+                    else if (registry->any_of<DynamicRenderable>(entity))
+                    {
+                        const auto& renderable = registry->get<DynamicRenderable>(entity);
+                        if (const auto* model = renderable.GetModel();
+                            model != nullptr && registry->any_of<sgTransform>(entity))
+                        {
+                            const auto& transform = registry->get<sgTransform>(entity);
+                            const Matrix worldMatrix = MatrixMultiply(model->transform, transform.GetMatrix());
+                            getFirstCollision.distance = std::numeric_limits<float>::max();
+                            for (int meshIndex = 0; meshIndex < model->meshCount; ++meshIndex)
+                            {
+                                const auto meshCollision =
+                                    GetRayCollisionMesh(ray, model->meshes[meshIndex], worldMatrix);
+                                if (meshCollision.hit && meshCollision.distance < getFirstCollision.distance)
+                                {
+                                    getFirstCollision = meshCollision;
+                                }
+                            }
+                        }
+                    }
 
                     if (getFirstCollision.hit)
                     {
@@ -1147,29 +1167,29 @@ namespace sage
     void NavigationGridSystem::InitGridHeightAndNormals()
     {
         std::cout << "START: Initialising grid height and normals \n";
-        const auto& view = registry->view<Collideable, Renderable>();
+        const auto& view = registry->view<Collideable, NavigationSurface>();
         for (const auto& entity : view)
         {
-            const auto& bb = view.get<Collideable>(entity);
-
-            if (IsNavigationLayer(bb.collisionLayer))
-            {
-                calculateTerrainHeightAndNormals(entity);
-            }
+            const auto& surface = view.get<NavigationSurface>(entity);
+            if (!surface.active || surface.heightSource == NavigationHeightSource::TerrainHeightField) continue;
+            calculateTerrainHeightAndNormals(entity);
         }
         // Height-field terrains sample exactly (no raycasts). Pass order is
         // irrelevant: TerrainTile::Set keeps the highest height per square, so
         // wherever terrain overlaps other walkable geometry the taller surface
         // wins — which also means a terrain valley dug below an overlapping
         // floor mesh will not register in the grid.
-        for (const auto& entity : registry->view<Terrain, sgTransform>())
+        for (const auto& entity : registry->view<Terrain, sgTransform, NavigationSurface>())
         {
+            const auto& surface = registry->get<NavigationSurface>(entity);
+            if (!surface.active || surface.heightSource != NavigationHeightSource::TerrainHeightField) continue;
             calculateHeightAndNormalsFromTerrain(entity);
         }
-        for (const auto& entity : registry->view<Collideable>(entt::exclude<MoveableActor>))
+        for (const auto& entity : registry->view<Collideable, NavigationObstacle>(entt::exclude<MoveableActor>))
         {
             const auto& collideable = registry->get<Collideable>(entity);
-            if (isNavigationBlocker(collideable))
+            const auto& obstacle = registry->get<NavigationObstacle>(entity);
+            if (obstacle.active)
             {
                 MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
             }

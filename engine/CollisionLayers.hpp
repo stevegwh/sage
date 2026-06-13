@@ -122,20 +122,10 @@ namespace sage
     namespace collision_masks
     {
         inline constexpr CollisionMask None{};
-        inline constexpr CollisionMask Navigation =
-            collision_layers::GeometrySimple | collision_layers::GeometryComplex | collision_layers::Stairs;
-        inline constexpr CollisionMask DefaultQuery = Navigation | collision_layers::Obstacle;
+        inline constexpr CollisionMask DefaultQuery =
+            collision_layers::GeometrySimple | collision_layers::GeometryComplex | collision_layers::Stairs |
+            collision_layers::Obstacle;
     } // namespace collision_masks
-
-    [[nodiscard]] constexpr bool IsNavigationLayer(const CollisionLayer& layer)
-    {
-        return collision_masks::Navigation.Contains(layer);
-    }
-
-    [[nodiscard]] constexpr bool RequiresMeshCollision(const CollisionLayer layer)
-    {
-        return layer == collision_layers::GeometryComplex || layer == collision_layers::Stairs;
-    }
 } // namespace sage
 
 template <>

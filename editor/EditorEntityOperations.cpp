@@ -2,6 +2,7 @@
 
 #include "EditorComponents.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
@@ -95,14 +96,12 @@ namespace sage::editor
         transform.position.world = position;
         transform.name = triggerLabel(entity);
 
-        // A trigger is just a non-blocking collision box (Unity isTrigger). Left non-static
-        // so the box tracks the transform as the user drags it in the editor; the collision
-        // layer/mask can be tuned in the inspector.
+        // A trigger is a collider plus TriggerVolume intent. Left non-static so
+        // the box tracks the transform as the user drags it in the editor.
         const BoundingBox localBox{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
         auto& collideable = sys->registry->emplace<Collideable>(entity, localBox, transform.GetMatrixNoRot());
-        collideable.isTrigger = true;
-        collideable.blocksNavigation = false;
         collideable.isStatic = false;
+        sys->registry->emplace<TriggerVolume>(entity);
         return entity;
     }
 
@@ -154,7 +153,8 @@ namespace sage::editor
         if (!sys->registry->valid(entity) || !sys->registry->any_of<Collideable>(entity)) return;
 
         const auto& collideable = sys->registry->get<Collideable>(entity);
-        if (collideable.blocksNavigation)
+        const auto* obstacle = sys->registry->try_get<NavigationObstacle>(entity);
+        if (obstacle != nullptr && obstacle->active)
         {
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
         }
@@ -229,6 +229,26 @@ namespace sage::editor
             {
                 record.hasCollideable = true;
                 record.collideable = sys->registry->get<Collideable>(entity);
+            }
+            if (sys->registry->any_of<NavigationSurface>(entity))
+            {
+                record.hasNavigationSurface = true;
+                record.navigationSurface = sys->registry->get<NavigationSurface>(entity);
+            }
+            if (sys->registry->any_of<NavigationObstacle>(entity))
+            {
+                record.hasNavigationObstacle = true;
+                record.navigationObstacle = sys->registry->get<NavigationObstacle>(entity);
+            }
+            if (sys->registry->any_of<TriggerVolume>(entity))
+            {
+                record.hasTriggerVolume = true;
+                record.triggerVolume = sys->registry->get<TriggerVolume>(entity);
+            }
+            if (sys->registry->any_of<CursorTarget>(entity))
+            {
+                record.hasCursorTarget = true;
+                record.cursorTarget = sys->registry->get<CursorTarget>(entity);
             }
             if (sys->registry->any_of<Renderable>(entity))
             {
@@ -318,6 +338,22 @@ namespace sage::editor
             if (record.hasCollideable)
             {
                 sys->registry->emplace<Collideable>(entity, record.collideable);
+            }
+            if (record.hasNavigationSurface)
+            {
+                sys->registry->emplace<NavigationSurface>(entity, record.navigationSurface);
+            }
+            if (record.hasNavigationObstacle)
+            {
+                sys->registry->emplace<NavigationObstacle>(entity, record.navigationObstacle);
+            }
+            if (record.hasTriggerVolume)
+            {
+                sys->registry->emplace<TriggerVolume>(entity, record.triggerVolume);
+            }
+            if (record.hasCursorTarget)
+            {
+                sys->registry->emplace<CursorTarget>(entity, record.cursorTarget);
             }
             if (record.hasRenderable)
             {

@@ -5,9 +5,9 @@
 #include "UIState.hpp"
 
 #include "../Cursor.hpp"
-#include "../GameUiEngine.hpp"
 #include "../Settings.hpp"
 #include "../slib.hpp"
+#include "GameUIEngine.hpp"
 
 #include "raylib.h"
 

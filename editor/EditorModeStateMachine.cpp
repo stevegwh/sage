@@ -488,13 +488,13 @@ namespace sage::editor
             const auto& registry = machine.registry();
             const bool meshCollider = std::ranges::any_of(entities, [&registry](const entt::entity entity) {
                 return registry.valid(entity) && registry.all_of<Collideable>(entity) &&
-                       RequiresMeshCollision(registry.get<Collideable>(entity).collisionLayer);
+                       registry.get<Collideable>(entity).shape == ColliderShape::RenderMesh;
             });
             if (meshCollider)
             {
                 TraceLog(
                     LOG_WARNING,
-                    "Box collider editing is disabled: the collision layer uses mesh collision, so the box is "
+                    "Box collider editing is disabled: this collider uses mesh collision, so the box is "
                     "derived from the meshes.");
             }
             else

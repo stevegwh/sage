@@ -30,7 +30,7 @@ namespace sage
         entt::registry* registry;
         [[nodiscard]] CollisionMask ResolveQueryMask(CollisionLayer layer) const;
 
-        // Entities overlapping each trigger Collideable last frame, for enter/exit diffing.
+        // Entities overlapping each TriggerVolume last frame, for enter/exit diffing.
         std::unordered_map<entt::entity, std::unordered_set<entt::entity>> triggerOverlaps;
         void UpdateTriggers();
 
@@ -40,8 +40,8 @@ namespace sage
         // masks through it; the editor's Collision Matrix window edits and saves it.
         CollisionMatrix matrix;
 
-        // Unity-style trigger callbacks, fired by UpdateTriggers() for any Collideable with
-        // isTrigger=true. Each passes (trigger, other): the trigger entity and the entity
+        // Trigger callbacks, fired by UpdateTriggers() for entities with Collideable +
+        // TriggerVolume. Each passes (trigger, other): the trigger entity and the entity
         // overlapping it. Subscribe via the Event<>/Subscription pattern.
         Event<entt::entity, entt::entity> onTriggerEnter;
         Event<entt::entity, entt::entity> onTriggerStay;

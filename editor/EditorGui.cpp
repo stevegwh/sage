@@ -118,6 +118,10 @@ namespace sage::editor
             .addScriptClicked = addClicks.script,
             .addAnimationClicked = addClicks.animation,
             .addMoveableActorClicked = addClicks.moveableActor,
+            .addNavigationSurfaceClicked = addClicks.navigationSurface,
+            .addNavigationObstacleClicked = addClicks.navigationObstacle,
+            .addTriggerVolumeClicked = addClicks.triggerVolume,
+            .addCursorTargetClicked = addClicks.cursorTarget,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 
@@ -137,6 +141,11 @@ namespace sage::editor
         clicks.script = ImGui::MenuItem("Script");
         clicks.animation = ImGui::MenuItem("Animation");
         clicks.moveableActor = ImGui::MenuItem("Moveable Actor");
+        ImGui::Separator();
+        clicks.navigationSurface = ImGui::MenuItem("Navigation Surface");
+        clicks.navigationObstacle = ImGui::MenuItem("Navigation Obstacle");
+        clicks.triggerVolume = ImGui::MenuItem("Trigger Volume");
+        clicks.cursorTarget = ImGui::MenuItem("Cursor Target");
         ImGui::EndPopup();
         return clicks;
     }

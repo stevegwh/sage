@@ -4,7 +4,7 @@
 
 #include "UIBase.hpp"
 
-#include "../GameUiEngine.hpp" // for full TableCell (parent->GetRec)
+#include "UILayout.hpp"
 #include "UIState.hpp"
 
 #include <algorithm>

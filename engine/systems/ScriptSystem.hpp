@@ -22,7 +22,7 @@ namespace sage
     //   OnDisable()  — whenever enabled transitions to false, and on destruction.
     //
     // Trigger callbacks, driven by CollisionSystem's onTrigger* events when the script's
-    // own entity is a trigger Collideable (isTrigger=true). Each receives the overlapping
+    // own entity has Collideable + TriggerVolume. Each receives the overlapping
     // entity's id. Only fire while the script is enabled and has ticked at least once.
     //   OnTriggerEnter(other)   — an entity started overlapping this trigger.
     //   OnTriggerUpdate(other)  — every frame an entity remains inside.

@@ -9,6 +9,7 @@
 #include "engine/EngineSystems.hpp"
 #include "engine/Settings.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
@@ -22,6 +23,15 @@
 
 namespace sage::editor
 {
+    namespace
+    {
+        bool IsNavigationObstacle(entt::registry& registry, const entt::entity entity)
+        {
+            const auto* obstacle = registry.try_get<NavigationObstacle>(entity);
+            return obstacle != nullptr && obstacle->active;
+        }
+    } // namespace
+
     namespace
     {
         // Mirrors the floor used elsewhere in the editor when treating uniform
@@ -513,7 +523,8 @@ namespace sage::editor
         {
             const auto& transform = sys->registry->get<sgTransform>(entity);
             auto& collideable = sys->registry->get<Collideable>(entity);
-            if (collideable.blocksNavigation)
+            const bool navigationObstacle = IsNavigationObstacle(*sys->registry, entity);
+            if (navigationObstacle)
             {
                 sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
             }
@@ -531,7 +542,7 @@ namespace sage::editor
             collideable.worldBoundingBox =
                 TransformBoundingBoxByCorners(collideable.localBoundingBox, entityMatrix);
 
-            if (collideable.blocksNavigation)
+            if (navigationObstacle)
             {
                 sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
             }
@@ -605,7 +616,8 @@ namespace sage::editor
         const Vector3 scale = transform.GetScale();
         constexpr float MIN_THICKNESS = 0.05f;
 
-        if (collideable.blocksNavigation)
+        const bool navigationObstacle = IsNavigationObstacle(*sys->registry, entity);
+        if (navigationObstacle)
         {
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
         }
@@ -643,7 +655,7 @@ namespace sage::editor
             transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
         collideable.worldBoundingBox = TransformBoundingBoxByCorners(box, entityMatrix);
 
-        if (collideable.blocksNavigation)
+        if (navigationObstacle)
         {
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
         }

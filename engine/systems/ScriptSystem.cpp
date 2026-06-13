@@ -143,12 +143,8 @@ namespace sage
                 sol::no_constructor,
                 "active",
                 &Collideable::active,
-                "isTrigger",
-                &Collideable::isTrigger,
                 "debugDraw",
-                &Collideable::debugDraw,
-                "blocksNavigation",
-                &Collideable::blocksNavigation);
+                &Collideable::debugDraw);
 
             // Clip names are the GLB animation names (Blender NLA tracks). Play/PlayOneShot
             // return false when no clip matches, so scripts can react instead of crashing.

@@ -739,7 +739,7 @@ namespace sage::editor
         }
 
         bool DrawInspectorComponent(
-            const InspectedComponent& component, std::optional<std::string>& removeComponent)
+            const InspectedComponent& component, std::optional<EditorComponentId>& removeComponent)
         {
             ImGui::PushID(component.displayName.c_str());
             bool changed = false;
@@ -752,9 +752,20 @@ namespace sage::editor
                     const auto text = FormatComponentValues(component);
                     ImGui::SetClipboardText(text.c_str());
                 }
-                if (component.removable && ImGui::MenuItem("Remove Component"))
+                if (component.removable && component.removeAllowed && ImGui::MenuItem("Remove Component"))
                 {
-                    removeComponent = component.displayName;
+                    removeComponent = component.componentId;
+                }
+                else if (component.removable && !component.removeAllowed)
+                {
+                    ImGui::BeginDisabled();
+                    ImGui::MenuItem("Remove Component");
+                    ImGui::EndDisabled();
+                    if (!component.removeBlockedReason.empty() &&
+                        ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    {
+                        ImGui::SetTooltip("%s", component.removeBlockedReason.c_str());
+                    }
                 }
                 ImGui::EndPopup();
             }
@@ -785,7 +796,7 @@ namespace sage::editor
         g_fieldEditBegan = false;
         g_fieldEditCommitted = false;
         bool changed = false;
-        std::optional<std::string> removeComponent;
+        std::optional<EditorComponentId> removeComponent;
         for (const auto& component : components)
         {
             changed |= DrawInspectorComponent(component, removeComponent);

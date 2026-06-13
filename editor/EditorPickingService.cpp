@@ -5,6 +5,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Settings.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
@@ -84,7 +85,7 @@ namespace sage::editor
                 collision.rlCollision = closestMeshHit;
             }
 
-            if (IsNavigationLayer(collision.collisionLayer) ||
+            if (sys->registry->any_of<NavigationSurface>(entity) ||
                 isMapBaseTransform(sys->registry->get<sgTransform>(entity)))
             {
                 fallbackHits.push_back(collision);

@@ -137,8 +137,12 @@ namespace sage
                 // "Add Component > Moveable Actor" was clicked; the host attaches a
                 // MoveableActor with default values on the selection.
                 bool addMoveableActorClicked = false;
-                // Display name of a component whose "Remove Component" was clicked.
-                std::optional<std::string> removeComponent;
+                bool addNavigationSurfaceClicked = false;
+                bool addNavigationObstacleClicked = false;
+                bool addTriggerVolumeClicked = false;
+                bool addCursorTargetClicked = false;
+                // Component type whose "Remove Component" was clicked.
+                std::optional<EditorComponentId> removeComponent;
             };
 
           private:
@@ -205,6 +209,10 @@ namespace sage
                 bool script = false;
                 bool animation = false;
                 bool moveableActor = false;
+                bool navigationSurface = false;
+                bool navigationObstacle = false;
+                bool triggerVolume = false;
+                bool cursorTarget = false;
             };
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;

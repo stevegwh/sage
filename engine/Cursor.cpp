@@ -4,6 +4,7 @@
 
 #include "Cursor.hpp"
 
+#include "components/CollisionIntent.hpp"
 #include "EngineSystems.hpp"
 #include "MousePicker.hpp"
 #include "ResourceManager.hpp"
@@ -28,7 +29,8 @@ namespace sage
             return;
         }
 
-        if (!cursorHoverMask.Contains(mouseHitInfo.collisionLayer))
+        const auto* cursorTarget = registry->try_get<CursorTarget>(mouseHitInfo.collidedEntityId);
+        if (cursorTarget == nullptr || !cursorTarget->hoverable)
         {
             if (m_hoverInfo.has_value())
             {
@@ -126,16 +128,6 @@ namespace sage
         hideCursor = false;
     }
 
-    void Cursor::SetCursorTexture(const CollisionLayer layer, std::string textureKey)
-    {
-        cursorTextureMap[layer] = std::move(textureKey);
-    }
-
-    void Cursor::SetCursorHoverMask(const CollisionMask mask)
-    {
-        cursorHoverMask = mask;
-    }
-
     void Cursor::SetNavigationRangeProvider(std::function<bool(Vector3)> provider)
     {
         navigationRangeProvider = std::move(provider);
@@ -149,22 +141,33 @@ namespace sage
     bool Cursor::OutOfRange() const
     {
         if (!navigationRangeProvider) return false;
+        if (!getNavigationHitInfo().rlCollision.hit) return false;
         return !navigationRangeProvider(getFirstNaviCollision().point);
     }
 
-    void Cursor::changeCursors(CollisionLayer collisionLayer)
+    void Cursor::changeCursors(const CollisionInfo& hitInfo)
     {
         if (contextLocked) return;
-        if (OutOfRange() || (IsNavigationLayer(collisionLayer) && navigationValidityProvider &&
-                             !navigationValidityProvider(getFirstNaviCollision().point)))
+
+        const auto* navigationSurface = registry->try_get<NavigationSurface>(hitInfo.collidedEntityId);
+        const auto* cursorTarget = registry->try_get<CursorTarget>(hitInfo.collidedEntityId);
+        const bool navigationHit = navigationSurface != nullptr && navigationSurface->active;
+        const bool invalidNavigation =
+            navigationHit && navigationValidityProvider && !navigationValidityProvider(getFirstNaviCollision().point);
+        const bool deniedTarget = cursorTarget != nullptr && cursorTarget->deniesNavigation;
+        if (OutOfRange() || invalidNavigation || deniedTarget)
         {
             currentTex = ResourceManager::GetInstance().TextureLoad("cursor_denied");
             currentColor = invalidColor;
             return;
         }
-        if (cursorTextureMap.contains(collisionLayer))
+        if (cursorTarget != nullptr && !cursorTarget->cursorTexture.empty())
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(cursorTextureMap.at(collisionLayer));
+            currentTex = ResourceManager::GetInstance().TextureLoad(cursorTarget->cursorTexture);
+        }
+        else if (navigationHit)
+        {
+            currentTex = ResourceManager::GetInstance().TextureLoad("cursor_move");
         }
         else
         {
@@ -202,7 +205,7 @@ namespace sage
         if (hitInfo.rlCollision.hit)
         {
             onCollisionHit.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
-            changeCursors(hitInfo.collisionLayer);
+            changeCursors(hitInfo);
         }
 
         checkMouseHover();
@@ -235,13 +238,13 @@ namespace sage
     bool Cursor::shouldPublishNavigationClick(const CollisionInfo& mouseHitInfo) const
     {
         const auto& navHitInfo = getNavigationHitInfo();
-        if (!navHitInfo.rlCollision.hit || !IsNavigationLayer(navHitInfo.collisionLayer)) return false;
-        if (IsNavigationLayer(mouseHitInfo.collisionLayer)) return true;
-        if (cursorHoverMask.Contains(mouseHitInfo.collisionLayer)) return false;
-        if (mouseHitInfo.collisionLayer == collision_layers::Obstacle) return false;
+        const auto* surface = registry->try_get<NavigationSurface>(navHitInfo.collidedEntityId);
+        if (!navHitInfo.rlCollision.hit || surface == nullptr || !surface->active) return false;
+        if (mouseHitInfo.collidedEntityId == navHitInfo.collidedEntityId) return true;
 
-        const auto cursorIt = cursorTextureMap.find(mouseHitInfo.collisionLayer);
-        return cursorIt == cursorTextureMap.end() || cursorIt->second != "cursor_denied";
+        const auto* target = registry->try_get<CursorTarget>(mouseHitInfo.collidedEntityId);
+        if (target == nullptr) return true;
+        return target->allowNavigationClickThrough && !target->deniesNavigation;
     }
 
     void Cursor::DrawDebug() const
@@ -277,11 +280,6 @@ namespace sage
 
     Cursor::Cursor(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
     {
-        SetCursorTexture(collision_layers::Default, "cursor_regular");
-        SetCursorTexture(collision_layers::GeometrySimple, "cursor_move");
-        SetCursorTexture(collision_layers::GeometryComplex, "cursor_move");
-        SetCursorTexture(collision_layers::Stairs, "cursor_move");
-        SetCursorTexture(collision_layers::Obstacle, "cursor_denied");
         EnableContextSwitching();
     }
 } // namespace sage

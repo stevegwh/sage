@@ -20,9 +20,8 @@ namespace sage::editor
         bool changed = false;   // a field's value was written this frame
         bool began = false;     // an edit gesture started this frame (widget activated)
         bool committed = false; // an edit gesture ended this frame (widget deactivated)
-        // Display name of a removable component whose "Remove Component" menu item
-        // was clicked this frame.
-        std::optional<std::string> removeComponent;
+        // Component type whose "Remove Component" menu item was clicked this frame.
+        std::optional<EditorComponentId> removeComponent;
     };
 
     // Draws every component (collapsing header + field table). Caller supplies the

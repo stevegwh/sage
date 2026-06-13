@@ -15,6 +15,7 @@
 #pragma once
 
 #include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
@@ -53,6 +54,7 @@ namespace sage::editor
         RemoveAnimation,
         AddMoveableActor,
         RemoveMoveableActor,
+        RemoveComponent,
         AddTerrain,
         SculptTerrain
     };
@@ -124,6 +126,14 @@ namespace sage::editor
             bool isMapBase = false;
             bool hasCollideable = false;
             Collideable collideable{};
+            bool hasNavigationSurface = false;
+            NavigationSurface navigationSurface{};
+            bool hasNavigationObstacle = false;
+            NavigationObstacle navigationObstacle{};
+            bool hasTriggerVolume = false;
+            TriggerVolume triggerVolume{};
+            bool hasCursorTarget = false;
+            CursorTarget cursorTarget{};
             bool hasRenderable = false;
             std::string renderableBlob;
             bool hasLight = false;
