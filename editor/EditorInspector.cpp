@@ -237,7 +237,7 @@ namespace sage::editor
         // A single scene tag chosen from the project's CustomSceneTags, rendered as a
         // dropdown via EnumField (same path as the CollisionLayer field). Index 0 is
         // "(none)"; the remaining options are the project tags, plus the entity's
-        // current tag if it isn't one of them (so legacy values stay selectable).
+        // current tag if it isn't one of them, so saved values stay selectable.
         EnumField e{.data = &tags};
         e.options.emplace_back("(none)");
         for (const auto& tag : CustomSceneTags)

@@ -157,21 +157,21 @@ namespace sage
         const bool deniedTarget = cursorTarget != nullptr && cursorTarget->deniesNavigation;
         if (OutOfRange() || invalidNavigation || deniedTarget)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad("cursor_denied");
+            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Denied));
             currentColor = invalidColor;
             return;
         }
-        if (cursorTarget != nullptr && !cursorTarget->cursorTexture.empty())
+        if (cursorTarget != nullptr)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(cursorTarget->cursorTexture);
+            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(cursorTarget->cursor));
         }
         else if (navigationHit)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad("cursor_move");
+            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Move));
         }
         else
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
+            currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Regular));
         }
     }
 
@@ -198,7 +198,7 @@ namespace sage
     void Cursor::Update()
     {
         sys->picker->Update();
-        currentTex = ResourceManager::GetInstance().TextureLoad("cursor_regular");
+        currentTex = ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Regular));
         currentColor = defaultColor;
 
         const auto& hitInfo = getMouseHitInfo();
@@ -270,7 +270,8 @@ namespace sage
         if (currentTex.id == 0) return;
         Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
         // TODO: Awful hack below
-        if (currentTex.id != ResourceManager::GetInstance().TextureLoad("cursor_regular").id)
+        if (currentTex.id !=
+            ResourceManager::GetInstance().TextureLoad(CursorTypeTextureKey(CursorType::Regular)).id)
         {
             pos = Vector2Subtract(
                 pos, {static_cast<float>(currentTex.width / 2), static_cast<float>(currentTex.height / 2)});

@@ -10,13 +10,11 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Spawner.hpp"
 #include "engine/components/Terrain.hpp"
+#include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/Light.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/Serializer.hpp"
-
-#include "cereal/types/string.hpp"
-#include "cereal/types/vector.hpp"
 
 #include <cstdint>
 #include <cstring>
@@ -32,176 +30,7 @@ namespace sage::editor
 {
     namespace
     {
-        constexpr char kEditorLayoutMapMagic[4] = {'L', 'Q', 'E', '2'};
-
-        struct LayoutEntityRecord
-        {
-            sage::serializer::entity entity{};
-            sgTransform transform{};
-            Collideable collideable{};
-            bool hasNavigationSurface = false;
-            NavigationSurface navigationSurface{};
-            bool hasNavigationObstacle = false;
-            NavigationObstacle navigationObstacle{};
-            bool hasTriggerVolume = false;
-            TriggerVolume triggerVolume{};
-            bool hasCursorTarget = false;
-            CursorTarget cursorTarget{};
-            Renderable renderable{};
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(
-                    entity,
-                    transform,
-                    collideable,
-                    hasNavigationSurface,
-                    navigationSurface,
-                    hasNavigationObstacle,
-                    navigationObstacle,
-                    hasTriggerVolume,
-                    triggerVolume,
-                    hasCursorTarget,
-                    cursorTarget,
-                    renderable);
-            }
-        };
-
-        struct LightEditorObjectRecord
-        {
-            std::uint32_t lightIndex = 0;
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(lightIndex);
-            }
-        };
-
-        struct EntityEditorObjectRecord
-        {
-            sage::serializer::entity entity{};
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(entity);
-            }
-        };
-
-        struct EntityMetaDataRecord
-        {
-            sage::serializer::entity entity{};
-            MetaData metaData{};
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(entity, metaData);
-            }
-        };
-
-        // A trigger is a Collideable + TriggerVolume with no mesh.
-        // It carries its own box, so we save the Collideable alongside the world position
-        // (taken from the transform). Must stay in sync with the game loader's TriggerRecord
-        // (LevelLayoutLoader.cpp).
-        struct TriggerRecord
-        {
-            Vector3 position{};
-            Collideable collideable{};
-            TriggerVolume triggerVolume{};
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(position, collideable, triggerVolume);
-            }
-        };
-
-        // Attaches a ScriptComponent to an entity from one of the three entity
-        // streams above; the owner is addressed by stream + id/index because only
-        // layout entities carry a saved entity id. Trailing section — old maps
-        // simply lack it. Must stay in sync with the game loader's
-        // EntityScriptRecord (LevelLayoutLoader.cpp).
-        struct EntityScriptRecord
-        {
-            // 0 = layout entity (targetId = saved entity id), 1 = spawner / 2 =
-            // trigger (targetId = index into that section, in saved order).
-            std::uint8_t targetKind = 0;
-            std::uint32_t targetId = 0;
-            ScriptComponent script{};
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(targetKind, targetId, script);
-            }
-        };
-
-        // Attaches an Animation to an entity, addressed the same way as
-        // EntityScriptRecord. Only the model key is saved; clips are derived from
-        // packed animation data on load. Trailing section — old maps simply lack
-        // it. Must stay in sync with the game loader's EntityAnimationRecord
-        // (LevelLayoutLoader.cpp).
-        struct EntityAnimationRecord
-        {
-            std::uint8_t targetKind = 0;
-            std::uint32_t targetId = 0;
-            std::string modelKey;
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(targetKind, targetId, modelKey);
-            }
-        };
-
-        // A terrain is its authored height field plus a world anchor (the field's
-        // min corner) and its Collideable (the layer is authored in the
-        // inspector); the mesh, shader and collision bounds are derived on load
-        // (AttachTerrainRenderable). Must stay in sync with the game loader's
-        // TerrainRecord (LevelLayoutLoader.cpp).
-        struct TerrainRecord
-        {
-            Vector3 position{};
-            std::int32_t resolution = 0;
-            float cellSize = 1.0f;
-            Collideable collideable{};
-            std::vector<float> heights;
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(position, resolution, cellSize, collideable, heights);
-            }
-        };
-
-        // Attaches a MoveableActor to an entity, addressed the same way as
-        // EntityScriptRecord. Only the authored fields are saved; the rest of the
-        // component is runtime state. Trailing section — old maps simply lack it.
-        // Must stay in sync with the game loader's EntityMoveableActorRecord
-        // (LevelLayoutLoader.cpp).
-        struct EntityMoveableActorRecord
-        {
-            std::uint8_t targetKind = 0;
-            std::uint32_t targetId = 0;
-            float movementSpeed = 0.0f;
-            std::int32_t pathfindingBounds = 0;
-            std::string moveClip;
-            std::string idleClip;
-
-            template <class Archive>
-            void serialize(Archive& archive)
-            {
-                archive(targetKind, targetId, movementSpeed, pathfindingBounds, moveClip, idleClip);
-            }
-        };
-
-        bool hasMoreSerializedData(std::istream& stream)
-        {
-            return stream.peek() != std::char_traits<char>::eof();
-        }
+        using namespace sage::editor_layout;
 
         bool isMapBaseTransform(const sgTransform& transform)
         {
@@ -266,7 +95,7 @@ namespace sage::editor
         char fileMagic[4]{};
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
-               std::memcmp(fileMagic, kEditorLayoutMapMagic, sizeof(fileMagic)) == 0;
+               std::memcmp(fileMagic, MapMagic, sizeof(fileMagic)) == 0;
     }
 
     bool LoadMap(entt::registry* destination, const char* path)
@@ -284,11 +113,9 @@ namespace sage::editor
         std::vector<entt::entity> loadedLayoutEntities;
 
         sage::serializer::ReadCompressedBinary(
-            path, kEditorLayoutMapMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
-                std::vector<entt::entity> loadedLights;
+            path, MapMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
                 std::vector<Light> lights;
                 input(lights);
-                loadedLights.reserve(lights.size());
                 for (const auto& light : lights)
                 {
                     const auto entity = destination->create();
@@ -296,7 +123,6 @@ namespace sage::editor
                     loadedLight.enabled = true;
                     destination->emplace<EditorMapEntity>(entity);
                     destination->emplace<Light>(entity, loadedLight);
-                    loadedLights.push_back(entity);
                 }
 
                 std::vector<LayoutEntityRecord> layoutEntities;
@@ -325,188 +151,129 @@ namespace sage::editor
                     loadedLayoutEntities.push_back(entity);
                 }
 
-                if (hasMoreSerializedData(stream))
+                std::vector<EntityMetaDataRecord> entityMetaData;
+                input(entityMetaData);
+                for (const auto& record : entityMetaData)
                 {
-                    std::vector<LightEditorObjectRecord> lightEditorObjects;
-                    input(lightEditorObjects);
-                    for (const auto& record : lightEditorObjects)
-                    {
-                        if (record.lightIndex >= loadedLights.size()) continue;
-                        const auto entity = loadedLights[record.lightIndex];
-                    }
-                }
-
-                if (hasMoreSerializedData(stream))
-                {
-                    std::vector<EntityEditorObjectRecord> entityEditorObjects;
-                    input(entityEditorObjects);
-                    for (const auto& record : entityEditorObjects)
-                    {
-                        const auto iter = idMap.find(record.entity.id);
-                        if (iter == idMap.end()) continue;
-                    }
-                }
-
-                if (hasMoreSerializedData(stream))
-                {
-                    std::vector<EntityMetaDataRecord> entityMetaData;
-                    input(entityMetaData);
-                    for (const auto& record : entityMetaData)
-                    {
-                        const auto iter = idMap.find(record.entity.id);
-                        if (iter == idMap.end()) continue;
-                        destination->emplace_or_replace<MetaData>(iter->second, record.metaData);
-                    }
+                    const auto iter = idMap.find(record.entity.id);
+                    if (iter == idMap.end()) continue;
+                    destination->emplace_or_replace<MetaData>(iter->second, record.metaData);
                 }
 
                 std::vector<entt::entity> loadedSpawnerEntities;
-                if (hasMoreSerializedData(stream))
+                std::vector<Spawner> spawners;
+                input(spawners);
+                for (const auto& spawner : spawners)
                 {
-                    std::vector<Spawner> spawners;
-                    input(spawners);
-                    for (const auto& spawner : spawners)
-                    {
-                        const auto entity = destination->create();
-                        destination->emplace<EditorMapEntity>(entity);
-                        auto& transform = destination->emplace<sgTransform>(entity);
-                        transform.position.world = spawner.pos;
-                        transform.rotation.world = spawner.rot;
-                        transform.name = "spawner_" + spawner.name;
-                        destination->emplace<Spawner>(entity, spawner);
-                        loadedSpawnerEntities.push_back(entity);
-                    }
+                    const auto entity = destination->create();
+                    destination->emplace<EditorMapEntity>(entity);
+                    auto& transform = destination->emplace<sgTransform>(entity);
+                    transform.position.world = spawner.pos;
+                    transform.rotation.world = spawner.rot;
+                    transform.name = "spawner_" + spawner.name;
+                    destination->emplace<Spawner>(entity, spawner);
+                    loadedSpawnerEntities.push_back(entity);
                 }
 
                 std::vector<entt::entity> loadedTriggerEntities;
-                if (hasMoreSerializedData(stream))
+                std::vector<TriggerRecord> triggers;
+                input(triggers);
+                for (const auto& record : triggers)
                 {
-                    std::vector<TriggerRecord> triggers;
-                    input(triggers);
-                    for (const auto& record : triggers)
-                    {
-                        const auto entity = destination->create();
-                        destination->emplace<EditorMapEntity>(entity);
-                        auto& transform = destination->emplace<sgTransform>(entity);
-                        transform.position.world = record.position;
-                        transform.name = "trigger";
-                        destination->emplace<Collideable>(entity, record.collideable);
-                        destination->emplace<TriggerVolume>(entity, record.triggerVolume);
-                        loadedTriggerEntities.push_back(entity);
-                    }
+                    const auto entity = destination->create();
+                    destination->emplace<EditorMapEntity>(entity);
+                    auto& transform = destination->emplace<sgTransform>(entity);
+                    transform.position.world = record.position;
+                    transform.name = "trigger";
+                    destination->emplace<Collideable>(entity, record.collideable);
+                    destination->emplace<TriggerVolume>(entity, record.triggerVolume);
+                    loadedTriggerEntities.push_back(entity);
                 }
 
-                if (hasMoreSerializedData(stream))
-                {
-                    std::vector<EntityScriptRecord> scripts;
-                    input(scripts);
-                    for (const auto& record : scripts)
+                const auto resolveTarget = [&](const std::uint8_t targetKind, const std::uint32_t targetId)
+                    -> entt::entity {
+                    switch (targetKind)
                     {
-                        entt::entity target = entt::null;
-                        switch (record.targetKind)
-                        {
-                        case 0:
-                            if (const auto iter = idMap.find(record.targetId); iter != idMap.end())
-                                target = iter->second;
-                            break;
-                        case 1:
-                            if (record.targetId < loadedSpawnerEntities.size())
-                                target = loadedSpawnerEntities[record.targetId];
-                            break;
-                        case 2:
-                            if (record.targetId < loadedTriggerEntities.size())
-                                target = loadedTriggerEntities[record.targetId];
-                            break;
-                        default:
-                            break;
-                        }
-                        if (target == entt::null) continue;
-                        destination->emplace_or_replace<ScriptComponent>(target, record.script);
+                    case 0:
+                        if (const auto iter = idMap.find(targetId); iter != idMap.end()) return iter->second;
+                        break;
+                    case 1:
+                        if (targetId < loadedSpawnerEntities.size()) return loadedSpawnerEntities[targetId];
+                        break;
+                    case 2:
+                        if (targetId < loadedTriggerEntities.size()) return loadedTriggerEntities[targetId];
+                        break;
+                    default:
+                        break;
                     }
+                    return entt::null;
+                };
+
+                std::vector<EntityScriptRecord> scripts;
+                input(scripts);
+                for (const auto& record : scripts)
+                {
+                    const entt::entity target = resolveTarget(record.targetKind, record.targetId);
+                    if (target == entt::null) continue;
+                    destination->emplace_or_replace<ScriptComponent>(target, record.script);
                 }
 
-                if (hasMoreSerializedData(stream))
+                std::vector<EntityAnimationRecord> animations;
+                input(animations);
+                for (const auto& record : animations)
                 {
-                    std::vector<EntityAnimationRecord> animations;
-                    input(animations);
-                    for (const auto& record : animations)
+                    const entt::entity target = resolveTarget(record.targetKind, record.targetId);
+                    if (target == entt::null) continue;
+                    if (!ResourceManager::GetInstance().HasModelAnimation(record.modelKey))
                     {
-                        entt::entity target = entt::null;
-                        switch (record.targetKind)
-                        {
-                        case 0:
-                            if (const auto iter = idMap.find(record.targetId); iter != idMap.end())
-                                target = iter->second;
-                            break;
-                        case 1:
-                            if (record.targetId < loadedSpawnerEntities.size())
-                                target = loadedSpawnerEntities[record.targetId];
-                            break;
-                        case 2:
-                            if (record.targetId < loadedTriggerEntities.size())
-                                target = loadedTriggerEntities[record.targetId];
-                            break;
-                        default:
-                            break;
-                        }
-                        if (target == entt::null) continue;
-                        if (!ResourceManager::GetInstance().HasModelAnimation(record.modelKey))
-                        {
-                            std::cerr << "EditorMapLoader: no packed animation data for '"
-                                      << record.modelKey << "', skipping Animation component.\n";
-                            continue;
-                        }
-                        // Animation is neither copyable nor movable (live Subscriptions
-                        // hold its address), so replace by remove + emplace.
-                        destination->remove<Animation>(target);
-                        destination->emplace<Animation>(target, record.modelKey);
+                        std::cerr << "EditorMapLoader: no packed animation data for '"
+                                  << record.modelKey << "', skipping Animation component.\n";
+                        continue;
                     }
+                    // Animation is neither copyable nor movable (live Subscriptions
+                    // hold its address), so replace by remove + emplace.
+                    destination->remove<Animation>(target);
+                    destination->emplace<Animation>(target, record.modelKey);
                 }
 
-                if (hasMoreSerializedData(stream))
+                std::vector<EntityMoveableActorRecord> moveables;
+                input(moveables);
+                for (const auto& record : moveables)
                 {
-                    std::vector<EntityMoveableActorRecord> moveables;
-                    input(moveables);
-                    for (const auto& record : moveables)
-                    {
-                        const auto iter = idMap.find(record.targetId);
-                        if (record.targetKind != 0 || iter == idMap.end()) continue;
-                        auto& moveable = destination->get_or_emplace<MoveableActor>(iter->second);
-                        moveable.movementSpeed = record.movementSpeed;
-                        moveable.pathfindingBounds = record.pathfindingBounds;
-                        moveable.moveClip = record.moveClip;
-                        moveable.idleClip = record.idleClip;
-                    }
+                    const auto iter = idMap.find(record.targetId);
+                    if (record.targetKind != 0 || iter == idMap.end()) continue;
+                    auto& moveable = destination->get_or_emplace<MoveableActor>(iter->second);
+                    moveable.movementSpeed = record.movementSpeed;
+                    moveable.pathfindingBounds = record.pathfindingBounds;
+                    moveable.moveClip = record.moveClip;
+                    moveable.idleClip = record.idleClip;
                 }
 
+                std::vector<TerrainRecord> terrains;
+                input(terrains);
+                for (auto& record : terrains)
                 {
-                    std::vector<TerrainRecord> terrains;
-                    input(terrains);
-                    for (auto& record : terrains)
+                    Terrain terrain;
+                    terrain.resolution = record.resolution;
+                    terrain.cellSize = record.cellSize;
+                    terrain.heights = std::move(record.heights);
+                    if (!terrain.IsValid())
                     {
-                        Terrain terrain;
-                        terrain.resolution = record.resolution;
-                        terrain.cellSize = record.cellSize;
-                        terrain.heights = std::move(record.heights);
-                        if (!terrain.IsValid())
-                        {
-                            std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
-                            continue;
-                        }
-
-                        const auto entity = destination->create();
-                        destination->emplace<EditorMapEntity>(entity);
-                        auto& transform = destination->emplace<sgTransform>(entity);
-                        transform.position.world = record.position;
-                        transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
-                        destination->emplace<Terrain>(entity, std::move(terrain));
-                        auto& collideable =
-                            destination->emplace<Collideable>(entity, record.collideable);
-                        collideable.isStatic = true;
-                        // The mesh, shader and collision bounds are derived after
-                        // load (EditorScene::refreshAfterMapLoad).
+                        std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
+                        continue;
                     }
-                }
 
+                    const auto entity = destination->create();
+                    destination->emplace<EditorMapEntity>(entity);
+                    auto& transform = destination->emplace<sgTransform>(entity);
+                    transform.position.world = record.position;
+                    transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
+                    destination->emplace<Terrain>(entity, std::move(terrain));
+                    auto& collideable = destination->emplace<Collideable>(entity, record.collideable);
+                    collideable.isStatic = true;
+                    // The mesh, shader and collision bounds are derived after
+                    // load (EditorScene::refreshAfterMapLoad).
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -539,9 +306,8 @@ namespace sage::editor
         }
 
         sage::serializer::WriteCompressedBinary(
-            path, kEditorLayoutMapMagic, [&](cereal::BinaryOutputArchive& output) {
+            path, MapMagic, [&](cereal::BinaryOutputArchive& output) {
                 std::vector<Light> lights;
-                std::vector<entt::entity> lightEntities;
                 for (const auto entity : source.view<EditorMapEntity, Light>())
                 {
                     auto light = source.get<Light>(entity);
@@ -550,7 +316,6 @@ namespace sage::editor
                         light.position = source.get<sgTransform>(entity).GetWorldPos();
                     }
                     lights.push_back(light);
-                    lightEntities.push_back(entity);
                 }
                 output(lights);
 
@@ -566,23 +331,6 @@ namespace sage::editor
                     appendLayoutEntityRecord(source, entityHandle, layoutEntities, emittedEntities);
                 }
                 output(layoutEntities);
-
-                std::vector<LightEditorObjectRecord> lightEditorObjects;
-                lightEditorObjects.reserve(lightEntities.size());
-                for (std::size_t i = 0; i < lightEntities.size(); ++i)
-                {
-                    // TODO
-                    const auto entity = lightEntities[i];
-                }
-                output(lightEditorObjects);
-
-                std::vector<EntityEditorObjectRecord> entityEditorObjects;
-                for (const auto entity : source.view<EditorMapEntity, sgTransform, Renderable, Collideable>())
-                {
-                    entityEditorObjects.push_back(
-                        EntityEditorObjectRecord{.entity = {entt::entt_traits<entt::entity>::to_entity(entity)}});
-                }
-                output(entityEditorObjects);
 
                 std::vector<EntityMetaDataRecord> entityMetaData;
                 for (const auto entity : source.view<EditorMapEntity, sgTransform, Renderable, Collideable, MetaData>())

@@ -78,11 +78,8 @@ namespace sage::editor
             }
         };
 
-        // The component sections below are trailing data after the records vector
-        // (plus a parallel vector of entity names) — flatpacks saved before they
-        // existed simply end early, mirroring the editor map format. localId
-        // indexes the records vector. Must stay in sync with the map-side records
-        // in EditorMapLoader.cpp, which carry the same authored fields.
+        // Component sections reference entities by localId, which indexes the
+        // records vector.
         struct FlatpackScriptRecord
         {
             std::uint32_t localId = 0;
@@ -126,10 +123,6 @@ namespace sage::editor
             }
         };
 
-        bool hasMoreSerializedData(std::istream& stream)
-        {
-            return stream.peek() != std::char_traits<char>::eof();
-        }
     } // namespace
 
     bool IsFlatpackFile(const char* path)
@@ -283,12 +276,8 @@ namespace sage::editor
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
         sage::serializer::ReadCompressedBinary(
-            path, kFlatpackMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
-                input(records);
-                if (hasMoreSerializedData(stream)) input(names);
-                if (hasMoreSerializedData(stream)) input(scripts);
-                if (hasMoreSerializedData(stream)) input(animations);
-                if (hasMoreSerializedData(stream)) input(moveables);
+            path, kFlatpackMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
+                input(records, names, scripts, animations, moveables);
             });
         if (records.empty()) return entt::null;
 

@@ -179,7 +179,7 @@ namespace sage::editor
         collideable.isStatic = true;
         sys->registry->emplace<NavigationObstacle>(entity);
         auto& cursorTarget = sys->registry->emplace<CursorTarget>(entity);
-        cursorTarget.cursorTexture = "cursor_denied";
+        cursorTarget.cursor = CursorType::Denied;
         cursorTarget.allowNavigationClickThrough = false;
         cursorTarget.deniesNavigation = true;
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
@@ -269,7 +269,7 @@ namespace sage::editor
         collideable.isStatic = true;
         sys->registry->emplace<NavigationSurface>(gridPlacementSurfaceEntity);
         auto& cursorTarget = sys->registry->emplace<CursorTarget>(gridPlacementSurfaceEntity);
-        cursorTarget.cursorTexture = "cursor_move";
+        cursorTarget.cursor = CursorType::Move;
         cursorTarget.allowNavigationClickThrough = true;
     }
 

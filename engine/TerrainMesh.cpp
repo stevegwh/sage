@@ -435,7 +435,7 @@ namespace sage
         auto& surface = registry.get_or_emplace<NavigationSurface>(entity);
         surface.heightSource = NavigationHeightSource::TerrainHeightField;
         auto& cursorTarget = registry.get_or_emplace<CursorTarget>(entity);
-        cursorTarget.cursorTexture = "cursor_move";
+        cursorTarget.cursor = CursorType::Move;
         cursorTarget.allowNavigationClickThrough = true;
         UpdateTerrainCollideableBounds(registry, entity);
     }

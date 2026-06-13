@@ -61,7 +61,7 @@ namespace sage::editor
 
         bool cursorTargetEqual(const CursorTarget& a, const CursorTarget& b)
         {
-            return a.cursorTexture == b.cursorTexture && a.hoverable == b.hoverable &&
+            return a.cursor == b.cursor && a.hoverable == b.hoverable &&
                    a.allowNavigationClickThrough == b.allowNavigationClickThrough &&
                    a.deniesNavigation == b.deniesNavigation;
         }
