@@ -195,14 +195,71 @@ namespace sage
             {worldSize, *maxHeight + TERRAIN_BOUNDS_PADDING, worldSize}};
     }
 
-    TerrainRegion ApplyTerrainBrush(
-        Terrain& terrain, const Vector2 localCenter, const float radius, const float delta)
+    namespace
     {
-        TerrainRegion region{
-            std::max(0, static_cast<int>(std::floor((localCenter.y - radius) / terrain.cellSize))),
-            std::max(0, static_cast<int>(std::floor((localCenter.x - radius) / terrain.cellSize))),
-            std::min(terrain.resolution - 1, static_cast<int>(std::ceil((localCenter.y + radius) / terrain.cellSize))),
-            std::min(terrain.resolution - 1, static_cast<int>(std::ceil((localCenter.x + radius) / terrain.cellSize)))};
+        // Inclusive vertex range covered by a brush circle, clamped to the field.
+        TerrainRegion brushRegion(const Terrain& terrain, const Vector2 center, const float radius)
+        {
+            return {
+                std::max(0, static_cast<int>(std::floor((center.y - radius) / terrain.cellSize))),
+                std::max(0, static_cast<int>(std::floor((center.x - radius) / terrain.cellSize))),
+                std::min(
+                    terrain.resolution - 1, static_cast<int>(std::ceil((center.y + radius) / terrain.cellSize))),
+                std::min(
+                    terrain.resolution - 1,
+                    static_cast<int>(std::ceil((center.x + radius) / terrain.cellSize)))};
+        }
+
+        float smoothstepFalloff(const float distance, const float radius)
+        {
+            const float t = distance / radius;
+            return 1.0f - t * t * (3.0f - 2.0f * t);
+        }
+
+        // Cheap, deterministic-per-call hash in [-1, 1] for the Noise brush.
+        float noiseAt(const int row, const int col, const unsigned int seed)
+        {
+            unsigned int h = seed;
+            h ^= static_cast<unsigned int>(row) * 374761393u;
+            h ^= static_cast<unsigned int>(col) * 668265263u;
+            h = (h ^ (h >> 13)) * 1274126177u;
+            h ^= h >> 16;
+            return static_cast<float>(h) / 2147483647.5f - 1.0f;
+        }
+    } // namespace
+
+    TerrainRegion ApplyTerrainBrush(
+        Terrain& terrain,
+        const Vector2 localCenter,
+        const float radius,
+        const float amount,
+        const TerrainBrushMode mode,
+        const float reference)
+    {
+        const TerrainRegion region = brushRegion(terrain, localCenter, radius);
+
+        // Smooth and Erosion read neighbour heights; sample from an immutable
+        // snapshot of the region so the result is independent of write order.
+        std::vector<float> snapshot;
+        const int snapCols = region.maxCol - region.minCol + 1;
+        const bool needsSnapshot = mode == TerrainBrushMode::Smooth || mode == TerrainBrushMode::Erosion;
+        if (needsSnapshot)
+        {
+            snapshot.reserve(static_cast<std::size_t>(region.maxRow - region.minRow + 1) * snapCols);
+            for (int row = region.minRow; row <= region.maxRow; ++row)
+                for (int col = region.minCol; col <= region.maxCol; ++col)
+                    snapshot.push_back(terrain.GetHeight(row, col));
+        }
+        // Neighbour height from the snapshot, falling back to the live field at
+        // the region edge (so brush borders blend into untouched terrain).
+        const auto sample = [&](const int row, const int col) -> float {
+            if (row >= region.minRow && row <= region.maxRow && col >= region.minCol && col <= region.maxCol)
+                return snapshot[static_cast<std::size_t>(row - region.minRow) * snapCols + (col - region.minCol)];
+            return terrain.GetHeight(row, col);
+        };
+
+        // A per-stroke-frame seed keeps Noise from layering the same pattern.
+        const auto seed = static_cast<unsigned int>(GetTime() * 1000.0) + 1u;
 
         for (int row = region.minRow; row <= region.maxRow; ++row)
         {
@@ -213,9 +270,93 @@ namespace sage
                 const float distance = std::sqrt(dx * dx + dz * dz);
                 if (distance >= radius) continue;
 
-                const float t = distance / radius;
-                const float falloff = 1.0f - t * t * (3.0f - 2.0f * t);
-                terrain.SetHeight(row, col, terrain.GetHeight(row, col) + delta * falloff);
+                const float falloff = smoothstepFalloff(distance, radius);
+                const float height = terrain.GetHeight(row, col);
+                float next = height;
+
+                switch (mode)
+                {
+                case TerrainBrushMode::RaiseLower:
+                    next = height + amount * falloff;
+                    break;
+                case TerrainBrushMode::Flatten:
+                    next = height + (reference - height) * std::clamp(amount, 0.0f, 1.0f) * falloff;
+                    break;
+                case TerrainBrushMode::Smooth:
+                {
+                    const float avg = 0.25f * (sample(row - 1, col) + sample(row + 1, col) +
+                                               sample(row, col - 1) + sample(row, col + 1));
+                    next = height + (avg - height) * std::clamp(amount, 0.0f, 1.0f) * falloff;
+                    break;
+                }
+                case TerrainBrushMode::Noise:
+                    next = height + noiseAt(row, col, seed) * amount * falloff;
+                    break;
+                case TerrainBrushMode::Erosion:
+                {
+                    const float avg = 0.25f * (sample(row - 1, col) + sample(row + 1, col) +
+                                               sample(row, col - 1) + sample(row, col + 1));
+                    const float diff = avg - height;
+                    // Peaks (diff < 0) wear faster than pits fill, so the field
+                    // loses material overall — the thermal-erosion look.
+                    const float bias = diff < 0.0f ? 1.0f : 0.3f;
+                    next = height + diff * bias * std::clamp(amount, 0.0f, 1.0f) * falloff;
+                    break;
+                }
+                case TerrainBrushMode::Ramp:
+                    break; // not a paint brush; see ApplyTerrainRamp
+                }
+
+                terrain.SetHeight(row, col, next);
+            }
+        }
+
+        return region;
+    }
+
+    TerrainRegion ApplyTerrainRamp(
+        Terrain& terrain, const Vector2 localStart, const Vector2 localEnd, const float halfWidth)
+    {
+        const TerrainRegion region{
+            std::max(
+                0,
+                static_cast<int>(
+                    std::floor((std::min(localStart.y, localEnd.y) - halfWidth) / terrain.cellSize))),
+            std::max(
+                0,
+                static_cast<int>(
+                    std::floor((std::min(localStart.x, localEnd.x) - halfWidth) / terrain.cellSize))),
+            std::min(
+                terrain.resolution - 1,
+                static_cast<int>(
+                    std::ceil((std::max(localStart.y, localEnd.y) + halfWidth) / terrain.cellSize))),
+            std::min(
+                terrain.resolution - 1,
+                static_cast<int>(
+                    std::ceil((std::max(localStart.x, localEnd.x) + halfWidth) / terrain.cellSize)))};
+
+        const Vector2 axis = Vector2Subtract(localEnd, localStart);
+        const float axisLenSq = Vector2LengthSqr(axis);
+        if (axisLenSq < 1e-4f) return region;
+
+        const float startHeight = terrain.SampleHeight(localStart.x, localStart.y);
+        const float endHeight = terrain.SampleHeight(localEnd.x, localEnd.y);
+
+        for (int row = region.minRow; row <= region.maxRow; ++row)
+        {
+            for (int col = region.minCol; col <= region.maxCol; ++col)
+            {
+                const Vector2 point = {
+                    static_cast<float>(col) * terrain.cellSize, static_cast<float>(row) * terrain.cellSize};
+                const float t = std::clamp(
+                    Vector2DotProduct(Vector2Subtract(point, localStart), axis) / axisLenSq, 0.0f, 1.0f);
+                const Vector2 projected = Vector2Add(localStart, Vector2Scale(axis, t));
+                const float distance = Vector2Distance(point, projected);
+                if (distance >= halfWidth) continue;
+
+                const float falloff = smoothstepFalloff(distance, halfWidth);
+                const float target = Lerp(startHeight, endHeight, t);
+                terrain.SetHeight(row, col, Lerp(terrain.GetHeight(row, col), target, falloff));
             }
         }
 

@@ -1299,11 +1299,45 @@ namespace sage
         ImGui::SetNextWindowSize(ImVec2{280.0f, 0.0f}, ImGuiCond_FirstUseEver);
         if (ImGui::Begin("Terrain Brush"))
         {
-            ImGui::SliderFloat("Radius", &sculpt->brushRadius, 0.5f, 50.0f, "%.1f");
-            ImGui::SliderFloat("Strength", &sculpt->brushStrength, 0.5f, 30.0f, "%.1f");
+            // Order must match TerrainBrushMode (engine/TerrainMesh.hpp).
+            static const char* const modeNames[] = {
+                "Raise / Lower", "Smooth", "Flatten", "Noise", "Erosion", "Ramp"};
+            int mode = static_cast<int>(sculpt->brushMode);
+            if (ImGui::Combo("Brush", &mode, modeNames, IM_ARRAYSIZE(modeNames)))
+            {
+                sculpt->brushMode = static_cast<TerrainBrushMode>(mode);
+            }
+
+            const bool ramp = sculpt->brushMode == TerrainBrushMode::Ramp;
+            ImGui::SliderFloat(ramp ? "Width" : "Radius", &sculpt->brushRadius, 0.5f, 50.0f, "%.1f");
+            if (!ramp)
+            {
+                ImGui::SliderFloat("Strength", &sculpt->brushStrength, 0.5f, 30.0f, "%.1f");
+            }
+
             ImGui::Spacing();
-            ImGui::TextUnformatted("LMB raise - Shift+LMB lower");
-            ImGui::TextUnformatted("[ / ] adjust radius - Esc to finish");
+            switch (sculpt->brushMode)
+            {
+            case TerrainBrushMode::RaiseLower:
+                ImGui::TextUnformatted("LMB raise - Shift+LMB lower");
+                break;
+            case TerrainBrushMode::Smooth:
+                ImGui::TextUnformatted("LMB to average toward neighbours");
+                break;
+            case TerrainBrushMode::Flatten:
+                ImGui::TextUnformatted("LMB flattens toward the click height");
+                break;
+            case TerrainBrushMode::Noise:
+                ImGui::TextUnformatted("LMB to add randomized roughness");
+                break;
+            case TerrainBrushMode::Erosion:
+                ImGui::TextUnformatted("LMB to wear ridges down");
+                break;
+            case TerrainBrushMode::Ramp:
+                ImGui::TextUnformatted("Click start, then end - Esc cancels");
+                break;
+            }
+            ImGui::TextUnformatted("Keys 1-6 pick brush - [ / ] size - Esc to finish");
         }
         ImGui::End();
     }

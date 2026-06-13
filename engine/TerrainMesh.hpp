@@ -30,10 +30,38 @@ namespace sage
 
     [[nodiscard]] BoundingBox GetTerrainLocalBounds(const Terrain& terrain);
 
-    // Raises (positive delta) or lowers the field inside the brush circle with
-    // a smoothstep falloff. localCenter and radius are in terrain-local units,
-    // delta in world units at the brush centre. Returns the touched range.
-    TerrainRegion ApplyTerrainBrush(Terrain& terrain, Vector2 localCenter, float radius, float delta);
+    // Sculpt brush behaviours, Unreal-landscape style. Ramp is not a paint
+    // brush (see ApplyTerrainRamp) but shares the enum for the mode selector.
+    enum class TerrainBrushMode
+    {
+        RaiseLower, // add amount (signed) to the field
+        Smooth,     // average each vertex toward its neighbours
+        Flatten,    // pull the field toward a reference height
+        Noise,      // jitter the field for natural roughness
+        Erosion,    // wear down ridges, lightly fill pits (thermal-style)
+        Ramp        // linear grade between two points (handled separately)
+    };
+
+    // Applies one paint-brush dab inside the brush circle with a smoothstep
+    // falloff. localCenter and radius are in terrain-local units. `amount` is
+    // the per-call scalar (typically strength * frame time): for RaiseLower it
+    // is the signed world-unit delta at the centre; for the others it is a
+    // positive rate. `reference` is the Flatten target height (ignored by other
+    // modes). Returns the touched vertex range.
+    TerrainRegion ApplyTerrainBrush(
+        Terrain& terrain,
+        Vector2 localCenter,
+        float radius,
+        float amount,
+        TerrainBrushMode mode,
+        float reference = 0.0f);
+
+    // Linearly grades a strip of the given half-width between two local points,
+    // taking the end heights from the current field and blending toward that
+    // ramp with a smoothstep falloff across the strip. Single-shot (not a drag).
+    // Returns the touched vertex range.
+    TerrainRegion ApplyTerrainRamp(
+        Terrain& terrain, Vector2 localStart, Vector2 localEnd, float halfWidth);
 
     // Intersects a world-space ray with the height field of a terrain whose
     // entity sits at worldOrigin. Returns the world-space hit point.

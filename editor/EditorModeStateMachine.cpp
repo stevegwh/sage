@@ -710,6 +710,16 @@ namespace sage::editor
             brushRadius = std::min(50.0f, brushRadius + 0.5f);
         }
 
+        // Number-key shortcuts mirror the brush selector in the Terrain Brush
+        // window. Switching away from Ramp drops any pending endpoint.
+        if (IsKeyPressed(KEY_ONE)) brushMode = TerrainBrushMode::RaiseLower;
+        if (IsKeyPressed(KEY_TWO)) brushMode = TerrainBrushMode::Smooth;
+        if (IsKeyPressed(KEY_THREE)) brushMode = TerrainBrushMode::Flatten;
+        if (IsKeyPressed(KEY_FOUR)) brushMode = TerrainBrushMode::Noise;
+        if (IsKeyPressed(KEY_FIVE)) brushMode = TerrainBrushMode::Erosion;
+        if (IsKeyPressed(KEY_SIX)) brushMode = TerrainBrushMode::Ramp;
+        if (brushMode != TerrainBrushMode::Ramp) rampStart.reset();
+
         cursorHit.reset();
         if (const auto ray = machine.viewportMouseRay(); ray.has_value() && !machine.isMouseOverUiCell())
         {
@@ -718,19 +728,32 @@ namespace sage::editor
             cursorHit = GetTerrainRayHit(terrainData, origin, *ray);
         }
 
-        const bool brushDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-        if (!stroking && cursorHit.has_value() && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        if (brushMode == TerrainBrushMode::Ramp)
         {
-            stroking = true;
-            machine.history().Begin(EditAction::SculptTerrain, {terrain});
+            updateRamp(machine);
         }
-        if (stroking && brushDown && cursorHit.has_value())
+        else
         {
-            applyBrushStroke(machine);
-        }
-        if (stroking && !brushDown)
-        {
-            finishStroke(machine, /*keepChanges=*/true);
+            const bool brushDown = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+            if (!stroking && cursorHit.has_value() && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                stroking = true;
+                machine.history().Begin(EditAction::SculptTerrain, {terrain});
+                if (brushMode == TerrainBrushMode::Flatten)
+                {
+                    const auto& terrainData = registry.get<Terrain>(terrain);
+                    const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+                    flattenTarget = terrainData.SampleHeight(cursorHit->x - origin.x, cursorHit->z - origin.z);
+                }
+            }
+            if (stroking && brushDown && cursorHit.has_value())
+            {
+                applyBrushStroke(machine);
+            }
+            if (stroking && !brushDown)
+            {
+                finishStroke(machine, /*keepChanges=*/true);
+            }
         }
 
         if (IsKeyPressed(KEY_TAB) || IsKeyPressed(KEY_G))
@@ -745,11 +768,46 @@ namespace sage::editor
         auto& terrainData = registry.get<Terrain>(terrain);
         const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
 
+        // Only RaiseLower is signed by Shift; the other brushes use Shift-free
+        // positive rates (Flatten/Smooth toward a target, Noise/Erosion intensity).
         const bool lower = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-        const float delta = (lower ? -1.0f : 1.0f) * brushStrength * GetFrameTime();
+        const float sign = (brushMode == TerrainBrushMode::RaiseLower && lower) ? -1.0f : 1.0f;
+        const float amount = sign * brushStrength * GetFrameTime();
         const Vector2 localCenter = {cursorHit->x - origin.x, cursorHit->z - origin.z};
 
-        const auto region = ApplyTerrainBrush(terrainData, localCenter, brushRadius, delta);
+        const auto region =
+            ApplyTerrainBrush(terrainData, localCenter, brushRadius, amount, brushMode, flattenTarget);
+        commitTerrainRegion(machine, region);
+    }
+
+    void EditorTerrainSculptState::updateRamp(EditorModeStateMachine& machine)
+    {
+        if (!cursorHit.has_value() || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+
+        auto& registry = machine.registry();
+        const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+        const Vector2 local = {cursorHit->x - origin.x, cursorHit->z - origin.z};
+
+        if (!rampStart.has_value())
+        {
+            rampStart = local;
+            return;
+        }
+
+        // Second click completes the ramp: a single, self-contained history entry.
+        machine.history().Begin(EditAction::SculptTerrain, {terrain});
+        auto& terrainData = registry.get<Terrain>(terrain);
+        const auto region = ApplyTerrainRamp(terrainData, *rampStart, local, brushRadius);
+        commitTerrainRegion(machine, region);
+        machine.history().Commit();
+        rampStart.reset();
+    }
+
+    void EditorTerrainSculptState::commitTerrainRegion(
+        EditorModeStateMachine& machine, const TerrainRegion& region) const
+    {
+        auto& registry = machine.registry();
+        auto& terrainData = registry.get<Terrain>(terrain);
         auto& renderable = registry.get<DynamicRenderable>(terrain);
         if (auto* model = renderable.GetModel())
         {
@@ -800,6 +858,29 @@ namespace sage::editor
             previous = point;
         }
         DrawSphere({cursorHit->x, cursorHit->y + ringLift, cursorHit->z}, 0.12f, GOLD);
+
+        // Ramp preview: a height-conformed line from the placed first endpoint
+        // to the cursor, sampled in segments so it hugs the surface.
+        if (brushMode == TerrainBrushMode::Ramp && rampStart.has_value())
+        {
+            const Vector3 start = {
+                origin.x + rampStart->x,
+                origin.y + terrainData.SampleHeight(rampStart->x, rampStart->y) + ringLift,
+                origin.z + rampStart->y};
+            const Vector3 end = {cursorHit->x, cursorHit->y + ringLift, cursorHit->z};
+            constexpr int rampSegments = 32;
+            Vector3 last = start;
+            for (int i = 1; i <= rampSegments; ++i)
+            {
+                const float f = static_cast<float>(i) / rampSegments;
+                const float x = Lerp(start.x, end.x, f);
+                const float z = Lerp(start.z, end.z, f);
+                const Vector3 point = {x, origin.y + terrainData.SampleHeight(x - origin.x, z - origin.z) + ringLift, z};
+                DrawLine3D(last, point, SKYBLUE);
+                last = point;
+            }
+            DrawSphere(start, 0.18f, SKYBLUE);
+        }
     }
 
     bool EditorTerrainSculptState::HandleEscape(EditorModeStateMachine& machine)
@@ -807,6 +888,12 @@ namespace sage::editor
         if (stroking)
         {
             finishStroke(machine, /*keepChanges=*/false);
+        }
+        // A pending ramp endpoint cancels first; a second Esc leaves the mode.
+        if (rampStart.has_value())
+        {
+            rampStart.reset();
+            return true;
         }
         machine.ChangeState(EditorSelectState{});
         machine.refreshOverlay();

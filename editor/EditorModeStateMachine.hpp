@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorGui.hpp"
+#include "engine/TerrainMesh.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -98,6 +99,7 @@ namespace sage::editor
         float brushRadius = 6.0f;
         // World units per second applied at the brush centre.
         float brushStrength = 6.0f;
+        TerrainBrushMode brushMode = TerrainBrushMode::RaiseLower;
 
         void OnEnter(EditorModeStateMachine& machine);
         void OnExit(EditorModeStateMachine& machine);
@@ -109,8 +111,16 @@ namespace sage::editor
       private:
         std::optional<Vector3> cursorHit;
         bool stroking = false;
+        // Reference height captured at stroke start for the Flatten brush.
+        float flattenTarget = 0.0f;
+        // First endpoint (terrain-local x/z) of a pending Ramp; the next click
+        // completes and applies the ramp.
+        std::optional<Vector2> rampStart;
         void applyBrushStroke(EditorModeStateMachine& machine) const;
         void finishStroke(EditorModeStateMachine& machine, bool keepChanges);
+        void updateRamp(EditorModeStateMachine& machine);
+        // Re-uploads the touched mesh chunks and refits the collider bounds.
+        void commitTerrainRegion(EditorModeStateMachine& machine, const TerrainRegion& region) const;
     };
 
     class EditorModeStateMachine final
