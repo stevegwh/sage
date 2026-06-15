@@ -78,7 +78,7 @@ namespace sage::editor
         // "Add" menu factories. Each creates a tagged EditorMapEntity at the given
         // world position and returns it; the caller records history and selects.
         [[nodiscard]] entt::entity CreateLight(Vector3 position) const;
-        [[nodiscard]] entt::entity CreateSpawner(Vector3 position) const;
+        [[nodiscard]] entt::entity CreateSpawnPoint(Vector3 position) const;
         [[nodiscard]] entt::entity CreateTriggerVolume(Vector3 position) const;
         [[nodiscard]] entt::entity CreateTerrain(Vector3 position) const;
 

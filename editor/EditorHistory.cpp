@@ -74,12 +74,6 @@ namespace sage::editor
                    a.constant == b.constant && a.linear == b.linear && a.quadratic == b.quadratic;
         }
 
-        bool spawnerEqual(const Spawner& a, const Spawner& b)
-        {
-            return a.type == b.type && a.name == b.name && vecEqual(a.pos, b.pos) &&
-                   vecEqual(a.rot, b.rot);
-        }
-
     } // namespace
 
     EditorHistory::EditorHistory(EngineSystems* _sys, OnApplied _onApplied)
@@ -133,10 +127,6 @@ namespace sage::editor
         }
         if (a.hasRenderable != b.hasRenderable || a.renderableBlob != b.renderableBlob) return false;
         if (a.hasLight != b.hasLight || (a.hasLight && !lightEqual(a.light, b.light))) return false;
-        if (a.hasSpawner != b.hasSpawner || (a.hasSpawner && !spawnerEqual(a.spawner, b.spawner)))
-        {
-            return false;
-        }
         if (a.hasAssetReference != b.hasAssetReference || a.assetKey != b.assetKey) return false;
         if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
         if (a.hasScript != b.hasScript ||
@@ -279,11 +269,6 @@ namespace sage::editor
         {
             s.hasLight = true;
             s.light = reg.get<Light>(entity);
-        }
-        if (reg.all_of<Spawner>(entity))
-        {
-            s.hasSpawner = true;
-            s.spawner = reg.get<Spawner>(entity);
         }
         if (reg.all_of<AssetReference>(entity))
         {
@@ -686,11 +671,6 @@ namespace sage::editor
             reg.emplace_or_replace<Light>(entity, target.light);
         else if (reg.all_of<Light>(entity))
             reg.remove<Light>(entity);
-
-        if (target.hasSpawner)
-            reg.emplace_or_replace<Spawner>(entity, target.spawner);
-        else if (reg.all_of<Spawner>(entity))
-            reg.remove<Spawner>(entity);
 
         if (target.hasAssetReference)
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});

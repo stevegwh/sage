@@ -17,11 +17,20 @@ namespace sage::editor
 {
     struct InspectorComponentsResult
     {
+        struct ComponentMoveRequest
+        {
+            EditorComponentId dragged{};
+            EditorComponentId target{};
+            bool after = false;
+        };
+
         bool changed = false;   // a field's value was written this frame
         bool began = false;     // an edit gesture started this frame (widget activated)
         bool committed = false; // an edit gesture ended this frame (widget deactivated)
         // Component type whose "Remove Component" menu item was clicked this frame.
         std::optional<EditorComponentId> removeComponent;
+        // Component header drag/drop reorder requested this frame.
+        std::optional<ComponentMoveRequest> moveComponent;
     };
 
     // Draws every component (collapsing header + field table). Caller supplies the

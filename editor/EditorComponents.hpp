@@ -2,9 +2,12 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace sage::editor
 {
+    inline constexpr std::string_view SpawnPointTag = "SpawnPoint";
+
     struct EditorMapEntity
     {
     };

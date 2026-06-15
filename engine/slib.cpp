@@ -77,18 +77,22 @@ namespace sage
 
     ImageSafe& ImageSafe::operator=(ImageSafe&& other) noexcept
     {
-
-        if (this != &other && deepCopy)
+        if (this != &other)
         {
-            // Clean up existing resources
-            UnloadImage(image);
+            // Clean up our existing resource only if we own it; deepCopy gates
+            // ownership, not whether the move happens.
+            if (deepCopy)
+            {
+                UnloadImage(image);
+            }
 
             // Move resources from other
             image = other.image;
             deepCopy = other.deepCopy;
 
-            // Reset the source object's model
+            // Reset the source object so it doesn't unload the image we just took
             other.image = {};
+            other.deepCopy = false;
         }
         return *this;
     }

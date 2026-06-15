@@ -9,7 +9,6 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
-#include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
 #include "engine/CursorTypes.hpp"
 #include "engine/SceneTags.hpp"
@@ -636,7 +635,6 @@ namespace sage::editor
         registry.Register<TriggerVolume>("Trigger Volume", true);
         registry.Register<CursorTarget>("Cursor Target", true);
         registry.Register<Light>("Light", true);
-        registry.Register<Spawner>("Spawner", true);
         registry.Register<Animation>("Animation", true);
         registry.Register<MoveableActor>("Moveable Actor", /*removable=*/true);
         registry.Register<ScriptComponent>("Script", /*removable=*/true);

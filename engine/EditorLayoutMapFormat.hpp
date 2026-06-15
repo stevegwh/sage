@@ -67,6 +67,30 @@ namespace sage::editor_layout
         }
     };
 
+    // Compatibility record for the old map marker section. Runtime/editor code
+    // now materializes these as ordinary entities tagged SpawnPoint.
+    enum class LegacySpawnPointType
+    {
+        PLAYER,
+        ENEMY,
+        DIALOG_CUTSCENE,
+        NPC
+    };
+
+    struct LegacySpawnPointRecord
+    {
+        std::string name;
+        LegacySpawnPointType type = LegacySpawnPointType::ENEMY;
+        Vector3 pos{};
+        Vector3 rot{};
+
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(type, name, pos, rot);
+        }
+    };
+
     struct TriggerRecord
     {
         Vector3 position{};
@@ -82,7 +106,7 @@ namespace sage::editor_layout
 
     struct EntityScriptRecord
     {
-        // 0 = layout entity (targetId = saved entity id), 1 = spawner / 2 =
+        // 0 = layout entity (targetId = saved entity id), 1 = spawn point / 2 =
         // trigger (targetId = index into that section, in saved order).
         std::uint8_t targetKind = 0;
         std::uint32_t targetId = 0;
@@ -142,7 +166,7 @@ namespace sage::editor_layout
     struct EntityArchetypeRecord
     {
         // Addressed like EntityScriptRecord: 0 = layout entity (targetId = saved
-        // entity id), 1 = spawner / 2 = trigger (targetId = index into that section).
+        // entity id), 1 = spawn point / 2 = trigger (targetId = index into that section).
         std::uint8_t targetKind = 0;
         std::uint32_t targetId = 0;
         Archetype archetype{};

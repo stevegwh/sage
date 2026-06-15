@@ -105,7 +105,6 @@ namespace sage
 
     void NavigationGridSystem::DrawDebugPathfinding(const GridSquare& minRange, const GridSquare& maxRange)
     {
-        // return;
         for (int i = 0; i < gridSquares.size(); i++)
         {
             for (int j = 0; j < gridSquares.at(0).size(); j++)
@@ -146,8 +145,6 @@ namespace sage
                 float dotProduct = normal.x * up.x + normal.y * up.y + normal.z * up.z;
                 float angle = std::acos(dotProduct) * RAD2DEG; // Convert to degrees
 
-                // If the angle is greater than the max slope angle, return a very high
-                // cost
                 if (angle > 45.0f)
                 {
                     gridSquares[row][col].occupied = occupied;
@@ -1047,14 +1044,17 @@ namespace sage
             {
                 GridSquare next = {current.row + dirX, current.col + dirY};
 
+                // Bounds-check before indexing gridSquares/visited/cost_so_far with next:
+                // an out-of-range neighbour (current on an edge) would otherwise read OOB.
+                if (!CheckWithinBounds(next, minRange, maxRange) || !checkFootprint(next, footprintOffsets) ||
+                    gridSquares.at(next.row).at(next.col).occupied)
+                    continue;
+
                 const auto current_cost = gridSquares[current.row][current.col].pathfindingCost;
                 const auto next_cost = gridSquares[next.row][next.col].pathfindingCost;
                 const double new_cost = current_cost + next_cost;
 
-                if (CheckWithinBounds(next, minRange, maxRange) && checkFootprint(next, footprintOffsets) &&
-                    (!visited[next.row][next.col] ||
-                     (visited[next.row][next.col] && new_cost < cost_so_far[next.row][next.col])) &&
-                    !gridSquares.at(next.row).at(next.col).occupied)
+                if (!visited[next.row][next.col] || new_cost < cost_so_far[next.row][next.col])
                 {
                     cost_so_far[next.row][next.col] = new_cost;
                     const double heuristic_cost = heuristic(next, finishGridSquare);

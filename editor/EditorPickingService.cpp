@@ -1,5 +1,6 @@
 #include "EditorPickingService.hpp"
 
+#include "EditorComponents.hpp"
 #include "EditorTransformMath.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
@@ -8,7 +9,7 @@
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
-#include "engine/components/Spawner.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 
 #include "raymath.h"
@@ -96,17 +97,17 @@ namespace sage::editor
             }
         }
 
-        // Spawners carry no Collideable, so test the ray against their stand-in sphere
-        // directly. Keeps the marker component as plain data instead of coupling it to
-        // the collision system. (Trigger volumes are real Collideables now, so they are
-        // picked through the collision ray query above.)
+        // Spawn point markers carry no Collideable, so test the ray against their
+        // stand-in sphere directly. Trigger volumes are real Collideables now, so
+        // they are picked through the collision ray query above.
         std::optional<std::pair<entt::entity, float>> markerHit;
         const auto considerMarker = [&](const entt::entity entity, const RayCollision& col) {
             if (!col.hit || entity == ignoredEntity) return;
             if (!markerHit || col.distance < markerHit->second) markerHit = {entity, col.distance};
         };
-        for (const auto entity : sys->registry->view<Spawner, sgTransform>())
+        for (const auto entity : sys->registry->view<sgTransform, MetaData>())
         {
+            if (!HasTag(sys->registry->get<MetaData>(entity), SpawnPointTag)) continue;
             const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
             considerMarker(entity, GetRayCollisionSphere(ray, position, 0.5f));
         }

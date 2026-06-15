@@ -14,7 +14,6 @@ namespace sage
 
     struct MetaData
     {
-        // Comma-separated scene tags. Example: "SpawnPoint, Goal".
         std::string tags;
 
         template <class Archive>

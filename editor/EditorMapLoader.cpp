@@ -9,7 +9,6 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
-#include "engine/components/Spawner.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/Light.hpp"
@@ -23,6 +22,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,6 +41,28 @@ namespace sage::editor
         std::string serializedEntityName(const std::uint32_t entityId)
         {
             return "entity_" + std::to_string(entityId);
+        }
+
+        std::string_view legacySpawnPointTypeName(const LegacySpawnPointType type)
+        {
+            switch (type)
+            {
+            case LegacySpawnPointType::PLAYER:
+                return "player";
+            case LegacySpawnPointType::ENEMY:
+                return "enemy";
+            case LegacySpawnPointType::DIALOG_CUTSCENE:
+                return "dialog";
+            case LegacySpawnPointType::NPC:
+                return "npc";
+            }
+            return "point";
+        }
+
+        std::string legacySpawnPointName(const LegacySpawnPointRecord& record, const std::size_t index)
+        {
+            const std::string suffix = record.name.empty() ? std::to_string(index) : record.name;
+            return "spawn_" + std::string{legacySpawnPointTypeName(record.type)} + "_" + suffix;
         }
 
         sgTransform transformWithSerializedNameFallback(sgTransform transform, const std::uint32_t entityId)
@@ -161,19 +183,20 @@ namespace sage::editor
                     destination->emplace_or_replace<MetaData>(iter->second, record.metaData);
                 }
 
-                std::vector<entt::entity> loadedSpawnerEntities;
-                std::vector<Spawner> spawners;
-                input(spawners);
-                for (const auto& spawner : spawners)
+                std::vector<entt::entity> loadedSpawnPointEntities;
+                std::vector<LegacySpawnPointRecord> spawnPoints;
+                input(spawnPoints);
+                for (std::size_t i = 0; i < spawnPoints.size(); ++i)
                 {
+                    const auto& spawnPoint = spawnPoints[i];
                     const auto entity = destination->create();
                     destination->emplace<EditorMapEntity>(entity);
                     auto& transform = destination->emplace<sgTransform>(entity);
-                    transform.position.world = spawner.pos;
-                    transform.rotation.world = spawner.rot;
-                    transform.name = "spawner_" + spawner.name;
-                    destination->emplace<Spawner>(entity, spawner);
-                    loadedSpawnerEntities.push_back(entity);
+                    transform.position.world = spawnPoint.pos;
+                    transform.rotation.world = spawnPoint.rot;
+                    transform.name = legacySpawnPointName(spawnPoint, i);
+                    sage::AddTag(*destination, entity, SpawnPointTag);
+                    loadedSpawnPointEntities.push_back(entity);
                 }
 
                 std::vector<entt::entity> loadedTriggerEntities;
@@ -199,7 +222,7 @@ namespace sage::editor
                         if (const auto iter = idMap.find(targetId); iter != idMap.end()) return iter->second;
                         break;
                     case 1:
-                        if (targetId < loadedSpawnerEntities.size()) return loadedSpawnerEntities[targetId];
+                        if (targetId < loadedSpawnPointEntities.size()) return loadedSpawnPointEntities[targetId];
                         break;
                     case 2:
                         if (targetId < loadedTriggerEntities.size()) return loadedTriggerEntities[targetId];
@@ -363,18 +386,23 @@ namespace sage::editor
                 }
                 output(entityMetaData);
 
-                std::vector<Spawner> spawners;
-                std::vector<entt::entity> spawnerEntities;
-                for (const auto entity : source.view<EditorMapEntity, sgTransform, Spawner>())
+                std::vector<LegacySpawnPointRecord> spawnPoints;
+                std::vector<entt::entity> spawnPointEntities;
+                for (const auto entity : source.view<EditorMapEntity, sgTransform, MetaData>())
                 {
-                    auto spawner = source.get<Spawner>(entity);
+                    if (emittedEntities.contains(entity)) continue;
+                    if (!HasTag(source.get<MetaData>(entity), SpawnPointTag)) continue;
+
                     const auto& transform = source.get<sgTransform>(entity);
-                    spawner.pos = transform.GetWorldPos();
-                    spawner.rot = transform.GetWorldRot();
-                    spawners.push_back(spawner);
-                    spawnerEntities.push_back(entity);
+                    spawnPoints.push_back(
+                        LegacySpawnPointRecord{
+                            .name = transform.name,
+                            .type = LegacySpawnPointType::ENEMY,
+                            .pos = transform.GetWorldPos(),
+                            .rot = transform.GetWorldRot()});
+                    spawnPointEntities.push_back(entity);
                 }
-                output(spawners);
+                output(spawnPoints);
 
                 std::vector<TriggerRecord> triggers;
                 std::vector<entt::entity> triggerEntities;
@@ -405,9 +433,9 @@ namespace sage::editor
                 {
                     appendScript(entity, 0, entt::entt_traits<entt::entity>::to_entity(entity));
                 }
-                for (std::size_t i = 0; i < spawnerEntities.size(); ++i)
+                for (std::size_t i = 0; i < spawnPointEntities.size(); ++i)
                 {
-                    appendScript(spawnerEntities[i], 1, static_cast<std::uint32_t>(i));
+                    appendScript(spawnPointEntities[i], 1, static_cast<std::uint32_t>(i));
                 }
                 for (std::size_t i = 0; i < triggerEntities.size(); ++i)
                 {

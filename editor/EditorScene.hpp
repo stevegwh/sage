@@ -92,7 +92,7 @@ namespace sage
         [[nodiscard]] Rectangle gameViewportScreenRect() const;
         void drawCollisionMatrixWindow() const;
         void addLight() const;
-        void addSpawner() const;
+        void addSpawnPoint() const;
         void addTriggerVolume() const;
         void addTerrain() const;
         // Brush settings panel, shown only while terrain sculpting is active.

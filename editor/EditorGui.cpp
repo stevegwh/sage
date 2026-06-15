@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <iterator>
 #include <utility>
 
 namespace sage::editor
@@ -89,6 +90,11 @@ namespace sage::editor
             else
             {
                 inspectorResult = DrawInspectorComponents(inspectedComponents);
+                if (inspectorResult.moveComponent.has_value())
+                {
+                    const auto& move = *inspectorResult.moveComponent;
+                    moveInspectorComponent(move.dragged, move.target, move.after);
+                }
                 addClicks = drawAddComponentControls();
             }
 
@@ -209,6 +215,75 @@ namespace sage::editor
     {
         inspectorSelectedEntity = selectedEntity;
         this->inspectedComponents = inspectedComponents;
+        syncInspectorComponentOrder();
+        applyInspectorComponentOrder();
+    }
+
+    void EditorGui::syncInspectorComponentOrder()
+    {
+        std::vector<EditorComponentId> uniqueOrder;
+        uniqueOrder.reserve(inspectorComponentOrder.size() + inspectedComponents.size());
+        for (const auto componentId : inspectorComponentOrder)
+        {
+            if (std::ranges::find(uniqueOrder, componentId) == uniqueOrder.end())
+            {
+                uniqueOrder.push_back(componentId);
+            }
+        }
+
+        for (const auto& component : inspectedComponents)
+        {
+            if (std::ranges::find(uniqueOrder, component.componentId) == uniqueOrder.end())
+            {
+                uniqueOrder.push_back(component.componentId);
+            }
+        }
+        inspectorComponentOrder = std::move(uniqueOrder);
+    }
+
+    void EditorGui::applyInspectorComponentOrder()
+    {
+        auto orderPosition = [this](const EditorComponentId componentId) -> std::optional<std::size_t> {
+            const auto it = std::ranges::find(inspectorComponentOrder, componentId);
+            if (it == inspectorComponentOrder.end()) return std::nullopt;
+            return static_cast<std::size_t>(std::distance(inspectorComponentOrder.begin(), it));
+        };
+
+        std::stable_sort(
+            inspectedComponents.begin(),
+            inspectedComponents.end(),
+            [&](const InspectedComponent& lhs, const InspectedComponent& rhs) {
+                const auto lhsIndex = orderPosition(lhs.componentId);
+                const auto rhsIndex = orderPosition(rhs.componentId);
+                if (lhsIndex.has_value() && rhsIndex.has_value()) return *lhsIndex < *rhsIndex;
+                if (lhsIndex.has_value()) return true;
+                if (rhsIndex.has_value()) return false;
+                return false;
+            });
+    }
+
+    void EditorGui::moveInspectorComponent(
+        const EditorComponentId dragged, const EditorComponentId target, const bool after)
+    {
+        if (dragged == target) return;
+
+        syncInspectorComponentOrder();
+        inspectorComponentOrder.erase(
+            std::remove(inspectorComponentOrder.begin(), inspectorComponentOrder.end(), dragged),
+            inspectorComponentOrder.end());
+
+        auto targetIt = std::ranges::find(inspectorComponentOrder, target);
+        if (targetIt == inspectorComponentOrder.end())
+        {
+            inspectorComponentOrder.push_back(dragged);
+        }
+        else
+        {
+            if (after) ++targetIt;
+            inspectorComponentOrder.insert(targetIt, dragged);
+        }
+
+        applyInspectorComponentOrder();
     }
 
     void EditorGui::DrawSceneViewInfo() const

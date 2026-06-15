@@ -7,6 +7,7 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <functional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -24,24 +25,26 @@ namespace sage
 
         std::string getNextText()
         {
-            if (currentIdx >= text.size())
+            // Visit at most one full cycle so a looping dialog whose entries all fail
+            // their condition() bails out instead of recursing/looping forever.
+            for (std::size_t visited = 0; visited < text.size(); ++visited)
             {
-                if (!loop)
+                if (currentIdx >= text.size())
                 {
-                    return "";
+                    if (!loop)
+                    {
+                        return "";
+                    }
+                    currentIdx = 0;
                 }
-                currentIdx = 0;
-            }
-            const auto& [txt, condition] = text.at(currentIdx);
-            if (condition())
-            {
-                return txt;
-            }
-            else
-            {
+                const auto& [txt, condition] = text.at(currentIdx);
+                if (condition())
+                {
+                    return txt;
+                }
                 ++currentIdx;
-                return getNextText();
             }
+            return "";
         }
 
       public:

@@ -86,15 +86,21 @@ namespace sage
             const auto& renderable = registry->get<Renderable>(hitInfo.collidedEntityId);
             const auto& transform = registry->get<sgTransform>(hitInfo.collidedEntityId);
 
+            RayCollision closest{};
+            closest.distance = std::numeric_limits<float>::max();
             for (int i = 0; i < renderable.GetModel()->GetMeshCount(); ++i)
             {
                 if (const auto meshCollision =
                         renderable.GetModel()->GetRayMeshCollision(ray, i, transform.GetMatrix());
-                    meshCollision.hit)
+                    meshCollision.hit && meshCollision.distance < closest.distance)
                 {
-                    hitInfo.rlCollision = meshCollision;
-                    return true;
+                    closest = meshCollision;
                 }
+            }
+            if (closest.hit)
+            {
+                hitInfo.rlCollision = closest;
+                return true;
             }
             return false;
         }

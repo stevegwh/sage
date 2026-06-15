@@ -17,7 +17,6 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/ScriptComponent.hpp"
-#include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -43,7 +42,7 @@ namespace sage::editor
         Paste,
         Delete,
         AddLight,
-        AddSpawner,
+        AddSpawnPoint,
         AddTriggerVolume,
         Transform,
         EditField,
@@ -138,8 +137,6 @@ namespace sage::editor
             std::string renderableBlob;
             bool hasLight = false;
             Light light{};
-            bool hasSpawner = false;
-            Spawner spawner{};
             bool hasAssetReference = false;
             std::string assetKey;
             bool hasMetaData = false;

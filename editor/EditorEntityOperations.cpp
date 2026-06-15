@@ -7,7 +7,6 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/EngineSystems.hpp"
-#include "engine/components/Spawner.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
 #include "engine/TerrainMesh.hpp"
@@ -34,9 +33,9 @@ namespace sage::editor
             return std::format("light_{}", entt::to_integral(entity));
         }
 
-        std::string spawnerLabel(const entt::entity entity)
+        std::string spawnPointLabel(const entt::entity entity)
         {
-            return std::format("spawner_{}", entt::to_integral(entity));
+            return std::format("spawn_point_{}", entt::to_integral(entity));
         }
 
         std::string triggerLabel(const entt::entity entity)
@@ -74,17 +73,15 @@ namespace sage::editor
         return entity;
     }
 
-    entt::entity EditorEntityOperations::CreateSpawner(const Vector3 position) const
+    entt::entity EditorEntityOperations::CreateSpawnPoint(const Vector3 position) const
     {
         const auto entity = sys->registry->create();
         sys->registry->emplace<EditorMapEntity>(entity);
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.position.world = position;
-        transform.name = spawnerLabel(entity);
+        transform.name = spawnPointLabel(entity);
 
-        sys->registry->emplace<Spawner>(
-            entity,
-            Spawner{.name = "", .type = SpawnerType::ENEMY, .pos = position, .rot = Vector3Zero()});
+        AddTag(*sys->registry, entity, SpawnPointTag);
         return entity;
     }
 

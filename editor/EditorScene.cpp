@@ -18,7 +18,6 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
-#include "engine/components/Spawner.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Cursor.hpp"
@@ -71,6 +70,7 @@ namespace sage
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
         constexpr float DEFAULT_MAP_BASE_HALF_HEIGHT = 0.02f;
         constexpr float DEFAULT_LIGHT_HEIGHT_OFFSET = 6.0f;
+        constexpr Color SPAWN_POINT_MARKER_COLOR = {80, 180, 255, 255};
 
         bool isMapBaseRenderable(const sgTransform& transform)
         {
@@ -83,21 +83,6 @@ namespace sage
             return std::ranges::find(keys, key) != keys.end();
         }
 
-        Color spawnerColor(const SpawnerType type)
-        {
-            switch (type)
-            {
-            case SpawnerType::PLAYER:
-                return BLUE;
-            case SpawnerType::ENEMY:
-                return RED;
-            case SpawnerType::NPC:
-                return GREEN;
-            case SpawnerType::DIALOG_CUTSCENE:
-                return PURPLE;
-            }
-            return WHITE;
-        }
     } // namespace
 
     const editor::PlaceableAsset& EditorScene::selectedPlaceable() const
@@ -364,15 +349,15 @@ namespace sage
         placementController->DrawGridAndAxes();
         editorModes->Draw3D();
 
-        // Markers have no mesh, so draw a stand-in: a sphere per spawner (coloured by
-        // type) and a wireframe box per trigger volume (from its halfExtents).
-        for (const auto entity : sys->registry->view<Spawner, sgTransform>())
+        // Marker entities have no mesh, so draw a stand-in sphere for tagged spawn points.
+        for (const auto entity : sys->registry->view<sgTransform, MetaData>())
         {
+            if (!HasTag(sys->registry->get<MetaData>(entity), editor::SpawnPointTag)) continue;
             const auto& transform = sys->registry->get<sgTransform>(entity);
             const auto position = transform.GetWorldPos();
-            const auto color = spawnerColor(sys->registry->get<Spawner>(entity).type);
+            const auto color = SPAWN_POINT_MARKER_COLOR;
             DrawSphereEx(position, 0.5f, 8, 8, color);
-            // Facing line: a stick from the sphere out along the spawner's forward.
+            // Facing line: a stick from the sphere out along the marker's forward.
             DrawLine3D(position, Vector3Add(position, Vector3Scale(transform.forward(), 1.5f)), color);
         }
         // Trigger volumes are Collideables with TriggerVolume intent; draw their world box so the
@@ -841,10 +826,6 @@ namespace sage
                 else if (componentId == editor::ComponentIdOf<Light>())
                 {
                     removeRegisteredComponent.template operator()<Light>();
-                }
-                else if (componentId == editor::ComponentIdOf<Spawner>())
-                {
-                    removeRegisteredComponent.template operator()<Spawner>();
                 }
             };
 
@@ -1323,12 +1304,12 @@ namespace sage
             {
                 addLight();
             }
-            // Spawners, trigger volumes and terrains persist via map-only
+            // Spawn point markers, trigger volumes and terrains persist via map-only
             // streams, so a flatpack can't carry them — keep them map-only.
             const bool flatpackOpen = flatpackSession->IsActive();
-            if (ImGui::MenuItem("Spawner", nullptr, false, !flatpackOpen))
+            if (ImGui::MenuItem("Spawn Point", nullptr, false, !flatpackOpen))
             {
-                addSpawner();
+                addSpawnPoint();
             }
             if (ImGui::MenuItem("Trigger Volume", nullptr, false, !flatpackOpen))
             {
@@ -1555,7 +1536,7 @@ namespace sage
         editorModes->SelectSceneEntity(entity);
     }
 
-    void EditorScene::addSpawner() const
+    void EditorScene::addSpawnPoint() const
     {
         Vector3 position = sys->camera->getRaylibCam()->target;
         if (const auto snappedPosition = placementController->SnappedPlacementPosition();
@@ -1564,8 +1545,8 @@ namespace sage
             position = *snappedPosition;
         }
 
-        const auto entity = entityOperations->CreateSpawner(position);
-        if (history) history->RecordCreate(editor::EditAction::AddSpawner, {entity});
+        const auto entity = entityOperations->CreateSpawnPoint(position);
+        if (history) history->RecordCreate(editor::EditAction::AddSpawnPoint, {entity});
         editorModes->SelectSceneEntity(entity);
     }
 

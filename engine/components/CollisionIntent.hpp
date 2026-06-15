@@ -11,6 +11,7 @@
 namespace sage
 {
     struct Collideable;
+    struct NavigationObstacle;
 
     // Shared base for the collider "aspect" components below: behaviours layered
     // onto an entity's Collideable, each toggleable via `active` and driven by its
@@ -51,6 +52,7 @@ namespace sage
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Collideable>();
+            i.template incompatibleComponent<NavigationObstacle>();
             i.field("Active", active);
             i.field("Height Source", heightSource);
         }
@@ -68,6 +70,7 @@ namespace sage
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Collideable>();
+            i.template incompatibleComponent<NavigationSurface>();
             i.field("Active", active);
         }
     };

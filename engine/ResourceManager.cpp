@@ -421,7 +421,6 @@ namespace sage
         auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
         // from QUEST_BONE.obj)
         assert(FileExists(path.c_str()));
-        // As the path is stripped of any relative information, file name overlap is very possible.
         assert(!images.contains(key));
         images[key] = LoadImage(path.c_str());
     }

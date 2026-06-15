@@ -93,7 +93,7 @@ namespace sage
         unsigned char a = 255;
 
         const bool last = currentTextIdx == overlayText.size() - 1;
-        if (timer.GetRemainingTime() < fadeOut || last)
+        if (fadeOut > 0 && (timer.GetRemainingTime() < fadeOut || last))
         {
             a = static_cast<unsigned char>((timer.GetRemainingTime() / fadeOut) * 255);
         }
@@ -136,7 +136,7 @@ namespace sage
 
             DrawTextEx(
                 font,
-                std::format("{}", text).c_str(),
+                text,
                 unscaledPos, // Position is already in screen coordinates
                 scaledFontSize,
                 1.5f,

@@ -25,6 +25,8 @@ namespace sage::editor
 {
     namespace
     {
+        constexpr const char* INSPECTOR_COMPONENT_DRAG_PAYLOAD = "SAGE_INSPECTOR_COMPONENT";
+
         template <class T>
         bool CommitField(const LeafField<T>& field, const T& value)
         {
@@ -735,12 +737,52 @@ namespace sage::editor
         }
 
         bool DrawInspectorComponent(
-            const InspectedComponent& component, std::optional<EditorComponentId>& removeComponent)
+            const InspectedComponent& component,
+            std::optional<EditorComponentId>& removeComponent,
+            std::optional<InspectorComponentsResult::ComponentMoveRequest>& moveComponent)
         {
             ImGui::PushID(component.displayName.c_str());
             bool changed = false;
             const bool open = ImGui::CollapsingHeader(
                 component.displayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth);
+            const ImVec2 headerMin = ImGui::GetItemRectMin();
+            const ImVec2 headerMax = ImGui::GetItemRectMax();
+
+            if (ImGui::BeginDragDropSource())
+            {
+                const EditorComponentId payload = component.componentId;
+                ImGui::SetDragDropPayload(INSPECTOR_COMPONENT_DRAG_PAYLOAD, &payload, sizeof(payload));
+                ImGui::TextUnformatted(component.displayName.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            if (ImGui::BeginDragDropTarget())
+            {
+                const bool dropAfter = ImGui::GetMousePos().y > (headerMin.y + headerMax.y) * 0.5f;
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(INSPECTOR_COMPONENT_DRAG_PAYLOAD);
+                    payload != nullptr && payload->DataSize == sizeof(EditorComponentId))
+                {
+                    const auto dragged = *static_cast<const EditorComponentId*>(payload->Data);
+                    if (dragged != component.componentId)
+                    {
+                        const float y = dropAfter ? headerMax.y : headerMin.y;
+                        const auto color = ImGui::GetColorU32(ImVec4{0.36f, 0.58f, 0.92f, 1.00f});
+                        ImGui::GetWindowDrawList()->AddLine(
+                            ImVec2{headerMin.x, y},
+                            ImVec2{headerMax.x, y},
+                            color,
+                            2.0f);
+
+                        if (payload->Delivery)
+                        {
+                            moveComponent = InspectorComponentsResult::ComponentMoveRequest{
+                                .dragged = dragged, .target = component.componentId, .after = dropAfter};
+                        }
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+
             if (ImGui::BeginPopupContextItem("component_context"))
             {
                 if (ImGui::MenuItem("Copy Component Values"))
@@ -793,14 +835,16 @@ namespace sage::editor
         g_fieldEditCommitted = false;
         bool changed = false;
         std::optional<EditorComponentId> removeComponent;
+        std::optional<InspectorComponentsResult::ComponentMoveRequest> moveComponent;
         for (const auto& component : components)
         {
-            changed |= DrawInspectorComponent(component, removeComponent);
+            changed |= DrawInspectorComponent(component, removeComponent, moveComponent);
         }
         return {
             .changed = changed,
             .began = g_fieldEditBegan,
             .committed = g_fieldEditCommitted,
-            .removeComponent = std::move(removeComponent)};
+            .removeComponent = std::move(removeComponent),
+            .moveComponent = std::move(moveComponent)};
     }
 } // namespace sage::editor

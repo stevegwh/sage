@@ -186,6 +186,7 @@ namespace sage
             std::optional<entt::entity> pendingHierarchyContextEntity;
             std::string inspectorSelectedEntity = "None";
             std::vector<InspectedComponent> inspectedComponents;
+            std::vector<EditorComponentId> inspectorComponentOrder;
             std::string assetDefaultsAssetName = "None";
             std::string assetDefaultsHeight = "0.00";
             std::string assetDefaultsRotation = "0";
@@ -221,6 +222,9 @@ namespace sage
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
             AddComponentClicks drawAddComponentControls();
+            void syncInspectorComponentOrder();
+            void applyInspectorComponentOrder();
+            void moveInspectorComponent(EditorComponentId dragged, EditorComponentId target, bool after);
             void openAssetRenamePopup(std::size_t index);
             void drawAssetRenamePopup();
             void openFlatpackRenamePopup(std::size_t index);
