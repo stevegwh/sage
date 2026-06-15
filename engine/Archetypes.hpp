@@ -1,9 +1,11 @@
 #pragma once
 
 #include "entt/core/hashed_string.hpp"
+#include "entt/entity/fwd.hpp"
 
 #include <cstdint>
 #include <string_view>
+#include <vector>
 
 namespace sage
 {
@@ -59,4 +61,14 @@ namespace sage
     {
         return Archetype{name, entt::hashed_string::value(name.data(), name.size())};
     }
+
+    struct ArchetypeIndex;
+
+    void EnableArchetypeIndex(entt::registry& registry);
+    void RebuildArchetypeIndex(entt::registry& registry);
+    void SetArchetype(entt::registry& registry, entt::entity entity, Archetype archetype);
+
+    [[nodiscard]] const std::vector<entt::entity>& FindAllWithArchetype(
+        entt::registry& registry,
+        Archetype archetype);
 } // namespace sage

@@ -313,11 +313,17 @@ namespace sage::editor
             }
             return 0;
         };
-        e.setIndex = [p = &v](const std::size_t idx) {
-            if (idx == 0 || idx > CustomArchetypes.size())
-                *p = sage::Archetype{};
-            else
-                *p = CustomArchetypes[idx - 1];
+        e.setIndex = [registry = contextRegistry_, entity = contextEntity_, p = &v](const std::size_t idx) {
+            const Archetype selected =
+                idx == 0 || idx > CustomArchetypes.size() ? sage::Archetype{} : CustomArchetypes[idx - 1];
+            if (registry != nullptr && entity != entt::null && registry->valid(entity) &&
+                registry->all_of<sage::Archetype>(entity))
+            {
+                sage::SetArchetype(*registry, entity, selected);
+                return;
+            }
+
+            *p = selected;
         };
 
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
