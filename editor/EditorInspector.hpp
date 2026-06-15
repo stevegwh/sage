@@ -32,6 +32,12 @@ namespace sage::editor
         std::string blockedReason;
     };
 
+    struct ComponentAddState
+    {
+        bool allowed = false;
+        std::string blockedReason;
+    };
+
     template <class T>
     struct LeafField
     {
@@ -93,6 +99,7 @@ namespace sage::editor
     {
         std::vector<InspectorField> fields;
         std::vector<EditorComponentId> requirements;
+        std::vector<EditorComponentId> incompatibleComponents;
     };
 
     namespace detail
@@ -103,8 +110,8 @@ namespace sage::editor
 
     // Component-side authors declare a templated `define_editor_options(Inspector&)` method
     // (or a free `define_editor_options(Inspector&, T&)` for foreign types). Inside it,
-    // call `i.field(label, value)` for editable/readable fields and
-    // `i.requiresComponent<T>()` for entity-level component requirements.
+    // call `i.field(label, value)` for editable/readable fields and declare entity-level
+    // rules with `i.requiresComponent<T>()` / `i.incompatibleComponent<T>()`.
     // Dispatch mirrors cereal's archive overloads:
     //
     //   - Concrete overloads handle "leaf" types (primitives, raylib Vec2/3/Color, …) and
@@ -119,6 +126,7 @@ namespace sage::editor
     {
         std::vector<InspectorField> fields_;
         std::vector<EditorComponentId> requirements_;
+        std::vector<EditorComponentId> incompatibleComponents_;
         std::string labelPrefix_;
         bool editableScope_ = true;
         // The entity being described; lets bespoke fields source options from
@@ -154,6 +162,12 @@ namespace sage::editor
         void requiresComponent()
         {
             requirements_.push_back(ComponentIdOf<T>());
+        }
+
+        template <class T>
+        void incompatibleComponent()
+        {
+            incompatibleComponents_.push_back(ComponentIdOf<T>());
         }
 
         // --- Informational row ---------------------------------------------------------
@@ -336,7 +350,8 @@ namespace sage::editor
         {
             return ComponentDescription{
                 .fields = std::move(fields_),
-                .requirements = std::move(requirements_)};
+                .requirements = std::move(requirements_),
+                .incompatibleComponents = std::move(incompatibleComponents_)};
         }
     };
 
@@ -361,6 +376,8 @@ namespace sage::editor
             std::string displayName;
             std::function<bool(const entt::registry&, entt::entity)> has;
             std::function<ComponentDescription(entt::registry&, entt::entity)> describe;
+            std::vector<EditorComponentId> requirements;
+            std::vector<EditorComponentId> incompatibleComponents;
             bool removable = false;
         };
 
@@ -381,11 +398,20 @@ namespace sage::editor
             const std::vector<DescribedEntry>& described, const Entry& entry);
         [[nodiscard]] ComponentRemovalState canRemoveFromDescription(
             const Entry& target, const std::vector<DescribedEntry>& described, bool multiSelection) const;
+        [[nodiscard]] ComponentAddState canAddToDescription(
+            const Entry& target,
+            const std::vector<DescribedEntry>& described,
+            bool multiSelection) const;
 
       public:
         template <class T>
         void Register(std::string displayName, bool removable = false)
         {
+            T defaultComponent{};
+            ComponentInspector defaultInspector;
+            defaultComponent.define_editor_options(defaultInspector);
+            auto defaultDescription = std::move(defaultInspector).Take();
+
             entries_.push_back(
                 {ComponentIdOf<T>(),
                  std::move(displayName),
@@ -398,9 +424,14 @@ namespace sage::editor
                      r.template get<T>(e).define_editor_options(ci);
                      return std::move(ci).Take();
                  },
+                 std::move(defaultDescription.requirements),
+                 std::move(defaultDescription.incompatibleComponents),
                  removable});
         }
 
+        [[nodiscard]] ComponentAddState CanAdd(
+            entt::registry& registry, EditorComponentId componentId, const std::vector<entt::entity>& entities)
+            const;
         [[nodiscard]] ComponentRemovalState CanRemove(
             entt::registry& registry, EditorComponentId componentId, const std::vector<entt::entity>& entities)
             const;

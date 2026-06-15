@@ -141,6 +141,9 @@ namespace sage
                 bool addNavigationObstacleClicked = false;
                 bool addTriggerVolumeClicked = false;
                 bool addCursorTargetClicked = false;
+                // "Add Component > Archetype" was clicked; the host attaches an
+                // (unset) Archetype on the selection — the kind is picked in the inspector.
+                bool addArchetypeClicked = false;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;
             };
@@ -213,6 +216,7 @@ namespace sage
                 bool navigationObstacle = false;
                 bool triggerVolume = false;
                 bool cursorTarget = false;
+                bool archetype = false;
             };
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;

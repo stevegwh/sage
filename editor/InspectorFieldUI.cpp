@@ -1,6 +1,7 @@
 #include "InspectorFieldUI.hpp"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
 #include "raylib.h"
@@ -424,22 +425,17 @@ namespace sage::editor
 
         bool DrawInspectorFieldWidget(const LeafField<bool>& field, const bool editable, const bool mixed)
         {
-            if (mixed)
-            {
-                return DrawMixedTextField<bool>(field, editable, [](const std::string_view text, bool& out) {
-                    return ParseBool(text, out);
-                });
-            }
-
-            bool value = field.data && *field.data;
+            bool value = mixed ? false : field.data && *field.data;
             bool changed = false;
             DrawMaybeDisabled(editable, [&]() {
+                if (mixed) ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
                 if (ImGui::Checkbox("##value", &value) && editable)
                 {
                     changed = CommitField(field, value);
                 }
+                if (mixed) ImGui::PopItemFlag();
             });
-            changed |= DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
+            changed |= DrawFieldClipboardMenu(mixed ? "-" : FormatLeafValue(field), editable, [field](const std::string_view text) {
                 bool parsed = false;
                 if (!ParseBool(text, parsed)) return false;
                 return CommitField(field, parsed);

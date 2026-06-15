@@ -11,6 +11,7 @@
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
+#include "engine/Archetypes.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
@@ -702,6 +703,18 @@ namespace sage
             const auto addIntentComponent = [&]<class Component>() {
                 const auto selected = selection->Selected();
                 if (selected.empty()) return;
+
+                const auto availability =
+                    inspectorRegistry.CanAdd(*sys->registry, editor::ComponentIdOf<Component>(), selected);
+                if (!availability.allowed)
+                {
+                    if (!availability.blockedReason.empty())
+                    {
+                        std::cout << "EditorScene: cannot add component: " << availability.blockedReason << '\n';
+                    }
+                    return;
+                }
+
                 history->Begin(editor::EditAction::EditField, selected);
                 for (const auto entity : selected)
                 {
@@ -724,6 +737,7 @@ namespace sage
             if (result.addNavigationObstacleClicked) addIntentComponent.template operator()<NavigationObstacle>();
             if (result.addTriggerVolumeClicked) addIntentComponent.template operator()<TriggerVolume>();
             if (result.addCursorTargetClicked) addIntentComponent.template operator()<CursorTarget>();
+            if (result.addArchetypeClicked) addIntentComponent.template operator()<Archetype>();
 
             const auto removeSelectedComponent = [&](const editor::EditorComponentId componentId) {
                 const auto selected = selection->Selected();
@@ -1056,21 +1070,7 @@ namespace sage
 
         if (selection)
         {
-            selection->Clear();
-            bool first = true;
-            for (const auto entity : restored)
-            {
-                if (!sys->registry->valid(entity)) continue;
-                if (first)
-                {
-                    (void)selection->Select(entity);
-                    first = false;
-                }
-                else
-                {
-                    (void)selection->Toggle(entity);
-                }
-            }
+            (void)selection->ReplaceWith(restored);
         }
 
         refreshSceneWindows();
@@ -1097,6 +1097,9 @@ namespace sage
     {
         if (!entityOperations->HasClipboard()) return;
 
+        if (editorModes) editorModes->ChangeState<editor::EditorSelectState>();
+        if (gui) gui->HideDeleteConfirmation();
+
         const auto newRoots = entityOperations->PasteClipboard();
         if (newRoots.empty()) return;
 
@@ -1115,18 +1118,12 @@ namespace sage
 
         if (history) history->RecordCreate(editor::EditAction::Paste, newRoots);
 
-        selection->Clear();
-        bool first = true;
-        for (const auto root : newRoots)
+        if (selection)
         {
-            if (first)
+            (void)selection->ReplaceWith(newRoots);
+            if (const auto active = selection->Active(); active.has_value() && gui)
             {
-                (void)selection->Select(root);
-                first = false;
-            }
-            else
-            {
-                (void)selection->Toggle(root);
+                gui->FocusHierarchyOnEntity(*active);
             }
         }
 

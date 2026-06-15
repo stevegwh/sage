@@ -122,6 +122,7 @@ namespace sage::editor
             .addNavigationObstacleClicked = addClicks.navigationObstacle,
             .addTriggerVolumeClicked = addClicks.triggerVolume,
             .addCursorTargetClicked = addClicks.cursorTarget,
+            .addArchetypeClicked = addClicks.archetype,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 
@@ -146,6 +147,8 @@ namespace sage::editor
         clicks.navigationObstacle = ImGui::MenuItem("Navigation Obstacle");
         clicks.triggerVolume = ImGui::MenuItem("Trigger Volume");
         clicks.cursorTarget = ImGui::MenuItem("Cursor Target");
+        ImGui::Separator();
+        clicks.archetype = ImGui::MenuItem("Archetype");
         ImGui::EndPopup();
         return clicks;
     }

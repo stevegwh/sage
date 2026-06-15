@@ -34,6 +34,9 @@ namespace sage::editor
         [[nodiscard]] bool Select(entt::entity entity);
         // Add the entity if absent, remove it if already selected.
         [[nodiscard]] bool Toggle(entt::entity entity);
+        // Replace the selection with the given entities, keeping the last
+        // selected root as the active/pivot entity.
+        [[nodiscard]] bool ReplaceWith(const std::vector<entt::entity>& entities);
         // Replace the selection with the given ordered run. The anchor is left
         // untouched so successive shift-clicks pivot around the same entity.
         [[nodiscard]] bool SelectRange(const std::vector<entt::entity>& orderedRange);

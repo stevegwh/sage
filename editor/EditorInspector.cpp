@@ -406,7 +406,7 @@ namespace sage::editor
         {
             if (dependent.entry->componentId == target.componentId) continue;
 
-            for (const auto requiredComponentId : dependent.description.requirements)
+            for (const auto requiredComponentId : dependent.entry->requirements)
             {
                 if (requiredComponentId != target.componentId) continue;
 
@@ -419,6 +419,84 @@ namespace sage::editor
             }
         }
 
+        return {.allowed = true};
+    }
+
+    ComponentAddState InspectorRegistry::canAddToDescription(
+        const Entry& target,
+        const std::vector<DescribedEntry>& described,
+        const bool multiSelection) const
+    {
+        auto componentName = [this](const EditorComponentId componentId) {
+            if (const auto* entry = findEntry(componentId)) return entry->displayName;
+            return std::string{"Unknown component"};
+        };
+        auto withSelectionContext = [multiSelection](std::string reason) {
+            if (multiSelection) reason += " on one or more selected entities";
+            return reason;
+        };
+        auto hasComponent = [&described](const EditorComponentId componentId) {
+            return std::ranges::any_of(described, [componentId](const DescribedEntry& candidate) {
+                return candidate.entry->componentId == componentId;
+            });
+        };
+
+        for (const auto requiredComponentId : target.requirements)
+        {
+            if (hasComponent(requiredComponentId)) continue;
+            return {
+                .allowed = false,
+                .blockedReason =
+                    withSelectionContext("Requires " + componentName(requiredComponentId))};
+        }
+
+        for (const auto incompatibleComponentId : target.incompatibleComponents)
+        {
+            if (!hasComponent(incompatibleComponentId)) continue;
+            return {
+                .allowed = false,
+                .blockedReason =
+                    withSelectionContext("Incompatible with " + componentName(incompatibleComponentId))};
+        }
+
+        for (const auto& existing : described)
+        {
+            for (const auto incompatibleComponentId : existing.entry->incompatibleComponents)
+            {
+                if (incompatibleComponentId != target.componentId) continue;
+                return {
+                    .allowed = false,
+                    .blockedReason = withSelectionContext("Incompatible with " + existing.entry->displayName)};
+            }
+        }
+
+        return {.allowed = true};
+    }
+
+    ComponentAddState InspectorRegistry::CanAdd(
+        entt::registry& registry,
+        const EditorComponentId componentId,
+        const std::vector<entt::entity>& entities) const
+    {
+        const auto* target = findEntry(componentId);
+        if (target == nullptr) return {.allowed = false, .blockedReason = "Unknown component"};
+
+        bool foundValidEntity = false;
+        bool foundEntityToAdd = false;
+        for (const auto entity : entities)
+        {
+            if (!registry.valid(entity)) continue;
+            foundValidEntity = true;
+            if (target->has(registry, entity)) continue;
+            foundEntityToAdd = true;
+
+            const auto described = describeEntity(registry, entity);
+            const auto add = canAddToDescription(*target, described, entities.size() > 1);
+            if (!add.allowed) return add;
+        }
+
+        if (!foundValidEntity) return {.allowed = false, .blockedReason = "No valid entity selected"};
+        if (!foundEntityToAdd) return {.allowed = false, .blockedReason = "Component is already present"};
         return {.allowed = true};
     }
 

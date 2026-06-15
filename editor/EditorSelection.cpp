@@ -100,6 +100,17 @@ namespace sage::editor
         return true;
     }
 
+    bool EditorSelection::ReplaceWith(const std::vector<entt::entity>& entities)
+    {
+        const auto previousRoots = selectedRoots;
+        const auto previousAnchor = selectionAnchor;
+
+        selectedRoots = entities;
+        normalizeRoots();
+        selectionAnchor = selectedRoots.empty() ? entt::null : selectedRoots.back();
+        return selectedRoots != previousRoots || selectionAnchor != previousAnchor;
+    }
+
     bool EditorSelection::SelectRange(const std::vector<entt::entity>& orderedRange)
     {
         std::vector<entt::entity> next;
