@@ -21,6 +21,7 @@
 #include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Cursor.hpp"
+#include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
@@ -71,11 +72,6 @@ namespace sage
         constexpr float DEFAULT_MAP_BASE_HALF_HEIGHT = 0.02f;
         constexpr float DEFAULT_LIGHT_HEIGHT_OFFSET = 6.0f;
         constexpr Color SPAWN_POINT_MARKER_COLOR = {80, 180, 255, 255};
-
-        bool isMapBaseRenderable(const sgTransform& transform)
-        {
-            return transform.name.find("_MAPBASE_") != std::string::npos;
-        }
 
         bool modelKeyAvailable(const std::string& key)
         {
@@ -1621,7 +1617,7 @@ namespace sage
         for (const auto entity : existingBaseView)
         {
             auto& transform = existingBaseView.get<sgTransform>(entity);
-            if (!isMapBaseRenderable(transform)) continue;
+            if (!editor_layout::IsMapBaseTransform(transform)) continue;
             auto& renderable = existingBaseView.get<Renderable>(entity);
             hasMapBase = true;
             if (!sys->registry->any_of<editor::EditorMapBase>(entity))
@@ -1637,9 +1633,8 @@ namespace sage
                 }
             }
             auto& collideable = existingBaseView.get<Collideable>(entity);
-            collideable.SetCollisionLayer(collision_layers::Background);
             collideable.isStatic = true;
-            collideable.active = true;
+            collideable.active = false;
             renderable.active = false;
         }
 
@@ -1670,9 +1665,8 @@ namespace sage
         const BoundingBox localBounds = {
             {-0.5f, -DEFAULT_MAP_BASE_HALF_HEIGHT, -0.5f}, {0.5f, DEFAULT_MAP_BASE_HALF_HEIGHT, 0.5f}};
         auto& collideable = sys->registry->emplace<Collideable>(entity, localBounds, transform.GetMatrixNoRot());
-        collideable.SetCollisionLayer(collision_layers::Background);
         collideable.isStatic = true;
-        collideable.active = true;
+        collideable.active = false;
     }
 
     void EditorScene::syncLightTransforms() const

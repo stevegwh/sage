@@ -4,6 +4,7 @@
 #include "EditorTransformMath.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
+#include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Settings.hpp"
 #include "engine/components/CollisionIntent.hpp"
@@ -21,17 +22,6 @@
 
 namespace sage::editor
 {
-    namespace
-    {
-        // Editor-only convenience: the large ground/terrain mesh is tagged with "_MAPBASE_"
-        // in its transform name (see EditorMapLoader). It almost always sits under the cursor,
-        // so we deprioritise it during picking to avoid grabbing it instead of props on top.
-        bool isMapBaseTransform(const sgTransform& transform)
-        {
-            return transform.name.find("_MAPBASE_") != std::string::npos;
-        }
-    } // namespace
-
     EditorPickingService::EditorPickingService(EngineSystems* _sys) : sys(_sys)
     {
     }
@@ -87,7 +77,7 @@ namespace sage::editor
             }
 
             if (sys->registry->any_of<NavigationSurface>(entity) ||
-                isMapBaseTransform(sys->registry->get<sgTransform>(entity)))
+                editor_layout::IsMapBaseTransform(sys->registry->get<sgTransform>(entity)))
             {
                 fallbackHits.push_back(collision);
             }

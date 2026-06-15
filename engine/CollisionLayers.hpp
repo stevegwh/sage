@@ -101,11 +101,6 @@ namespace sage
     namespace collision_layers
     {
         inline constexpr CollisionLayer Default = MakeCollisionLayer("Default", 0);
-        inline constexpr CollisionLayer GeometrySimple = MakeCollisionLayer("GeometrySimple", 1);
-        inline constexpr CollisionLayer GeometryComplex = MakeCollisionLayer("GeometryComplex", 2);
-        inline constexpr CollisionLayer Background = MakeCollisionLayer("Background", 3);
-        inline constexpr CollisionLayer Stairs = MakeCollisionLayer("Stairs", 4);
-        inline constexpr CollisionLayer Obstacle = MakeCollisionLayer("Obstacle", 5);
     } // namespace collision_layers
 
     [[nodiscard]] const std::vector<CollisionLayer>& GetCollisionLayers();
@@ -119,13 +114,6 @@ namespace sage
         return {};
     }
 
-    namespace collision_masks
-    {
-        inline constexpr CollisionMask None{};
-        inline constexpr CollisionMask DefaultQuery =
-            collision_layers::GeometrySimple | collision_layers::GeometryComplex | collision_layers::Stairs |
-            collision_layers::Obstacle;
-    } // namespace collision_masks
 } // namespace sage
 
 template <>
@@ -153,11 +141,6 @@ namespace sage
             static std::vector<CollisionLayer> layers = []() {
                 std::vector<CollisionLayer> v = {
                     collision_layers::Default,
-                    collision_layers::GeometrySimple,
-                    collision_layers::GeometryComplex,
-                    collision_layers::Background,
-                    collision_layers::Stairs,
-                    collision_layers::Obstacle,
                 };
                 for (const auto& l : CustomCollisionLayers) v.push_back(l);
                 return v;

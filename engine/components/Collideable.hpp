@@ -34,9 +34,6 @@ namespace sage
 
         Collideable() = default;
         Collideable(const BoundingBox& local, const Matrix& worldMat);
-        // What a layer collides with is decided globally by CollisionSystem's
-        // CollisionMatrix, not per-collideable.
-        void SetCollisionLayer(CollisionLayer layer);
 
         template <class Archive>
         void save(Archive& archive) const

@@ -3,7 +3,6 @@
 #include "EditorComponents.hpp"
 #include "EditorTransformMath.hpp"
 #include "engine/Camera.hpp"
-#include "engine/CollisionLayers.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"

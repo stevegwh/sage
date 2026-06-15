@@ -1,12 +1,14 @@
 #pragma once
 
+#include "engine/EditorLayoutTags.hpp"
+
 #include <cstdint>
 #include <string>
 #include <string_view>
 
 namespace sage::editor
 {
-    inline constexpr std::string_view SpawnPointTag = "SpawnPoint";
+    inline constexpr std::string_view SpawnPointTag = editor_layout::SpawnPointSceneTag;
 
     struct EditorMapEntity
     {

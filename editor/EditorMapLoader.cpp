@@ -32,22 +32,6 @@ namespace sage::editor
     {
         using namespace sage::editor_layout;
 
-        bool isMapBaseTransform(const sgTransform& transform)
-        {
-            return transform.name.find("_MAPBASE_") != std::string::npos;
-        }
-
-        std::string serializedEntityName(const std::uint32_t entityId)
-        {
-            return "entity_" + std::to_string(entityId);
-        }
-
-        sgTransform transformWithSerializedNameFallback(sgTransform transform, const std::uint32_t entityId)
-        {
-            if (transform.name.empty()) transform.name = serializedEntityName(entityId);
-            return transform;
-        }
-
         void appendLayoutEntityRecord(
             entt::registry& source,
             const entt::entity entityHandle,
@@ -61,7 +45,7 @@ namespace sage::editor
             auto& record = layoutEntities.emplace_back();
             record.entity.id = entt::entt_traits<entt::entity>::to_entity(entityHandle);
             record.transform =
-                transformWithSerializedNameFallback(source.get<sgTransform>(entityHandle), record.entity.id);
+                TransformWithSerializedNameFallback(source.get<sgTransform>(entityHandle), record.entity.id);
             record.collideable = source.get<Collideable>(entityHandle);
             if (const auto* component = source.try_get<NavigationSurface>(entityHandle))
             {
@@ -130,7 +114,7 @@ namespace sage::editor
                 for (const auto& record : layoutEntities)
                 {
                     const auto entity = destination->create();
-                    auto transform = transformWithSerializedNameFallback(record.transform, record.entity.id);
+                    auto transform = TransformWithSerializedNameFallback(record.transform, record.entity.id);
                     destination->emplace<EditorMapEntity>(entity);
                     destination->emplace<MetaData>(entity);
                     destination->emplace<sgTransform>(entity, transform);
@@ -145,7 +129,7 @@ namespace sage::editor
                     if (record.hasCursorTarget)
                         destination->emplace<CursorTarget>(entity, record.cursorTarget);
                     auto renderable = record.renderable;
-                    if (isMapBaseTransform(transform)) renderable.active = false;
+                    if (IsMapBaseTransform(transform)) renderable.active = false;
                     destination->emplace<Renderable>(entity, renderable);
                     idMap[record.entity.id] = entity;
                     loadedLayoutEntities.push_back(entity);

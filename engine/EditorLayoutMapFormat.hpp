@@ -23,6 +23,29 @@
 namespace sage::editor_layout
 {
     inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '2'};
+    inline constexpr std::string_view MapBaseNameMarker = "_MAPBASE_";
+
+    [[nodiscard]] inline bool IsMapBaseTransformName(const std::string_view name)
+    {
+        return name.find(MapBaseNameMarker) != std::string_view::npos;
+    }
+
+    [[nodiscard]] inline bool IsMapBaseTransform(const sgTransform& transform)
+    {
+        return IsMapBaseTransformName(transform.name);
+    }
+
+    [[nodiscard]] inline std::string SerializedEntityName(const std::uint32_t entityId)
+    {
+        return "entity_" + std::to_string(entityId);
+    }
+
+    [[nodiscard]] inline sgTransform TransformWithSerializedNameFallback(
+        sgTransform transform, const std::uint32_t entityId)
+    {
+        if (transform.name.empty()) transform.name = SerializedEntityName(entityId);
+        return transform;
+    }
 
     struct LayoutEntityRecord
     {

@@ -23,7 +23,7 @@ namespace sage
 
     CollisionMask CollisionMatrix::GetMask(const CollisionLayer layer) const
     {
-        if (!layer.IsValid()) return collision_masks::None;
+        if (!layer.IsValid()) return CollisionMask{};
         return CollisionMask{rows[bitIndex(layer)]};
     }
 
@@ -64,16 +64,7 @@ namespace sage
     void CollisionMatrix::ResetToDefaults()
     {
         rows = {};
-        // Mirrors the old hardcoded behavior: Default-layer queries (mouse picking,
-        // movement raycasts) hit world geometry and obstacles.
-        for (const auto layer :
-             {collision_layers::GeometrySimple,
-              collision_layers::GeometryComplex,
-              collision_layers::Stairs,
-              collision_layers::Obstacle})
-        {
-            SetPair(collision_layers::Default, layer, true);
-        }
+        SetPair(collision_layers::Default, collision_layers::Default, true);
     }
 
     void CollisionMatrix::Load(const char* path)

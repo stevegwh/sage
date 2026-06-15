@@ -52,8 +52,4 @@ namespace sage
         worldBoundingBox = TransformBoundingBox(local, worldMat);
     }
 
-    void Collideable::SetCollisionLayer(const CollisionLayer layer)
-    {
-        collisionLayer = layer;
-    }
 } // namespace sage
