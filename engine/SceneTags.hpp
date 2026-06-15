@@ -1,7 +1,6 @@
 #pragma once
 
 #include "cereal/types/string.hpp"
-#include "entt/core/hashed_string.hpp"
 #include "entt/entt.hpp"
 
 #include <string>
@@ -48,12 +47,6 @@ namespace sage
         return {tags.data(), tags.size()};
     }
 
-    [[nodiscard]] inline entt::id_type SceneTagStorageId(const std::string_view tag)
-    {
-        const auto trimmed = TrimSceneTag(tag);
-        return entt::hashed_string::value(trimmed.data(), trimmed.size());
-    }
-
     template <class Func>
     inline void ForEachSceneTag(const std::string_view tags, Func&& func)
     {
@@ -97,9 +90,6 @@ namespace sage
             if (!meta.tags.empty()) meta.tags += ", ";
             meta.tags.append(trimmed.data(), trimmed.size());
         }
-
-        auto& index = registry.storage<void>(SceneTagStorageId(trimmed));
-        if (!index.contains(entity)) index.emplace(entity);
     }
 
     inline void RemoveTag(entt::registry& registry, const entt::entity entity, const std::string_view tag)
@@ -117,36 +107,12 @@ namespace sage
             });
             meta->tags = std::move(nextTags);
         }
-
-        if (auto* index = registry.storage(SceneTagStorageId(trimmed)); index != nullptr)
-        {
-            index->remove(entity);
-        }
-    }
-
-    inline void RebuildSceneTagIndex(entt::registry& registry)
-    {
-        for (auto view = registry.view<MetaData>(); const auto entity : view)
-        {
-            ForEachSceneTag(SceneTagText(view.get<MetaData>(entity).tags), [&](const std::string_view tag) {
-                auto& index = registry.storage<void>(SceneTagStorageId(tag));
-                if (!index.contains(entity)) index.emplace(entity);
-            });
-        }
     }
 
     [[nodiscard]] inline entt::entity FindFirstWithTag(entt::registry& registry, const std::string_view tag)
     {
         const auto trimmed = TrimSceneTag(tag);
         if (trimmed.empty()) return entt::null;
-
-        if (auto* index = registry.storage(SceneTagStorageId(trimmed)); index != nullptr)
-        {
-            for (const auto entity : *index)
-            {
-                if (registry.valid(entity) && HasTag(registry, entity, trimmed)) return entity;
-            }
-        }
 
         for (auto view = registry.view<MetaData>(); const auto entity : view)
         {

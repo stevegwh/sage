@@ -6,6 +6,9 @@
 
 #include "raylib.h"
 
+#include <cstdint>
+#include <vector>
+
 namespace sage
 {
     struct UberShaderComponent
@@ -31,43 +34,15 @@ namespace sage
 
         void SetShaderBools(unsigned int materialIdx) const
         {
-            int valueT = 1;
-            int valueF = 0;
-            if (HasFlag(materialIdx, Skinned))
-            {
-                SetShaderValue(shader, skinnedLoc, &valueT, RL_SHADER_UNIFORM_INT);
-            }
-            else
-            {
-                SetShaderValue(shader, skinnedLoc, &valueF, RL_SHADER_UNIFORM_INT);
-            }
+            auto setBool = [&](int loc, Flags flag) {
+                int value = HasFlag(materialIdx, flag) ? 1 : 0;
+                SetShaderValue(shader, loc, &value, RL_SHADER_UNIFORM_INT);
+            };
 
-            if (HasFlag(materialIdx, Lit))
-            {
-                SetShaderValue(shader, litLoc, &valueT, RL_SHADER_UNIFORM_INT);
-            }
-            else
-            {
-                SetShaderValue(shader, litLoc, &valueF, RL_SHADER_UNIFORM_INT);
-            }
-
-            if (HasFlag(materialIdx, EmissiveTexture))
-            {
-                SetShaderValue(shader, hasEmissiveTexLoc, &valueT, RL_SHADER_UNIFORM_INT);
-            }
-            else
-            {
-                SetShaderValue(shader, hasEmissiveTexLoc, &valueF, RL_SHADER_UNIFORM_INT);
-            }
-
-            if (HasFlag(materialIdx, EmissiveCol))
-            {
-                SetShaderValue(shader, hasEmissiveColLoc, &valueT, RL_SHADER_UNIFORM_INT);
-            }
-            else
-            {
-                SetShaderValue(shader, hasEmissiveColLoc, &valueF, RL_SHADER_UNIFORM_INT);
-            }
+            setBool(skinnedLoc, Skinned);
+            setBool(litLoc, Lit);
+            setBool(hasEmissiveTexLoc, EmissiveTexture);
+            setBool(hasEmissiveColLoc, EmissiveCol);
         }
 
         void SetShaderBools() const
@@ -115,4 +90,4 @@ namespace sage
         }
     };
 
-}; // namespace sage
+} // namespace sage

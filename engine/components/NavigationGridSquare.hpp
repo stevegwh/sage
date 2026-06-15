@@ -6,34 +6,19 @@
 
 #include "entt/entt.hpp"
 #include "raylib.h"
-#include <tuple>
+#include <compare>
 
 namespace sage
 {
     struct GridSquare
     {
-        int row;
-        int col;
+        int row = 0;
+        int col = 0;
 
-        bool operator>(const GridSquare& other) const
-        {
-            return std::tie(row, col) > std::tie(other.row, other.col);
-        }
-
-        bool operator<(const GridSquare& other) const
-        {
-            return std::tie(row, col) < std::tie(other.row, other.col);
-        }
-
-        bool operator==(const GridSquare& other) const
-        {
-            return std::tie(row, col) == std::tie(other.row, other.col);
-        }
-
-        bool operator!=(const GridSquare& other) const
-        {
-            return !(*this == other);
-        }
+        // Defaulted comparisons order by row then col (declaration order), matching the
+        // std::tie-based operators this replaced.
+        auto operator<=>(const GridSquare&) const = default;
+        bool operator==(const GridSquare&) const = default;
 
         GridSquare operator-(const GridSquare& other) const
         {

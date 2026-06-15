@@ -13,8 +13,11 @@
 #include "cereal/types/vector.hpp"
 #include "raylib.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace sage::editor_layout
@@ -91,6 +94,29 @@ namespace sage::editor_layout
         }
     };
 
+    [[nodiscard]] inline std::string_view LegacySpawnPointTypeName(const LegacySpawnPointType type)
+    {
+        switch (type)
+        {
+        case LegacySpawnPointType::PLAYER:
+            return "player";
+        case LegacySpawnPointType::ENEMY:
+            return "enemy";
+        case LegacySpawnPointType::DIALOG_CUTSCENE:
+            return "dialog";
+        case LegacySpawnPointType::NPC:
+            return "npc";
+        }
+        return "point";
+    }
+
+    [[nodiscard]] inline std::string LegacySpawnPointEntityName(
+        const LegacySpawnPointRecord& record, const std::size_t index)
+    {
+        const std::string suffix = record.name.empty() ? std::to_string(index) : record.name;
+        return "spawn_" + std::string{LegacySpawnPointTypeName(record.type)} + "_" + suffix;
+    }
+
     struct TriggerRecord
     {
         Vector3 position{};
@@ -104,11 +130,39 @@ namespace sage::editor_layout
         }
     };
 
+    inline constexpr std::uint8_t LayoutEntityTargetKind = 0;
+    inline constexpr std::uint8_t SpawnPointTargetKind = 1;
+    inline constexpr std::uint8_t TriggerTargetKind = 2;
+
+    [[nodiscard]] inline entt::entity ResolveEntityTarget(
+        const std::uint8_t targetKind,
+        const std::uint32_t targetId,
+        const std::unordered_map<std::uint32_t, entt::entity>& layoutEntities,
+        const std::vector<entt::entity>& spawnPointEntities,
+        const std::vector<entt::entity>& triggerEntities)
+    {
+        switch (targetKind)
+        {
+        case LayoutEntityTargetKind:
+            if (const auto iter = layoutEntities.find(targetId); iter != layoutEntities.end()) return iter->second;
+            break;
+        case SpawnPointTargetKind:
+            if (targetId < spawnPointEntities.size()) return spawnPointEntities[targetId];
+            break;
+        case TriggerTargetKind:
+            if (targetId < triggerEntities.size()) return triggerEntities[targetId];
+            break;
+        default:
+            break;
+        }
+        return entt::null;
+    }
+
     struct EntityScriptRecord
     {
-        // 0 = layout entity (targetId = saved entity id), 1 = spawn point / 2 =
-        // trigger (targetId = index into that section, in saved order).
-        std::uint8_t targetKind = 0;
+        // targetId is a saved entity id for layout entities, or a section index
+        // for spawn points and triggers.
+        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         ScriptComponent script{};
 
@@ -121,7 +175,7 @@ namespace sage::editor_layout
 
     struct EntityAnimationRecord
     {
-        std::uint8_t targetKind = 0;
+        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         std::string modelKey;
 
@@ -134,7 +188,7 @@ namespace sage::editor_layout
 
     struct EntityMoveableActorRecord
     {
-        std::uint8_t targetKind = 0;
+        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         float movementSpeed = 0.0f;
         std::int32_t pathfindingBounds = 0;
@@ -165,9 +219,8 @@ namespace sage::editor_layout
 
     struct EntityArchetypeRecord
     {
-        // Addressed like EntityScriptRecord: 0 = layout entity (targetId = saved
-        // entity id), 1 = spawn point / 2 = trigger (targetId = index into that section).
-        std::uint8_t targetKind = 0;
+        // Addressed like EntityScriptRecord.
+        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         Archetype archetype{};
 

@@ -22,7 +22,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -41,28 +40,6 @@ namespace sage::editor
         std::string serializedEntityName(const std::uint32_t entityId)
         {
             return "entity_" + std::to_string(entityId);
-        }
-
-        std::string_view legacySpawnPointTypeName(const LegacySpawnPointType type)
-        {
-            switch (type)
-            {
-            case LegacySpawnPointType::PLAYER:
-                return "player";
-            case LegacySpawnPointType::ENEMY:
-                return "enemy";
-            case LegacySpawnPointType::DIALOG_CUTSCENE:
-                return "dialog";
-            case LegacySpawnPointType::NPC:
-                return "npc";
-            }
-            return "point";
-        }
-
-        std::string legacySpawnPointName(const LegacySpawnPointRecord& record, const std::size_t index)
-        {
-            const std::string suffix = record.name.empty() ? std::to_string(index) : record.name;
-            return "spawn_" + std::string{legacySpawnPointTypeName(record.type)} + "_" + suffix;
         }
 
         sgTransform transformWithSerializedNameFallback(sgTransform transform, const std::uint32_t entityId)
@@ -194,7 +171,7 @@ namespace sage::editor
                     auto& transform = destination->emplace<sgTransform>(entity);
                     transform.position.world = spawnPoint.pos;
                     transform.rotation.world = spawnPoint.rot;
-                    transform.name = legacySpawnPointName(spawnPoint, i);
+                    transform.name = LegacySpawnPointEntityName(spawnPoint, i);
                     sage::AddTag(*destination, entity, SpawnPointTag);
                     loadedSpawnPointEntities.push_back(entity);
                 }
@@ -214,23 +191,9 @@ namespace sage::editor
                     loadedTriggerEntities.push_back(entity);
                 }
 
-                const auto resolveTarget = [&](const std::uint8_t targetKind, const std::uint32_t targetId)
-                    -> entt::entity {
-                    switch (targetKind)
-                    {
-                    case 0:
-                        if (const auto iter = idMap.find(targetId); iter != idMap.end()) return iter->second;
-                        break;
-                    case 1:
-                        if (targetId < loadedSpawnPointEntities.size()) return loadedSpawnPointEntities[targetId];
-                        break;
-                    case 2:
-                        if (targetId < loadedTriggerEntities.size()) return loadedTriggerEntities[targetId];
-                        break;
-                    default:
-                        break;
-                    }
-                    return entt::null;
+                const auto resolveTarget = [&](const std::uint8_t targetKind, const std::uint32_t targetId) {
+                    return ResolveEntityTarget(
+                        targetKind, targetId, idMap, loadedSpawnPointEntities, loadedTriggerEntities);
                 };
 
                 std::vector<EntityScriptRecord> scripts;
@@ -265,7 +228,7 @@ namespace sage::editor
                 for (const auto& record : moveables)
                 {
                     const auto iter = idMap.find(record.targetId);
-                    if (record.targetKind != 0 || iter == idMap.end()) continue;
+                    if (record.targetKind != LayoutEntityTargetKind || iter == idMap.end()) continue;
                     auto& moveable = destination->get_or_emplace<MoveableActor>(iter->second);
                     moveable.movementSpeed = record.movementSpeed;
                     moveable.pathfindingBounds = record.pathfindingBounds;
@@ -324,8 +287,6 @@ namespace sage::editor
                 destination->get<sgTransform>(entity).ResolveSerializedParent(idMap);
             }
         }
-
-        RebuildSceneTagIndex(*destination);
 
         std::cout << "FINISH: Loading layout map data from file (editor)." << std::endl;
         return true;
@@ -428,24 +389,25 @@ namespace sage::editor
                         const auto& script = source.get<ScriptComponent>(entity);
                         if (script.scriptPath.empty()) return;
                         scripts.push_back(EntityScriptRecord{kind, id, script});
-                    };
+                };
                 for (const auto entity : emittedEntities)
                 {
-                    appendScript(entity, 0, entt::entt_traits<entt::entity>::to_entity(entity));
+                    appendScript(
+                        entity, LayoutEntityTargetKind, entt::entt_traits<entt::entity>::to_entity(entity));
                 }
                 for (std::size_t i = 0; i < spawnPointEntities.size(); ++i)
                 {
-                    appendScript(spawnPointEntities[i], 1, static_cast<std::uint32_t>(i));
+                    appendScript(spawnPointEntities[i], SpawnPointTargetKind, static_cast<std::uint32_t>(i));
                 }
                 for (std::size_t i = 0; i < triggerEntities.size(); ++i)
                 {
-                    appendScript(triggerEntities[i], 2, static_cast<std::uint32_t>(i));
+                    appendScript(triggerEntities[i], TriggerTargetKind, static_cast<std::uint32_t>(i));
                 }
                 output(scripts);
 
                 // Animation requires a Renderable, so in practice only layout
-                // entities (kind 0) carry one; the record keeps the same addressing
-                // as scripts so the loaders stay uniform.
+                // entities carry one; the record keeps the same addressing as
+                // scripts so the loaders stay uniform.
                 std::vector<EntityAnimationRecord> animations;
                 for (const auto entity : emittedEntities)
                 {
@@ -454,11 +416,13 @@ namespace sage::editor
                     if (animation.modelKey.empty()) continue;
                     animations.push_back(
                         EntityAnimationRecord{
-                            0, entt::entt_traits<entt::entity>::to_entity(entity), animation.modelKey});
+                            LayoutEntityTargetKind,
+                            entt::entt_traits<entt::entity>::to_entity(entity),
+                            animation.modelKey});
                 }
                 output(animations);
 
-                // Like Animation, only layout entities (kind 0) carry a MoveableActor.
+                // Like Animation, only layout entities carry a MoveableActor.
                 std::vector<EntityMoveableActorRecord> moveables;
                 for (const auto entity : emittedEntities)
                 {
@@ -466,7 +430,7 @@ namespace sage::editor
                     const auto& moveable = source.get<MoveableActor>(entity);
                     moveables.push_back(
                         EntityMoveableActorRecord{
-                            0,
+                            LayoutEntityTargetKind,
                             entt::entt_traits<entt::entity>::to_entity(entity),
                             moveable.movementSpeed,
                             moveable.pathfindingBounds,
@@ -493,8 +457,8 @@ namespace sage::editor
 
                 // Trailing (final) section. Like Animation/MoveableActor, an
                 // archetype identity belongs to actual world objects, so only layout
-                // entities (kind 0) carry one; the record keeps the script addressing
-                // so the loaders stay uniform.
+                // entities carry one; the record keeps the script addressing so the
+                // loaders stay uniform.
                 std::vector<EntityArchetypeRecord> archetypes;
                 for (const auto entity : emittedEntities)
                 {
@@ -502,7 +466,9 @@ namespace sage::editor
                     if (archetype == nullptr || !archetype->IsValid()) continue;
                     archetypes.push_back(
                         EntityArchetypeRecord{
-                            0, entt::entt_traits<entt::entity>::to_entity(entity), *archetype});
+                            LayoutEntityTargetKind,
+                            entt::entt_traits<entt::entity>::to_entity(entity),
+                            *archetype});
                 }
                 output(archetypes);
 

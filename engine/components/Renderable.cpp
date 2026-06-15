@@ -5,9 +5,6 @@
 #include "Renderable.hpp"
 #include "engine/slib.hpp"
 
-#include <algorithm>
-#include <regex>
-
 namespace sage
 {
 
