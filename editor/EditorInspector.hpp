@@ -4,6 +4,7 @@
 #include "magic_enum.hpp"
 #include "raylib.h"
 
+#include "engine/Archetypes.hpp"
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/sgTransform.hpp"
 
@@ -254,6 +255,12 @@ namespace sage::editor
         // like tagSet; the current value stays selectable even if unlisted. Stored
         // as EnumField.
         void cursorDropdown(const std::string& label, std::string& value, bool rw = true);
+
+        // Bespoke: dropdown of the project's archetypes (sage::CustomArchetypes) for
+        // an entity's Archetype "kind". Index 0 is "(none)" — an unset/invalid id.
+        // Sourced like the CollisionLayer field; matches/stores by id. Stored as
+        // EnumField.
+        void archetypeDropdown(const std::string& label, sage::Archetype& v, bool rw = true);
 
         void SetContext(entt::registry* registry, const entt::entity entity)
         {

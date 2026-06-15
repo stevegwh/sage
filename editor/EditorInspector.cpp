@@ -13,6 +13,7 @@
 #include "engine/Light.hpp"
 #include "engine/CursorTypes.hpp"
 #include "engine/SceneTags.hpp"
+#include "project/CustomArchetypes.hpp"
 #include "project/CustomCursors.hpp"
 #include "project/CustomSceneTags.hpp"
 
@@ -293,6 +294,36 @@ namespace sage::editor
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
     }
 
+    void ComponentInspector::archetypeDropdown(const std::string& label, sage::Archetype& v, const bool ed)
+    {
+        // A single archetype ("kind") chosen from the project's CustomArchetypes,
+        // rendered as a dropdown via EnumField (same path as the CollisionLayer
+        // field). Index 0 is "(none)" — an unset/invalid id; the rest are the
+        // project kinds. Matched and stored by id so the display name need not be
+        // persisted on the component.
+        EnumField e{.data = &v};
+        e.options.emplace_back("(none)");
+        for (const auto& archetype : CustomArchetypes)
+            e.options.emplace_back(archetype.name);
+
+        e.getIndex = [p = &v]() -> std::size_t {
+            if (!p->IsValid()) return 0;
+            for (std::size_t i = 0; i < CustomArchetypes.size(); ++i)
+            {
+                if (CustomArchetypes[i].id == p->id) return i + 1;
+            }
+            return 0;
+        };
+        e.setIndex = [p = &v](const std::size_t idx) {
+            if (idx == 0 || idx > CustomArchetypes.size())
+                *p = sage::Archetype{};
+            else
+                *p = CustomArchetypes[idx - 1];
+        };
+
+        fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
+    }
+
     void ComponentInspector::clipDropdown(const std::string& label, std::string& value, const bool rw)
     {
         EnumField e{.data = &value};
@@ -531,5 +562,6 @@ namespace sage::editor
         registry.Register<Animation>("Animation", true);
         registry.Register<MoveableActor>("Moveable Actor", /*removable=*/true);
         registry.Register<ScriptComponent>("Script", /*removable=*/true);
+        registry.Register<Archetype>("Archetype", /*removable=*/true);
     }
 } // namespace sage::editor

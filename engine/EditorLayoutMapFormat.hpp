@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/Archetypes.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/Serializer.hpp"
 #include "engine/components/Collideable.hpp"
@@ -135,6 +136,21 @@ namespace sage::editor_layout
         void serialize(Archive& archive)
         {
             archive(position, resolution, cellSize, collideable, heights);
+        }
+    };
+
+    struct EntityArchetypeRecord
+    {
+        // Addressed like EntityScriptRecord: 0 = layout entity (targetId = saved
+        // entity id), 1 = spawner / 2 = trigger (targetId = index into that section).
+        std::uint8_t targetKind = 0;
+        std::uint32_t targetId = 0;
+        Archetype archetype{};
+
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(targetKind, targetId, archetype);
         }
     };
 } // namespace sage::editor_layout

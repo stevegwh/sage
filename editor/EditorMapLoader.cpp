@@ -1,6 +1,7 @@
 #include "EditorMapLoader.hpp"
 
 #include "EditorComponents.hpp"
+#include "engine/Archetypes.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
@@ -274,6 +275,23 @@ namespace sage::editor
                     // The mesh, shader and collision bounds are derived after
                     // load (EditorScene::refreshAfterMapLoad).
                 }
+
+                // Trailing (final) section: maps saved before archetypes existed end
+                // here, so a missing/incompatible stream degrades to "no archetypes".
+                try
+                {
+                    std::vector<EntityArchetypeRecord> archetypes;
+                    input(archetypes);
+                    for (const auto& record : archetypes)
+                    {
+                        const entt::entity target = resolveTarget(record.targetKind, record.targetId);
+                        if (target == entt::null) continue;
+                        destination->emplace_or_replace<Archetype>(target, record.archetype);
+                    }
+                }
+                catch (const std::exception&)
+                {
+                }
             });
 
         for (const auto entity : loadedLayoutEntities)
@@ -444,6 +462,21 @@ namespace sage::editor
                             terrain.heights});
                 }
                 output(terrains);
+
+                // Trailing (final) section. Like Animation/MoveableActor, an
+                // archetype identity belongs to actual world objects, so only layout
+                // entities (kind 0) carry one; the record keeps the script addressing
+                // so the loaders stay uniform.
+                std::vector<EntityArchetypeRecord> archetypes;
+                for (const auto entity : emittedEntities)
+                {
+                    const auto* archetype = source.try_get<Archetype>(entity);
+                    if (archetype == nullptr || !archetype->IsValid()) continue;
+                    archetypes.push_back(
+                        EntityArchetypeRecord{
+                            0, entt::entt_traits<entt::entity>::to_entity(entity), *archetype});
+                }
+                output(archetypes);
 
             });
 

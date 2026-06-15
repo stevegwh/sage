@@ -12,6 +12,14 @@ namespace sage
 {
     struct Collideable;
 
+    // Shared base for the collider "aspect" components below: behaviours layered
+    // onto an entity's Collideable, each toggleable via `active` and driven by its
+    // own system. Holds only the shared flag — every aspect adds its own fields.
+    struct ColliderAspect
+    {
+        bool active = true;
+    };
+
     enum class NavigationHeightSource
     {
         FlatTop,
@@ -20,9 +28,8 @@ namespace sage
         Ramp
     };
 
-    struct NavigationSurface
+    struct NavigationSurface : ColliderAspect
     {
-        bool active = true;
         NavigationHeightSource heightSource = NavigationHeightSource::FlatTop;
 
         template <class Archive>
@@ -49,10 +56,8 @@ namespace sage
         }
     };
 
-    struct NavigationObstacle
+    struct NavigationObstacle : ColliderAspect
     {
-        bool active = true;
-
         template <class Archive>
         void serialize(Archive& archive)
         {
@@ -67,9 +72,8 @@ namespace sage
         }
     };
 
-    struct TriggerVolume
+    struct TriggerVolume : ColliderAspect
     {
-        bool active = true;
         CollisionMask overlapMask{~0ull};
 
         template <class Archive>
