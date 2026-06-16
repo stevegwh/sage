@@ -10,6 +10,10 @@
 
 #include "raymath.h"
 
+#include <cstdint>
+#include <iostream>
+#include <unordered_set>
+
 namespace sage
 {
 
@@ -31,6 +35,29 @@ namespace sage
             auto& renderable = registry->get<Renderable>(entity);
             auto& animData = animation.current;
             const ModelAnimation& anim = animation.animations[animData.index];
+
+            // Guard against a model/animation skeleton mismatch: if a model is
+            // re-exported with a different bone count but its cached/packed
+            // ModelAnimation is stale, raylib's UpdateModelAnimationBones asserts
+            // boneCount equality and aborts the whole game (one bad entity kills
+            // every other animation). Skip and warn once per entity instead.
+            {
+                const Model& rl = renderable.GetModel()->GetRlModel();
+                const int modelBones = (rl.meshCount > 0) ? rl.meshes[0].boneCount : rl.boneCount;
+                if (modelBones != anim.boneCount)
+                {
+                    static std::unordered_set<std::uint32_t> warned;
+                    if (warned.insert(static_cast<std::uint32_t>(entity)).second)
+                    {
+                        std::cerr << "AnimationSystem: skipping entity " << static_cast<std::uint32_t>(entity)
+                                  << " - model bone count (" << modelBones
+                                  << ") does not match animation '" << animation.GetClipName(animData.index)
+                                  << "' (" << anim.boneCount
+                                  << "). The animation data is stale for this model; re-pack/re-import it.\n";
+                    }
+                    continue;
+                }
+            }
 
             if (animData.currentFrame == 0 || animData.currentFrame < animData.lastFrame)
             {
