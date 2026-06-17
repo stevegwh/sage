@@ -159,6 +159,11 @@ namespace sage
         //---------------------------------------------------------
         void DrawDebug() const;
         //---------------------------------------------------------
+        // Draws every navigation cell, using green for free cells and red for
+        // occupied cells. Intended for editor/debug tooling rather than normal
+        // game rendering.
+        void DrawDebugGrid() const;
+        //---------------------------------------------------------
         explicit NavigationGridSystem(entt::registry* _registry, CollisionSystem* _collisionSystem);
     };
 } // namespace sage

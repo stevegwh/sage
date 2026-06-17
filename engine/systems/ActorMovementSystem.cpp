@@ -3,6 +3,7 @@
 #include "CollisionSystem.hpp"
 #include "components/MoveableActor.hpp"
 #include "components/NavigationGridSquare.hpp"
+#include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 #include "EngineSystems.hpp"
 #include "NavigationGridSystem.hpp"
@@ -22,6 +23,7 @@ namespace sage
         auto& actor = registry->get<MoveableActor>(entity);
         std::deque<Vector3> empty;
         std::swap(actor.path, empty);
+        actor.isWalking = false;
     }
 
     void ActorMovementSystem::CancelMovement(const entt::entity& entity) const
@@ -40,11 +42,13 @@ namespace sage
         {
             registry->emplace<MoveableActor>(entity);
         }
+        const bool wasWalking = registry->get<MoveableActor>(entity).isWalking;
         PruneMoveCommands(entity);
         const auto& transform = registry->get<sgTransform>(entity);
         auto& moveableActor = registry->get<MoveableActor>(entity);
         moveableActor.path.emplace_back(transform.GetWorldPos());
         moveableActor.path.emplace_back(location);
+        moveableActor.isWalking = wasWalking;
         moveableActor.onStartMovement.Publish(entity);
     }
 
@@ -60,6 +64,7 @@ namespace sage
         const entt::entity& entity, const Vector3& destination, bool astar) const
     {
         auto& moveable = registry->get<MoveableActor>(entity);
+        const bool wasWalking = moveable.isWalking;
 
         if (!sys->navigationGridSystem->CheckWithinGridBounds(destination))
         {
@@ -117,12 +122,13 @@ namespace sage
             moveable.path.emplace_back(n);
         }
 
-        auto& transform = registry->get<sgTransform>(entity);
-
         if (!path.empty())
         {
+            auto& transform = registry->get<sgTransform>(entity);
             updateActorDirection(transform, moveable);
-            updateActorRotation(transform, moveable);
+            // A reroute while already walking should steer into the new path;
+            // only an actor starting from rest must turn in place first.
+            moveable.isWalking = wasWalking;
             moveable.onStartMovement.Publish(entity);
         }
         else
@@ -216,6 +222,7 @@ namespace sage
 
     void ActorMovementSystem::handleDestinationReached(const entt::entity entity, MoveableActor& moveableActor)
     {
+        moveableActor.isWalking = false;
         moveableActor.onDestinationReached.Publish(entity);
     }
 
@@ -283,19 +290,92 @@ namespace sage
             Vector3Normalize(Vector3Subtract(moveableActor.path.front(), transform.GetWorldPos()));
     }
 
-    void ActorMovementSystem::updateActorRotation(sgTransform& transform, const MoveableActor& moveableActor)
+    void ActorMovementSystem::centerTurnPivot(
+        const entt::entity entity, MoveableActor& moveableActor, sgTransform& transform) const
+    {
+        if (moveableActor.hasCenteredTurnPivot) return;
+        moveableActor.hasCenteredTurnPivot = true;
+
+        BoundingBox localBounds{};
+        bool hasBounds = false;
+        Renderable* renderable = registry->try_get<Renderable>(entity);
+        if (renderable != nullptr)
+        {
+            if (const auto* model = renderable->GetModel(); model != nullptr)
+            {
+                localBounds = model->CalcLocalBoundingBox();
+                hasBounds = true;
+            }
+        }
+        if (!hasBounds)
+        {
+            if (const auto* collideable = registry->try_get<Collideable>(entity); collideable != nullptr)
+            {
+                localBounds = collideable->localBoundingBox;
+                hasBounds = true;
+            }
+        }
+        if (!hasBounds) return;
+
+        const Vector3 localPivot = {
+            (localBounds.min.x + localBounds.max.x) * 0.5f,
+            0.0f,
+            (localBounds.min.z + localBounds.max.z) * 0.5f};
+        if (fabsf(localPivot.x) < 0.0001f && fabsf(localPivot.z) < 0.0001f) return;
+
+        // Move the entity origin to the existing world-space pivot, then offset
+        // its model and collider back by the same local amount. The actor does
+        // not visibly move, but subsequent yaw now occurs around its centre.
+        const Vector3 pivotWorld = Vector3Transform(localPivot, transform.GetMatrix());
+        const Vector3 currentPosition = transform.GetWorldPos();
+        transform.position.world = {
+            pivotWorld.x,
+            currentPosition.y,
+            pivotWorld.z};
+
+        const Matrix pivotOffset = MatrixTranslate(-localPivot.x, 0.0f, -localPivot.z);
+        if (renderable != nullptr)
+        {
+            if (auto* model = renderable->GetModel(); model != nullptr)
+            {
+                const Matrix centeredTransform = MatrixMultiply(model->GetTransform(), pivotOffset);
+                model->SetTransform(centeredTransform);
+                renderable->initialTransform = centeredTransform;
+            }
+        }
+
+        if (auto* collideable = registry->try_get<Collideable>(entity); collideable != nullptr)
+        {
+            collideable->localBoundingBox.min.x -= localPivot.x;
+            collideable->localBoundingBox.max.x -= localPivot.x;
+            collideable->localBoundingBox.min.z -= localPivot.z;
+            collideable->localBoundingBox.max.z -= localPivot.z;
+        }
+    }
+
+    bool ActorMovementSystem::updateActorRotation(sgTransform& transform, const MoveableActor& moveableActor)
     {
         const float target = atan2f(transform.direction.x, transform.direction.z) * RAD2DEG;
+        const Vector3 currentRotation = transform.GetWorldRot();
         float angle = target;
         if (moveableActor.turnSpeed > 0.0f)
         {
-            const float current = transform.GetWorldRot().y;
             // Shortest signed angular difference, mapped into [-180, 180).
-            const float delta = fmodf(target - current + 540.0f, 360.0f) - 180.0f;
+            const float delta = fmodf(target - currentRotation.y + 540.0f, 360.0f) - 180.0f;
+            constexpr float facingTolerance = 0.01f;
+            if (fabsf(delta) <= facingTolerance)
+            {
+                transform.rotation.world = {currentRotation.x, target, currentRotation.z};
+                return true;
+            }
+
             const float maxStep = moveableActor.turnSpeed * GetFrameTime();
-            angle = current + Clamp(delta, -maxStep, maxStep);
+            angle = currentRotation.y + Clamp(delta, -maxStep, maxStep);
         }
-        transform.rotation.world = {transform.GetWorldRot().x, angle, transform.GetWorldRot().z};
+        transform.rotation.world = {currentRotation.x, angle, currentRotation.z};
+        // If this update contained any gradual rotation, remain stationary until
+        // the following update observes that the actor is fully facing the path.
+        return moveableActor.turnSpeed <= 0.0f;
     }
 
     void ActorMovementSystem::updateActorWorldPosition(entt::entity entity) const
@@ -316,8 +396,12 @@ namespace sage
         entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const
     {
         updateActorDirection(transform, moveableActor);
-        updateActorRotation(transform, moveableActor);
-        updateActorWorldPosition(entity);
+        const bool isFacingMovementDirection = updateActorRotation(transform, moveableActor);
+        if (moveableActor.isWalking || isFacingMovementDirection)
+        {
+            moveableActor.isWalking = true;
+            updateActorWorldPosition(entity);
+        }
     }
 
     void ActorMovementSystem::updateActor(
@@ -328,17 +412,17 @@ namespace sage
             return;
         }
 
+        if (hasReachedNextPoint(entity, moveableActor))
+        {
+            handlePointReached(entity, moveableActor);
+            if (moveableActor.path.empty()) return;
+        }
+
         if (isNextPointOccupied(entity, moveableActor))
         {
             // std::cout << std::format(// "Entity {}: Next point occupied, rerouting \n",
             // static_cast<int>(entity));
             recalculatePath(entity, moveableActor, collideable);
-            return;
-        }
-
-        if (hasReachedNextPoint(entity, moveableActor))
-        {
-            handlePointReached(entity, moveableActor);
             return;
         }
 
@@ -360,7 +444,7 @@ namespace sage
         if (hasReachedNextPoint(entity, moveableActor))
         {
             handlePointReached(entity, moveableActor);
-            return;
+            if (moveableActor.path.empty()) return;
         }
 
         updateActorTransform(entity, transform, moveableActor);
@@ -373,6 +457,7 @@ namespace sage
         auto fullView = registry->view<MoveableActor, sgTransform, Collideable>();
         for (auto [entity, moveableActor, transform, collideable] : fullView.each())
         {
+            centerTurnPivot(entity, moveableActor, transform);
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
             updateActor(entity, moveableActor, transform, collideable);
             // updateActor mutated the transform; refresh the world bbox so the re-mark
@@ -386,6 +471,7 @@ namespace sage
         auto partialView = registry->view<MoveableActor, sgTransform>(entt::exclude<Collideable>);
         for (auto [entity, moveableActor, transform] : partialView.each())
         {
+            centerTurnPivot(entity, moveableActor, transform);
             updateActor(entity, moveableActor, transform);
         }
     }

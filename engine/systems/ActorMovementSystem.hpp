@@ -52,8 +52,10 @@ namespace sage
             float distance,
             MoveableActor& moveableActor) const;
         void updateActorTransform(entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const;
+        void centerTurnPivot(entt::entity entity, MoveableActor& moveableActor, sgTransform& transform) const;
         static void updateActorDirection(sgTransform& transform, const MoveableActor& moveableActor);
-        static void updateActorRotation(sgTransform& transform, const MoveableActor& moveableActor);
+        [[nodiscard]] static bool updateActorRotation(
+            sgTransform& transform, const MoveableActor& moveableActor);
         void updateActorWorldPosition(entt::entity entity) const;
 
       public:

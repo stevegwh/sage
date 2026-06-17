@@ -371,6 +371,10 @@ namespace sage
         sys->renderSystem->Draw();
         sys->lightSubSystem->DrawDebugLights();
         placementController->DrawGridAndAxes();
+        if (navigationGridVisible)
+        {
+            sys->navigationGridSystem->DrawDebugGrid();
+        }
         editorModes->Draw3D();
 
         // Marker entities have no mesh, so draw a stand-in sphere for tagged spawn points.
@@ -440,6 +444,14 @@ namespace sage
         if (placementController) placementController->SetSnapToGrid(enabled);
         if (transformEditor) transformEditor->SetSnapToGrid(enabled);
         refreshOverlay();
+    }
+
+    void EditorScene::rebuildNavigationGrid() const
+    {
+        // Initialize clears stale height/occupancy data, then samples authored
+        // navigation surfaces and stamps active obstacles exactly as play mode does.
+        placementController->Initialize();
+        sys->navigationGridSystem->InitGridHeightAndNormals();
     }
 
     void EditorScene::DrawOverlay2D() const
@@ -1474,6 +1486,19 @@ namespace sage
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("View"))
+        {
+            if (ImGui::MenuItem("Navigation Grid", nullptr, navigationGridVisible))
+            {
+                navigationGridVisible = !navigationGridVisible;
+                if (navigationGridVisible) rebuildNavigationGrid();
+            }
+            if (ImGui::MenuItem("Refresh Navigation Grid", nullptr, false, navigationGridVisible))
+            {
+                rebuildNavigationGrid();
+            }
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("Add"))
         {
             if (ImGui::MenuItem("Light"))
@@ -1905,6 +1930,10 @@ namespace sage
         }
         giveTransformsToLights();
         placementController->Initialize();
+        if (navigationGridVisible)
+        {
+            sys->navigationGridSystem->InitGridHeightAndNormals();
+        }
         selection->Clear();
         editorModes->ChangeState<editor::EditorSelectState>();
         refreshOverlay();

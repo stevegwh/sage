@@ -72,6 +72,7 @@ namespace sage
         mutable entt::entity hierarchyContextEntity = entt::null;
         bool viewportFullscreen = false;
         mutable bool snapToGrid = false;
+        mutable bool navigationGridVisible = false;
         mutable bool collisionMatrixWindowOpen = false;
         mutable std::string newCollisionLayerName;
         mutable bool orbitingCamera = false;
@@ -81,6 +82,7 @@ namespace sage
         void refreshOverlay() const;
         void refreshSceneWindows() const;
         void setSnapToGrid(bool enabled) const;
+        void rebuildNavigationGrid() const;
         void drawMainMenuBar(bool& exitRequested) const;
         // Play-in-editor (items 2-4): snapshot the authored scene to a temp map,
         // spin up a game runtime on its own registry, tear it down on stop.

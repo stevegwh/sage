@@ -25,7 +25,7 @@ namespace sage
         {
             auto& animation = registry->get<Animation>(entity);
             const auto& moveable = registry->get<MoveableActor>(entity);
-            animation.ChangeAnimationByName(moveable.IsMoving() ? moveable.moveClip : moveable.idleClip);
+            animation.ChangeAnimationByName(moveable.IsWalking() ? moveable.moveClip : moveable.idleClip);
         }
 
         for (const auto& view = registry->view<Animation, Renderable>(); auto& entity : view)

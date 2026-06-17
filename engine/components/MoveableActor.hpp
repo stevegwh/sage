@@ -6,8 +6,8 @@
 
 #include "NavigationGridSquare.hpp"
 
-#include "entt/entt.hpp"
 #include "engine/Event.hpp"
+#include "entt/entt.hpp"
 #include "raylib.h"
 
 #include <deque>
@@ -24,16 +24,22 @@ namespace sage
         int pathfindingBounds = 50;
         // GLB clip names played while moving / stopped (AnimationSystem polls
         // IsMoving). Unknown clip names leave the current animation untouched.
-        std::string moveClip = "Walk";
+        std::string moveClip = "Walking";
         std::string idleClip = "Idle";
-        // Max turn rate in degrees per second; 0 snaps to the movement direction
-        // instantly. Runtime-only, not serialized.
-        float turnSpeed = 240.0f;
+        // Max turn rate in degrees per second; 0 snaps to the movement direction instantly.
+        float turnSpeed = 540.0f;
+        // A path may be active while the actor turns in place. This tracks when
+        // translation has actually begun so animation does not walk during the turn.
+        bool isWalking = false;
+        // Runtime guard for aligning the entity origin with the horizontal centre
+        // of its rendered bounds, so yaw rotates the actor in place.
+        bool hasCenteredTurnPivot = false;
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.field("Movement Speed", movementSpeed);
+            i.field("Turn Speed", turnSpeed);
             i.field("Pathfinding Bounds", pathfindingBounds);
             i.clipDropdown("Move Clip", moveClip);
             i.clipDropdown("Idle Clip", idleClip);
@@ -54,6 +60,11 @@ namespace sage
         [[nodiscard]] bool IsMoving() const
         {
             return !path.empty();
+        }
+
+        [[nodiscard]] bool IsWalking() const
+        {
+            return isWalking;
         }
 
         [[nodiscard]] Vector3 GetDestination() const

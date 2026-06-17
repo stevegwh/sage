@@ -143,6 +143,7 @@ namespace sage::editor
         if (a.hasMoveableActor != b.hasMoveableActor ||
             (a.hasMoveableActor &&
              (a.moveableActorSpeed != b.moveableActorSpeed ||
+              a.moveableActorTurnSpeed != b.moveableActorTurnSpeed ||
               a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds ||
               a.moveableActorMoveClip != b.moveableActorMoveClip ||
               a.moveableActorIdleClip != b.moveableActorIdleClip)))
@@ -290,6 +291,7 @@ namespace sage::editor
             const auto& moveable = reg.get<MoveableActor>(entity);
             s.hasMoveableActor = true;
             s.moveableActorSpeed = moveable.movementSpeed;
+            s.moveableActorTurnSpeed = moveable.turnSpeed;
             s.moveableActorPathfindingBounds = moveable.pathfindingBounds;
             s.moveableActorMoveClip = moveable.moveClip;
             s.moveableActorIdleClip = moveable.idleClip;
@@ -702,6 +704,7 @@ namespace sage::editor
         {
             auto& moveable = reg.get_or_emplace<MoveableActor>(entity);
             moveable.movementSpeed = target.moveableActorSpeed;
+            moveable.turnSpeed = target.moveableActorTurnSpeed;
             moveable.pathfindingBounds = target.moveableActorPathfindingBounds;
             moveable.moveClip = target.moveableActorMoveClip;
             moveable.idleClip = target.moveableActorIdleClip;

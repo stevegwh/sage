@@ -154,6 +154,7 @@ namespace sage::editor
             // authored fields are captured.
             bool hasMoveableActor = false;
             float moveableActorSpeed = 0.0f;
+            float moveableActorTurnSpeed = 240.0f;
             int moveableActorPathfindingBounds = 0;
             std::string moveableActorMoveClip;
             std::string moveableActorIdleClip;

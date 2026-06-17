@@ -10,6 +10,8 @@
 #include "components/Terrain.hpp"
 #include <Serializer.hpp>
 
+#include "rlgl.h"
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -740,6 +742,60 @@ namespace sage
                     gridSquare.debugColor);
             }
         }
+    }
+
+    void NavigationGridSystem::DrawDebugGrid() const
+    {
+        if (gridSquares.empty() || gridSquares.front().empty()) return;
+
+        constexpr Color walkableColor = {40, 220, 80, 65};
+        constexpr Color blockedColor = {235, 55, 55, 150};
+        constexpr float surfaceOffset = 0.06f;
+        constexpr float blockedSurfaceOffset = 0.01f;
+        constexpr float cellInsetRatio = 0.04f;
+
+        // Free space is the common case, so represent the whole grid with one
+        // green quad and only emit per-cell geometry for occupied squares.
+        // This keeps submitted geometry proportional to obstacle count rather
+        // than total grid area.
+        const auto& first = gridSquares.front().front();
+        const auto& last = gridSquares.back().back();
+        const float firstSampledHeight = first.heightMap.GetHeight();
+        const float baseHeight =
+            (firstSampledHeight != -1.0f ? firstSampledHeight : first.worldPosMin.y) + surfaceOffset;
+
+        rlBegin(RL_QUADS);
+        rlColor4ub(walkableColor.r, walkableColor.g, walkableColor.b, walkableColor.a);
+        rlVertex3f(first.worldPosMin.x, baseHeight, first.worldPosMin.z);
+        rlVertex3f(first.worldPosMin.x, baseHeight, last.worldPosMax.z);
+        rlVertex3f(last.worldPosMax.x, baseHeight, last.worldPosMax.z);
+        rlVertex3f(last.worldPosMax.x, baseHeight, first.worldPosMin.z);
+
+        for (const auto& row : gridSquares)
+        {
+            for (const auto& square : row)
+            {
+                if (!square.occupied) continue;
+
+                const float sampledHeight = square.heightMap.GetHeight();
+                const float height =
+                    (sampledHeight != -1.0f ? sampledHeight : square.worldPosCentre.y) + surfaceOffset +
+                    blockedSurfaceOffset;
+                const float insetX = square.debugBox.x * cellInsetRatio;
+                const float insetZ = square.debugBox.z * cellInsetRatio;
+                const float minX = square.worldPosMin.x + insetX;
+                const float maxX = square.worldPosMax.x - insetX;
+                const float minZ = square.worldPosMin.z + insetZ;
+                const float maxZ = square.worldPosMax.z - insetZ;
+
+                rlColor4ub(blockedColor.r, blockedColor.g, blockedColor.b, blockedColor.a);
+                rlVertex3f(minX, height, minZ);
+                rlVertex3f(minX, height, maxZ);
+                rlVertex3f(maxX, height, maxZ);
+                rlVertex3f(maxX, height, minZ);
+            }
+        }
+        rlEnd();
     }
 
     std::vector<Vector3> NavigationGridSystem::tracebackPath(

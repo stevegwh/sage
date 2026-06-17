@@ -28,7 +28,8 @@ namespace sage::editor
 {
     namespace
     {
-        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', 'P'};
+        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '2'};
+        constexpr char kLegacyFlatpackMagic[4] = {'L', 'Q', 'F', 'P'};
 
         // A serialized entity from the source registry. parentLocalId points into
         // this same vector (-1 for the root). Transform values are captured as
@@ -112,6 +113,22 @@ namespace sage::editor
         {
             std::uint32_t localId = 0;
             float movementSpeed = 0.0f;
+            float turnSpeed = 240.0f;
+            std::int32_t pathfindingBounds = 0;
+            std::string moveClip;
+            std::string idleClip;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(localId, movementSpeed, turnSpeed, pathfindingBounds, moveClip, idleClip);
+            }
+        };
+
+        struct LegacyFlatpackMoveableActorRecord
+        {
+            std::uint32_t localId = 0;
+            float movementSpeed = 0.0f;
             std::int32_t pathfindingBounds = 0;
             std::string moveClip;
             std::string idleClip;
@@ -133,7 +150,8 @@ namespace sage::editor
         char fileMagic[4]{};
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
-               std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0;
+               (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0);
     }
 
     bool SaveFlatpack(entt::registry& source, entt::entity root, const char* path)
@@ -191,6 +209,7 @@ namespace sage::editor
                     FlatpackMoveableActorRecord{
                         localId,
                         moveable->movementSpeed,
+                        moveable->turnSpeed,
                         moveable->pathfindingBounds,
                         moveable->moveClip,
                         moveable->idleClip});
@@ -275,9 +294,36 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
+        std::ifstream header(path, std::ios::binary);
+        char fileMagic[4]{};
+        header.read(fileMagic, sizeof(fileMagic));
+        const bool legacyFormat = std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0;
         sage::serializer::ReadCompressedBinary(
-            path, kFlatpackMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
-                input(records, names, scripts, animations, moveables);
+            path,
+            legacyFormat ? kLegacyFlatpackMagic : kFlatpackMagic,
+            [&](cereal::BinaryInputArchive& input, std::istream&) {
+                input(records, names, scripts, animations);
+                if (legacyFormat)
+                {
+                    std::vector<LegacyFlatpackMoveableActorRecord> legacyMoveables;
+                    input(legacyMoveables);
+                    moveables.reserve(legacyMoveables.size());
+                    for (auto& record : legacyMoveables)
+                    {
+                        moveables.push_back(
+                            FlatpackMoveableActorRecord{
+                                record.localId,
+                                record.movementSpeed,
+                                240.0f,
+                                record.pathfindingBounds,
+                                std::move(record.moveClip),
+                                std::move(record.idleClip)});
+                    }
+                }
+                else
+                {
+                    input(moveables);
+                }
             });
         if (records.empty()) return entt::null;
 
@@ -383,6 +429,7 @@ namespace sage::editor
             if (record.localId >= created.size()) continue;
             auto& moveable = destination.get_or_emplace<MoveableActor>(created[record.localId]);
             moveable.movementSpeed = record.movementSpeed;
+            moveable.turnSpeed = record.turnSpeed;
             moveable.pathfindingBounds = record.pathfindingBounds;
             moveable.moveClip = record.moveClip;
             moveable.idleClip = record.idleClip;

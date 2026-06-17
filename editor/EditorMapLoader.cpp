@@ -96,7 +96,8 @@ namespace sage::editor
         char fileMagic[4]{};
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
-               std::memcmp(fileMagic, MapMagic, sizeof(fileMagic)) == 0;
+               (std::memcmp(fileMagic, MapMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0);
     }
 
     bool LoadMap(entt::registry* destination, const char* path)
@@ -110,11 +111,16 @@ namespace sage::editor
 
         std::cout << "START: Loading layout map data from file (editor)." << std::endl;
 
+        std::ifstream header(path, std::ios::binary);
+        char fileMagic[4]{};
+        header.read(fileMagic, sizeof(fileMagic));
+        const bool legacyFormat = std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0;
+
         std::unordered_map<std::uint32_t, entt::entity> idMap;
         std::vector<entt::entity> loadedEntities;
 
         sage::serializer::ReadCompressedBinary(
-            path, MapMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
+            path, legacyFormat ? LegacyMapMagic : MapMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
                 std::vector<Light> lights;
                 input(lights);
                 for (const auto& light : lights)
@@ -192,17 +198,30 @@ namespace sage::editor
                     destination->emplace<Animation>(target, record.modelKey);
                 }
 
-                std::vector<EntityMoveableActorRecord> moveables;
-                input(moveables);
-                for (const auto& record : moveables)
+                const auto loadMoveables = [&](const auto& moveables) {
+                    for (const auto& record : moveables)
+                    {
+                        const entt::entity target = resolveTarget(record.targetId);
+                        if (target == entt::null) continue;
+                        auto& moveable = destination->get_or_emplace<MoveableActor>(target);
+                        moveable.movementSpeed = record.movementSpeed;
+                        if constexpr (requires { record.turnSpeed; }) moveable.turnSpeed = record.turnSpeed;
+                        moveable.pathfindingBounds = record.pathfindingBounds;
+                        moveable.moveClip = record.moveClip;
+                        moveable.idleClip = record.idleClip;
+                    }
+                };
+                if (legacyFormat)
                 {
-                    const entt::entity target = resolveTarget(record.targetId);
-                    if (target == entt::null) continue;
-                    auto& moveable = destination->get_or_emplace<MoveableActor>(target);
-                    moveable.movementSpeed = record.movementSpeed;
-                    moveable.pathfindingBounds = record.pathfindingBounds;
-                    moveable.moveClip = record.moveClip;
-                    moveable.idleClip = record.idleClip;
+                    std::vector<LegacyEntityMoveableActorRecord> moveables;
+                    input(moveables);
+                    loadMoveables(moveables);
+                }
+                else
+                {
+                    std::vector<EntityMoveableActorRecord> moveables;
+                    input(moveables);
+                    loadMoveables(moveables);
                 }
 
                 std::vector<TerrainRecord> terrains;
@@ -339,6 +358,7 @@ namespace sage::editor
                         EntityMoveableActorRecord{
                             entt::entt_traits<entt::entity>::to_entity(entity),
                             moveable.movementSpeed,
+                            moveable.turnSpeed,
                             moveable.pathfindingBounds,
                             moveable.moveClip,
                             moveable.idleClip});
