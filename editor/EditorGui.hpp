@@ -131,22 +131,9 @@ namespace sage
                 bool changed = false;
                 bool began = false;
                 bool committed = false;
-                // "Add Component > Script" was clicked; the host opens a file dialog
-                // to pick the lua script for the selection.
-                bool addScriptClicked = false;
-                // "Add Component > Animation" was clicked; the host attaches an
-                // Animation (and swaps the model to a mutable copy) on the selection.
-                bool addAnimationClicked = false;
-                // "Add Component > Moveable Actor" was clicked; the host attaches a
-                // MoveableActor with default values on the selection.
-                bool addMoveableActorClicked = false;
-                bool addNavigationSurfaceClicked = false;
-                bool addNavigationObstacleClicked = false;
-                bool addTriggerVolumeClicked = false;
-                bool addCursorTargetClicked = false;
-                // "Add Component > Archetype" was clicked; the host attaches an
-                // (unset) Archetype on the selection — the kind is picked in the inspector.
-                bool addArchetypeClicked = false;
+                // Component type selected from the Add Component menu. The host
+                // performs the type-specific construction and records history.
+                std::optional<EditorComponentId> addComponent;
                 // The Renderable header's context menu requested the selected
                 // model's asset-default editor.
                 bool editModelDefaultsClicked = false;
@@ -154,6 +141,15 @@ namespace sage
                 std::optional<std::string> selectedModelKey;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;
+            };
+
+            struct AddComponentOption
+            {
+                EditorComponentId componentId{};
+                std::string displayName;
+                bool enabled = false;
+                std::string disabledReason;
+                bool separatorBefore = false;
             };
 
           private:
@@ -194,6 +190,7 @@ namespace sage
             std::optional<entt::entity> pendingHierarchyContextEntity;
             std::string inspectorSelectedEntity = "None";
             std::vector<InspectedComponent> inspectedComponents;
+            std::vector<AddComponentOption> addComponentOptions;
             std::vector<EditorComponentId> inspectorComponentOrder;
             std::string assetDefaultsAssetName = "None";
             float assetDefaultsHeight = 0.0f;
@@ -216,20 +213,8 @@ namespace sage
             mutable bool sceneHasUnsavedChanges = false;
             bool dockLayoutChanged = false;
 
-            struct AddComponentClicks
-            {
-                bool script = false;
-                bool animation = false;
-                bool moveableActor = false;
-                bool navigationSurface = false;
-                bool navigationObstacle = false;
-                bool triggerVolume = false;
-                bool cursorTarget = false;
-                bool archetype = false;
-            };
-
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
-            AddComponentClicks drawAddComponentControls();
+            [[nodiscard]] std::optional<EditorComponentId> drawAddComponentControls();
             void syncInspectorComponentOrder();
             void applyInspectorComponentOrder();
             void moveInspectorComponent(EditorComponentId dragged, EditorComponentId target, bool after);
@@ -272,7 +257,9 @@ namespace sage
             void FocusHierarchyOnEntity(entt::entity entity);
             [[nodiscard]] std::optional<entt::entity> ConsumeHierarchyContextEntity();
             void SetInspector(
-                const std::string& selectedEntity, const std::vector<InspectedComponent>& inspectedComponents);
+                const std::string& selectedEntity,
+                const std::vector<InspectedComponent>& inspectedComponents,
+                std::vector<AddComponentOption> addComponentOptions);
             void DrawSceneViewInfo() const;
             void ShowDeleteConfirmation(const std::string& selectedEntity);
             void HideDeleteConfirmation();

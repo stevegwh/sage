@@ -72,6 +72,8 @@ namespace sage
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
         constexpr float DEFAULT_MAP_BASE_HALF_HEIGHT = 0.02f;
         constexpr float DEFAULT_LIGHT_HEIGHT_OFFSET = 6.0f;
+        constexpr float DEFAULT_COMPONENT_LIGHT_BRIGHTNESS = 3.0f;
+        constexpr Color DEFAULT_COMPONENT_LIGHT_COLOR = {255, 244, 214, 255};
         constexpr Color SPAWN_POINT_MARKER_COLOR = {80, 180, 255, 255};
 
         bool modelKeyAvailable(const std::string& key)
@@ -198,10 +200,34 @@ namespace sage
         auto inspectedComponents = !selectedRoots.empty()
                                        ? inspectorRegistry.Inspect(*sys->registry, selectedRoots)
                                        : std::vector<editor::InspectedComponent>{};
+        std::vector<editor::EditorGui::AddComponentOption> addComponentOptions{
+            {.componentId = editor::ComponentIdOf<Renderable>(), .displayName = "Renderable"},
+            {.componentId = editor::ComponentIdOf<Collideable>(), .displayName = "Collideable"},
+            {.componentId = editor::ComponentIdOf<Light>(), .displayName = "Light"},
+            {.componentId = editor::ComponentIdOf<ScriptComponent>(),
+             .displayName = "Script",
+             .separatorBefore = true},
+            {.componentId = editor::ComponentIdOf<Animation>(), .displayName = "Animation"},
+            {.componentId = editor::ComponentIdOf<MoveableActor>(), .displayName = "Moveable Actor"},
+            {.componentId = editor::ComponentIdOf<NavigationSurface>(),
+             .displayName = "Navigation Surface",
+             .separatorBefore = true},
+            {.componentId = editor::ComponentIdOf<NavigationObstacle>(), .displayName = "Navigation Obstacle"},
+            {.componentId = editor::ComponentIdOf<TriggerVolume>(), .displayName = "Trigger Volume"},
+            {.componentId = editor::ComponentIdOf<CursorTarget>(), .displayName = "Cursor Target"},
+            {.componentId = editor::ComponentIdOf<Archetype>(),
+             .displayName = "Archetype",
+             .separatorBefore = true}};
+        for (auto& option : addComponentOptions)
+        {
+            const auto state = inspectorRegistry.CanAdd(*sys->registry, option.componentId, selectedRoots);
+            option.enabled = state.allowed;
+            option.disabledReason = state.blockedReason;
+        }
 
         gui->SetHierarchy(
             hierarchyTree->CollectSceneObjectEntries(), selection->SelectedWithChildren(), selection->Anchor());
-        gui->SetInspector(describeSelectedSceneEntity(), inspectedComponents);
+        gui->SetInspector(describeSelectedSceneEntity(), inspectedComponents, std::move(addComponentOptions));
     }
 
     void EditorScene::focusSelectedObject() const
@@ -671,16 +697,7 @@ namespace sage
 
         if (!history->HasActiveTransaction())
         {
-            if (result.addScriptClicked && scriptBrowser)
-            {
-                std::error_code ec;
-                std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);
-                scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
-                scriptBrowser->Open();
-            }
-            if (result.addAnimationClicked) addAnimationToSelection();
-            if (result.addMoveableActorClicked) addMoveableActorToSelection();
-            const auto addIntentComponent = [&]<class Component>() {
+            const auto addRegisteredComponent = [&]<class Component>() {
                 const auto selected = selection->Selected();
                 if (selected.empty()) return;
 
@@ -695,29 +712,90 @@ namespace sage
                     return;
                 }
 
-                history->Begin(editor::EditAction::EditField, selected);
+                history->Begin(editor::EditAction::AddComponent, selected);
                 for (const auto entity : selected)
                 {
                     if (!sys->registry->valid(entity) || sys->registry->any_of<Component>(entity)) continue;
-                    auto& component = sys->registry->emplace<Component>(entity);
-                    if constexpr (std::is_same_v<Component, NavigationObstacle>)
+                    if constexpr (std::is_same_v<Component, Renderable>)
                     {
-                        if (const auto* collideable = sys->registry->try_get<Collideable>(entity);
-                            collideable != nullptr && component.active)
+                        auto& renderable = sys->registry->emplace<Renderable>(entity);
+                        renderable.initialTransform = MatrixIdentity();
+                    }
+                    else if constexpr (std::is_same_v<Component, Collideable>)
+                    {
+                        constexpr BoundingBox localBounds{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
+                        const auto* transform = sys->registry->try_get<sgTransform>(entity);
+                        sys->registry->emplace<Collideable>(
+                            entity,
+                            localBounds,
+                            transform != nullptr ? transform->GetMatrixNoRot() : MatrixIdentity());
+                    }
+                    else if constexpr (std::is_same_v<Component, Light>)
+                    {
+                        const auto* transform = sys->registry->try_get<sgTransform>(entity);
+                        const Vector3 position = transform != nullptr ? transform->GetWorldPos() : Vector3Zero();
+                        sys->registry->emplace<Light>(
+                            entity,
+                            Light{
+                                .type = LIGHT_POINT,
+                                .enabled = true,
+                                .position = position,
+                                .target = Vector3Zero(),
+                                .color = DEFAULT_COMPONENT_LIGHT_COLOR,
+                                .brightness = DEFAULT_COMPONENT_LIGHT_BRIGHTNESS});
+                    }
+                    else
+                    {
+                        auto& component = sys->registry->emplace<Component>(entity);
+                        if constexpr (std::is_same_v<Component, NavigationObstacle>)
                         {
-                            sys->navigationGridSystem->MarkSquareAreaOccupied(
-                                collideable->worldBoundingBox, true, entity);
+                            if (const auto* collideable = sys->registry->try_get<Collideable>(entity);
+                                collideable != nullptr && component.active)
+                            {
+                                sys->navigationGridSystem->MarkSquareAreaOccupied(
+                                    collideable->worldBoundingBox, true, entity);
+                            }
                         }
                     }
+                }
+                if constexpr (std::is_same_v<Component, Light>)
+                {
+                    if (sys->lightSubSystem) sys->lightSubSystem->RefreshLights();
                 }
                 history->Commit();
                 refreshSceneWindows();
             };
-            if (result.addNavigationSurfaceClicked) addIntentComponent.template operator()<NavigationSurface>();
-            if (result.addNavigationObstacleClicked) addIntentComponent.template operator()<NavigationObstacle>();
-            if (result.addTriggerVolumeClicked) addIntentComponent.template operator()<TriggerVolume>();
-            if (result.addCursorTargetClicked) addIntentComponent.template operator()<CursorTarget>();
-            if (result.addArchetypeClicked) addIntentComponent.template operator()<Archetype>();
+            if (const auto requested = result.addComponent)
+            {
+                const auto requestedComponent = *requested;
+                if (requestedComponent == editor::ComponentIdOf<ScriptComponent>() && scriptBrowser)
+                {
+                    std::error_code ec;
+                    std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);
+                    scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
+                    scriptBrowser->Open();
+                }
+                else if (requestedComponent == editor::ComponentIdOf<Animation>())
+                    addAnimationToSelection();
+                else if (requestedComponent == editor::ComponentIdOf<MoveableActor>())
+                    addMoveableActorToSelection();
+                else if (requestedComponent == editor::ComponentIdOf<Renderable>())
+                    addRegisteredComponent.template operator()<Renderable>();
+                else if (requestedComponent == editor::ComponentIdOf<Collideable>())
+                    addRegisteredComponent.template operator()<Collideable>();
+                else if (requestedComponent == editor::ComponentIdOf<Light>())
+                    addRegisteredComponent.template operator()<Light>();
+                else if (requestedComponent == editor::ComponentIdOf<NavigationSurface>())
+                    addRegisteredComponent.template operator()<NavigationSurface>();
+                else if (requestedComponent == editor::ComponentIdOf<NavigationObstacle>())
+                    addRegisteredComponent.template operator()<NavigationObstacle>();
+                else if (requestedComponent == editor::ComponentIdOf<TriggerVolume>())
+                    addRegisteredComponent.template operator()<TriggerVolume>();
+                else if (requestedComponent == editor::ComponentIdOf<CursorTarget>())
+                    addRegisteredComponent.template operator()<CursorTarget>();
+                else if (requestedComponent == editor::ComponentIdOf<Archetype>())
+                    addRegisteredComponent.template operator()<Archetype>();
+            }
 
             if (result.selectedModelKey.has_value()) changeSelectedModels(*result.selectedModelKey);
 

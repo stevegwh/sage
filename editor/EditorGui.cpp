@@ -74,7 +74,7 @@ namespace sage::editor
                                                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
 
         InspectorComponentsResult inspectorResult;
-        AddComponentClicks addClicks;
+        std::optional<EditorComponentId> addComponent;
         if (ImGui::Begin("Inspector", nullptr, windowFlags))
         {
             ImGui::Text("Selected: %s", inspectorSelectedEntity.c_str());
@@ -92,7 +92,7 @@ namespace sage::editor
                     const auto& move = *inspectorResult.moveComponent;
                     moveInspectorComponent(move.dragged, move.target, move.after);
                 }
-                addClicks = drawAddComponentControls();
+                addComponent = drawAddComponentControls();
             }
 
             if (dockLayout)
@@ -118,14 +118,7 @@ namespace sage::editor
             .changed = inspectorResult.changed,
             .began = inspectorResult.began,
             .committed = inspectorResult.committed,
-            .addScriptClicked = addClicks.script,
-            .addAnimationClicked = addClicks.animation,
-            .addMoveableActorClicked = addClicks.moveableActor,
-            .addNavigationSurfaceClicked = addClicks.navigationSurface,
-            .addNavigationObstacleClicked = addClicks.navigationObstacle,
-            .addTriggerVolumeClicked = addClicks.triggerVolume,
-            .addCursorTargetClicked = addClicks.cursorTarget,
-            .addArchetypeClicked = addClicks.archetype,
+            .addComponent = addComponent,
             .editModelDefaultsClicked = inspectorResult.editModelDefaults,
             .selectedModelKey = std::move(inspectorResult.selectedModelKey),
             .removeComponent = std::move(inspectorResult.removeComponent)};
@@ -133,29 +126,31 @@ namespace sage::editor
 
     // "Add Component" button + popup. The host (EditorScene) performs the add:
     // Script opens a file dialog, Animation attaches clips from the entity's model.
-    EditorGui::AddComponentClicks EditorGui::drawAddComponentControls()
+    std::optional<EditorComponentId> EditorGui::drawAddComponentControls()
     {
-        AddComponentClicks clicks;
-
         ImGui::Spacing();
         if (ImGui::Button("Add Component", ImVec2{-FLT_MIN, 0.0f}))
         {
             ImGui::OpenPopup("##add_component");
         }
-        if (!ImGui::BeginPopup("##add_component")) return clicks;
+        if (!ImGui::BeginPopup("##add_component")) return std::nullopt;
 
-        clicks.script = ImGui::MenuItem("Script");
-        clicks.animation = ImGui::MenuItem("Animation");
-        clicks.moveableActor = ImGui::MenuItem("Moveable Actor");
-        ImGui::Separator();
-        clicks.navigationSurface = ImGui::MenuItem("Navigation Surface");
-        clicks.navigationObstacle = ImGui::MenuItem("Navigation Obstacle");
-        clicks.triggerVolume = ImGui::MenuItem("Trigger Volume");
-        clicks.cursorTarget = ImGui::MenuItem("Cursor Target");
-        ImGui::Separator();
-        clicks.archetype = ImGui::MenuItem("Archetype");
+        std::optional<EditorComponentId> clicked;
+        for (const auto& option : addComponentOptions)
+        {
+            if (option.separatorBefore) ImGui::Separator();
+            if (ImGui::MenuItem(option.displayName.c_str(), nullptr, false, option.enabled))
+            {
+                clicked = option.componentId;
+            }
+            if (!option.enabled && !option.disabledReason.empty() &&
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            {
+                ImGui::SetTooltip("%s", option.disabledReason.c_str());
+            }
+        }
         ImGui::EndPopup();
-        return clicks;
+        return clicked;
     }
 
     void EditorGui::DrawDeleteConfirmationModal()
@@ -210,10 +205,13 @@ namespace sage::editor
     }
 
     void EditorGui::SetInspector(
-        const std::string& selectedEntity, const std::vector<InspectedComponent>& inspectedComponents)
+        const std::string& selectedEntity,
+        const std::vector<InspectedComponent>& inspectedComponents,
+        std::vector<AddComponentOption> addComponentOptions)
     {
         inspectorSelectedEntity = selectedEntity;
         this->inspectedComponents = inspectedComponents;
+        this->addComponentOptions = std::move(addComponentOptions);
         syncInspectorComponentOrder();
         applyInspectorComponentOrder();
     }

@@ -33,11 +33,11 @@ namespace sage::editor
             if (entities.empty() || !registry.valid(entities.front())) return std::nullopt;
 
             const auto* firstRenderable = registry.try_get<Renderable>(entities.front());
-            const auto* firstModel = firstRenderable ? firstRenderable->GetModel() : nullptr;
-            if (firstModel == nullptr) return std::nullopt;
+            if (firstRenderable == nullptr) return std::nullopt;
+            const auto* firstModel = firstRenderable->GetModel();
 
             ModelPickerField picker{
-                .currentKey = firstModel->GetKey(),
+                .currentKey = firstModel != nullptr ? firstModel->GetKey() : std::string{},
                 .options = ResourceManager::GetInstance().GetModelKeys(),
                 .animationCompatibleOnly = std::ranges::any_of(entities, [&](const entt::entity entity) {
                     return registry.valid(entity) && registry.any_of<Animation>(entity);
