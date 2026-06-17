@@ -5,13 +5,12 @@
 #include "EditorFlatpack.hpp"
 #include "EditorFocus.hpp"
 #include "EditorMapLoader.hpp"
+#include "engine/Archetypes.hpp"
 #include "engine/AudioManager.hpp"
-#include "engine/IGameRuntime.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
-#include "engine/Archetypes.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
@@ -23,15 +22,17 @@
 #include "engine/Cursor.hpp"
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
+#include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
-#include "engine/TerrainMesh.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
+#include "engine/systems/UberShaderSystem.hpp"
+#include "engine/TerrainMesh.hpp"
 #include "engine/UserInput.hpp"
 
 #include "imfilebrowser.h"
@@ -132,8 +133,8 @@ namespace sage
             if (renderable.GetModel() == nullptr) continue;
             if (!sys->registry->any_of<UberShaderComponent>(entity))
             {
-                auto& uber = sys->registry->emplace<UberShaderComponent>(
-                    entity, renderable.GetModel()->GetMaterialCount());
+                auto& uber =
+                    sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
                 uber.SetFlagAll(UberShaderComponent::Flags::Lit);
             }
             // Undo/redo restores Animation and the Renderable independently of the
@@ -147,6 +148,7 @@ namespace sage
             {
                 uber.ClearFlagAll(UberShaderComponent::Flags::Skinned);
             }
+            sys->uberShaderSystem->RebindRenderable(entity);
         }
     }
 
@@ -235,8 +237,8 @@ namespace sage
     {
         const bool uiBlocksMouse = !viewportFullscreen && gui && gui->WantsMouseCapture();
         const bool gizmoDragging = transformEditor && transformEditor->IsGizmoDragging();
-        const bool canBeginDrag = !uiBlocksMouse && !gizmoDragging &&
-                                  sys->settings->IsPointInRenderViewport(GetMousePosition());
+        const bool canBeginDrag =
+            !uiBlocksMouse && !gizmoDragging && sys->settings->IsPointInRenderViewport(GetMousePosition());
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE) && canBeginDrag)
         {
@@ -380,8 +382,7 @@ namespace sage
                 {
                     if (auto* model = sys->registry->get<Renderable>(entity).GetModel(); model != nullptr)
                     {
-                        model->Draw(
-                            transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), GREEN);
+                        model->Draw(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), GREEN);
                     }
                 }
                 else if (sys->registry->any_of<DynamicRenderable>(entity))
@@ -506,13 +507,11 @@ namespace sage
             constexpr float cancelButtonWidth = 120.0f;
             const float buttonsWidth = exitButtonWidth + cancelButtonWidth + ImGui::GetStyle().ItemSpacing.x;
             ImGui::SetCursorPosX((ImGui::GetWindowSize().x - buttonsWidth) * 0.5f);
-            const bool confirm =
-                ImGui::Button("Exit Without Saving (Y)", ImVec2{exitButtonWidth, 0.0f}) ||
-                ImGui::IsKeyPressed(ImGuiKey_Y);
+            const bool confirm = ImGui::Button("Exit Without Saving (Y)", ImVec2{exitButtonWidth, 0.0f}) ||
+                                 ImGui::IsKeyPressed(ImGuiKey_Y);
             ImGui::SameLine();
             const bool cancel =
-                ImGui::Button("Cancel (N)", ImVec2{cancelButtonWidth, 0.0f}) ||
-                ImGui::IsKeyPressed(ImGuiKey_N);
+                ImGui::Button("Cancel (N)", ImVec2{cancelButtonWidth, 0.0f}) || ImGui::IsKeyPressed(ImGuiKey_N);
             if (confirm)
             {
                 exitRequested = false;
@@ -577,8 +576,8 @@ namespace sage
         // Save must fire no matter what currently owns the keyboard. Plain RouteGlobal
         // yields to a focused window or an active item (e.g. a search/inspector field),
         // so OverFocused|OverActive force Ctrl/Cmd+S to win in every context.
-        constexpr ImGuiInputFlags saveFlags = ImGuiInputFlags_RouteGlobal |
-            ImGuiInputFlags_RouteOverFocused | ImGuiInputFlags_RouteOverActive;
+        constexpr ImGuiInputFlags saveFlags =
+            ImGuiInputFlags_RouteGlobal | ImGuiInputFlags_RouteOverFocused | ImGuiInputFlags_RouteOverActive;
         if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, saveFlags))
         {
             if (flatpackSession->IsActive())
@@ -720,6 +719,24 @@ namespace sage
             if (result.addCursorTargetClicked) addIntentComponent.template operator()<CursorTarget>();
             if (result.addArchetypeClicked) addIntentComponent.template operator()<Archetype>();
 
+            if (result.selectedModelKey.has_value()) changeSelectedModels(*result.selectedModelKey);
+
+            if (result.editModelDefaultsClicked)
+            {
+                const auto active = selection->Active();
+                if (active.has_value() && sys->registry->valid(*active))
+                {
+                    if (const auto* renderable = sys->registry->try_get<Renderable>(*active);
+                        renderable != nullptr && renderable->GetModel() != nullptr)
+                    {
+                        if (const auto index = assetCatalog->FindByModelKey(renderable->GetModel()->GetKey()))
+                        {
+                            editorModes->SelectPlaceable(*index);
+                        }
+                    }
+                }
+            }
+
             const auto removeSelectedComponent = [&](const editor::EditorComponentId componentId) {
                 const auto selected = selection->Selected();
                 if (selected.empty()) return;
@@ -729,7 +746,8 @@ namespace sage
                 {
                     if (!availability.blockedReason.empty())
                     {
-                        std::cout << "EditorScene: cannot remove component: " << availability.blockedReason << '\n';
+                        std::cout << "EditorScene: cannot remove component: " << availability.blockedReason
+                                  << '\n';
                     }
                     return;
                 }
@@ -948,6 +966,7 @@ namespace sage
             if (auto* uber = reg.try_get<UberShaderComponent>(entity))
             {
                 uber->SetFlagAll(UberShaderComponent::Flags::Skinned);
+                sys->uberShaderSystem->RebindRenderable(entity);
             }
         }
         history->Commit();
@@ -980,7 +999,90 @@ namespace sage
             if (auto* uber = reg.try_get<UberShaderComponent>(entity))
             {
                 uber->ClearFlagAll(UberShaderComponent::Flags::Skinned);
+                sys->uberShaderSystem->RebindRenderable(entity);
             }
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::changeSelectedModels(const std::string& modelKey) const
+    {
+        const auto catalogIndex = assetCatalog->FindByModelKey(modelKey);
+        if (!catalogIndex.has_value()) return;
+
+        auto& registry = *sys->registry;
+        auto& resources = ResourceManager::GetInstance();
+        std::vector<entt::entity> targets;
+        for (const auto entity : selection->Selected())
+        {
+            if (!registry.valid(entity) || !registry.all_of<Renderable>(entity)) continue;
+            if (registry.any_of<Animation>(entity) && !resources.HasModelAnimation(modelKey))
+            {
+                std::cout << "EditorScene: animated renderables require a model with animation data.\n";
+                return;
+            }
+            targets.push_back(entity);
+        }
+        if (targets.empty()) return;
+
+        const Matrix defaultTransform = assetCatalog->DefaultTransform(assetCatalog->At(*catalogIndex));
+        history->Begin(editor::EditAction::EditField, targets);
+        for (const auto entity : targets)
+        {
+            auto& renderable = registry.get<Renderable>(entity);
+            if (renderable.GetModel() != nullptr && renderable.GetModel()->GetKey() == modelKey) continue;
+
+            const auto* oldAnimation = registry.try_get<Animation>(entity);
+            const bool animated = oldAnimation != nullptr;
+            const std::string oldClip = animated ? oldAnimation->GetClipName(oldAnimation->current.index) : "";
+            const int oldSpeed = animated ? oldAnimation->current.speed : 1;
+            const float blendDuration = animated ? oldAnimation->blendDuration : 0.2f;
+
+            const bool hadUberShader = registry.any_of<UberShaderComponent>(entity);
+            bool wasLit = false;
+            if (const auto* uber = registry.try_get<UberShaderComponent>(entity))
+            {
+                wasLit = std::ranges::any_of(uber->materialMap, [](const auto flags) {
+                    return (flags & UberShaderComponent::Flags::Lit) != 0;
+                });
+                registry.remove<UberShaderComponent>(entity);
+            }
+            if (animated) registry.remove<Animation>(entity);
+
+            renderable.initialTransform = defaultTransform;
+            if (animated)
+            {
+                auto model = resources.CreateModelMutable(modelKey);
+                model.SetTransform(defaultTransform);
+                renderable.SetModel(std::move(model));
+
+                auto& animation = registry.emplace<Animation>(entity, modelKey);
+                animation.blendDuration = blendDuration;
+                animation.current.speed = oldSpeed;
+                if (!oldClip.empty()) (void)animation.ChangeAnimationByName(oldClip, oldSpeed);
+            }
+            else
+            {
+                auto model = resources.GetModelView(modelKey);
+                model.SetTransform(defaultTransform);
+                renderable.SetModel(std::move(model));
+            }
+
+            if (auto* reference = registry.try_get<editor::AssetReference>(entity))
+            {
+                reference->assetKey = modelKey;
+            }
+
+            if (hadUberShader)
+            {
+                auto& uber = registry.emplace<UberShaderComponent>(
+                    entity, static_cast<unsigned int>(renderable.GetModel()->GetMaterialCount()));
+                if (wasLit) uber.SetFlagAll(UberShaderComponent::Flags::Lit);
+                if (animated) uber.SetFlagAll(UberShaderComponent::Flags::Skinned);
+            }
+
+            if (transformEditor) transformEditor->RefreshCollisionBounds(entity);
         }
         history->Commit();
         refreshSceneWindows();
@@ -1315,6 +1417,10 @@ namespace sage
             {
                 addTerrain();
             }
+            if (ImGui::MenuItem("Empty Transform", nullptr, false, !flatpackOpen))
+            {
+                addEmptyTransform();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Project"))
@@ -1383,12 +1489,10 @@ namespace sage
 
             // Unity-style triangular grid: one row per layer, columns in reverse
             // order, the redundant half omitted.
-            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingFixedFit |
-                                                   ImGuiTableFlags_BordersInner | ImGuiTableFlags_ScrollX |
-                                                   ImGuiTableFlags_ScrollY |
+            constexpr ImGuiTableFlags tableFlags = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersInner |
+                                                   ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY |
                                                    ImGuiTableFlags_HighlightHoveredColumn;
-            const float gridHeight =
-                ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing() * 2.0f;
+            const float gridHeight = ImGui::GetContentRegionAvail().y - ImGui::GetFrameHeightWithSpacing() * 2.0f;
             if (ImGui::BeginTable("##collisionMatrix", count + 1, tableFlags, ImVec2(0.0f, gridHeight)))
             {
                 ImGui::TableSetupColumn(
@@ -1574,6 +1678,20 @@ namespace sage
         editorModes->SelectSceneEntity(entity);
     }
 
+    void EditorScene::addEmptyTransform() const
+    {
+        Vector3 position = sys->camera->getRaylibCam()->target;
+        if (const auto snappedPosition = placementController->SnappedPlacementPosition();
+            snappedPosition.has_value())
+        {
+            position = *snappedPosition;
+        }
+
+        const auto entity = entityOperations->CreateEmptyTransform(position);
+        if (history) history->RecordCreate(editor::EditAction::AddEmptyTransform, {entity});
+        editorModes->SelectSceneEntity(entity);
+    }
+
     void EditorScene::clearCurrentMap() const
     {
         if (history)
@@ -1716,8 +1834,7 @@ namespace sage
     }
 
     editor::EditorGui::AssetRenameResult EditorScene::handleAssetFileRename(
-        const std::size_t index,
-        const std::string& requestedFileName) const
+        const std::size_t index, const std::string& requestedFileName) const
     {
         if (!assetCatalog)
         {

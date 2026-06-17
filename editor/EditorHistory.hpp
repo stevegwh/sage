@@ -55,6 +55,7 @@ namespace sage::editor
         RemoveMoveableActor,
         RemoveComponent,
         AddTerrain,
+        AddEmptyTransform,
         SculptTerrain
     };
 

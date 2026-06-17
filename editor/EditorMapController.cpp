@@ -124,6 +124,33 @@ namespace sage::editor
                 saveMapBrowser->ClearSelected();
             }
         }
+
+        drawOutdatedMapDialog();
+    }
+
+    void EditorMapController::drawOutdatedMapDialog()
+    {
+        constexpr const char* popupId = "Outdated Map##editor_map_controller";
+        if (showOutdatedMapDialog)
+        {
+            ImGui::OpenPopup(popupId);
+            showOutdatedMapDialog = false;
+        }
+
+        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("'%s' was saved in an outdated map format and can't be loaded.", outdatedMapName.c_str());
+            ImGui::TextUnformatted("A blank map has been loaded in its place.");
+            ImGui::Spacing();
+            if (ImGui::Button("OK", ImVec2(120.0f, 0.0f)))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 
     void EditorMapController::OpenLoadBrowser()
@@ -153,7 +180,16 @@ namespace sage::editor
         const auto pathString = selectedPath.string();
         if (!editor::IsEditorLayoutMap(pathString.c_str()))
         {
-            std::cerr << "ERROR: Not an editor layout map: " << pathString << std::endl;
+            std::cerr << "ERROR: Not a current editor layout map: " << pathString << std::endl;
+            // A real file that fails the magic check is an outdated/incompatible map
+            // (e.g. a pre-LQE3 save). Warn the user and drop them into a blank map
+            // rather than leaving the previous scene or a half-loaded one.
+            if (std::filesystem::is_regular_file(selectedPath))
+            {
+                outdatedMapName = selectedPath.filename().string();
+                showOutdatedMapDialog = true;
+                loadBlankMap();
+            }
             return;
         }
 
@@ -162,6 +198,18 @@ namespace sage::editor
         currentMapPath = selectedPath;
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
+        if (callbacks.finishLoad) callbacks.finishLoad();
+        if (history) history->MarkSaved();
+        saveFeedbackRemaining = 0.0f;
+        saveFeedbackStatus.clear();
+    }
+
+    void EditorMapController::loadBlankMap()
+    {
+        if (callbacks.prepareForLoad) callbacks.prepareForLoad();
+        currentMapPath.clear();
+        if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
+        // finishLoad ensures the default map base exists, so the blank scene is valid.
         if (callbacks.finishLoad) callbacks.finishLoad();
         if (history) history->MarkSaved();
         saveFeedbackRemaining = 0.0f;

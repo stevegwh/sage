@@ -72,6 +72,10 @@ namespace sage
             void saveMapAs(const std::filesystem::path& path);
             void rememberCurrentMapPath();
             void markSaved(const std::filesystem::path& path);
+            // Clears the scene to a fresh, unsaved blank map (no current path).
+            void loadBlankMap();
+            // Modal shown when a selected map fails the magic check (outdated format).
+            void drawOutdatedMapDialog();
             [[nodiscard]] std::filesystem::path browserDirectory() const;
 
             EngineSystems* sys{};
@@ -82,6 +86,8 @@ namespace sage
             std::filesystem::path currentMapPath;
             float saveFeedbackRemaining = 0.0f;
             std::string saveFeedbackStatus;
+            bool showOutdatedMapDialog = false;
+            std::string outdatedMapName;
             std::unique_ptr<ImGui::FileBrowser> loadMapBrowser;
             std::unique_ptr<ImGui::FileBrowser> saveMapBrowser;
         };

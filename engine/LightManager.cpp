@@ -16,10 +16,11 @@ namespace sage
         lightsCount = 0;
         for (const auto view = registry->view<Light>(); auto& entity : view)
         {
-            auto& light = registry->get<Light>(entity);
+            const auto& light = registry->get<Light>(entity);
+            if (!light.enabled) continue;
+
             if (lightsCount < MAX_LIGHTS)
             {
-                light.enabled = true;
                 light.LinkShader(_shader, lightsCount);
                 lightsCount++;
             }
@@ -57,6 +58,7 @@ namespace sage
             auto entity = registry->create();
             auto& light = registry->emplace<Light>(entity);
             light.type = type;
+            light.enabled = true;
             light.position = position;
             light.target = target;
             light.color = color;

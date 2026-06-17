@@ -1,6 +1,5 @@
 #include "EditorModelDefaultsController.hpp"
 
-#include <format>
 #include <utility>
 
 namespace sage::editor
@@ -13,9 +12,7 @@ namespace sage::editor
     } // namespace
 
     EditorModelDefaultsController::EditorModelDefaultsController(
-        EditorAssetCatalog& _assets,
-        std::function<bool()> _isActive,
-        std::function<void()> _onChanged)
+        EditorAssetCatalog& _assets, std::function<bool()> _isActive, std::function<void()> _onChanged)
         : assets(_assets), isActive(std::move(_isActive)), onChanged(std::move(_onChanged))
     {
     }
@@ -41,6 +38,27 @@ namespace sage::editor
         notifyChanged();
     }
 
+    void EditorModelDefaultsController::SetHeight(const float value)
+    {
+        if (isActive && !isActive()) return;
+        assets.SetSelectedDefaultHeight(value);
+        notifyChanged();
+    }
+
+    void EditorModelDefaultsController::SetRotation(const float value)
+    {
+        if (isActive && !isActive()) return;
+        assets.SetSelectedDefaultRotation(value);
+        notifyChanged();
+    }
+
+    void EditorModelDefaultsController::SetScale(const float value)
+    {
+        if (isActive && !isActive()) return;
+        assets.SetSelectedDefaultScale(value);
+        notifyChanged();
+    }
+
     void EditorModelDefaultsController::Apply()
     {
         if (isActive && !isActive()) return;
@@ -61,18 +79,18 @@ namespace sage::editor
         {
             return {
                 .assetName = inactiveAssetName,
-                .height = "0.00",
-                .rotation = "0",
-                .scale = "1.00",
+                .height = 0.0f,
+                .rotation = 0.0f,
+                .scale = 1.0f,
             };
         }
 
         const auto& placeable = assets.Selected();
         return {
             .assetName = placeable.displayName,
-            .height = std::format("{:.2f}", placeable.modelDefaultHeightOffset),
-            .rotation = std::format("{:.0f}", placeable.modelDefaultRotationY),
-            .scale = std::format("{:.2f}", placeable.modelDefaultScale),
+            .height = placeable.modelDefaultHeightOffset,
+            .rotation = placeable.modelDefaultRotationY,
+            .scale = placeable.modelDefaultScale,
         };
     }
 
@@ -81,10 +99,13 @@ namespace sage::editor
         return {
             .heightDown = [this]() { AdjustHeight(-PLACEMENT_HEIGHT_STEP); },
             .heightUp = [this]() { AdjustHeight(PLACEMENT_HEIGHT_STEP); },
+            .setHeight = [this](const float value) { SetHeight(value); },
             .rotationDown = [this]() { AdjustRotation(-PLACEMENT_ROTATION_STEP); },
             .rotationUp = [this]() { AdjustRotation(PLACEMENT_ROTATION_STEP); },
+            .setRotation = [this](const float value) { SetRotation(value); },
             .scaleDown = [this]() { AdjustScale(-PLACEMENT_SCALE_STEP); },
             .scaleUp = [this]() { AdjustScale(PLACEMENT_SCALE_STEP); },
+            .setScale = [this](const float value) { SetScale(value); },
             .apply = [this]() { Apply(); },
             .reset = [this]() { Reset(); },
         };

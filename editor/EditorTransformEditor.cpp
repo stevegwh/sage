@@ -531,7 +531,9 @@ namespace sage::editor
 
             const Matrix entityMatrix = BuildRenderableEntityMatrix(
                 transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-            if (sys->registry->any_of<Renderable>(entity))
+            // Box colliders may have hand-authored bounds. Only mesh colliders
+            // derive their broad-phase box from the render model.
+            if (collideable.shape == ColliderShape::RenderMesh && sys->registry->any_of<Renderable>(entity))
             {
                 const auto& renderable = sys->registry->get<Renderable>(entity);
                 if (const auto* model = renderable.GetModel(); model != nullptr)
@@ -647,10 +649,8 @@ namespace sage::editor
             break;
         }
 
-        // Recompute the world box from the edited local box. Note this is the one
-        // place we don't route through updateEntityCollisionBounds: that helper
-        // re-derives localBoundingBox from a Renderable's mesh, which would
-        // immediately discard the manual edit.
+        // Recompute the world box from the edited local box immediately so the
+        // face handles and navigation occupancy track the drag.
         const Matrix entityMatrix = BuildRenderableEntityMatrix(
             transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
         collideable.worldBoundingBox = TransformBoundingBoxByCorners(box, entityMatrix);

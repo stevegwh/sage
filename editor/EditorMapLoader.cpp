@@ -32,21 +32,33 @@ namespace sage::editor
     {
         using namespace sage::editor_layout;
 
-        void appendLayoutEntityRecord(
+        // Emits any map entity as a unified record carrying whatever components it
+        // has. Light and Terrain entities are skipped: they own dedicated sections.
+        void appendEntityRecord(
             entt::registry& source,
             const entt::entity entityHandle,
-            std::vector<LayoutEntityRecord>& layoutEntities,
+            std::vector<EntityRecord>& entities,
             std::unordered_set<entt::entity>& emittedEntities)
         {
             if (emittedEntities.contains(entityHandle)) return;
-            if (!source.all_of<EditorMapEntity, sgTransform, Renderable, Collideable>(entityHandle)) return;
+            if (!source.all_of<EditorMapEntity, sgTransform>(entityHandle)) return;
+            if (source.any_of<Light, Terrain>(entityHandle)) return;
 
             emittedEntities.insert(entityHandle);
-            auto& record = layoutEntities.emplace_back();
+            auto& record = entities.emplace_back();
             record.entity.id = entt::entt_traits<entt::entity>::to_entity(entityHandle);
             record.transform =
                 TransformWithSerializedNameFallback(source.get<sgTransform>(entityHandle), record.entity.id);
-            record.collideable = source.get<Collideable>(entityHandle);
+            if (const auto* component = source.try_get<Renderable>(entityHandle))
+            {
+                record.hasRenderable = true;
+                record.renderable = *component;
+            }
+            if (const auto* component = source.try_get<Collideable>(entityHandle))
+            {
+                record.hasCollideable = true;
+                record.collideable = *component;
+            }
             if (const auto* component = source.try_get<NavigationSurface>(entityHandle))
             {
                 record.hasNavigationSurface = true;
@@ -67,7 +79,12 @@ namespace sage::editor
                 record.hasCursorTarget = true;
                 record.cursorTarget = *component;
             }
-            record.renderable = source.get<Renderable>(entityHandle);
+            if (const auto* component = source.try_get<MetaData>(entityHandle);
+                component != nullptr && !component->tags.empty())
+            {
+                record.hasMetaData = true;
+                record.metaData = *component;
+            }
         }
     } // namespace
 
@@ -94,7 +111,7 @@ namespace sage::editor
         std::cout << "START: Loading layout map data from file (editor)." << std::endl;
 
         std::unordered_map<std::uint32_t, entt::entity> idMap;
-        std::vector<entt::entity> loadedLayoutEntities;
+        std::vector<entt::entity> loadedEntities;
 
         sage::serializer::ReadCompressedBinary(
             path, MapMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
@@ -109,17 +126,22 @@ namespace sage::editor
                     destination->emplace<Light>(entity, loadedLight);
                 }
 
-                std::vector<LayoutEntityRecord> layoutEntities;
-                input(layoutEntities);
-                for (const auto& record : layoutEntities)
+                std::vector<EntityRecord> entities;
+                input(entities);
+                for (const auto& record : entities)
                 {
                     const auto entity = destination->create();
                     auto transform = TransformWithSerializedNameFallback(record.transform, record.entity.id);
                     destination->emplace<EditorMapEntity>(entity);
-                    destination->emplace<MetaData>(entity);
                     destination->emplace<sgTransform>(entity, transform);
-                    destination->emplace<Collideable>(entity, record.collideable);
-                    destination->get<Collideable>(entity).isStatic = true;
+                    destination->emplace<MetaData>(entity, record.hasMetaData ? record.metaData : MetaData{});
+                    if (record.hasCollideable)
+                    {
+                        auto& collideable = destination->emplace<Collideable>(entity, record.collideable);
+                        // Triggers stay non-static so their box follows the transform
+                        // when dragged; other colliders are static map geometry.
+                        collideable.isStatic = !record.hasTriggerVolume;
+                    }
                     if (record.hasNavigationSurface)
                         destination->emplace<NavigationSurface>(entity, record.navigationSurface);
                     if (record.hasNavigationObstacle)
@@ -128,63 +150,26 @@ namespace sage::editor
                         destination->emplace<TriggerVolume>(entity, record.triggerVolume);
                     if (record.hasCursorTarget)
                         destination->emplace<CursorTarget>(entity, record.cursorTarget);
-                    auto renderable = record.renderable;
-                    if (IsMapBaseTransform(transform)) renderable.active = false;
-                    destination->emplace<Renderable>(entity, renderable);
+                    if (record.hasRenderable)
+                    {
+                        auto renderable = record.renderable;
+                        if (IsMapBaseTransform(transform)) renderable.active = false;
+                        destination->emplace<Renderable>(entity, renderable);
+                    }
                     idMap[record.entity.id] = entity;
-                    loadedLayoutEntities.push_back(entity);
+                    loadedEntities.push_back(entity);
                 }
 
-                std::vector<EntityMetaDataRecord> entityMetaData;
-                input(entityMetaData);
-                for (const auto& record : entityMetaData)
-                {
-                    const auto iter = idMap.find(record.entity.id);
-                    if (iter == idMap.end()) continue;
-                    destination->emplace_or_replace<MetaData>(iter->second, record.metaData);
-                }
-
-                std::vector<entt::entity> loadedSpawnPointEntities;
-                std::vector<LegacySpawnPointRecord> spawnPoints;
-                input(spawnPoints);
-                for (std::size_t i = 0; i < spawnPoints.size(); ++i)
-                {
-                    const auto& spawnPoint = spawnPoints[i];
-                    const auto entity = destination->create();
-                    destination->emplace<EditorMapEntity>(entity);
-                    auto& transform = destination->emplace<sgTransform>(entity);
-                    transform.position.world = spawnPoint.pos;
-                    transform.rotation.world = spawnPoint.rot;
-                    transform.name = LegacySpawnPointEntityName(spawnPoint, i);
-                    sage::AddTag(*destination, entity, SpawnPointTag);
-                    loadedSpawnPointEntities.push_back(entity);
-                }
-
-                std::vector<entt::entity> loadedTriggerEntities;
-                std::vector<TriggerRecord> triggers;
-                input(triggers);
-                for (const auto& record : triggers)
-                {
-                    const auto entity = destination->create();
-                    destination->emplace<EditorMapEntity>(entity);
-                    auto& transform = destination->emplace<sgTransform>(entity);
-                    transform.position.world = record.position;
-                    transform.name = "trigger";
-                    destination->emplace<Collideable>(entity, record.collideable);
-                    destination->emplace<TriggerVolume>(entity, record.triggerVolume);
-                    loadedTriggerEntities.push_back(entity);
-                }
-
-                const auto resolveTarget = [&](const std::uint8_t targetKind, const std::uint32_t targetId) {
-                    return ResolveEntityTarget(
-                        targetKind, targetId, idMap, loadedSpawnPointEntities, loadedTriggerEntities);
+                const auto resolveTarget = [&](const std::uint32_t targetId) {
+                    const auto iter = idMap.find(targetId);
+                    return iter != idMap.end() ? iter->second : entt::null;
                 };
 
                 std::vector<EntityScriptRecord> scripts;
                 input(scripts);
                 for (const auto& record : scripts)
                 {
-                    const entt::entity target = resolveTarget(record.targetKind, record.targetId);
+                    const entt::entity target = resolveTarget(record.targetId);
                     if (target == entt::null) continue;
                     destination->emplace_or_replace<ScriptComponent>(target, record.script);
                 }
@@ -193,7 +178,7 @@ namespace sage::editor
                 input(animations);
                 for (const auto& record : animations)
                 {
-                    const entt::entity target = resolveTarget(record.targetKind, record.targetId);
+                    const entt::entity target = resolveTarget(record.targetId);
                     if (target == entt::null) continue;
                     if (!ResourceManager::GetInstance().HasModelAnimation(record.modelKey))
                     {
@@ -211,9 +196,9 @@ namespace sage::editor
                 input(moveables);
                 for (const auto& record : moveables)
                 {
-                    const auto iter = idMap.find(record.targetId);
-                    if (record.targetKind != LayoutEntityTargetKind || iter == idMap.end()) continue;
-                    auto& moveable = destination->get_or_emplace<MoveableActor>(iter->second);
+                    const entt::entity target = resolveTarget(record.targetId);
+                    if (target == entt::null) continue;
+                    auto& moveable = destination->get_or_emplace<MoveableActor>(target);
                     moveable.movementSpeed = record.movementSpeed;
                     moveable.pathfindingBounds = record.pathfindingBounds;
                     moveable.moveClip = record.moveClip;
@@ -254,7 +239,7 @@ namespace sage::editor
                     input(archetypes);
                     for (const auto& record : archetypes)
                     {
-                        const entt::entity target = resolveTarget(record.targetKind, record.targetId);
+                        const entt::entity target = resolveTarget(record.targetId);
                         if (target == entt::null) continue;
                         destination->emplace_or_replace<Archetype>(target, record.archetype);
                     }
@@ -264,7 +249,8 @@ namespace sage::editor
                 }
             });
 
-        for (const auto entity : loadedLayoutEntities)
+        // Resolved after every section so any entity can parent onto any other.
+        for (const auto entity : loadedEntities)
         {
             if (destination->valid(entity) && destination->any_of<EditorMapEntity, sgTransform>(entity))
             {
@@ -305,93 +291,33 @@ namespace sage::editor
                 }
                 output(lights);
 
-                std::vector<LayoutEntityRecord> layoutEntities;
+                // Unified entity section: every map entity except Light/Terrain,
+                // carrying whatever components it has. hierarchyOrder first so parents
+                // serialize before children, then the view sweeps up anything else.
+                std::vector<EntityRecord> entities;
                 std::unordered_set<entt::entity> emittedEntities;
                 emittedEntities.reserve(hierarchyOrder.size());
                 for (const auto entityHandle : hierarchyOrder)
                 {
-                    appendLayoutEntityRecord(source, entityHandle, layoutEntities, emittedEntities);
+                    appendEntityRecord(source, entityHandle, entities, emittedEntities);
                 }
-                for (const auto entityHandle : source.view<EditorMapEntity, sgTransform, Renderable, Collideable>())
+                for (const auto entityHandle : source.view<EditorMapEntity, sgTransform>())
                 {
-                    appendLayoutEntityRecord(source, entityHandle, layoutEntities, emittedEntities);
+                    appendEntityRecord(source, entityHandle, entities, emittedEntities);
                 }
-                output(layoutEntities);
-
-                std::vector<EntityMetaDataRecord> entityMetaData;
-                for (const auto entity : source.view<EditorMapEntity, sgTransform, Renderable, Collideable, MetaData>())
-                {
-                    const auto& metaData = source.get<MetaData>(entity);
-                    if (metaData.tags.empty()) continue;
-
-                    entityMetaData.push_back(
-                        EntityMetaDataRecord{
-                            .entity = {entt::entt_traits<entt::entity>::to_entity(entity)},
-                            .metaData = metaData});
-                }
-                output(entityMetaData);
-
-                std::vector<LegacySpawnPointRecord> spawnPoints;
-                std::vector<entt::entity> spawnPointEntities;
-                for (const auto entity : source.view<EditorMapEntity, sgTransform, MetaData>())
-                {
-                    if (emittedEntities.contains(entity)) continue;
-                    if (!HasTag(source.get<MetaData>(entity), SpawnPointTag)) continue;
-
-                    const auto& transform = source.get<sgTransform>(entity);
-                    spawnPoints.push_back(
-                        LegacySpawnPointRecord{
-                            .name = transform.name,
-                            .type = LegacySpawnPointType::ENEMY,
-                            .pos = transform.GetWorldPos(),
-                            .rot = transform.GetWorldRot()});
-                    spawnPointEntities.push_back(entity);
-                }
-                output(spawnPoints);
-
-                std::vector<TriggerRecord> triggers;
-                std::vector<entt::entity> triggerEntities;
-                for (const auto entity : source.view<EditorMapEntity, sgTransform, Collideable, TriggerVolume>())
-                {
-                    const auto& collideable = source.get<Collideable>(entity);
-                    // Mesh-bearing triggers round-trip via the layout-entity stream;
-                    // only meshless trigger markers go here.
-                    if (source.all_of<Renderable>(entity)) continue;
-                    triggers.push_back(
-                        TriggerRecord{
-                            .position = source.get<sgTransform>(entity).GetWorldPos(),
-                            .collideable = collideable,
-                            .triggerVolume = source.get<TriggerVolume>(entity)});
-                    triggerEntities.push_back(entity);
-                }
-                output(triggers);
+                output(entities);
 
                 std::vector<EntityScriptRecord> scripts;
-                const auto appendScript =
-                    [&](const entt::entity entity, const std::uint8_t kind, const std::uint32_t id) {
-                        if (!source.all_of<ScriptComponent>(entity)) return;
-                        const auto& script = source.get<ScriptComponent>(entity);
-                        if (script.scriptPath.empty()) return;
-                        scripts.push_back(EntityScriptRecord{kind, id, script});
-                };
                 for (const auto entity : emittedEntities)
                 {
-                    appendScript(
-                        entity, LayoutEntityTargetKind, entt::entt_traits<entt::entity>::to_entity(entity));
-                }
-                for (std::size_t i = 0; i < spawnPointEntities.size(); ++i)
-                {
-                    appendScript(spawnPointEntities[i], SpawnPointTargetKind, static_cast<std::uint32_t>(i));
-                }
-                for (std::size_t i = 0; i < triggerEntities.size(); ++i)
-                {
-                    appendScript(triggerEntities[i], TriggerTargetKind, static_cast<std::uint32_t>(i));
+                    if (!source.all_of<ScriptComponent>(entity)) continue;
+                    const auto& script = source.get<ScriptComponent>(entity);
+                    if (script.scriptPath.empty()) continue;
+                    scripts.push_back(
+                        EntityScriptRecord{entt::entt_traits<entt::entity>::to_entity(entity), script});
                 }
                 output(scripts);
 
-                // Animation requires a Renderable, so in practice only layout
-                // entities carry one; the record keeps the same addressing as
-                // scripts so the loaders stay uniform.
                 std::vector<EntityAnimationRecord> animations;
                 for (const auto entity : emittedEntities)
                 {
@@ -400,13 +326,10 @@ namespace sage::editor
                     if (animation.modelKey.empty()) continue;
                     animations.push_back(
                         EntityAnimationRecord{
-                            LayoutEntityTargetKind,
-                            entt::entt_traits<entt::entity>::to_entity(entity),
-                            animation.modelKey});
+                            entt::entt_traits<entt::entity>::to_entity(entity), animation.modelKey});
                 }
                 output(animations);
 
-                // Like Animation, only layout entities carry a MoveableActor.
                 std::vector<EntityMoveableActorRecord> moveables;
                 for (const auto entity : emittedEntities)
                 {
@@ -414,7 +337,6 @@ namespace sage::editor
                     const auto& moveable = source.get<MoveableActor>(entity);
                     moveables.push_back(
                         EntityMoveableActorRecord{
-                            LayoutEntityTargetKind,
                             entt::entt_traits<entt::entity>::to_entity(entity),
                             moveable.movementSpeed,
                             moveable.pathfindingBounds,
@@ -439,10 +361,8 @@ namespace sage::editor
                 }
                 output(terrains);
 
-                // Trailing (final) section. Like Animation/MoveableActor, an
-                // archetype identity belongs to actual world objects, so only layout
-                // entities carry one; the record keeps the script addressing so the
-                // loaders stay uniform.
+                // Trailing (final) section, wrapped in try/catch on load so older
+                // maps without it degrade to "no archetypes".
                 std::vector<EntityArchetypeRecord> archetypes;
                 for (const auto entity : emittedEntities)
                 {
@@ -450,12 +370,9 @@ namespace sage::editor
                     if (archetype == nullptr || !archetype->IsValid()) continue;
                     archetypes.push_back(
                         EntityArchetypeRecord{
-                            LayoutEntityTargetKind,
-                            entt::entt_traits<entt::entity>::to_entity(entity),
-                            *archetype});
+                            entt::entt_traits<entt::entity>::to_entity(entity), *archetype});
                 }
                 output(archetypes);
-
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

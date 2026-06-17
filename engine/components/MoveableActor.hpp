@@ -11,20 +11,12 @@
 #include "raylib.h"
 
 #include <deque>
-#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
 namespace sage
 {
-
-    struct MoveableActorCollision
-    {
-        entt::entity hitEntityId = entt::null;
-        Vector3 hitLastPos{};
-    };
-
     struct MoveableActor
     {
         float movementSpeed = 0.35f;
@@ -47,7 +39,6 @@ namespace sage
             i.clipDropdown("Idle Clip", idleClip);
         }
 
-        // std::optional<MoveableActorCollision> moveableActorCollision;
         entt::entity hitEntityId = entt::null;
         Vector3 hitLastPos{};
         // Keeps collision rerouting from fighting deliberate movement toward another moveable entity.

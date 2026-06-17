@@ -1,12 +1,13 @@
 #pragma once
 
-#include "EditorGui.hpp"
 #include "cereal/cereal.hpp"
+#include "EditorGui.hpp"
 #include "raylib.h"
 #include "raymath.h"
 
 #include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -69,11 +70,16 @@ namespace sage::editor
         void AdjustSelectedDefaultHeight(float amount);
         void AdjustSelectedDefaultRotation(float amount);
         void AdjustSelectedDefaultScale(float amount);
+        void SetSelectedDefaultHeight(float value);
+        void SetSelectedDefaultRotation(float value);
+        void SetSelectedDefaultScale(float value);
         void ApplySelectedDefaults();
         void ResetSelectedDefaults();
 
         [[nodiscard]] const PlaceableAsset& Selected() const;
+        [[nodiscard]] const PlaceableAsset& At(std::size_t index) const;
         [[nodiscard]] std::size_t SelectedIndex() const;
+        [[nodiscard]] std::optional<std::size_t> FindByModelKey(const std::string& modelKey) const;
         [[nodiscard]] std::size_t Size() const;
         [[nodiscard]] Matrix DefaultTransform(const PlaceableAsset& placeable) const;
         [[nodiscard]] Matrix SelectedDefaultTransform() const;

@@ -67,11 +67,6 @@ namespace sage
             return directory + materialFileName;
         }
 
-        std::string UnnamedMaterialName(const char* fileName, size_t materialIndex)
-        {
-            return std::string(fileName) + "#Material" + std::to_string(materialIndex);
-        }
-
         std::string FindObjMaterialLibrary(const char* fileName)
         {
             std::ifstream objFile(fileName);
@@ -124,7 +119,7 @@ namespace sage
             for (unsigned int i = 0; i < materialCount; ++i)
             {
                 const char* name = materials[i].name;
-                names.emplace_back((name != nullptr && name[0] != '\0') ? name : UnnamedMaterialName(fileName, i));
+                names.emplace_back((name != nullptr && name[0] != '\0') ? name : FallbackMaterialName(fileName, i));
             }
 
             tinyobj_materials_free(materials, materialCount);
@@ -175,7 +170,7 @@ namespace sage
             {
                 const char* name = gltf.data->materials[i].name;
                 names.emplace_back(
-                    (name != nullptr && name[0] != '\0') ? name : UnnamedMaterialName(fileName, i + 1));
+                    (name != nullptr && name[0] != '\0') ? name : FallbackMaterialName(fileName, i + 1));
             }
 
             return names;
@@ -305,10 +300,12 @@ namespace sage
     */
     Shader ResourceManager::ShaderLoad(const char* vsFileName, const char* fsFileName)
     {
-        if (vsFileName == nullptr && fsFileName == nullptr || (vsFileName != nullptr && !FileExists(vsFileName) &&
-                                                               (fsFileName != nullptr && !FileExists(fsFileName))))
+        const bool noShaderFiles = vsFileName == nullptr && fsFileName == nullptr;
+        const bool vertexShaderMissing = vsFileName != nullptr && !FileExists(vsFileName);
+        const bool fragmentShaderMissing = fsFileName != nullptr && !FileExists(fsFileName);
+        if (noShaderFiles || vertexShaderMissing || fragmentShaderMissing)
         {
-            std::cout << "WARNING: Both files nullptr or do not exist. Loading default shader. \n";
+            std::cout << "WARNING: Requested shader files do not exist. Loading default shader. \n";
             return shaders["DEFAULT"];
         }
 

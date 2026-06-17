@@ -14,6 +14,13 @@ namespace sage
 
     void UberShaderSystem::onComponentAdded(entt::entity entity)
     {
+        RebindRenderable(entity);
+    }
+
+    void UberShaderSystem::RebindRenderable(const entt::entity entity)
+    {
+        if (!registry->valid(entity) || !registry->all_of<UberShaderComponent, Renderable>(entity)) return;
+
         auto& uber = registry->get<UberShaderComponent>(entity);
         uber.shader = shader;
         uber.litLoc = litLoc;
@@ -22,26 +29,30 @@ namespace sage
         uber.hasEmissiveColLoc = hasEmissiveColLoc;
         uber.colEmissiveLoc = colEmissionLoc;
         auto& renderable = registry->get<Renderable>(entity);
+        auto* model = renderable.GetModel();
+        if (model == nullptr) return;
 
-        const auto& rlmodel = renderable.GetModel()->GetRlModel();
+        const auto& rlmodel = model->GetRlModel();
+        uber.materialMap.resize(static_cast<std::size_t>(rlmodel.materialCount));
         for (int i = 0; i < rlmodel.materialCount; ++i)
         {
-            auto col = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].color;
-            auto emissiveTex = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].texture.id;
+            const auto materialIndex = static_cast<unsigned int>(i);
+            uber.ClearFlag(materialIndex, UberShaderComponent::Flags::EmissiveCol);
+            uber.ClearFlag(materialIndex, UberShaderComponent::Flags::EmissiveTexture);
+
+            const auto col = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].color;
+            const auto emissiveTex = rlmodel.materials[i].maps[MATERIAL_MAP_EMISSION].texture.id;
             if (col.r != 0 || col.g != 0 || col.b != 0)
             {
-                uber.SetFlag(i, UberShaderComponent::Flags::EmissiveCol);
+                uber.SetFlag(materialIndex, UberShaderComponent::Flags::EmissiveCol);
             }
             if (emissiveTex > 1)
             {
-                uber.SetFlag(i, UberShaderComponent::Flags::EmissiveTexture);
+                uber.SetFlag(materialIndex, UberShaderComponent::Flags::EmissiveTexture);
             }
         }
 
-        for (int i = 0; i < renderable.GetModel()->GetMaterialCount(); ++i)
-        {
-            renderable.GetModel()->SetShader(shader, i);
-        }
+        model->SetShader(shader);
     }
 
     void UberShaderSystem::onComponentRemoved(entt::entity entity)

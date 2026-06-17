@@ -105,10 +105,13 @@ namespace sage
             {
                 std::function<void()> heightDown;
                 std::function<void()> heightUp;
+                std::function<void(float)> setHeight;
                 std::function<void()> rotationDown;
                 std::function<void()> rotationUp;
+                std::function<void(float)> setRotation;
                 std::function<void()> scaleDown;
                 std::function<void()> scaleUp;
+                std::function<void(float)> setScale;
                 std::function<void()> apply;
                 std::function<void()> reset;
             };
@@ -144,6 +147,11 @@ namespace sage
                 // "Add Component > Archetype" was clicked; the host attaches an
                 // (unset) Archetype on the selection — the kind is picked in the inspector.
                 bool addArchetypeClicked = false;
+                // The Renderable header's context menu requested the selected
+                // model's asset-default editor.
+                bool editModelDefaultsClicked = false;
+                // Renderable's model dropdown requested a coordinated model swap.
+                std::optional<std::string> selectedModelKey;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;
             };
@@ -188,9 +196,9 @@ namespace sage
             std::vector<InspectedComponent> inspectedComponents;
             std::vector<EditorComponentId> inspectorComponentOrder;
             std::string assetDefaultsAssetName = "None";
-            std::string assetDefaultsHeight = "0.00";
-            std::string assetDefaultsRotation = "0";
-            std::string assetDefaultsScale = "1.00";
+            float assetDefaultsHeight = 0.0f;
+            float assetDefaultsRotation = 0.0f;
+            float assetDefaultsScale = 1.0f;
             std::string assetRenameInput;
             std::string assetRenameStatus;
             std::string flatpackRenameInput;
@@ -249,9 +257,9 @@ namespace sage
             void SetSaveStatus(const std::string& status, bool hasUnsavedChanges) const;
             void SetAssetDefaultsStatus(
                 const std::string& assetName,
-                const std::string& modelDefaultHeight,
-                const std::string& modelDefaultRotation,
-                const std::string& modelDefaultScale);
+                float modelDefaultHeight,
+                float modelDefaultRotation,
+                float modelDefaultScale);
             void SetSceneName(const std::string& sceneName) const;
             void SetSelectedAsset(std::optional<std::size_t> index);
             void SetFlatpacks(std::vector<FlatpackEntry> entries);

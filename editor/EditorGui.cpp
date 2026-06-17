@@ -1,9 +1,9 @@
 #include "EditorGui.hpp"
 
 #include "EditorGuiInternal.hpp"
-#include "InspectorFieldUI.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
+#include "InspectorFieldUI.hpp"
 
 #include "imgui.h"
 #include "rlImGui.h"
@@ -55,9 +55,7 @@ namespace sage::editor
         const float mainMenuHeight = ImGui::GetFrameHeight();
         const float rightDockWidth = dockLayout ? dockLayout->rightDockWidth : EDITOR_RIGHT_DOCK_DEFAULT_WIDTH;
         const float width = settings->ScaleValueWidth(rightDockWidth);
-        const ImVec2 windowPos{
-            viewportOffset.x + viewport.x - width,
-            viewportOffset.y + mainMenuHeight};
+        const ImVec2 windowPos{viewportOffset.x + viewport.x - width, viewportOffset.y + mainMenuHeight};
         const ImVec2 windowSize{width, std::max(1.0f, viewport.y - mainMenuHeight)};
 
         ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
@@ -72,9 +70,8 @@ namespace sage::editor
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{6.0f, 5.0f});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0f, 7.0f});
 
-        constexpr ImGuiWindowFlags windowFlags =
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoSavedSettings;
+        constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
 
         InspectorComponentsResult inspectorResult;
         AddComponentClicks addClicks;
@@ -129,6 +126,8 @@ namespace sage::editor
             .addTriggerVolumeClicked = addClicks.triggerVolume,
             .addCursorTargetClicked = addClicks.cursorTarget,
             .addArchetypeClicked = addClicks.archetype,
+            .editModelDefaultsClicked = inspectorResult.editModelDefaults,
+            .selectedModelKey = std::move(inspectorResult.selectedModelKey),
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 
@@ -338,10 +337,9 @@ namespace sage::editor
             ImGuiCond_Always,
             ImVec2{0.5f, 0.0f});
         ImGui::SetNextWindowBgAlpha(0.85f);
-        constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_AlwaysAutoResize |
-                                                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
-                                                 ImGuiWindowFlags_NoSavedSettings |
-                                                 ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
+        constexpr ImGuiWindowFlags windowFlags =
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
         if (ImGui::Begin("##sceneTabs", nullptr, windowFlags))
         {
             if (ImGui::BeginTabBar("##sceneTabBar"))

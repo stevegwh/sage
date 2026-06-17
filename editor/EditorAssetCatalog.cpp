@@ -1,7 +1,7 @@
 #include "EditorAssetCatalog.hpp"
 
-#include "engine/ResourceManager.hpp"
 #include "engine/raylib-cereal.hpp"
+#include "engine/ResourceManager.hpp"
 
 #include "cereal/archives/json.hpp"
 
@@ -135,13 +135,12 @@ namespace sage::editor
 
         void WrapDegrees(float& degrees)
         {
-            if (degrees >= 360.0f) degrees -= 360.0f;
+            degrees = std::fmod(degrees, 360.0f);
             if (degrees < 0.0f) degrees += 360.0f;
         }
     } // namespace
 
-    EditorAssetCatalog::EditorAssetCatalog(std::vector<PlaceableAsset> placeables)
-        : assets(std::move(placeables))
+    EditorAssetCatalog::EditorAssetCatalog(std::vector<PlaceableAsset> placeables) : assets(std::move(placeables))
     {
     }
 
@@ -154,13 +153,14 @@ namespace sage::editor
         for (const auto& key : modelKeys)
         {
             const auto modelSpaceDefaultTransform = ModelSpaceDefaultTransform(key);
-            placeables.push_back(PlaceableAsset{
-                .displayName = DisplayNameFromModelKey(key),
-                .modelKey = key,
-                .labelStem = LabelStemFromModelKey(key),
-                .appliedModelDefaultTransform = modelSpaceDefaultTransform,
-                .modelSpaceDefaultTransform = modelSpaceDefaultTransform,
-            });
+            placeables.push_back(
+                PlaceableAsset{
+                    .displayName = DisplayNameFromModelKey(key),
+                    .modelKey = key,
+                    .labelStem = LabelStemFromModelKey(key),
+                    .appliedModelDefaultTransform = modelSpaceDefaultTransform,
+                    .modelSpaceDefaultTransform = modelSpaceDefaultTransform,
+                });
         }
 
         return EditorAssetCatalog{std::move(placeables)};
@@ -216,6 +216,23 @@ namespace sage::editor
         scale = std::max(PLACEMENT_MIN_SCALE, scale + amount);
     }
 
+    void EditorAssetCatalog::SetSelectedDefaultHeight(const float value)
+    {
+        SelectedMutable().modelDefaultHeightOffset = value;
+    }
+
+    void EditorAssetCatalog::SetSelectedDefaultRotation(const float value)
+    {
+        auto& rotationY = SelectedMutable().modelDefaultRotationY;
+        rotationY = value;
+        WrapDegrees(rotationY);
+    }
+
+    void EditorAssetCatalog::SetSelectedDefaultScale(const float value)
+    {
+        SelectedMutable().modelDefaultScale = std::max(PLACEMENT_MIN_SCALE, value);
+    }
+
     void EditorAssetCatalog::ApplySelectedDefaults()
     {
         auto& placeable = SelectedMutable();
@@ -241,9 +258,21 @@ namespace sage::editor
         return assets.at(selectedIndex);
     }
 
+    const PlaceableAsset& EditorAssetCatalog::At(const std::size_t index) const
+    {
+        return assets.at(index);
+    }
+
     std::size_t EditorAssetCatalog::SelectedIndex() const
     {
         return selectedIndex;
+    }
+
+    std::optional<std::size_t> EditorAssetCatalog::FindByModelKey(const std::string& modelKey) const
+    {
+        const auto it = std::ranges::find(assets, modelKey, &PlaceableAsset::modelKey);
+        if (it == assets.end()) return std::nullopt;
+        return static_cast<std::size_t>(std::distance(assets.begin(), it));
     }
 
     std::size_t EditorAssetCatalog::Size() const
@@ -259,7 +288,10 @@ namespace sage::editor
                 MatrixRotateY(placeable.modelDefaultRotationY * DEG2RAD)),
             MatrixTranslate(0.0f, placeable.modelDefaultHeightOffset, 0.0f));
 
-        return MatrixMultiply(editableTransform, placeable.appliedModelDefaultTransform);
+        // Raymath composes these left-to-right. Apply the imported/model-space
+        // normalization first, then the editable SRT so its translation remains
+        // in world units instead of being multiplied by the model's baked scale.
+        return MatrixMultiply(placeable.appliedModelDefaultTransform, editableTransform);
     }
 
     Matrix EditorAssetCatalog::SelectedDefaultTransform() const

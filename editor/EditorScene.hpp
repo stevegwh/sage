@@ -95,6 +95,7 @@ namespace sage
         void addSpawnPoint() const;
         void addTriggerVolume() const;
         void addTerrain() const;
+        void addEmptyTransform() const;
         // Brush settings panel, shown only while terrain sculpting is active.
         void drawTerrainBrushWindow() const;
         void clearCurrentMap() const;
@@ -118,6 +119,7 @@ namespace sage
         void removeScriptFromSelection() const;
         void addAnimationToSelection() const;
         void removeAnimationFromSelection() const;
+        void changeSelectedModels(const std::string& modelKey) const;
         void addMoveableActorToSelection() const;
         void removeMoveableActorFromSelection() const;
         void onHistoryApplied(const std::vector<entt::entity>& restored) const;

@@ -22,7 +22,7 @@
 
 namespace sage::editor_layout
 {
-    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '2'};
+    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '3'};
     inline constexpr std::string_view MapBaseNameMarker = "_MAPBASE_";
 
     [[nodiscard]] inline bool IsMapBaseTransformName(const std::string_view name)
@@ -47,10 +47,18 @@ namespace sage::editor_layout
         return transform;
     }
 
-    struct LayoutEntityRecord
+    // A single map entity is just a transform plus whatever components it was
+    // authored with (Unity-style composition). Every optional component is gated by
+    // a presence flag, so an empty grouping node, a collider-only box, a renderable
+    // prop, a trigger marker and a full layout object all round-trip through this one
+    // record. Light and Terrain keep dedicated sections (engine-managed / bulk data).
+    struct EntityRecord
     {
         serializer::entity entity{};
         sgTransform transform{};
+        bool hasRenderable = false;
+        Renderable renderable{};
+        bool hasCollideable = false;
         Collideable collideable{};
         bool hasNavigationSurface = false;
         NavigationSurface navigationSurface{};
@@ -60,7 +68,8 @@ namespace sage::editor_layout
         TriggerVolume triggerVolume{};
         bool hasCursorTarget = false;
         CursorTarget cursorTarget{};
-        Renderable renderable{};
+        bool hasMetaData = false;
+        MetaData metaData{};
 
         template <class Archive>
         void serialize(Archive& archive)
@@ -68,6 +77,9 @@ namespace sage::editor_layout
             archive(
                 entity,
                 transform,
+                hasRenderable,
+                renderable,
+                hasCollideable,
                 collideable,
                 hasNavigationSurface,
                 navigationSurface,
@@ -77,141 +89,39 @@ namespace sage::editor_layout
                 triggerVolume,
                 hasCursorTarget,
                 cursorTarget,
-                renderable);
+                hasMetaData,
+                metaData);
         }
     };
 
-    struct EntityMetaDataRecord
-    {
-        serializer::entity entity{};
-        MetaData metaData{};
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(entity, metaData);
-        }
-    };
-
-    // Compatibility record for the old map marker section. Runtime/editor code
-    // now materializes these as ordinary entities tagged SpawnPoint.
-    enum class LegacySpawnPointType
-    {
-        PLAYER,
-        ENEMY,
-        DIALOG_CUTSCENE,
-        NPC
-    };
-
-    struct LegacySpawnPointRecord
-    {
-        std::string name;
-        LegacySpawnPointType type = LegacySpawnPointType::ENEMY;
-        Vector3 pos{};
-        Vector3 rot{};
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(type, name, pos, rot);
-        }
-    };
-
-    [[nodiscard]] inline std::string_view LegacySpawnPointTypeName(const LegacySpawnPointType type)
-    {
-        switch (type)
-        {
-        case LegacySpawnPointType::PLAYER:
-            return "player";
-        case LegacySpawnPointType::ENEMY:
-            return "enemy";
-        case LegacySpawnPointType::DIALOG_CUTSCENE:
-            return "dialog";
-        case LegacySpawnPointType::NPC:
-            return "npc";
-        }
-        return "point";
-    }
-
-    [[nodiscard]] inline std::string LegacySpawnPointEntityName(
-        const LegacySpawnPointRecord& record, const std::size_t index)
-    {
-        const std::string suffix = record.name.empty() ? std::to_string(index) : record.name;
-        return "spawn_" + std::string{LegacySpawnPointTypeName(record.type)} + "_" + suffix;
-    }
-
-    struct TriggerRecord
-    {
-        Vector3 position{};
-        Collideable collideable{};
-        TriggerVolume triggerVolume{};
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(position, collideable, triggerVolume);
-        }
-    };
-
-    inline constexpr std::uint8_t LayoutEntityTargetKind = 0;
-    inline constexpr std::uint8_t SpawnPointTargetKind = 1;
-    inline constexpr std::uint8_t TriggerTargetKind = 2;
-
-    [[nodiscard]] inline entt::entity ResolveEntityTarget(
-        const std::uint8_t targetKind,
-        const std::uint32_t targetId,
-        const std::unordered_map<std::uint32_t, entt::entity>& layoutEntities,
-        const std::vector<entt::entity>& spawnPointEntities,
-        const std::vector<entt::entity>& triggerEntities)
-    {
-        switch (targetKind)
-        {
-        case LayoutEntityTargetKind:
-            if (const auto iter = layoutEntities.find(targetId); iter != layoutEntities.end()) return iter->second;
-            break;
-        case SpawnPointTargetKind:
-            if (targetId < spawnPointEntities.size()) return spawnPointEntities[targetId];
-            break;
-        case TriggerTargetKind:
-            if (targetId < triggerEntities.size()) return triggerEntities[targetId];
-            break;
-        default:
-            break;
-        }
-        return entt::null;
-    }
-
+    // Attachment records (script/animation/moveable/archetype) name their owning
+    // entity by its saved id, resolved through the load's id map.
     struct EntityScriptRecord
     {
-        // targetId is a saved entity id for layout entities, or a section index
-        // for spawn points and triggers.
-        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         ScriptComponent script{};
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(targetKind, targetId, script);
+            archive(targetId, script);
         }
     };
 
     struct EntityAnimationRecord
     {
-        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         std::string modelKey;
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(targetKind, targetId, modelKey);
+            archive(targetId, modelKey);
         }
     };
 
     struct EntityMoveableActorRecord
     {
-        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         float movementSpeed = 0.0f;
         std::int32_t pathfindingBounds = 0;
@@ -221,7 +131,7 @@ namespace sage::editor_layout
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(targetKind, targetId, movementSpeed, pathfindingBounds, moveClip, idleClip);
+            archive(targetId, movementSpeed, pathfindingBounds, moveClip, idleClip);
         }
     };
 
@@ -242,15 +152,13 @@ namespace sage::editor_layout
 
     struct EntityArchetypeRecord
     {
-        // Addressed like EntityScriptRecord.
-        std::uint8_t targetKind = LayoutEntityTargetKind;
         std::uint32_t targetId = 0;
         Archetype archetype{};
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(targetKind, targetId, archetype);
+            archive(targetId, archetype);
         }
     };
 } // namespace sage::editor_layout

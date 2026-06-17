@@ -81,6 +81,7 @@ namespace sage::editor
         [[nodiscard]] entt::entity CreateSpawnPoint(Vector3 position) const;
         [[nodiscard]] entt::entity CreateTriggerVolume(Vector3 position) const;
         [[nodiscard]] entt::entity CreateTerrain(Vector3 position) const;
+        [[nodiscard]] entt::entity CreateEmptyTransform(Vector3 position) const;
 
         // Captures the given entities (and their descendants) into the clipboard,
         // replacing any previous contents. Entries that are descendants of another

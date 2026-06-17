@@ -47,6 +47,11 @@ namespace sage::editor
         {
             return std::format("terrain_{}", entt::to_integral(entity));
         }
+
+        std::string emptyTransformLabel(const entt::entity entity)
+        {
+            return std::format("empty_{}", entt::to_integral(entity));
+        }
     } // namespace
 
     EditorEntityOperations::EditorEntityOperations(EngineSystems* _sys) : sys(_sys)
@@ -114,6 +119,16 @@ namespace sage::editor
         transform.position.world = {position.x - halfSize, position.y, position.z - halfSize};
         transform.name = terrainLabel(entity);
         AttachTerrainRenderable(*sys->registry, entity, *sys->lightSubSystem);
+        return entity;
+    }
+
+    entt::entity EditorEntityOperations::CreateEmptyTransform(const Vector3 position) const
+    {
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = emptyTransformLabel(entity);
         return entity;
     }
 

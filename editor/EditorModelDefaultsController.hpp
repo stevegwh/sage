@@ -11,9 +11,9 @@ namespace sage::editor
     struct ModelDefaultsStatus
     {
         std::string assetName;
-        std::string height;
-        std::string rotation;
-        std::string scale;
+        float height = 0.0f;
+        float rotation = 0.0f;
+        float scale = 1.0f;
     };
 
     class EditorModelDefaultsController
@@ -26,13 +26,14 @@ namespace sage::editor
 
       public:
         EditorModelDefaultsController(
-            EditorAssetCatalog& assets,
-            std::function<bool()> isActive,
-            std::function<void()> onChanged);
+            EditorAssetCatalog& assets, std::function<bool()> isActive, std::function<void()> onChanged);
 
         void AdjustHeight(float amount);
         void AdjustRotation(float amount);
         void AdjustScale(float amount);
+        void SetHeight(float value);
+        void SetRotation(float value);
+        void SetScale(float value);
         void Apply();
         void Reset();
 

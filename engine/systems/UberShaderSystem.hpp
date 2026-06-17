@@ -27,6 +27,10 @@ namespace sage
         void onComponentRemoved(entt::entity entity);
 
       public:
+        // Rebinds the uber shader after a Renderable swaps or reloads its model.
+        // Existing authored flags (Lit/Skinned) are preserved while material-derived
+        // state is refreshed from the replacement model.
+        void RebindRenderable(entt::entity entity);
         UberShaderSystem(entt::registry* _registry, EngineSystems* _sys);
     };
 

@@ -183,7 +183,6 @@ namespace sage::editor
                 0.0f);
         }
 
-
     } // namespace
 
     void EditorGui::DrawAssetDrawerWindow()
@@ -200,9 +199,7 @@ namespace sage::editor
         const float right = settings->ScaleValueWidth(rightDockWidth + EDITOR_SCENE_VIEW_PADDING);
         const float height = settings->ScaleValueHeight(assetDrawerHeight);
         const float bottomMargin = settings->ScaleValueHeight(EDITOR_SCENE_VIEW_PADDING);
-        const ImVec2 windowPos{
-            viewportOffset.x + left,
-            viewportOffset.y + viewport.y - height - bottomMargin};
+        const ImVec2 windowPos{viewportOffset.x + left, viewportOffset.y + viewport.y - height - bottomMargin};
         const ImVec2 windowSize{std::max(1.0f, viewport.x - left - right), height};
 
         ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
@@ -217,9 +214,8 @@ namespace sage::editor
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{6.0f, 5.0f});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0f, 7.0f});
 
-        constexpr ImGuiWindowFlags windowFlags =
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoSavedSettings;
+        constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
 
         if (ImGui::Begin("Asset Drawer", nullptr, windowFlags))
         {
@@ -293,12 +289,11 @@ namespace sage::editor
         ImGui::PopStyleColor(5);
     }
 
-
     void EditorGui::SetAssetDefaultsStatus(
         const std::string& assetName,
-        const std::string& modelDefaultHeight,
-        const std::string& modelDefaultRotation,
-        const std::string& modelDefaultScale)
+        const float modelDefaultHeight,
+        const float modelDefaultRotation,
+        const float modelDefaultScale)
     {
         assetDefaultsAssetName = assetName;
         assetDefaultsHeight = modelDefaultHeight;
@@ -306,12 +301,10 @@ namespace sage::editor
         assetDefaultsScale = modelDefaultScale;
     }
 
-
     void EditorGui::SetSelectedAsset(const std::optional<std::size_t> index)
     {
         selectedAssetIndex = index;
     }
-
 
     void EditorGui::SetFlatpacks(std::vector<FlatpackEntry> entries)
     {
@@ -589,30 +582,55 @@ namespace sage::editor
             ImGui::TextWrapped("Asset: %s", assetDefaultsAssetName.c_str());
 
             auto adjustmentRow = [](const char* label,
-                                    const std::string& value,
+                                    float& value,
+                                    const char* format,
                                     const std::function<void()>& down,
-                                    const std::function<void()>& up) {
+                                    const std::function<void()>& up,
+                                    const std::function<void(float)>& set) {
                 ImGui::PushID(label);
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted(label);
                 ImGui::SameLine(70.0f);
                 if (ImGui::SmallButton("-") && down) down();
                 ImGui::SameLine();
-                auto displayValue = value;
                 ImGui::SetNextItemWidth(72.0f);
-                ImGui::InputText("##value", &displayValue, ImGuiInputTextFlags_ReadOnly);
+                if (ImGui::InputFloat(
+                        "##value",
+                        &value,
+                        0.0f,
+                        0.0f,
+                        format,
+                        ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_CharsScientific) &&
+                    set)
+                {
+                    set(value);
+                }
                 ImGui::SameLine();
                 if (ImGui::SmallButton("+") && up) up();
                 ImGui::PopID();
             };
 
-            adjustmentRow("Z", assetDefaultsHeight, modelDefaultCallbacks.heightDown, modelDefaultCallbacks.heightUp);
+            adjustmentRow(
+                "Y Offset",
+                assetDefaultsHeight,
+                "%.2f",
+                modelDefaultCallbacks.heightDown,
+                modelDefaultCallbacks.heightUp,
+                modelDefaultCallbacks.setHeight);
             adjustmentRow(
                 "Rot Y",
                 assetDefaultsRotation,
+                "%.0f",
                 modelDefaultCallbacks.rotationDown,
-                modelDefaultCallbacks.rotationUp);
-            adjustmentRow("Scale", assetDefaultsScale, modelDefaultCallbacks.scaleDown, modelDefaultCallbacks.scaleUp);
+                modelDefaultCallbacks.rotationUp,
+                modelDefaultCallbacks.setRotation);
+            adjustmentRow(
+                "Scale",
+                assetDefaultsScale,
+                "%.2f",
+                modelDefaultCallbacks.scaleDown,
+                modelDefaultCallbacks.scaleUp,
+                modelDefaultCallbacks.setScale);
 
             ImGui::Spacing();
             if (ImGui::Button("Apply", ImVec2{96.0f, 0.0f}) && modelDefaultCallbacks.apply)
@@ -695,15 +713,14 @@ namespace sage::editor
                 ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
 
                 Texture2D* texture = i < assetThumbnails.size() ? &assetThumbnails[i].texture : nullptr;
-                const bool clicked =
-                    texture ? ImGui::ImageButton(
-                                  "thumbnail",
-                                  reinterpret_cast<ImTextureID>(texture),
-                                  ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE},
-                                  ImVec2{0.0f, 1.0f},
-                                  ImVec2{1.0f, 0.0f},
-                                  ImVec4{0.10f, 0.11f, 0.13f, 1.00f})
-                            : ImGui::Button("No Preview", ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE});
+                const bool clicked = texture ? ImGui::ImageButton(
+                                                   "thumbnail",
+                                                   reinterpret_cast<ImTextureID>(texture),
+                                                   ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE},
+                                                   ImVec2{0.0f, 1.0f},
+                                                   ImVec2{1.0f, 0.0f},
+                                                   ImVec4{0.10f, 0.11f, 0.13f, 1.00f})
+                                             : ImGui::Button("No Preview", ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE});
                 ImGui::PopStyleColor(3);
 
                 if (clicked && onAssetSelectedCb)
@@ -715,10 +732,7 @@ namespace sage::editor
                     const auto sourcePath = asset.sourcePath.string();
                     const auto tooltipPath = sourcePath.empty() ? asset.defaultsPath.string() : sourcePath;
                     ImGui::SetTooltip(
-                        "%s\n%s\n%s",
-                        asset.displayName.c_str(),
-                        asset.modelKey.c_str(),
-                        tooltipPath.c_str());
+                        "%s\n%s\n%s", asset.displayName.c_str(), asset.modelKey.c_str(), tooltipPath.c_str());
                 }
                 if (ImGui::BeginPopupContextItem("asset_context"))
                 {
@@ -791,7 +805,8 @@ namespace sage::editor
             return;
         }
 
-        if (ImGui::BeginTable("flatpack_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
+        if (ImGui::BeginTable(
+                "flatpack_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
         {
             for (int column = 0; column < columns; ++column)
             {
@@ -842,7 +857,8 @@ namespace sage::editor
                         openFlatpackDeleteConfirmation(i);
                     }
                     ImGui::Separator();
-                    if (ImGui::MenuItem("Copy Flatpack Name")) ImGui::SetClipboardText(flatpack.displayName.c_str());
+                    if (ImGui::MenuItem("Copy Flatpack Name"))
+                        ImGui::SetClipboardText(flatpack.displayName.c_str());
                     if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
                     ImGui::EndPopup();
                 }

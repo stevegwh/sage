@@ -31,6 +31,10 @@ namespace sage::editor
         std::optional<EditorComponentId> removeComponent;
         // Component header drag/drop reorder requested this frame.
         std::optional<ComponentMoveRequest> moveComponent;
+        // Renderable header context action requested this frame.
+        bool editModelDefaults = false;
+        // Deferred model replacement requested by Renderable's model picker.
+        std::optional<std::string> selectedModelKey;
     };
 
     // Draws every component (collapsing header + field table). Caller supplies the

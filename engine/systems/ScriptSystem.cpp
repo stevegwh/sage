@@ -136,7 +136,16 @@ namespace sage
                 "SetScale",
                 [](sgTransform& t, const Vector3& v) { t.scale.world = v; },
                 "Forward",
-                [](const sgTransform& t) { return t.forward(); });
+                [](const sgTransform& t) { return t.forward(); },
+                // Returns the parent entity id (usable with GetTransform(id) etc.),
+                // or nil when this transform is a root. Lets a child collider's
+                // OnTrigger forward to its logical owner (the parent).
+                "GetParent",
+                [](const sgTransform& t, sol::this_state s) -> sol::object {
+                    const auto parent = t.GetParent();
+                    if (parent == entt::null) return sol::lua_nil;
+                    return sol::make_object(s, static_cast<std::uint32_t>(parent));
+                });
 
             lua.new_usertype<Collideable>(
                 "Collideable",

@@ -9,8 +9,9 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
-#include "engine/Light.hpp"
 #include "engine/CursorTypes.hpp"
+#include "engine/Light.hpp"
+#include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
 #include "project/CustomArchetypes.hpp"
 #include "project/CustomCursors.hpp"
@@ -26,6 +27,45 @@ namespace sage::editor
 {
     namespace
     {
+        std::optional<ModelPickerField> DescribeModelPicker(
+            const entt::registry& registry, const std::vector<entt::entity>& entities)
+        {
+            if (entities.empty() || !registry.valid(entities.front())) return std::nullopt;
+
+            const auto* firstRenderable = registry.try_get<Renderable>(entities.front());
+            const auto* firstModel = firstRenderable ? firstRenderable->GetModel() : nullptr;
+            if (firstModel == nullptr) return std::nullopt;
+
+            ModelPickerField picker{
+                .currentKey = firstModel->GetKey(),
+                .options = ResourceManager::GetInstance().GetModelKeys(),
+                .animationCompatibleOnly = std::ranges::any_of(entities, [&](const entt::entity entity) {
+                    return registry.valid(entity) && registry.any_of<Animation>(entity);
+                })};
+
+            picker.mixed = std::ranges::any_of(entities, [&](const entt::entity entity) {
+                if (!registry.valid(entity)) return true;
+                const auto* renderable = registry.try_get<Renderable>(entity);
+                const auto* model = renderable ? renderable->GetModel() : nullptr;
+                return model == nullptr || model->GetKey() != picker.currentKey;
+            });
+
+            if (picker.animationCompatibleOnly)
+            {
+                std::erase_if(picker.options, [](const std::string& key) {
+                    return !ResourceManager::GetInstance().HasModelAnimation(key);
+                });
+            }
+
+            return picker;
+        }
+
+        bool HasCatalogModel(const std::optional<ModelPickerField>& picker)
+        {
+            return picker.has_value() && !picker->mixed && !picker->currentKey.empty() &&
+                   std::ranges::find(picker->options, picker->currentKey) != picker->options.end();
+        }
+
         template <class T>
         bool leafValueEquals(const LeafField<T>& lhs, const LeafField<T>& rhs)
         {
@@ -106,9 +146,8 @@ namespace sage::editor
 
             InspectorField result;
             result.label = fields.front().label;
-            result.editable = std::ranges::all_of(fields, [](const InspectorField& field) {
-                return field.editable;
-            });
+            result.editable =
+                std::ranges::all_of(fields, [](const InspectorField& field) { return field.editable; });
 
             if (!std::ranges::all_of(fields, [&fields](const InspectorField& field) {
                     return field.value.index() == fields.front().value.index();
@@ -366,9 +405,8 @@ namespace sage::editor
 
     const InspectorRegistry::Entry* InspectorRegistry::findEntry(const EditorComponentId componentId) const
     {
-        const auto it = std::ranges::find_if(entries_, [componentId](const Entry& entry) {
-            return entry.componentId == componentId;
-        });
+        const auto it = std::ranges::find_if(
+            entries_, [componentId](const Entry& entry) { return entry.componentId == componentId; });
         return it != entries_.end() ? &*it : nullptr;
     }
 
@@ -387,18 +425,16 @@ namespace sage::editor
     InspectorRegistry::DescribedEntry* InspectorRegistry::findDescribed(
         std::vector<DescribedEntry>& described, const Entry& entry)
     {
-        const auto it = std::ranges::find_if(described, [&entry](const DescribedEntry& candidate) {
-            return candidate.entry == &entry;
-        });
+        const auto it = std::ranges::find_if(
+            described, [&entry](const DescribedEntry& candidate) { return candidate.entry == &entry; });
         return it != described.end() ? &*it : nullptr;
     }
 
     const InspectorRegistry::DescribedEntry* InspectorRegistry::findDescribed(
         const std::vector<DescribedEntry>& described, const Entry& entry)
     {
-        const auto it = std::ranges::find_if(described, [&entry](const DescribedEntry& candidate) {
-            return candidate.entry == &entry;
-        });
+        const auto it = std::ranges::find_if(
+            described, [&entry](const DescribedEntry& candidate) { return candidate.entry == &entry; });
         return it != described.end() ? &*it : nullptr;
     }
 
@@ -428,9 +464,7 @@ namespace sage::editor
     }
 
     ComponentAddState InspectorRegistry::canAddToDescription(
-        const Entry& target,
-        const std::vector<DescribedEntry>& described,
-        const bool multiSelection) const
+        const Entry& target, const std::vector<DescribedEntry>& described, const bool multiSelection) const
     {
         auto componentName = [this](const EditorComponentId componentId) {
             if (const auto* entry = findEntry(componentId)) return entry->displayName;
@@ -451,8 +485,7 @@ namespace sage::editor
             if (hasComponent(requiredComponentId)) continue;
             return {
                 .allowed = false,
-                .blockedReason =
-                    withSelectionContext("Requires " + componentName(requiredComponentId))};
+                .blockedReason = withSelectionContext("Requires " + componentName(requiredComponentId))};
         }
 
         for (const auto incompatibleComponentId : target.incompatibleComponents)
@@ -537,13 +570,18 @@ namespace sage::editor
         for (auto& component : described)
         {
             const auto removal = canRemoveFromDescription(*component.entry, described, false);
+            const auto modelPicker = component.entry->componentId == ComponentIdOf<Renderable>()
+                                         ? DescribeModelPicker(registry, {entity})
+                                         : std::nullopt;
             result.push_back(
                 {.componentId = component.entry->componentId,
                  .displayName = component.entry->displayName,
                  .fields = std::move(component.description.fields),
                  .removable = component.entry->removable,
                  .removeAllowed = removal.allowed,
-                 .removeBlockedReason = removal.blockedReason});
+                 .removeBlockedReason = removal.blockedReason,
+                 .modelPicker = modelPicker,
+                 .modelDefaultsAvailable = HasCatalogModel(modelPicker)});
         }
         return result;
     }
@@ -584,12 +622,17 @@ namespace sage::editor
                 }
             }
 
+            const auto modelPicker = entry.componentId == ComponentIdOf<Renderable>()
+                                         ? DescribeModelPicker(registry, entities)
+                                         : std::nullopt;
             InspectedComponent component{
                 .componentId = entry.componentId,
                 .displayName = entry.displayName,
                 .removable = entry.removable,
                 .removeAllowed = removal.allowed,
-                .removeBlockedReason = removal.blockedReason};
+                .removeBlockedReason = removal.blockedReason,
+                .modelPicker = modelPicker,
+                .modelDefaultsAvailable = HasCatalogModel(modelPicker)};
             for (const auto& firstField : describedFields.front())
             {
                 std::vector<InspectorField> matchingFields;

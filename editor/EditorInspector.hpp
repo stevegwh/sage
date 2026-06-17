@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -173,8 +174,7 @@ namespace sage::editor
         // --- Informational row ---------------------------------------------------------
         void note(const std::string& label, std::string text)
         {
-            fields_.push_back(
-                {.label = qualified(label), .editable = false, .value = NoteField{std::move(text)}});
+            fields_.push_back({.label = qualified(label), .editable = false, .value = NoteField{std::move(text)}});
         }
 
         // --- Leaf overloads ------------------------------------------------------------
@@ -298,10 +298,9 @@ namespace sage::editor
                 addLeaf(std::move(label), data, false);
                 return;
             }
-            addLeaf(
-                std::move(label),
-                data,
-                std::function<void(const Vector3&)>([&proxy](const Vector3& v) { proxy = v; }));
+            addLeaf(std::move(label), data, std::function<void(const Vector3&)>([&proxy](const Vector3& v) {
+                        proxy = v;
+                    }));
         }
 
         // --- Enum template -------------------------------------------------------------
@@ -355,6 +354,14 @@ namespace sage::editor
         }
     };
 
+    struct ModelPickerField
+    {
+        std::string currentKey;
+        std::vector<std::string> options;
+        bool mixed = false;
+        bool animationCompatibleOnly = false;
+    };
+
     struct InspectedComponent
     {
         EditorComponentId componentId{};
@@ -366,6 +373,10 @@ namespace sage::editor
         bool removable = false;
         bool removeAllowed = false;
         std::string removeBlockedReason;
+        // Renderable owns model selection and the shortcut to that model's
+        // defaults. The picker is populated only for Renderable components.
+        std::optional<ModelPickerField> modelPicker;
+        bool modelDefaultsAvailable = false;
     };
 
     class InspectorRegistry
@@ -390,8 +401,8 @@ namespace sage::editor
         std::vector<Entry> entries_;
 
         [[nodiscard]] const Entry* findEntry(EditorComponentId componentId) const;
-        [[nodiscard]] std::vector<DescribedEntry> describeEntity(entt::registry& registry, entt::entity entity)
-            const;
+        [[nodiscard]] std::vector<DescribedEntry> describeEntity(
+            entt::registry& registry, entt::entity entity) const;
         [[nodiscard]] static DescribedEntry* findDescribed(
             std::vector<DescribedEntry>& described, const Entry& entry);
         [[nodiscard]] static const DescribedEntry* findDescribed(
@@ -399,9 +410,7 @@ namespace sage::editor
         [[nodiscard]] ComponentRemovalState canRemoveFromDescription(
             const Entry& target, const std::vector<DescribedEntry>& described, bool multiSelection) const;
         [[nodiscard]] ComponentAddState canAddToDescription(
-            const Entry& target,
-            const std::vector<DescribedEntry>& described,
-            bool multiSelection) const;
+            const Entry& target, const std::vector<DescribedEntry>& described, bool multiSelection) const;
 
       public:
         template <class T>
@@ -430,13 +439,14 @@ namespace sage::editor
         }
 
         [[nodiscard]] ComponentAddState CanAdd(
-            entt::registry& registry, EditorComponentId componentId, const std::vector<entt::entity>& entities)
-            const;
+            entt::registry& registry,
+            EditorComponentId componentId,
+            const std::vector<entt::entity>& entities) const;
         [[nodiscard]] ComponentRemovalState CanRemove(
-            entt::registry& registry, EditorComponentId componentId, const std::vector<entt::entity>& entities)
-            const;
-        [[nodiscard]] std::vector<InspectedComponent> Inspect(
-            entt::registry& registry, entt::entity entity) const;
+            entt::registry& registry,
+            EditorComponentId componentId,
+            const std::vector<entt::entity>& entities) const;
+        [[nodiscard]] std::vector<InspectedComponent> Inspect(entt::registry& registry, entt::entity entity) const;
         [[nodiscard]] std::vector<InspectedComponent> Inspect(
             entt::registry& registry, const std::vector<entt::entity>& entities) const;
     };

@@ -97,7 +97,6 @@ namespace sage
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Renderable>();
-            i.field("Model Key", modelKey, false);
             for (std::size_t n = 0; n < clipNames.size(); ++n)
             {
                 i.field("Clip " + std::to_string(n), clipNames[n], false);

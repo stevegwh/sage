@@ -1,6 +1,5 @@
 #include "DynamicRenderable.hpp"
 
-#include <cassert>
 #include <utility>
 
 namespace sage
@@ -51,7 +50,7 @@ namespace sage
 
     Model* DynamicRenderable::GetModel()
     {
-        return HasModel() ? &model : nullptr;
+        return const_cast<Model*>(std::as_const(*this).GetModel());
     }
 
     const Model* DynamicRenderable::GetModel() const
@@ -61,15 +60,12 @@ namespace sage
 
     Mesh* DynamicRenderable::GetMesh(int num)
     {
-        if (!HasModel()) return nullptr;
-        assert(num < model.meshCount);
-        return &model.meshes[num];
+        return const_cast<Mesh*>(std::as_const(*this).GetMesh(num));
     }
 
     const Mesh* DynamicRenderable::GetMesh(int num) const
     {
-        if (!HasModel()) return nullptr;
-        assert(num < model.meshCount);
+        if (!HasModel() || num < 0 || num >= model.meshCount) return nullptr;
         return &model.meshes[num];
     }
 
@@ -112,8 +108,7 @@ namespace sage
 
     void DynamicRenderable::SetShader(Shader shader, int materialIdx)
     {
-        if (!HasModel()) return;
-        assert(materialIdx < model.materialCount);
+        if (!HasModel() || materialIdx < 0 || materialIdx >= model.materialCount) return;
         model.materials[materialIdx].shader = shader;
     }
 
