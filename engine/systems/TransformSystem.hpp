@@ -7,6 +7,8 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <cassert>
+
 namespace sage
 {
 
@@ -22,6 +24,19 @@ namespace sage
         void propagateChildren(entt::entity entity);
         void onComponentAdded(entt::entity entity);
         void onComponentRemoved(entt::entity entity);
+
+        template <bool World, typename Apply>
+        void mutate(entt::entity entity, Apply&& apply)
+        {
+            assert(registry->valid(entity));
+            assert(registry->all_of<sgTransform>(entity));
+            apply(registry->get<sgTransform>(entity));
+            if constexpr (World)
+                syncLocalFromWorld(entity);
+            else
+                syncWorldFromLocal(entity);
+            propagateChildren(entity);
+        }
 
       public:
         void SetWorldPos(entt::entity entity, const Vector3& position);

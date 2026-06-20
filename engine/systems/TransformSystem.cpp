@@ -109,32 +109,17 @@ namespace sage
 
     void TransformSystem::SetWorldPos(entt::entity entity, const Vector3& position)
     {
-        assert(registry->valid(entity));
-        assert(registry->all_of<sgTransform>(entity));
-        auto& transform = registry->get<sgTransform>(entity);
-        transform.position.world.value = position;
-        syncLocalFromWorld(entity);
-        propagateChildren(entity);
+        mutate<true>(entity, [&](sgTransform& transform) { transform.position.world.value = position; });
     }
 
     void TransformSystem::SetWorldRot(entt::entity entity, const Vector3& rotation)
     {
-        assert(registry->valid(entity));
-        assert(registry->all_of<sgTransform>(entity));
-        auto& transform = registry->get<sgTransform>(entity);
-        transform.rotation.world.value = rotation;
-        syncLocalFromWorld(entity);
-        propagateChildren(entity);
+        mutate<true>(entity, [&](sgTransform& transform) { transform.rotation.world.value = rotation; });
     }
 
     void TransformSystem::SetWorldScale(entt::entity entity, const Vector3& scale)
     {
-        assert(registry->valid(entity));
-        assert(registry->all_of<sgTransform>(entity));
-        auto& transform = registry->get<sgTransform>(entity);
-        transform.scale.world.value = scale;
-        syncLocalFromWorld(entity);
-        propagateChildren(entity);
+        mutate<true>(entity, [&](sgTransform& transform) { transform.scale.world.value = scale; });
     }
 
     void TransformSystem::SetWorldScale(entt::entity entity, float scale)
@@ -144,22 +129,12 @@ namespace sage
 
     void TransformSystem::SetLocalPos(entt::entity entity, const Vector3& position)
     {
-        assert(registry->valid(entity));
-        assert(registry->all_of<sgTransform>(entity));
-        auto& transform = registry->get<sgTransform>(entity);
-        transform.position.local.value = position;
-        syncWorldFromLocal(entity);
-        propagateChildren(entity);
+        mutate<false>(entity, [&](sgTransform& transform) { transform.position.local.value = position; });
     }
 
     void TransformSystem::SetLocalRot(entt::entity entity, const Vector3& rotation)
     {
-        assert(registry->valid(entity));
-        assert(registry->all_of<sgTransform>(entity));
-        auto& transform = registry->get<sgTransform>(entity);
-        transform.rotation.local.value = rotation;
-        syncWorldFromLocal(entity);
-        propagateChildren(entity);
+        mutate<false>(entity, [&](sgTransform& transform) { transform.rotation.local.value = rotation; });
     }
 
     void TransformSystem::SetLocalRot(entt::entity entity, const Quaternion& rotation)
@@ -171,12 +146,7 @@ namespace sage
 
     void TransformSystem::SetLocalScale(entt::entity entity, const Vector3& scale)
     {
-        assert(registry->valid(entity));
-        assert(registry->all_of<sgTransform>(entity));
-        auto& transform = registry->get<sgTransform>(entity);
-        transform.scale.local.value = scale;
-        syncWorldFromLocal(entity);
-        propagateChildren(entity);
+        mutate<false>(entity, [&](sgTransform& transform) { transform.scale.local.value = scale; });
     }
 
     void TransformSystem::SetLocalScale(entt::entity entity, float scale)

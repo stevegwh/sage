@@ -37,6 +37,31 @@ namespace sage
             static const std::string empty;
             return empty;
         }
+
+        std::string WrapText(const TextBox::FontInfo& info, const std::string& text, const float availableWidth)
+        {
+            std::string wrapped;
+            std::string line;
+            std::istringstream words(text);
+            for (std::string word; words >> word;)
+            {
+                const std::string candidate = line.empty() ? word : line + " " + word;
+                if (MeasureTextEx(info.font, candidate.c_str(), info.fontSize, info.fontSpacing).x <= availableWidth)
+                {
+                    line = candidate;
+                    continue;
+                }
+                if (!wrapped.empty()) wrapped += '\n';
+                wrapped += line;
+                line = word;
+            }
+            if (!line.empty())
+            {
+                if (!wrapped.empty()) wrapped += '\n';
+                wrapped += line;
+            }
+            return wrapped;
+        }
     } // namespace
 
     const std::string& TextBox::GetContent() const
@@ -62,37 +87,7 @@ namespace sage
 
     float TextBox::WrappedHeight(const FontInfo& info, const std::string& text, float availableWidth)
     {
-        // Mirrors the WORD_WRAP branch of TextBox::UpdateDimensions so callers
-        // measure the same number of lines that UpdateDimensions will produce.
-        std::string wrappedText;
-        std::string currentLine;
-        std::istringstream words(text);
-        std::string word;
-        while (words >> word)
-        {
-            std::string testLine = currentLine;
-            if (!testLine.empty()) testLine += " ";
-            testLine += word;
-
-            const Vector2 lineSize =
-                MeasureTextEx(info.font, testLine.c_str(), info.fontSize, info.fontSpacing);
-
-            if (lineSize.x <= availableWidth)
-            {
-                currentLine = testLine;
-            }
-            else
-            {
-                if (!wrappedText.empty()) wrappedText += "\n";
-                wrappedText += currentLine;
-                currentLine = word;
-            }
-        }
-        if (!currentLine.empty())
-        {
-            if (!wrappedText.empty()) wrappedText += "\n";
-            wrappedText += currentLine;
-        }
+        const std::string wrappedText = WrapText(info, text, availableWidth);
         return MeasureTextEx(info.font, wrappedText.c_str(), info.fontSize, info.fontSpacing).y;
     }
 
@@ -120,39 +115,7 @@ namespace sage
         }
         else if (fontInfo.overflowBehaviour == OverflowBehaviour::WORD_WRAP)
         {
-            std::string wrappedText;
-            std::string currentLine;
-            std::istringstream words(content);
-            std::string word;
-
-            while (words >> word)
-            {
-                std::string testLine = currentLine;
-                if (!testLine.empty()) testLine += " ";
-                testLine += word;
-
-                Vector2 lineSize =
-                    MeasureTextEx(fontInfo.font, testLine.c_str(), fontInfo.fontSize, fontInfo.fontSpacing);
-
-                if (lineSize.x <= availableWidth)
-                {
-                    currentLine = testLine;
-                }
-                else
-                {
-                    if (!wrappedText.empty()) wrappedText += "\n";
-                    wrappedText += currentLine;
-                    currentLine = word;
-                }
-            }
-
-            if (!currentLine.empty())
-            {
-                if (!wrappedText.empty()) wrappedText += "\n";
-                wrappedText += currentLine;
-            }
-
-            content = wrappedText;
+            content = WrapText(fontInfo, content, availableWidth);
         }
 
         textSize = MeasureTextEx(fontInfo.font, content.c_str(), fontInfo.fontSize, fontInfo.fontSpacing);

@@ -15,6 +15,7 @@
 #include "external/cgltf.h"
 
 #include <ranges>
+#include <stdexcept>
 extern "C"
 {
 #include "raylib/src/external/tinyobj_loader_c.h"
@@ -32,6 +33,22 @@ namespace sage
     namespace
     {
         constexpr const char* DefaultMaterialName = "Default";
+
+        void RegisterSourcePath(
+            std::unordered_map<std::string, std::string>& sources,
+            const std::string& kind,
+            const std::string& key,
+            const std::string& path)
+        {
+            if (const auto existing = sources.find(key); existing != sources.end())
+            {
+                if (existing->second == path) return;
+                throw std::runtime_error(
+                    kind + " resource key collision for '" + key + "': '" + existing->second + "' and '" +
+                    path + "'");
+            }
+            sources.emplace(key, path);
+        }
 
         std::string FallbackMaterialName(const std::string& sourcePath, int materialIndex)
         {
@@ -273,8 +290,11 @@ namespace sage
                                     // from QUEST_BONE.obj)
         if (!music.contains(key))
         {
+            RegisterSourcePath(musicSourcePaths, "Music", key, path);
             music[key] = LoadMusicStream(path.c_str());
         }
+        else
+            RegisterSourcePath(musicSourcePaths, "Music", key, path);
         return music.at(key);
     }
 
@@ -284,9 +304,12 @@ namespace sage
                                     // from QUEST_BONE.obj)
         if (!sfx.contains(key))
         {
+            RegisterSourcePath(sfxSourcePaths, "Sound", key, path);
             // NB: Currently, the resource packer does not support serializing sound/music.
             sfx[key] = LoadSound(path.c_str());
         }
+        else
+            RegisterSourcePath(sfxSourcePaths, "Sound", key, path);
         return sfx.at(key);
     }
 
@@ -355,6 +378,7 @@ namespace sage
         {
             if (!images.contains(key))
             {
+                registerImageKey(key, path);
                 images.emplace(key, LoadImage(path.c_str()));
             }
             nonModelTextures[key] = LoadTextureFromImage(images[key]);
@@ -366,6 +390,7 @@ namespace sage
     {
         if (!images.contains(name))
         {
+            registerImageKey(name, name);
             images.emplace(name, image);
             nonModelTextures[name] = LoadTextureFromImage(images[name]);
         }
@@ -388,6 +413,7 @@ namespace sage
         {
             UnloadImage(images.at(key));
             images.erase(key);
+            imageSourcePaths.erase(key);
         }
     }
 
@@ -418,7 +444,7 @@ namespace sage
         auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
         // from QUEST_BONE.obj)
         assert(FileExists(path.c_str()));
-        assert(!images.contains(key));
+        registerImageKey(key, path);
         images[key] = LoadImage(path.c_str());
     }
 
@@ -426,9 +452,20 @@ namespace sage
     {
         auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
         // from QUEST_BONE.obj)
-        assert(!images.contains(key));
+        registerImageKey(key, path);
         images[key] = image;
         image = {};
+    }
+
+    void ResourceManager::registerImageKey(const std::string& key, const std::string& sourcePath)
+    {
+        RegisterSourcePath(imageSourcePaths, "Image", key, sourcePath);
+        if (images.contains(key))
+        {
+            throw std::runtime_error(
+                "Image resource key collision for '" + key + "' while loading '" + sourcePath + "'");
+        }
+        imageSourcePaths.emplace(key, sourcePath);
     }
 
     void ResourceManager::ModelLoadFromFile(const std::string& path)
@@ -441,7 +478,14 @@ namespace sage
     void ResourceManager::ModelLoadFromFile(const std::string& path, const std::string& key)
     {
         assert(!key.empty());
-        if (modelCopies.contains(key)) return;
+        if (const auto existing = modelCopies.find(key); existing != modelCopies.end())
+        {
+            if (existing->second.sourcePath != path)
+                throw std::runtime_error(
+                    "Model resource key collision for '" + key + "': '" + existing->second.sourcePath +
+                    "' and '" + path + "'");
+            return;
+        }
         assert(FileExists(path.c_str()));
 
         auto materialNames = LoadMaterialNames(path.c_str());
@@ -626,6 +670,7 @@ namespace sage
     {
         auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
         // from QUEST_BONE.obj)
+        RegisterSourcePath(animationSourcePaths, "Animation", key, path);
         if (!modelAnimations.contains(key))
         {
             int animsCount;
@@ -665,6 +710,8 @@ namespace sage
             UnloadImage(image);
         }
         images.clear();
+        imageSourcePaths.clear();
+        imageSourcePaths.clear();
     }
 
     void ResourceManager::UnloadShaderFileText()
@@ -782,10 +829,13 @@ namespace sage
         nonModelTextures.clear();
         modelCopies.clear();
         modelAnimations.clear();
+        animationSourcePaths.clear();
         vertShaderFileText.clear();
         fragShaderFileText.clear();
         music.clear();
         sfx.clear();
+        musicSourcePaths.clear();
+        sfxSourcePaths.clear();
     }
 
     void ResourceManager::Reset()

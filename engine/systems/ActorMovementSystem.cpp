@@ -72,9 +72,7 @@ namespace sage
         {
             moveable.onDestinationUnreachable.Publish(entity, destination);
             onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationOutOfGrid);
-            // std::cout << std::format(
-            // "Entity {}: Requested destination out of grid bounds \n", static_cast<int>(entity));
-
+            TraceLog(LOG_TRACE, "Actor %u: destination is outside the grid", static_cast<unsigned>(entity));
             return;
         }
 
@@ -82,10 +80,7 @@ namespace sage
         GridSquare maxRange{};
         if (!sys->navigationGridSystem->GetPathfindRange(entity, moveable.pathfindingBounds, minRange, maxRange))
         {
-            // This will very rarely happen. Only triggers if the entity's current position is outside of grid
-            // bounds.
-            // std::cout << std::format(
-            // "Entity {}: Current position out of grid bounds \n", static_cast<int>(entity));
+            TraceLog(LOG_TRACE, "Actor %u: current position is outside the grid", static_cast<unsigned>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);
             onPathfindFailed.Publish(entity, destination, PathfindFailureReason::ActorOutOfGrid);
             return;
@@ -93,8 +88,7 @@ namespace sage
 
         if (!sys->navigationGridSystem->CheckWithinBounds(destination, minRange, maxRange))
         {
-            // std::cout << std::format(
-            // "Entity {}: Requested destination is outside of pathfinding range \n", static_cast<int>(entity));
+            TraceLog(LOG_TRACE, "Actor %u: destination is outside pathfinding range", static_cast<unsigned>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);
             onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationOutOfRange);
             return;
@@ -104,10 +98,6 @@ namespace sage
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
 
         const auto& actorTrans = registry->get<sgTransform>(entity);
-        //        const auto path =
-        //            navigationGridSystem->AStarPathfind(entity, actorTrans.GetWorldPos(), destination, minRange,
-        //            maxRange);
-
         const auto path = astar ? sys->navigationGridSystem->AStarPathfind(
                                       entity, actorTrans.GetWorldPos(), destination, minRange, maxRange)
                                 : sys->navigationGridSystem->BFSPathfind(
@@ -135,7 +125,7 @@ namespace sage
         }
         else
         {
-            // std::cout << std::format(// "Entity {}: Destination unreachable \n", static_cast<int>(entity));
+            TraceLog(LOG_TRACE, "Actor %u: destination is unreachable", static_cast<unsigned>(entity));
             moveable.onDestinationUnreachable.Publish(entity, destination);
             onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationUnreachable);
         }
@@ -267,8 +257,7 @@ namespace sage
                 if (Vector3Distance(hitTransform.GetWorldPos(), transform.GetWorldPos()) <
                     Vector3Distance(moveableActor.path.back(), transform.GetWorldPos()))
                 {
-                    // std::cout << std::format(
-                    // "Entity {}: Collided with a moving object, rerouting \n", static_cast<int>(entity));
+                    TraceLog(LOG_TRACE, "Actor %u: moving obstacle detected; rerouting", static_cast<unsigned>(entity));
                     PathfindToLocation(entity, moveableActor.GetDestination());
                     hitCol.debugDraw = true;
                     return true;
@@ -407,7 +396,7 @@ namespace sage
     }
 
     void ActorMovementSystem::updateActor(
-        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable& collideable)
+        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable* collideable)
     {
         if (moveableActor.path.empty())
         {
@@ -420,36 +409,18 @@ namespace sage
             if (moveableActor.path.empty()) return;
         }
 
-        if (isNextPointOccupied(entity, moveableActor))
+        if (collideable != nullptr && isNextPointOccupied(entity, moveableActor))
         {
-            // std::cout << std::format(// "Entity {}: Next point occupied, rerouting \n",
-            // static_cast<int>(entity));
+            TraceLog(LOG_TRACE, "Actor %u: next point occupied; rerouting", static_cast<unsigned>(entity));
             recalculatePath(entity, moveableActor);
             return;
         }
 
-        if (!CheckCollisionWithOtherMoveable(entity, transform, moveableActor))
+        if (collideable == nullptr || !CheckCollisionWithOtherMoveable(entity, transform, moveableActor))
         {
             // TODO: Distance of the ray cast should be from the current pos to the next node
             updateActorTransform(entity, transform, moveableActor);
         }
-    }
-
-    void ActorMovementSystem::updateActor(
-        const entt::entity entity, MoveableActor& moveableActor, sgTransform& transform)
-    {
-        if (moveableActor.path.empty())
-        {
-            return;
-        }
-
-        if (hasReachedNextPoint(entity, moveableActor))
-        {
-            handlePointReached(entity, moveableActor);
-            if (moveableActor.path.empty()) return;
-        }
-
-        updateActorTransform(entity, transform, moveableActor);
     }
 
     void ActorMovementSystem::Update()
@@ -461,7 +432,7 @@ namespace sage
         {
             centerTurnPivot(entity, moveableActor, transform);
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
-            updateActor(entity, moveableActor, transform, collideable);
+            updateActor(entity, moveableActor, transform, &collideable);
             // updateActor mutated the transform; refresh the world bbox so the re-mark
             // uses the post-move position (CollisionSystem::Update only runs once per frame).
             collideable.worldBoundingBox =

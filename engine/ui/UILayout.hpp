@@ -205,6 +205,8 @@ namespace sage
     // share the leftover percent equally; explicit-percent children take their
     // requested share. Returned sizes are ceil-rounded.
     std::vector<float> distributeAlong(float availableSize, const std::vector<SizeRequest>& requests);
+    void layoutChildrenVertically(
+        TableElement& parent, float availableWidth, const std::vector<SizeRequest>& requests);
 
     // Checked downcast for the TableElement hierarchy: children are inserted via
     // type-specific Create* methods so the static_cast is sound, but we keep a

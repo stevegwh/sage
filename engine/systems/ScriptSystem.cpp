@@ -327,6 +327,14 @@ namespace sage
             instances.erase(it);
         }
 
+        bool syncEnabledState(ScriptInstance& instance, const bool enabled)
+        {
+            if (enabled == instance.wasEnabled) return enabled;
+            instance.wasEnabled = enabled;
+            call(instance, enabled ? instance.onEnable : instance.onDisable);
+            return enabled;
+        }
+
     };
 
     void ScriptSystem::Update()
@@ -353,17 +361,7 @@ namespace sage
             auto& instance = it->second;
             if (instance.failed) continue;
 
-            if (script.enabled && !instance.wasEnabled)
-            {
-                instance.wasEnabled = true;
-                impl->call(instance, instance.onEnable);
-            }
-            else if (!script.enabled && instance.wasEnabled)
-            {
-                instance.wasEnabled = false;
-                impl->call(instance, instance.onDisable);
-            }
-            if (!script.enabled) continue;
+            if (!impl->syncEnabledState(instance, script.enabled)) continue;
 
             if (!instance.started)
             {

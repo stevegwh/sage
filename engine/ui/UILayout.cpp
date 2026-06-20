@@ -43,11 +43,27 @@ namespace sage
         return out;
     }
 
+    void layoutChildrenVertically(
+        TableElement& parent, const float availableWidth, const std::vector<SizeRequest>& requests)
+    {
+        const float availableHeight = parent.rec.height - (parent.padding.up + parent.padding.down);
+        const float startX = parent.rec.x + parent.padding.left;
+        float currentY = parent.rec.y + parent.padding.up;
+        const auto sizes = distributeAlong(availableHeight, requests);
+
+        for (std::size_t i = 0; i < parent.children.size(); ++i)
+        {
+            auto& child = *parent.children[i];
+            child.parent = &parent;
+            child.rec = {startX, currentY, availableWidth, sizes[i]};
+            if (!child.children.empty()) child.InitLayout();
+            currentY += sizes[i];
+        }
+        if (!parent.children.empty()) parent.UpdateTextureDimensions();
+    }
+
     void Table::InitLayout()
     {
-        const float availableHeight = rec.height - (padding.up + padding.down);
-        const float startY = rec.y + padding.up;
-
         std::vector<SizeRequest> requests;
         requests.reserve(children.size());
         for (const auto& r : children)
@@ -55,31 +71,7 @@ namespace sage
             auto* row = downcast<TableRow>(r.get());
             requests.push_back({row->autoSize, row->requestedHeight});
         }
-        auto sizes = distributeAlong(availableHeight, requests);
-
-        float currentY = startY;
-        for (size_t i = 0; i < children.size(); ++i)
-        {
-            auto* row = downcast<TableRow>(children[i].get());
-            row->parent = this;
-            row->rec = rec;
-
-            const float rowHeight = sizes[i];
-
-            // Set row dimensions accounting for table padding
-            row->rec.height = rowHeight;
-            row->rec.y = currentY;
-            row->rec.x = rec.x + padding.left;
-            row->rec.width = rec.width - (padding.left + padding.right);
-
-            if (!row->children.empty())
-            {
-                row->InitLayout();
-            }
-
-            currentY += rowHeight;
-        }
-        if (!children.empty()) UpdateTextureDimensions();
+        layoutChildrenVertically(*this, rec.width - (padding.left + padding.right), requests);
     }
 
     void TableRowGrid::InitLayout()
@@ -89,10 +81,8 @@ namespace sage
         const unsigned int cols = children.size();
         const float availableWidth = rec.width - (padding.left + padding.right);
         const float availableHeight = rec.height - (padding.up + padding.down);
-        const int maxCellSize =
-            1 << static_cast<int>(std::floor(std::log2(std::min(availableWidth / cols, availableHeight))));
-        const float cellSize =
-            (std::min(availableWidth / cols, availableHeight) - cellSpacing) / maxCellSize * maxCellSize;
+        // Cells are square and use the smaller axis allowance; spacing is paid once per cell step.
+        const float cellSize = std::max(0.0f, std::min(availableWidth / cols, availableHeight) - cellSpacing);
         const float gridWidth = cellSize * cols + cellSpacing * (cols - 1); // Account for spacing between columns
         const float startX = rec.x + (availableWidth - gridWidth) / 2.0f;
         const float startY = rec.y + (availableHeight - cellSize) / 2.0f;
@@ -119,11 +109,10 @@ namespace sage
         const unsigned int cols = children[0]->children.size();
         const float availableWidth = rec.width - (padding.left + padding.right);
         const float availableHeight = rec.height - (padding.up + padding.down);
-        const int maxCellSize =
-            1 << static_cast<int>(
-                std::floor(std::log2(std::min(availableWidth / cols, availableHeight / children.size()))));
-        const float cellSize = (std::min(availableWidth / cols, availableHeight / children.size()) - cellSpacing) /
-                               maxCellSize * maxCellSize;
+        // Cells are square and use the smaller per-column/per-row allowance.
+        const float cellSize = std::max(
+            0.0f,
+            std::min(availableWidth / cols, availableHeight / children.size()) - cellSpacing);
         const float gridWidth = cellSize * cols + cellSpacing * (cols - 1); // Account for spacing between columns
         const float gridHeight =
             cellSize * children.size() + cellSpacing * (children.size() - 1); // Account for spacing between rows
@@ -210,11 +199,7 @@ namespace sage
             return;
         }
 
-        // Same vertical-distribution algorithm as Window::InitLayout / Table::InitLayout.
-        const float availableHeight = rec.height - (padding.up + padding.down);
-        const float startY = rec.y + padding.up;
         const float availableWidth = rec.width - (padding.left + padding.right);
-        const float startX = rec.x + padding.left;
 
         std::vector<SizeRequest> requests;
         requests.reserve(children.size());
@@ -223,26 +208,7 @@ namespace sage
             auto* table = downcast<Table>(p.get());
             requests.push_back({table->autoSize, table->requestedHeight});
         }
-        auto sizes = distributeAlong(availableHeight, requests);
-
-        float currentY = startY;
-        for (size_t i = 0; i < children.size(); ++i)
-        {
-            auto* table = downcast<Table>(children[i].get());
-            table->parent = this;
-            table->rec = rec;
-
-            const float panelHeight = sizes[i];
-            table->rec.height = panelHeight;
-            table->rec.y = currentY;
-            table->rec.width = availableWidth;
-            table->rec.x = startX;
-
-            if (!table->children.empty()) table->InitLayout();
-
-            currentY += panelHeight;
-        }
-        if (!children.empty()) UpdateTextureDimensions();
+        layoutChildrenVertically(*this, availableWidth, requests);
     }
 
     void TableElement::Reset()
@@ -680,7 +646,8 @@ namespace sage
     Table* TableCell::CreateTable(const Percent _requestedHeight, const Padding _padding)
     {
         assert(_requestedHeight.value <= 100 && _requestedHeight.value >= 0);
-        const auto table = CreateTable(_padding);
+        children.push_back(std::make_unique<Table>(this, _padding));
+        const auto table = downcast<Table>(children.back().get());
         table->autoSize = false;
         table->requestedHeight = _requestedHeight.value;
         InitLayout();

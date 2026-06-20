@@ -210,33 +210,8 @@ namespace sage
         rebindProxies();
     }
 
-    // Copy/move ctors and assignment operators transfer the full state
-    // (proxy values + parent/children + binding + free fields) and rebind the
-    // proxies' back-pointers to `this`. The on_construct signal in TransformSystem
-    // will re-call Bind() when a copy is inserted into the registry via emplace,
-    // overwriting the copied entity/system pointers with the correct values.
-    sgTransform::sgTransform(const sgTransform& rhs)
-        : m_entity(rhs.m_entity),
-          m_transformSystem(rhs.m_transformSystem),
-          m_parent(rhs.m_parent),
-          m_children(rhs.m_children),
-          m_savedParentId(rhs.m_savedParentId),
-          name(rhs.name),
-          direction(rhs.direction),
-          movementDirectionDebugLine(rhs.movementDirectionDebugLine)
+    void sgTransform::assignStateFrom(const sgTransform& rhs)
     {
-        position.world.value = rhs.position.world.value;
-        position.local.value = rhs.position.local.value;
-        rotation.world.value = rhs.rotation.world.value;
-        rotation.local.value = rhs.rotation.local.value;
-        scale.world.value = rhs.scale.world.value;
-        scale.local.value = rhs.scale.local.value;
-        rebindProxies();
-    }
-
-    sgTransform& sgTransform::operator=(const sgTransform& rhs)
-    {
-        if (this == &rhs) return *this;
         m_entity = rhs.m_entity;
         m_transformSystem = rhs.m_transformSystem;
         m_parent = rhs.m_parent;
@@ -251,35 +226,10 @@ namespace sage
         rotation.local.value = rhs.rotation.local.value;
         scale.world.value = rhs.scale.world.value;
         scale.local.value = rhs.scale.local.value;
-        rebindProxies();
-        return *this;
     }
 
-    sgTransform::sgTransform(sgTransform&& rhs) noexcept
-        : m_entity(rhs.m_entity),
-          m_transformSystem(rhs.m_transformSystem),
-          m_parent(rhs.m_parent),
-          m_children(std::move(rhs.m_children)),
-          m_savedParentId(rhs.m_savedParentId),
-          name(std::move(rhs.name)),
-          direction(rhs.direction),
-          movementDirectionDebugLine(rhs.movementDirectionDebugLine)
+    void sgTransform::stealStateFrom(sgTransform&& rhs)
     {
-        position.world.value = rhs.position.world.value;
-        position.local.value = rhs.position.local.value;
-        rotation.world.value = rhs.rotation.world.value;
-        rotation.local.value = rhs.rotation.local.value;
-        scale.world.value = rhs.scale.world.value;
-        scale.local.value = rhs.scale.local.value;
-        rhs.m_transformSystem = nullptr;
-        rhs.m_entity = entt::null;
-        rhs.m_savedParentId = serializedNullId();
-        rebindProxies();
-    }
-
-    sgTransform& sgTransform::operator=(sgTransform&& rhs) noexcept
-    {
-        if (this == &rhs) return *this;
         m_entity = rhs.m_entity;
         m_transformSystem = rhs.m_transformSystem;
         m_parent = rhs.m_parent;
@@ -297,6 +247,33 @@ namespace sage
         rhs.m_transformSystem = nullptr;
         rhs.m_entity = entt::null;
         rhs.m_savedParentId = serializedNullId();
+    }
+
+    // The on_construct signal rebinds registry copies to their new entity/system.
+    sgTransform::sgTransform(const sgTransform& rhs)
+    {
+        assignStateFrom(rhs);
+        rebindProxies();
+    }
+
+    sgTransform& sgTransform::operator=(const sgTransform& rhs)
+    {
+        if (this == &rhs) return *this;
+        assignStateFrom(rhs);
+        rebindProxies();
+        return *this;
+    }
+
+    sgTransform::sgTransform(sgTransform&& rhs) noexcept
+    {
+        stealStateFrom(std::move(rhs));
+        rebindProxies();
+    }
+
+    sgTransform& sgTransform::operator=(sgTransform&& rhs) noexcept
+    {
+        if (this == &rhs) return *this;
+        stealStateFrom(std::move(rhs));
         rebindProxies();
         return *this;
     }

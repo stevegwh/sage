@@ -111,20 +111,22 @@ namespace sage
 
     void NavigationGridSystem::DrawDebugPathfinding(const GridSquare& minRange, const GridSquare& maxRange)
     {
-        for (int i = 0; i < gridSquares.size(); i++)
+        if (hasDebugRange)
         {
-            for (int j = 0; j < gridSquares.at(0).size(); j++)
+            for (int row = debugRangeMin.row; row < debugRangeMax.row; ++row)
             {
-                gridSquares[i][j].drawDebug = false;
+                for (int col = debugRangeMin.col; col < debugRangeMax.col; ++col)
+                    gridSquares[row][col].drawDebug = false;
             }
         }
-        for (int i = minRange.row; i < maxRange.row; i++)
+        for (int row = minRange.row; row < maxRange.row; ++row)
         {
-            for (int j = minRange.col; j < maxRange.col; j++)
-            {
-                gridSquares[i][j].drawDebug = true;
-            }
+            for (int col = minRange.col; col < maxRange.col; ++col)
+                gridSquares[row][col].drawDebug = true;
         }
+        debugRangeMin = minRange;
+        debugRangeMax = maxRange;
+        hasDebugRange = true;
     }
 
     void NavigationGridSystem::MarkSquareAreaOccupiedIfSteep(const BoundingBox& occupant, bool occupied)
@@ -369,12 +371,24 @@ namespace sage
 
     bool NavigationGridSystem::CompareSquareAreaOccupant(entt::entity entity, const BoundingBox& bb) const
     {
+        GridSquare minRange{};
+        GridSquare maxRange{};
+        if (!getGridRangeForBounds(bb, minRange, maxRange)) return false;
+        for (int row = minRange.row; row <= maxRange.row; ++row)
+        {
+            for (int col = minRange.col; col <= maxRange.col; ++col)
+            {
+                if (gridSquares[row][col].occupant == entity) return true;
+            }
+        }
         return false;
     }
 
     bool NavigationGridSystem::CompareSingleSquareOccupant(entt::entity entity, const BoundingBox& bb) const
     {
-        return false;
+        const Vector3 center = Vector3Scale(Vector3Add(bb.min, bb.max), 0.5f);
+        GridSquare square{};
+        return WorldToGridSpace(center, square) && gridSquares[square.row][square.col].occupant == entity;
     }
 
     float calculateTerrainCost(const Vector3& normal, float maxSlopeAngle)
@@ -722,7 +736,6 @@ namespace sage
 
     void NavigationGridSystem::DrawDebug() const
     {
-        return;
         for (const auto& gridSquareRow : gridSquares)
         {
             for (const auto& gridSquare : gridSquareRow)
@@ -831,8 +844,9 @@ namespace sage
                 }
             }
         }
-        // Commented out the first node to stop "stuttering" bug when holding left click
-        // path.push_back(combineWorldPosTerrainHeight(current));
+        // This emits only direction changes, collapsing collinear grid runs into corners.
+        // The start cell is omitted because it duplicates the actor's current position and
+        // makes repeated move commands stutter before advancing to the first actual corner.
         std::ranges::reverse(path);
         return path;
     }
@@ -1020,6 +1034,82 @@ namespace sage
         return bestSquare;
     }
 
+    std::vector<Vector3> NavigationGridSystem::searchPath(
+        const entt::entity entity,
+        const Vector3 startPos,
+        const Vector3 finishPos,
+        const GridSquare minRange,
+        const GridSquare maxRange,
+        const bool useAStar,
+        const AStarHeuristic heuristicType)
+    {
+        GridSquare start{};
+        GridSquare finish{};
+        BoundingBox footprintOffsets{};
+        if (!WorldToGridSpace(startPos, start) || !WorldToGridSpace(finishPos, finish) ||
+            !getFootprintOffsets(entity, footprintOffsets))
+            return {};
+
+        if (!checkFootprint(finish, footprintOffsets))
+            finish = FindNextBestLocation(start, finish, minRange, maxRange, footprintOffsets);
+
+        struct FrontierNode
+        {
+            double priority = 0.0;
+            std::uint64_t sequence = 0;
+            GridSquare square{};
+        };
+        struct Compare
+        {
+            bool operator()(const FrontierNode& lhs, const FrontierNode& rhs) const
+            {
+                if (lhs.priority != rhs.priority) return lhs.priority > rhs.priority;
+                return lhs.sequence > rhs.sequence;
+            }
+        };
+
+        std::vector<std::vector<bool>> visited(maxRange.row, std::vector<bool>(maxRange.col, false));
+        std::vector<std::vector<GridSquare>> cameFrom(
+            maxRange.row, std::vector<GridSquare>(maxRange.col, {-1, -1}));
+        std::vector<std::vector<double>> costs(
+            maxRange.row, std::vector<double>(maxRange.col, std::numeric_limits<double>::infinity()));
+        std::priority_queue<FrontierNode, std::vector<FrontierNode>, Compare> frontier;
+        std::uint64_t sequence = 0;
+        frontier.push({0.0, sequence++, start});
+        visited[start.row][start.col] = true;
+        costs[start.row][start.col] = 0.0;
+        const Vector3 pathDirection = Vector3Subtract(finishPos, startPos);
+
+        while (!frontier.empty())
+        {
+            const GridSquare current = frontier.top().square;
+            frontier.pop();
+            if (current == finish) return tracebackPath(cameFrom, start, finish);
+
+            for (const auto& [dirRow, dirCol] : directions)
+            {
+                const GridSquare next{current.row + dirRow, current.col + dirCol};
+                if (!CheckWithinBounds(next, minRange, maxRange) || !checkFootprint(next, footprintOffsets) ||
+                    gridSquares[next.row][next.col].occupied)
+                    continue;
+
+                const double newCost = costs[current.row][current.col] +
+                                       gridSquares[next.row][next.col].pathfindingCost;
+                if (visited[next.row][next.col] && (!useAStar || newCost >= costs[next.row][next.col])) continue;
+
+                visited[next.row][next.col] = true;
+                costs[next.row][next.col] = newCost;
+                cameFrom[next.row][next.col] = current;
+                const double estimate =
+                    heuristicType == AStarHeuristic::FAVOUR_RIGHT
+                        ? heuristic_favourRight(next, finish, pathDirection)
+                        : heuristic(next, finish);
+                frontier.push({useAStar ? newCost + estimate : 0.0, sequence++, next});
+            }
+        }
+        return {};
+    }
+
     std::vector<Vector3> NavigationGridSystem::AStarPathfind(
         const entt::entity& entity,
         const Vector3& startPos,
@@ -1043,89 +1133,7 @@ namespace sage
         const GridSquare& maxRange,
         AStarHeuristic heuristicType)
     {
-        GridSquare startGridSquare{};
-        GridSquare finishGridSquare{};
-        BoundingBox footprintOffsets{};
-
-        if (!WorldToGridSpace(startPos, startGridSquare) || !WorldToGridSpace(finishPos, finishGridSquare) ||
-            !getFootprintOffsets(entity, footprintOffsets))
-            return {};
-
-        if (!checkFootprint(finishGridSquare, footprintOffsets))
-        {
-            // TODO: Should try to find next best location to "original" destination
-            finishGridSquare =
-                FindNextBestLocation(startGridSquare, finishGridSquare, minRange, maxRange, footprintOffsets);
-        }
-
-        struct Compare
-        {
-            bool operator()(const std::pair<int, GridSquare>& a, const std::pair<int, GridSquare>& b) const
-            {
-                return a.first > b.first;
-            }
-        };
-
-        std::vector<std::vector<bool>> visited(maxRange.row, std::vector<bool>(maxRange.col, false));
-        std::vector<std::vector<GridSquare>> came_from(
-            maxRange.row, std::vector<GridSquare>(maxRange.col, {-1, -1}));
-        std::vector<std::vector<double>> cost_so_far(maxRange.row, std::vector<double>(maxRange.col, 0.0));
-
-        std::priority_queue<std::pair<int, GridSquare>, std::vector<std::pair<int, GridSquare>>, Compare> frontier;
-
-        frontier.emplace(0, startGridSquare);
-        visited[startGridSquare.row][startGridSquare.col] = true;
-
-        bool pathFound = false;
-        const Vector3 pathDirection = Vector3Subtract(finishPos, startPos);
-
-        while (!frontier.empty())
-        {
-            const auto currentPair = frontier.top();
-            frontier.pop();
-            const auto current = currentPair.second;
-
-            if (current.row == finishGridSquare.row && current.col == finishGridSquare.col)
-            {
-                pathFound = true;
-                break;
-            }
-
-            for (const auto& [dirX, dirY] : directions)
-            {
-                GridSquare next = {current.row + dirX, current.col + dirY};
-
-                // Bounds-check before indexing gridSquares/visited/cost_so_far with next:
-                // an out-of-range neighbour (current on an edge) would otherwise read OOB.
-                if (!CheckWithinBounds(next, minRange, maxRange) || !checkFootprint(next, footprintOffsets) ||
-                    gridSquares.at(next.row).at(next.col).occupied)
-                    continue;
-
-                const auto current_cost = gridSquares[current.row][current.col].pathfindingCost;
-                const auto next_cost = gridSquares[next.row][next.col].pathfindingCost;
-                const double new_cost = current_cost + next_cost;
-
-                if (!visited[next.row][next.col] || new_cost < cost_so_far[next.row][next.col])
-                {
-                    cost_so_far[next.row][next.col] = new_cost;
-                    const double heuristic_cost =
-                        heuristicType == AStarHeuristic::FAVOUR_RIGHT
-                            ? heuristic_favourRight(next, finishGridSquare, pathDirection)
-                            : heuristic(next, finishGridSquare);
-                    const double priority = new_cost + heuristic_cost;
-                    frontier.emplace(priority, next);
-                    came_from[next.row][next.col] = current;
-                    visited[next.row][next.col] = true;
-                }
-            }
-        }
-
-        if (!pathFound)
-        {
-            return {};
-        }
-
-        return tracebackPath(came_from, startGridSquare, finishGridSquare);
+        return searchPath(entity, startPos, finishPos, minRange, maxRange, true, heuristicType);
     }
 
     /**
@@ -1161,61 +1169,7 @@ namespace sage
         const GridSquare& minRange,
         const GridSquare& maxRange)
     {
-        GridSquare start{};
-        GridSquare finish{};
-        BoundingBox footprintOffsets{};
-        if (!WorldToGridSpace(startPos, start) || !WorldToGridSpace(finishPos, finish) ||
-            !getFootprintOffsets(entity, footprintOffsets))
-            return {};
-
-        if (!checkFootprint(finish, footprintOffsets))
-        {
-            // TODO: Should actually try to find next best location to original
-            // destination
-            finish = FindNextBestLocation(start, finish, minRange, maxRange, footprintOffsets);
-        }
-
-        std::vector<std::vector<bool>> visited(maxRange.row, std::vector<bool>(maxRange.col, false));
-        std::vector<std::vector<GridSquare>> came_from(
-            maxRange.row, std::vector<GridSquare>(maxRange.col, {-1, -1}));
-
-        std::queue<GridSquare> frontier;
-
-        frontier.emplace(start);
-        visited[start.row][start.col] = true;
-
-        bool pathFound = false;
-
-        while (!frontier.empty())
-        {
-            const auto current = frontier.front();
-            frontier.pop();
-
-            if (current.row == finish.row && current.col == finish.col)
-            {
-                pathFound = true;
-                break;
-            }
-
-            for (const auto& [dirX, dirY] : directions)
-            {
-                if (GridSquare next = {current.row + dirX, current.col + dirY};
-                    CheckWithinBounds(next, minRange, maxRange) && !visited[next.row][next.col] &&
-                    checkFootprint(next, footprintOffsets) && !gridSquares[next.row][next.col].occupied)
-                {
-                    frontier.emplace(next);
-                    visited[next.row][next.col] = true;
-                    came_from[next.row][next.col] = current;
-                }
-            }
-        }
-
-        if (!pathFound)
-        {
-            return {};
-        }
-
-        return tracebackPath(came_from, start, finish);
+        return searchPath(entity, startPos, finishPos, minRange, maxRange, false, AStarHeuristic::DEFAULT);
     }
 
     void NavigationGridSystem::InitGridHeightAndNormals()

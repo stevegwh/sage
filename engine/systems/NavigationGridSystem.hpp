@@ -24,6 +24,9 @@ namespace sage
             {1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}};
         CollisionSystem* collisionSystem;
         std::vector<std::vector<NavigationGridSquare>> gridSquares;
+        GridSquare debugRangeMin{};
+        GridSquare debugRangeMax{};
+        bool hasDebugRange = false;
 
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> tracebackPath(
@@ -46,6 +49,14 @@ namespace sage
         void calculateTerrainHeightAndNormals(const entt::entity& entity);
         //---------------------------------------------------------
         void calculateHeightAndNormalsFromTerrain(const entt::entity& entity);
+        [[nodiscard]] std::vector<Vector3> searchPath(
+            entt::entity entity,
+            Vector3 startPos,
+            Vector3 finishPos,
+            GridSquare minRange,
+            GridSquare maxRange,
+            bool useAStar,
+            AStarHeuristic heuristicType);
         //---------------------------------------------------------
       public:
         float spacing{};

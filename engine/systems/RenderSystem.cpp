@@ -55,21 +55,14 @@ namespace sage
                 renderable.hint);
         };
 
-        // TODO: Unsure if having three separate views will cause issues or not.
+        const auto drawAll = [](auto& view, const auto& draw) {
+            for (auto [entity, renderable, transform] : view.each()) draw(renderable, transform, entity);
+        };
 
-        for (auto entity : normalView)
-        {
-            auto& r = normalView.get<Renderable>(entity);
-            const auto& t = normalView.get<sgTransform>(entity);
-            renderEntity(r, t, entity);
-        }
-
-        for (auto entity : dynamicView)
-        {
-            auto& r = dynamicView.get<DynamicRenderable>(entity);
-            const auto& t = dynamicView.get<sgTransform>(entity);
-            renderDynamicEntity(r, t, entity);
-        }
+        // Pass order is intentional: ordinary forward geometry first, then dynamic geometry,
+        // uber-shader objects, deferred objects, and finally dynamic deferred objects.
+        drawAll(normalView, renderEntity);
+        drawAll(dynamicView, renderDynamicEntity);
 
         for (auto entity : uberView)
         {
@@ -88,19 +81,8 @@ namespace sage
                 renderable.hint);
         }
 
-        for (auto entity : deferredView)
-        {
-            auto& r = deferredView.get<Renderable>(entity);
-            const auto& t = deferredView.get<sgTransform>(entity);
-            renderEntity(r, t, entity);
-        }
-
-        for (auto entity : dynamicDeferredView)
-        {
-            auto& r = dynamicDeferredView.get<DynamicRenderable>(entity);
-            const auto& t = dynamicDeferredView.get<sgTransform>(entity);
-            renderDynamicEntity(r, t, entity);
-        }
+        drawAll(deferredView, renderEntity);
+        drawAll(dynamicDeferredView, renderDynamicEntity);
     }
 
     RenderSystem::RenderSystem(entt::registry* _registry) : registry(_registry)

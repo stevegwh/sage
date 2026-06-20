@@ -49,7 +49,8 @@ namespace sage::editor
             record.entity.id = entt::entt_traits<entt::entity>::to_entity(entityHandle);
             record.transform =
                 TransformWithSerializedNameFallback(source.get<sgTransform>(entityHandle), record.entity.id);
-            if (const auto* component = source.try_get<Renderable>(entityHandle))
+            if (const auto* component = source.try_get<Renderable>(entityHandle);
+                component != nullptr && component->serializable)
             {
                 record.hasRenderable = true;
                 record.renderable = *component;

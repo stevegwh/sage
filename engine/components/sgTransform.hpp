@@ -49,6 +49,8 @@ namespace sage
 
         void Bind(TransformSystem* transformSystem, entt::entity entity);
         void rebindProxies();
+        void assignStateFrom(const sgTransform& rhs);
+        void stealStateFrom(sgTransform&& rhs);
 
       public:
         // As the transform is the only required component to exist in the scene graph, the transform also stores

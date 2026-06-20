@@ -56,6 +56,8 @@ namespace sage
     CellElement* GameUIEngine::GetCellUnderCursor() const
     {
         const auto mousePos = ViewportMousePosition();
+        // Capturing windows (for example an open dropdown extending outside its window)
+        // get first refusal. If none captures, fall back to ordinary unobscured window hits.
         for (auto windowIt = windows.rbegin(); windowIt != windows.rend(); ++windowIt)
         {
             auto& window = *windowIt;

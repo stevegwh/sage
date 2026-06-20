@@ -27,10 +27,6 @@ namespace sage
         float availableWidth = rec.width - (padding.left + padding.right);
         if (overflowContingency == OverflowContingency::SCROLLBAR)
             availableWidth -= Scrollbar::GUTTER_WIDTH;
-        const float availableHeight = rec.height - (padding.up + padding.down);
-        const float startX = rec.x + padding.left;
-        const float startY = rec.y + padding.up;
-
         std::vector<SizeRequest> requests;
         requests.reserve(children.size());
         for (const auto& p : children)
@@ -39,26 +35,7 @@ namespace sage
             auto* table = downcast<Table>(p.get());
             requests.push_back({table->autoSize, table->requestedHeight});
         }
-        auto sizes = distributeAlong(availableHeight, requests);
-
-        float currentY = startY;
-        for (size_t i = 0; i < children.size(); ++i)
-        {
-            auto* table = downcast<Table>(children[i].get());
-            table->parent = this;
-            table->rec = rec;
-
-            const float panelHeight = sizes[i];
-            table->rec.height = panelHeight;
-            table->rec.y = currentY;
-            table->rec.width = availableWidth;
-            table->rec.x = startX;
-
-            if (!table->children.empty()) table->InitLayout();
-
-            currentY += panelHeight;
-        }
-        UpdateTextureDimensions();
+        layoutChildrenVertically(*this, availableWidth, requests);
     }
 
     void Window::SetPos(const float x, const float y)
@@ -252,9 +229,9 @@ namespace sage
         {
             rec.x = viewport.x - rec.width;
         }
-        if (rec.y + rec.height > viewport.y + rec.height / 2)
+        if (rec.y + rec.height > viewport.y)
         {
-            rec.y = viewport.y - rec.height / 2;
+            rec.y = viewport.y - rec.height;
         }
         if (rec.x < 0)
         {
@@ -327,7 +304,8 @@ namespace sage
     Table* Window::CreateTable(const Percent _requestedHeight, const Padding _padding)
     {
         assert(_requestedHeight.value <= 100 && _requestedHeight.value >= 0);
-        const auto table = CreateTable(_padding);
+        children.push_back(std::make_unique<Table>(this, _padding));
+        const auto table = downcast<Table>(children.back().get());
         table->autoSize = false;
         table->requestedHeight = _requestedHeight.value;
         InitLayout();

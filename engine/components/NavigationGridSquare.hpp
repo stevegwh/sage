@@ -47,14 +47,16 @@ namespace sage
     {
         float height = -1;
         Vector3 normal = Vector3{0, 1, 0};
+        bool isSet = false;
 
       public:
         void Set(const float _height, const Vector3& _normal)
         {
-            if (height == -1 || height < _height)
+            if (!isSet || height < _height)
             {
                 height = _height;
                 normal = _normal;
+                isSet = true;
             }
         }
         [[nodiscard]] Vector3 GetNormal() const

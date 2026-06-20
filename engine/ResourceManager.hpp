@@ -59,6 +59,7 @@ namespace sage
         std::unordered_map<std::string, Shader> shaders{};
         std::unordered_map<std::string, Material> materialMap;
         std::unordered_map<std::string, Image> images{};             // Image (CPU) data
+        std::unordered_map<std::string, std::string> imageSourcePaths{}; // transient collision diagnostics
         std::unordered_map<std::string, Texture> nonModelTextures{}; // Textures loaded outside of model loading
         std::unordered_map<std::string, ModelInfo> modelCopies{};
         std::unordered_map<std::string, std::pair<ModelAnimation*, int>> modelAnimations{};
@@ -69,6 +70,9 @@ namespace sage
         std::unordered_map<std::string, char*> fragShaderFileText{};
         std::unordered_map<std::string, Music> music;
         std::unordered_map<std::string, Sound> sfx;
+        std::unordered_map<std::string, std::string> musicSourcePaths;
+        std::unordered_map<std::string, std::string> sfxSourcePaths;
+        std::unordered_map<std::string, std::string> animationSourcePaths;
 
         Shader gpuShaderLoad(const char* vs, const char* fs);
         void dedupeAndShareMaterials(
@@ -77,6 +81,7 @@ namespace sage
         void FontLoadFromFile(const std::string& path);
         void ImageLoadFromFile(const std::string& path);
         void ImageLoadFromFile(const std::string& path, Image image);
+        void registerImageKey(const std::string& key, const std::string& sourcePath);
         void ModelLoadFromFile(const std::string& path);
         void ModelLoadFromFile(const std::string& path, const std::string& key);
         void StoreModel(const ModelInfo& modelInfo, const std::string& key);
