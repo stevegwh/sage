@@ -49,17 +49,12 @@ namespace sage::editor
         struct DragSample
         {
             Axis axis = Axis::None;
-            Vector2 mouseDelta{};
             float projectedAxisPixels = 0.0f;
             float rotationDegrees = 0.0f;
         };
 
-        // Mode-independent geometry. Exposed because EditorScene composes them
-        // in its own pivot-aware transform math (e.g. rotating a renderable
-        // around its bounding-box centre).
+        // Geometry shared with transform and collider editing.
         static Vector3 AxisVector(Axis axis);
-        static Color AxisColor(Axis axis);
-        static Vector3 RotationRingPoint(Vector3 origin, float radius, Axis axis, float angleRad);
         // viewportScale lets callers keep the gizmo a constant fraction of the
         // *window* rather than the render viewport: the projected pixel size of a
         // fixed world size is proportional to the render-viewport height, so when
@@ -85,10 +80,6 @@ namespace sage::editor
         {
             return drag.active;
         }
-        [[nodiscard]] Axis DragAxis() const
-        {
-            return drag.axis;
-        }
 
         // Returns DragSample{axis = Axis::None, …} when not dragging, when the
         // mouse hasn't moved, or when the projected screen vector is degenerate
@@ -98,7 +89,6 @@ namespace sage::editor
 
         void Draw(
             const Camera3D& camera,
-            Vector2 viewport,
             Vector3 origin,
             Mode mode,
             float viewportScale = 1.0f) const;

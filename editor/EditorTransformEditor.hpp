@@ -74,6 +74,7 @@ namespace sage::editor
         void AdjustPosition(const std::vector<entt::entity>& entities, Vector3 worldDelta);
         void AdjustRotationAxis(const std::vector<entt::entity>& entities, EditGizmo::Axis axis, float degrees);
         void AdjustScale(const std::vector<entt::entity>& entities, float delta);
+        void SnapToFloor(const std::vector<entt::entity>& entities, float floorY);
 
         // Rebuilds collision bounds for `entity` and all its descendants.
         // Used after bulk-instantiating entities (e.g. flatpacks) so each new

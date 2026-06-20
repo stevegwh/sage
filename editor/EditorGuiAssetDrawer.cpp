@@ -205,12 +205,7 @@ namespace sage::editor
         ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
         ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ToImGuiColor(EDITOR_WINDOW_BACKGROUND));
-        ImGui::PushStyleColor(ImGuiCol_Text, ToImGuiColor(EDITOR_TEXT));
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.18f, 0.26f, 0.38f, 0.90f});
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.23f, 0.34f, 0.50f, 0.95f});
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{14.0f, 12.0f});
+        PushEditorWindowStyle();
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{6.0f, 5.0f});
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2{8.0f, 7.0f});
 
@@ -220,48 +215,35 @@ namespace sage::editor
         if (ImGui::Begin("Asset Drawer", nullptr, windowFlags))
         {
             const bool showDefaults = selectedAssetIndex.has_value();
-            if (showDefaults && ImGui::BeginTable("asset_drawer_split", 2, ImGuiTableFlags_SizingStretchProp))
+            const bool splitView =
+                showDefaults && ImGui::BeginTable("asset_drawer_split", 2, ImGuiTableFlags_SizingStretchProp);
+            if (splitView)
             {
                 ImGui::TableSetupColumn("Browser", ImGuiTableColumnFlags_WidthStretch);
                 ImGui::TableSetupColumn("Defaults", ImGuiTableColumnFlags_WidthFixed, ASSET_DEFAULTS_PANEL_WIDTH);
-
                 ImGui::TableNextColumn();
-                if (ImGui::BeginTabBar("asset_tabs"))
-                {
-                    if (ImGui::BeginTabItem("Assets"))
-                    {
-                        currentTab = BrowserTab::Assets;
-                        drawAssetGrid();
-                        ImGui::EndTabItem();
-                    }
-                    if (ImGui::BeginTabItem("Flatpacks"))
-                    {
-                        currentTab = BrowserTab::Flatpacks;
-                        drawFlatpackGrid();
-                        ImGui::EndTabItem();
-                    }
-                    ImGui::EndTabBar();
-                }
-
-                ImGui::TableNextColumn();
-                drawAssetDefaultsControls();
-                ImGui::EndTable();
             }
-            else if (ImGui::BeginTabBar("asset_tabs"))
+
+            if (ImGui::BeginTabBar("asset_tabs"))
             {
                 if (ImGui::BeginTabItem("Assets"))
                 {
-                    currentTab = BrowserTab::Assets;
                     drawAssetGrid();
                     ImGui::EndTabItem();
                 }
                 if (ImGui::BeginTabItem("Flatpacks"))
                 {
-                    currentTab = BrowserTab::Flatpacks;
                     drawFlatpackGrid();
                     ImGui::EndTabItem();
                 }
                 ImGui::EndTabBar();
+            }
+
+            if (splitView)
+            {
+                ImGui::TableNextColumn();
+                drawAssetDefaultsControls();
+                ImGui::EndTable();
             }
 
             drawAssetRenamePopup();
@@ -285,8 +267,8 @@ namespace sage::editor
         }
         ImGui::End();
 
-        ImGui::PopStyleVar(3);
-        ImGui::PopStyleColor(5);
+        ImGui::PopStyleVar(2);
+        PopEditorWindowStyle();
     }
 
     void EditorGui::SetAssetDefaultsStatus(

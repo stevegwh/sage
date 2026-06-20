@@ -1490,6 +1490,17 @@ namespace sage
             {
                 setSnapToGrid(!snapToGrid);
             }
+            const auto selected = selection->Selected();
+            const bool canSnapToFloor = std::ranges::any_of(selected, [this](const entt::entity entity) {
+                return sys->registry->valid(entity) && sys->registry->any_of<sgTransform>(entity);
+            });
+            if (ImGui::MenuItem("Snap to floor", nullptr, false, canSnapToFloor))
+            {
+                const bool beginTransaction = history && !history->HasActiveTransaction();
+                if (beginTransaction) history->Begin(editor::EditAction::Transform, selected);
+                transformEditor->SnapToFloor(selected, placementController->GridSurfaceY());
+                if (beginTransaction) history->Commit();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Sculpt Terrain", "G", false, editorModes->CanBeginTerrainSculpt()))
             {

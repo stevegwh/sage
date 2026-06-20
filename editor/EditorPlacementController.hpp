@@ -53,5 +53,6 @@ namespace sage::editor
         [[nodiscard]] const std::optional<Vector3>& SnappedPlacementPosition() const;
         [[nodiscard]] float RotationY() const;
         [[nodiscard]] float Scale() const;
+        [[nodiscard]] float GridSurfaceY() const;
     };
 } // namespace sage::editor

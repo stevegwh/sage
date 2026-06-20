@@ -25,6 +25,45 @@ namespace sage::editor
                 worldPosition, camera, static_cast<int>(viewport.x), static_cast<int>(viewport.y));
         }
 
+        Color AxisColor(const EditGizmo::Axis axis)
+        {
+            switch (axis)
+            {
+            case EditGizmo::Axis::X:
+                return RED;
+            case EditGizmo::Axis::Y:
+                return GREEN;
+            case EditGizmo::Axis::Z:
+                return BLUE;
+            case EditGizmo::Axis::Uniform:
+                return GOLD;
+            case EditGizmo::Axis::None:
+                return ORANGE;
+            }
+            return ORANGE;
+        }
+
+        Vector3 RotationRingPoint(
+            const Vector3 origin,
+            const float radius,
+            const EditGizmo::Axis axis,
+            const float angleRad)
+        {
+            switch (axis)
+            {
+            case EditGizmo::Axis::X:
+                return Vector3Add(origin, {0.0f, std::cos(angleRad) * radius, std::sin(angleRad) * radius});
+            case EditGizmo::Axis::Y:
+                return Vector3Add(origin, {std::cos(angleRad) * radius, 0.0f, std::sin(angleRad) * radius});
+            case EditGizmo::Axis::Z:
+                return Vector3Add(origin, {std::cos(angleRad) * radius, std::sin(angleRad) * radius, 0.0f});
+            case EditGizmo::Axis::None:
+            case EditGizmo::Axis::Uniform:
+                return origin;
+            }
+            return origin;
+        }
+
         float DistancePointToSegment(const Vector2 point, const Vector2 start, const Vector2 end)
         {
             const Vector2 segment = Vector2Subtract(end, start);
@@ -46,13 +85,13 @@ namespace sage::editor
             const Vector2 mousePosition)
         {
             float closestDistance = std::numeric_limits<float>::max();
-            Vector2 previousScreen = WorldToScreen(camera, viewport, EditGizmo::RotationRingPoint(origin, radius, axis, 0.0f));
+            Vector2 previousScreen = WorldToScreen(camera, viewport, RotationRingPoint(origin, radius, axis, 0.0f));
 
             for (int i = 1; i <= GIZMO_RING_SEGMENTS; ++i)
             {
                 const float angle = (2.0f * PI * static_cast<float>(i)) / static_cast<float>(GIZMO_RING_SEGMENTS);
                 const Vector2 currentScreen =
-                    WorldToScreen(camera, viewport, EditGizmo::RotationRingPoint(origin, radius, axis, angle));
+                    WorldToScreen(camera, viewport, RotationRingPoint(origin, radius, axis, angle));
                 closestDistance = std::min(
                     closestDistance, DistancePointToSegment(mousePosition, previousScreen, currentScreen));
                 previousScreen = currentScreen;
@@ -99,42 +138,6 @@ namespace sage::editor
         return Vector3Zero();
     }
 
-    Color EditGizmo::AxisColor(const Axis axis)
-    {
-        switch (axis)
-        {
-        case Axis::X:
-            return RED;
-        case Axis::Y:
-            return GREEN;
-        case Axis::Z:
-            return BLUE;
-        case Axis::Uniform:
-            return GOLD;
-        case Axis::None:
-            return ORANGE;
-        }
-        return ORANGE;
-    }
-
-    Vector3 EditGizmo::RotationRingPoint(
-        const Vector3 origin, const float radius, const Axis axis, const float angleRad)
-    {
-        switch (axis)
-        {
-        case Axis::X:
-            return Vector3Add(origin, {0.0f, std::cos(angleRad) * radius, std::sin(angleRad) * radius});
-        case Axis::Y:
-            return Vector3Add(origin, {std::cos(angleRad) * radius, 0.0f, std::sin(angleRad) * radius});
-        case Axis::Z:
-            return Vector3Add(origin, {std::cos(angleRad) * radius, std::sin(angleRad) * radius, 0.0f});
-        case Axis::None:
-        case Axis::Uniform:
-            return origin;
-        }
-        return origin;
-    }
-
     float EditGizmo::SizeForCamera(const Vector3 cameraPosition, const Vector3 origin, const float viewportScale)
     {
         const float distance = Vector3Distance(cameraPosition, origin);
@@ -168,8 +171,8 @@ namespace sage::editor
             return closestDistance <= GIZMO_SCREEN_HIT_RADIUS ? closestAxis : Axis::None;
         }
 
-        if (mode == Mode::Scale &&
-            Vector2Distance(mousePosition, WorldToScreen(camera, viewport, origin)) <= GIZMO_SCREEN_HIT_RADIUS)
+        const Vector2 screenOrigin = WorldToScreen(camera, viewport, origin);
+        if (mode == Mode::Scale && Vector2Distance(mousePosition, screenOrigin) <= GIZMO_SCREEN_HIT_RADIUS)
         {
             return Axis::Uniform;
         }
@@ -180,7 +183,7 @@ namespace sage::editor
         {
             const Vector3 end = Vector3Add(origin, Vector3Scale(AxisVector(axis), size));
             const float distance = DistancePointToSegment(
-                mousePosition, WorldToScreen(camera, viewport, origin), WorldToScreen(camera, viewport, end));
+                mousePosition, screenOrigin, WorldToScreen(camera, viewport, end));
             if (distance < closestDistance)
             {
                 closestDistance = distance;
@@ -214,7 +217,7 @@ namespace sage::editor
         drag.lastMousePosition = mousePosition;
         if (Vector2Length(mouseDelta) <= 0.0001f) return {};
 
-        DragSample sample{.axis = drag.axis, .mouseDelta = mouseDelta};
+        DragSample sample{.axis = drag.axis};
 
         switch (mode)
         {
@@ -253,7 +256,6 @@ namespace sage::editor
 
     void EditGizmo::Draw(
         const Camera3D& camera,
-        const Vector2 /*viewport*/,
         const Vector3 origin,
         const Mode mode,
         const float viewportScale) const
@@ -288,9 +290,7 @@ namespace sage::editor
         switch (mode)
         {
         case Mode::Translate:
-            drawTranslateAxis(Axis::X);
-            drawTranslateAxis(Axis::Y);
-            drawTranslateAxis(Axis::Z);
+            for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) drawTranslateAxis(axis);
             break;
         case Mode::Rotate:
         {
@@ -306,14 +306,11 @@ namespace sage::editor
                     previous = current;
                 }
             };
-            drawRotationRing(Axis::X);
-            drawRotationRing(Axis::Y);
+            for (const auto axis : {Axis::X, Axis::Y}) drawRotationRing(axis);
             break;
         }
         case Mode::Scale:
-            drawScaleAxis(Axis::X);
-            drawScaleAxis(Axis::Y);
-            drawScaleAxis(Axis::Z);
+            for (const auto axis : {Axis::X, Axis::Y, Axis::Z}) drawScaleAxis(axis);
             DrawCubeV(
                 origin,
                 {handleSize * 0.9f, handleSize * 0.9f, handleSize * 0.9f},

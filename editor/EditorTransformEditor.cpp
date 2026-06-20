@@ -108,6 +108,56 @@ namespace sage::editor
             return bounds;
         }
 
+        void AppendSnapBounds(
+            entt::registry& registry,
+            const entt::entity entity,
+            std::optional<BoundingBox>& renderBounds,
+            std::optional<BoundingBox>& colliderBounds)
+        {
+            if (!registry.valid(entity) || !registry.any_of<sgTransform>(entity)) return;
+
+            if (registry.any_of<Renderable>(entity))
+            {
+                const auto& transform = registry.get<sgTransform>(entity);
+                const auto& renderable = registry.get<Renderable>(entity);
+                if (const auto* model = renderable.GetModel(); model != nullptr)
+                {
+                    const Matrix matrix = BuildRenderableEntityMatrix(
+                        transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+                    const BoundingBox bounds =
+                        TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), matrix);
+                    if (renderBounds.has_value())
+                        ExpandBounds(*renderBounds, bounds);
+                    else
+                        renderBounds = bounds;
+                }
+            }
+
+            if (registry.any_of<Collideable>(entity))
+            {
+                const auto& bounds = registry.get<Collideable>(entity).worldBoundingBox;
+                if (colliderBounds.has_value())
+                    ExpandBounds(*colliderBounds, bounds);
+                else
+                    colliderBounds = bounds;
+            }
+
+            for (const auto child : registry.get<sgTransform>(entity).GetChildren())
+            {
+                AppendSnapBounds(registry, child, renderBounds, colliderBounds);
+            }
+        }
+
+        float SnapBoundsMinY(entt::registry& registry, const entt::entity entity)
+        {
+            std::optional<BoundingBox> renderBounds;
+            std::optional<BoundingBox> colliderBounds;
+            AppendSnapBounds(registry, entity, renderBounds, colliderBounds);
+            if (renderBounds.has_value()) return renderBounds->min.y;
+            if (colliderBounds.has_value()) return colliderBounds->min.y;
+            return registry.get<sgTransform>(entity).GetWorldPos().y;
+        }
+
         bool HasValidTransform(entt::registry& registry, const std::vector<entt::entity>& entities)
         {
             return std::ranges::any_of(entities, [&registry](const entt::entity entity) {
@@ -287,7 +337,6 @@ namespace sage::editor
         if (!HasValidTransform(*sys->registry, entities)) return;
 
         const Camera3D camera = *sys->camera->getRaylibCam();
-        const Vector2 viewport = sys->settings->GetRenderViewPort();
         const float viewportScale = gizmoViewportScale();
 
         if (mode == EditGizmo::Mode::BoxCollider)
@@ -299,7 +348,7 @@ namespace sage::editor
         }
 
         const Vector3 origin = PivotWorldPosition(entities);
-        gizmo.Draw(camera, viewport, origin, mode, viewportScale);
+        gizmo.Draw(camera, origin, mode, viewportScale);
     }
 
     void EditorTransformEditor::SetMode(const EditGizmo::Mode newMode)
@@ -402,6 +451,25 @@ namespace sage::editor
         if (Vector3Equals(appliedDelta, Vector3Zero())) return;
 
         applyPositionDelta(entities, appliedDelta);
+    }
+
+    void EditorTransformEditor::SnapToFloor(
+        const std::vector<entt::entity>& entities, const float floorY)
+    {
+        entt::entity notifiedEntity = entt::null;
+        for (const auto entity : entities)
+        {
+            if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) continue;
+
+            auto& transform = sys->registry->get<sgTransform>(entity);
+            const float deltaY = floorY - SnapBoundsMinY(*sys->registry, entity);
+            if (std::abs(deltaY) <= 0.0001f) continue;
+
+            transform.position.world.y = transform.GetWorldPos().y + deltaY;
+            updateEntityCollisionBounds(entity);
+            if (notifiedEntity == entt::null) notifiedEntity = entity;
+        }
+        notify(notifiedEntity);
     }
 
     void EditorTransformEditor::applyPositionDelta(

@@ -248,6 +248,11 @@ namespace sage::editor
         return placementScale;
     }
 
+    float EditorPlacementController::GridSurfaceY() const
+    {
+        return gridSurfaceY;
+    }
+
     void EditorPlacementController::SetSnapToGrid(const bool enabled)
     {
         snapToGrid = enabled;

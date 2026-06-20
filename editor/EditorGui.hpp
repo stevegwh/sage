@@ -154,12 +154,6 @@ namespace sage
             };
 
           private:
-            enum class BrowserTab
-            {
-                Assets,
-                Flatpacks
-            };
-
             Settings* settings{};
             EditorDockLayout* dockLayout{};
             std::vector<AssetEntry> assetEntries;
@@ -175,7 +169,6 @@ namespace sage
             std::function<void(const std::filesystem::path&)> onFlatpackDeleteCb;
             std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
-            BrowserTab currentTab = BrowserTab::Assets;
             ImGuiTextFilter assetFilter;
             ImGuiTextFilter flatpackFilter;
             ImGuiTextFilter hierarchyFilter;
