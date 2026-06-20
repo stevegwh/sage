@@ -54,12 +54,11 @@ namespace sage
             table->rec.width = availableWidth;
             table->rec.x = startX;
 
-            UpdateTextureDimensions();
-
             if (!table->children.empty()) table->InitLayout();
 
             currentY += panelHeight;
         }
+        UpdateTextureDimensions();
     }
 
     void Window::SetPos(const float x, const float y)

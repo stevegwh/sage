@@ -36,12 +36,13 @@ namespace sage
 
         float cameraScrollVelY = 0.0;
         float floorYOffset = 0.0f;
-        static constexpr float cameraInitialVelY = 2.0f;
-        static constexpr float cameraScrollDeceleration = 0.075f;
+        static constexpr float cameraInitialScrollSpeed = 120.0f;
+        static constexpr float cameraScrollDeceleration = 270.0f;
+        static constexpr float cameraZoomForwardSpeed = 60.0f;
         static constexpr float cameraMaxY = 130.0f;
 
-        static constexpr float cameraRotateSpeed = 3.0f;
-        static constexpr float cameraMoveSpeed = 1.4f;
+        static constexpr float cameraRotateSpeed = 180.0f;
+        static constexpr float cameraMoveSpeed = 84.0f;
 
         bool forwardKeyDown{};
         bool backKeyDown{};
@@ -54,7 +55,7 @@ namespace sage
 
         void cameraHeightSmoothing();
         void handleInput();
-        void handleMouseScroll();
+        void handleMouseScroll(float deltaTime);
         void snapFocusToNavigationHeight();
 
       public:

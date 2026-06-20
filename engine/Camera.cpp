@@ -17,6 +17,9 @@
 #include "raymath.h"
 #include "rcamera.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace sage
 {
     /*
@@ -37,28 +40,15 @@ namespace sage
         rlCamera.target.y = verticalSmoothingTargetY;
         rlCamera.position.y = verticalSmoothingCurrentY;
     }
-    // TODO: Frame time?
-    void Camera::handleMouseScroll()
+    void Camera::handleMouseScroll(const float deltaTime)
     {
         if (cameraScrollVelY > 0)
         {
-            cameraScrollVelY -= cameraScrollDeceleration;
-            if (cameraScrollVelY < 0)
-            {
-                cameraScrollVelY = 0;
-            }
+            cameraScrollVelY = std::max(0.0f, cameraScrollVelY - cameraScrollDeceleration * deltaTime);
         }
         else if (cameraScrollVelY < 0)
         {
-            cameraScrollVelY += cameraScrollDeceleration;
-            if (cameraScrollVelY > 0)
-            {
-                cameraScrollVelY = 0;
-            }
-        }
-        else
-        {
-            cameraScrollVelY = 0;
+            cameraScrollVelY = std::min(0.0f, cameraScrollVelY + cameraScrollDeceleration * deltaTime);
         }
 
         if (scrollEnabled)
@@ -67,18 +57,21 @@ namespace sage
             auto mouseScroll = GetMouseWheelMoveV();
             if (mouseScroll.y > 0)
             {
-                cameraScrollVelY = cameraInitialVelY;
+                cameraScrollVelY = cameraInitialScrollSpeed;
             }
             else if (mouseScroll.y < 0)
             {
-                cameraScrollVelY = -cameraInitialVelY;
+                cameraScrollVelY = -cameraInitialScrollSpeed;
             }
-            Vector3 up = Vector3MultiplyByValue(GetCameraUp(&rlCamera), abs(cameraScrollVelY));
+            const Vector3 up =
+                Vector3MultiplyByValue(GetCameraUp(&rlCamera), std::abs(cameraScrollVelY) * deltaTime);
+            const Vector3 forward =
+                Vector3MultiplyByValue(GetCameraForward(&rlCamera), cameraZoomForwardSpeed * deltaTime);
             if (cameraScrollVelY > 0)
             {
                 auto nextPos = rlCamera.position;
                 nextPos = Vector3Subtract(nextPos, up);
-                nextPos = Vector3Add(nextPos, GetCameraForward(&rlCamera));
+                nextPos = Vector3Add(nextPos, forward);
                 if (nextPos.y > rlCamera.target.y)
                 {
                     rlCamera.position = nextPos;
@@ -93,7 +86,7 @@ namespace sage
             {
                 auto nextPos = rlCamera.position;
                 nextPos = Vector3Add(nextPos, up);
-                nextPos = Vector3Subtract(nextPos, GetCameraForward(&rlCamera));
+                nextPos = Vector3Subtract(nextPos, forward);
 
                 if (nextPos.y < cameraMaxY)
                 {
@@ -114,13 +107,16 @@ namespace sage
         if (lockInput || IsMetaKeyDown() || IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
             return;
 
-        handleMouseScroll();
+        const float deltaTime = GetFrameTime();
+        handleMouseScroll(deltaTime);
+        const float moveStep = cameraMoveSpeed * deltaTime;
+        const float rotateStep = cameraRotateSpeed * deltaTime;
 
         if (backKeyDown)
         {
             auto right = GetCameraRight(&rlCamera);
             right = Vector3RotateByAxisAngle(right, {0, 1, 0}, DEG2RAD * 90);
-            auto newPos = Vector3MultiplyByValue(right, cameraMoveSpeed);
+            auto newPos = Vector3MultiplyByValue(right, moveStep);
             rlCamera.position = Vector3Subtract(rlCamera.position, newPos);
             rlCamera.target = Vector3Subtract(rlCamera.target, newPos);
         }
@@ -129,21 +125,21 @@ namespace sage
         {
             auto right = GetCameraRight(&rlCamera);
             right = Vector3RotateByAxisAngle(right, {0, 1, 0}, DEG2RAD * 90);
-            auto newPos = Vector3MultiplyByValue(right, cameraMoveSpeed);
+            auto newPos = Vector3MultiplyByValue(right, moveStep);
             rlCamera.position = Vector3Add(newPos, rlCamera.position);
             rlCamera.target = Vector3Add(newPos, rlCamera.target);
         }
 
         if (leftKeyDown)
         {
-            auto newPos = Vector3MultiplyByValue(GetCameraRight(&rlCamera), cameraMoveSpeed);
+            auto newPos = Vector3MultiplyByValue(GetCameraRight(&rlCamera), moveStep);
             rlCamera.position = Vector3Subtract(rlCamera.position, newPos);
             rlCamera.target = Vector3Subtract(rlCamera.target, newPos);
         }
 
         if (rightKeyDown)
         {
-            auto newPos = Vector3MultiplyByValue(GetCameraRight(&rlCamera), cameraMoveSpeed);
+            auto newPos = Vector3MultiplyByValue(GetCameraRight(&rlCamera), moveStep);
             rlCamera.position = Vector3Add(newPos, rlCamera.position);
             rlCamera.target = Vector3Add(newPos, rlCamera.target);
         }
@@ -151,13 +147,13 @@ namespace sage
         if (rotateLeftKeyDown)
         {
             rlCamera.position = Vector3Add(
-                Vector3MultiplyByValue(GetCameraRight(&rlCamera), cameraRotateSpeed), rlCamera.position);
+                Vector3MultiplyByValue(GetCameraRight(&rlCamera), rotateStep), rlCamera.position);
         }
 
         if (rotateRightKeyDown)
         {
             rlCamera.position = Vector3Subtract(
-                rlCamera.position, Vector3MultiplyByValue(GetCameraRight(&rlCamera), cameraRotateSpeed));
+                rlCamera.position, Vector3MultiplyByValue(GetCameraRight(&rlCamera), rotateStep));
         }
 
         cameraHeightSmoothing();

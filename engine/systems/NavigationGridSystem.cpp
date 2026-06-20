@@ -1077,6 +1077,7 @@ namespace sage
         visited[startGridSquare.row][startGridSquare.col] = true;
 
         bool pathFound = false;
+        const Vector3 pathDirection = Vector3Subtract(finishPos, startPos);
 
         while (!frontier.empty())
         {
@@ -1107,7 +1108,10 @@ namespace sage
                 if (!visited[next.row][next.col] || new_cost < cost_so_far[next.row][next.col])
                 {
                     cost_so_far[next.row][next.col] = new_cost;
-                    const double heuristic_cost = heuristic(next, finishGridSquare);
+                    const double heuristic_cost =
+                        heuristicType == AStarHeuristic::FAVOUR_RIGHT
+                            ? heuristic_favourRight(next, finishGridSquare, pathDirection)
+                            : heuristic(next, finishGridSquare);
                     const double priority = new_cost + heuristic_cost;
                     frontier.emplace(priority, next);
                     came_from[next.row][next.col] = current;

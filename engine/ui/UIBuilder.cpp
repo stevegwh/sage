@@ -11,6 +11,7 @@
 #include "UIWindow.hpp"
 
 #include <cassert>
+#include <stdexcept>
 #include <utility>
 
 namespace sage
@@ -82,9 +83,20 @@ namespace sage
             return f.row->CreateTableCell(engine->Theme().itemCellPadding);
         case Kind::Grid:
         {
-            const int idx = f.count++;
-            auto* gridRow = downcast<TableRow>(f.table->children[idx / f.cols].get());
-            return downcast<TableCell>(gridRow->children[idx % f.cols].get());
+            const int idx = f.count;
+            if (f.cols <= 0) throw std::logic_error("UIBuilder grid has no columns");
+
+            const std::size_t rowIndex = static_cast<std::size_t>(idx / f.cols);
+            const std::size_t colIndex = static_cast<std::size_t>(idx % f.cols);
+            if (rowIndex >= f.table->children.size())
+                throw std::out_of_range("UIBuilder grid capacity exceeded");
+
+            auto* gridRow = downcast<TableRow>(f.table->children[rowIndex].get());
+            if (colIndex >= gridRow->children.size())
+                throw std::out_of_range("UIBuilder grid capacity exceeded");
+
+            ++f.count;
+            return downcast<TableCell>(gridRow->children[colIndex].get());
         }
         }
         return nullptr;

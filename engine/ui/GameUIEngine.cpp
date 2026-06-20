@@ -207,14 +207,28 @@ namespace sage
 
         for (auto& window : windows)
         {
-            if (!window || window->IsMarkedForRemoval() || window->IsHidden()) continue;
+            if (!window) continue;
+
+            if (window->IsMarkedForRemoval() || window->IsHidden())
+            {
+                if (window->mouseHover)
+                {
+                    window->mouseHover = false;
+                    window->OnHoverStop();
+                }
+                continue;
+            }
 
             const bool insideWindow = PointInsideRect(window->rec, mousePos);
             const bool capturesCursor = window->CapturesCursor(mousePos);
             if ((!insideWindow && !capturesCursor) ||
                 (insideWindow && !mouseInNonObscuredWindowRegion(window.get(), mousePos)))
             {
-                window->OnHoverStop();
+                if (window->mouseHover)
+                {
+                    window->mouseHover = false;
+                    window->OnHoverStop();
+                }
                 continue;
             }
 
@@ -226,7 +240,11 @@ namespace sage
             cursor->Disable();
             cursor->DisableContextSwitching();
 
-            window->OnHoverStart(); // TODO: Need to check if it was already being hovered?
+            if (!window->mouseHover)
+            {
+                window->mouseHover = true;
+                window->OnHoverStart();
+            }
             window->Update();
         }
     }

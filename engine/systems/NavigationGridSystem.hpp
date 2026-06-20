@@ -65,8 +65,11 @@ namespace sage
         //---------------------------------------------------------
         bool GridToWorldSpace(GridSquare gridPos, Vector3& out) const;
         //---------------------------------------------------------
+        // Always writes the computed grid index to out, even when returning false for an
+        // out-of-range point. Callers may use that index to clamp partially overlapping bounds.
         bool WorldToGridSpace(Vector3 worldPos, GridSquare& out) const;
         //---------------------------------------------------------
+        // As above, out receives the computed index regardless of the return value.
         bool WorldToGridSpace(
             Vector3 worldPos, GridSquare& out, const GridSquare& _minRange, const GridSquare& _maxRange) const;
         //---------------------------------------------------------

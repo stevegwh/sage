@@ -30,6 +30,7 @@ namespace sage
 
     float Terrain::GetHeight(int row, int col) const
     {
+        // GetNormal samples beyond the edge and relies on clamping to duplicate the border cell.
         row = std::clamp(row, 0, resolution - 1);
         col = std::clamp(col, 0, resolution - 1);
         return heights[static_cast<std::size_t>(row) * resolution + col];
@@ -37,6 +38,7 @@ namespace sage
 
     void Terrain::SetHeight(const int row, const int col, const float height)
     {
+        // Unlike reads, out-of-range writes are ignored rather than redirected to an edge cell.
         if (row < 0 || row >= resolution || col < 0 || col >= resolution) return;
         heights[static_cast<std::size_t>(row) * resolution + col] = height;
     }

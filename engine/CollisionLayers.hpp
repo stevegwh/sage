@@ -16,6 +16,8 @@ namespace sage
 
     struct CollisionLayer
     {
+        // Non-owning metadata: the name must outlive this layer. Runtime names should be
+        // created through RegisterUserCollisionLayer, which owns stable backing storage.
         std::string_view layerName{};
         std::uint64_t bit{};
 

@@ -8,6 +8,7 @@
 #include "raylib.h"
 
 #include <bit>
+#include <cassert>
 #include <exception>
 #include <fstream>
 
@@ -17,6 +18,7 @@ namespace sage
     {
         int bitIndex(const CollisionLayer layer)
         {
+            assert(layer.IsValid() && "bitIndex requires a non-zero collision layer");
             return std::countr_zero(layer.bit);
         }
     } // namespace

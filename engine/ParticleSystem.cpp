@@ -7,6 +7,7 @@
 
 /**
  * This is a heavily modified version of the 'libpartikel' project modified for 3D and ported to C++.
+ * This project carries the implementation as a C++ source file, not as a header-only library.
  * The original notice is included below.
  */
 /**********************************************************************************************
@@ -65,7 +66,7 @@ namespace sage
 {
     // Utility functions & structs.
     //----------------------------------------------------------------------------------
-    // GetRandomFloat returns a random float between 0.0 and 1.0.
+    // Returns a random float in the inclusive range [min, max].
     float GetRandomFloat(float min, float max)
     {
         float range = max - min;

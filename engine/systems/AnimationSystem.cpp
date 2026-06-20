@@ -62,6 +62,7 @@ namespace sage
 
             if (animData.currentFrame == 0 || animData.currentFrame < animData.lastFrame)
             {
+                // Fire at the start of every loop, including when the frame counter wraps.
                 animation.onAnimationStart.Publish(entity);
             }
 

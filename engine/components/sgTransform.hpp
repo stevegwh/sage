@@ -55,8 +55,9 @@ namespace sage
         // the name of the 'object'
         std::string name{"Transform"};
         // Proxy field with its cached Vector3 living inside.
-        // Assignment routes through TransformSystem (vioa `Write`) so dirty propagation
-        // happens automatically; reads return the cached value directly.
+        // Assignment routes through TransformSystem (via `Write`) so dirty propagation
+        // happens automatically; reads return the cached value directly. Assign a complete
+        // Vector3 in hot paths: setting x/y/z separately performs three hierarchy updates.
         template <Writer Write>
         class VectorField
         {

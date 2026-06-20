@@ -72,8 +72,6 @@ namespace sage
             row->rec.x = rec.x + padding.left;
             row->rec.width = rec.width - (padding.left + padding.right);
 
-            UpdateTextureDimensions();
-
             if (!row->children.empty())
             {
                 row->InitLayout();
@@ -81,6 +79,7 @@ namespace sage
 
             currentY += rowHeight;
         }
+        if (!children.empty()) UpdateTextureDimensions();
     }
 
     void TableRowGrid::InitLayout()
@@ -188,8 +187,6 @@ namespace sage
             cell->rec.y = rec.y + padding.up;
             cell->rec.height = rec.height - (padding.up + padding.down);
 
-            UpdateTextureDimensions();
-
             cell->InitLayout();
 
             cell->unscaledDimensions.rec = rec;
@@ -197,6 +194,7 @@ namespace sage
 
             currentX += cellWidth;
         }
+        if (!children.empty()) UpdateTextureDimensions();
     }
 
     void TableCell::InitLayout()
@@ -240,12 +238,11 @@ namespace sage
             table->rec.width = availableWidth;
             table->rec.x = startX;
 
-            UpdateTextureDimensions();
-
             if (!table->children.empty()) table->InitLayout();
 
             currentY += panelHeight;
         }
+        if (!children.empty()) UpdateTextureDimensions();
     }
 
     void TableElement::Reset()

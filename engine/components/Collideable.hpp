@@ -77,7 +77,8 @@ namespace sage
     {
     };
 
-    // Transforms a bounding box by a world matrix.
+    // Fast translation/scale-only transform. The matrix must not contain rotation.
     BoundingBox TransformBoundingBox(const BoundingBox& local, const Matrix& worldMat);
+    // Eight-corner transform that produces a valid axis-aligned box under rotation.
     BoundingBox TransformBoundingBoxByCorners(const BoundingBox& local, const Matrix& worldMat);
 } // namespace sage
