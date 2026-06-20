@@ -48,7 +48,8 @@ namespace sage
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayFactory(std::make_unique<FullscreenTextOverlayManager>(this)),
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
-          scriptSystem(std::make_unique<ScriptSystem>(_registry, collisionSystem.get()))
+          scriptSystem(
+              std::make_unique<ScriptSystem>(_registry, collisionSystem.get(), actorMovementSystem.get()))
     {
         uiEngine = std::make_unique<GameUIEngine>(_registry, this);
     }

@@ -10,6 +10,7 @@
 
 namespace sage
 {
+    class ActorMovementSystem;
     class CollisionSystem;
 
     // Runs Lua scripts attached to entities via ScriptComponent.
@@ -46,7 +47,10 @@ namespace sage
 
       public:
         void Update();
-        ScriptSystem(entt::registry* _registry, CollisionSystem* _collisionSystem);
+        ScriptSystem(
+            entt::registry* _registry,
+            CollisionSystem* _collisionSystem,
+            ActorMovementSystem* _actorMovementSystem);
         ~ScriptSystem();
     };
 } // namespace sage

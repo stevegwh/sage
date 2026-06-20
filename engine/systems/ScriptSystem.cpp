@@ -4,9 +4,12 @@
 
 #include "ScriptSystem.hpp"
 
+#include "Archetypes.hpp"
+#include "ActorMovementSystem.hpp"
 #include "CollisionSystem.hpp"
 #include "components/Animation.hpp"
 #include "components/Collideable.hpp"
+#include "components/MoveableActor.hpp"
 #include "components/ScriptComponent.hpp"
 #include "components/sgTransform.hpp"
 
@@ -51,11 +54,16 @@ namespace sage
         sol::state lua;
         std::unordered_map<entt::entity, ScriptInstance> instances;
         entt::registry* registry;
+        ActorMovementSystem* actorMovementSystem;
         Subscription triggerEnterSub;
         Subscription triggerStaySub;
         Subscription triggerExitSub;
 
-        Impl(entt::registry* _registry, CollisionSystem* _collisionSystem) : registry(_registry)
+        Impl(
+            entt::registry* _registry,
+            CollisionSystem* _collisionSystem,
+            ActorMovementSystem* _actorMovementSystem)
+            : registry(_registry), actorMovementSystem(_actorMovementSystem)
         {
             lua.open_libraries(
                 sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::os);
@@ -193,6 +201,34 @@ namespace sage
             env["entity"] = static_cast<std::uint32_t>(entity);
 
             env.set_function(
+                "FindFirstWithArchetype",
+                [this](const std::string& name, sol::this_state state) -> sol::object {
+                    const auto found = sage::FindFirstWithArchetype(*registry, MakeArchetype(name));
+                    if (!found) return sol::lua_nil;
+                    return sol::make_object(state, static_cast<std::uint32_t>(*found));
+                });
+
+            env.set_function(
+                "MoveToLocation",
+                [this, entity](const Vector3& destination) {
+                    if (!registry->all_of<sgTransform>(entity)) return false;
+                    actorMovementSystem->MoveToLocation(entity, destination);
+                    return true;
+                });
+
+            env.set_function(
+                "TryPathfindToLocation",
+                sol::overload(
+                    [this, entity](const Vector3& destination) {
+                        if (!registry->all_of<sgTransform, MoveableActor, Collideable>(entity)) return false;
+                        return actorMovementSystem->TryPathfindToLocation(entity, destination);
+                    },
+                    [this, entity](const Vector3& destination, const bool astar) {
+                        if (!registry->all_of<sgTransform, MoveableActor, Collideable>(entity)) return false;
+                        return actorMovementSystem->TryPathfindToLocation(entity, destination, astar);
+                    }));
+
+            env.set_function(
                 "GetTransform",
                 sol::overload(
                     [this, entity]() { return registry->try_get<sgTransform>(entity); },
@@ -318,8 +354,11 @@ namespace sage
         impl->destroyInstance(entity);
     }
 
-    ScriptSystem::ScriptSystem(entt::registry* _registry, CollisionSystem* _collisionSystem)
-        : impl(std::make_unique<Impl>(_registry, _collisionSystem)), registry(_registry)
+    ScriptSystem::ScriptSystem(
+        entt::registry* _registry,
+        CollisionSystem* _collisionSystem,
+        ActorMovementSystem* _actorMovementSystem)
+        : impl(std::make_unique<Impl>(_registry, _collisionSystem, _actorMovementSystem)), registry(_registry)
     {
         registry->on_destroy<ScriptComponent>().connect<&ScriptSystem::onScriptComponentDestroyed>(this);
     }
