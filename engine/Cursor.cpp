@@ -159,20 +159,24 @@ namespace sage
         if (OutOfRange() || invalidNavigation || deniedTarget)
         {
             currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Denied});
+            currentIsRegular = false;
             currentColor = invalidColor;
             return;
         }
         if (cursorTarget != nullptr)
         {
             currentTex = ResourceManager::GetInstance().TextureLoad(cursorTarget->cursor);
+            currentIsRegular = false;
         }
         else if (navigationHit)
         {
             currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Move});
+            currentIsRegular = false;
         }
         else
         {
             currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular});
+            currentIsRegular = true;
         }
     }
 
@@ -200,6 +204,7 @@ namespace sage
     {
         sys->picker->Update();
         currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular});
+        currentIsRegular = true;
         currentColor = defaultColor;
 
         const auto& hitInfo = getMouseHitInfo();
@@ -270,9 +275,9 @@ namespace sage
         if (hideCursor) return;
         if (currentTex.id == 0) return;
         Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
-        // TODO: Awful hack below
-        if (currentTex.id !=
-            ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular}).id)
+        // The pointer (Regular) cursor draws from its tip (top-left); every other cursor
+        // is centred on the mouse position.
+        if (!currentIsRegular)
         {
             pos = Vector2Subtract(
                 pos, {static_cast<float>(currentTex.width / 2), static_cast<float>(currentTex.height / 2)});

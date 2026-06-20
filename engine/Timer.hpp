@@ -5,8 +5,10 @@ namespace sage
 class Timer
 {
     bool active = false;
-    bool finished = true;
-    bool autoFinish = true; // New boolean to control automatic finishing
+    // An idle timer (never started, or stopped/reset) reports HasFinished() == false;
+    // only a timer that ran to completion reports true. Matches Reset()/Stop().
+    bool finished = false;
+    bool autoFinish = true;
     float counter{};
     float maxTime{};
 

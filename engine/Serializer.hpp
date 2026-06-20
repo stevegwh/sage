@@ -38,7 +38,7 @@ namespace sage::serializer
     void LoadAssetBinFile(entt::registry* destination, const char* path);
 
     template <typename T>
-    void SaveClassXML(const char* path, const T& toSave)
+    bool SaveClassXML(const char* path, const T& toSave)
     {
         std::cout << "START: Saving class data to XML file." << std::endl;
         using namespace entt::literals;
@@ -47,8 +47,8 @@ namespace sage::serializer
         std::ofstream storage(path);
         if (!storage.is_open())
         {
-            std::cerr << "ERROR: Unable to open file for writing." << std::endl;
-            exit(1);
+            std::cerr << "ERROR: Unable to open '" << path << "' for writing." << std::endl;
+            return false;
         }
 
         {
@@ -59,6 +59,7 @@ namespace sage::serializer
 
         storage.close();
         std::cout << "FINISH: Saving class data to XML file." << std::endl;
+        return true;
     }
 
     template <typename T>
@@ -84,7 +85,7 @@ namespace sage::serializer
     }
 
     template <typename T>
-    void SaveClassJson(const std::string& path, const T& toSave)
+    bool SaveClassJson(const std::string& path, const T& toSave)
     {
         std::cout << "START: Saving class data to json file." << std::endl;
         using namespace entt::literals;
@@ -93,8 +94,8 @@ namespace sage::serializer
         std::ofstream storage(path);
         if (!storage.is_open())
         {
-            std::cerr << "ERROR: Unable to open file for writing." << std::endl;
-            exit(1);
+            std::cerr << "ERROR: Unable to open '" << path << "' for writing." << std::endl;
+            return false;
         }
 
         {
@@ -106,10 +107,11 @@ namespace sage::serializer
 
         storage.close();
         std::cout << "FINISH: Saving class data to json file." << std::endl;
+        return true;
     }
 
     template <typename T>
-    void SaveViewJson(entt::registry& source, const char* path)
+    bool SaveViewJson(entt::registry& source, const char* path)
     {
         std::cout << "START: Saving view data to json file." << std::endl;
         using namespace entt::literals;
@@ -118,8 +120,8 @@ namespace sage::serializer
         std::ofstream storage(path);
         if (!storage.is_open())
         {
-            std::cerr << "ERROR: Unable to open file for writing." << std::endl;
-            exit(1);
+            std::cerr << "ERROR: Unable to open '" << path << "' for writing." << std::endl;
+            return false;
         }
 
         {
@@ -131,6 +133,7 @@ namespace sage::serializer
 
         storage.close();
         std::cout << "FINISH: Saving view data to json file." << std::endl;
+        return true;
     }
 
     template <typename T>
@@ -163,7 +166,7 @@ namespace sage::serializer
     // DEFLATE-compressed cereal binary payload. The lambda receives a BinaryOutputArchive and
     // is free to call output(...) any number of times.
     template <typename ArchiveFn>
-    void WriteCompressedBinary(const char* path, const char (&magic)[4], ArchiveFn&& archiveFn)
+    bool WriteCompressedBinary(const char* path, const char (&magic)[4], ArchiveFn&& archiveFn)
     {
         std::ostringstream buf(std::ios::binary);
         {
@@ -178,17 +181,17 @@ namespace sage::serializer
             reinterpret_cast<const unsigned char*>(raw.data()), rawSize, &compSize);
         if (compData == nullptr || compSize <= 0)
         {
-            std::cerr << "ERROR: CompressData failed; aborting save." << std::endl;
+            std::cerr << "ERROR: CompressData failed; aborting save of '" << path << "'." << std::endl;
             if (compData) MemFree(compData);
-            exit(1);
+            return false;
         }
 
         std::ofstream storage(path, std::ios::binary);
         if (!storage.is_open())
         {
-            std::cerr << "ERROR: Unable to open file for writing." << std::endl;
+            std::cerr << "ERROR: Unable to open '" << path << "' for writing." << std::endl;
             MemFree(compData);
-            exit(1);
+            return false;
         }
 
         const uint64_t uncompressedSize = static_cast<uint64_t>(rawSize);
@@ -203,6 +206,7 @@ namespace sage::serializer
         std::cout << "  (raw=" << rawSize << "B compressed=" << compSize
                   << "B ratio=" << (rawSize > 0 ? (static_cast<double>(compSize) / rawSize) : 0.0) << ")"
                   << std::endl;
+        return true;
     }
 
     // Reads a header-prefixed DEFLATE-compressed cereal payload, then invokes the lambda with
@@ -259,12 +263,13 @@ namespace sage::serializer
     }
 
     template <typename T>
-    void SaveClassBinary(const char* path, const T& toSave)
+    bool SaveClassBinary(const char* path, const T& toSave)
     {
         std::cout << "START: Saving class data to binary file." << std::endl;
-        WriteCompressedBinary(path, kAssetBinMagic, [&](cereal::BinaryOutputArchive& output) {
+        const bool ok = WriteCompressedBinary(path, kAssetBinMagic, [&](cereal::BinaryOutputArchive& output) {
             output(toSave);
         });
         std::cout << "FINISH: Saving class data to binary file." << std::endl;
+        return ok;
     }
 } // namespace sage::serializer

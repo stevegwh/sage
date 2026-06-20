@@ -58,7 +58,7 @@ namespace sage
         std::unique_ptr<ControllableActorSystem> controllableActorSystem;
         std::unique_ptr<AnimationSystem> animationSystem;
         std::unique_ptr<UberShaderSystem> uberShaderSystem;
-        std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayFactory;
+        std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayManager;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;
         std::unique_ptr<ScriptSystem> scriptSystem;
 

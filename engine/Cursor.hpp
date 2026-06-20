@@ -34,6 +34,10 @@ namespace sage
         std::optional<HoverInfo> m_hoverInfo{};
 
         Texture2D currentTex{};
+        // Tracks whether currentTex is the plain pointer (Regular) cursor, set wherever
+        // currentTex is assigned. Draw2D only centres non-pointer cursors, so this avoids
+        // re-loading the Regular texture every frame just to compare ids.
+        bool currentIsRegular = true;
         std::function<bool(Vector3)> navigationRangeProvider{};
         std::function<bool(Vector3)> navigationValidityProvider{};
 

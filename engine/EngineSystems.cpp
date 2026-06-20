@@ -50,7 +50,7 @@ namespace sage
           controllableActorSystem(std::make_unique<ControllableActorSystem>(_registry, this)),
           animationSystem(std::make_unique<AnimationSystem>(_registry)),
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
-          fullscreenTextOverlayFactory(std::make_unique<FullscreenTextOverlayManager>(this)),
+          fullscreenTextOverlayManager(std::make_unique<FullscreenTextOverlayManager>(this)),
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
           scriptSystem(std::make_unique<ScriptSystem>(_registry))
     {

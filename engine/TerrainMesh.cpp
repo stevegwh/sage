@@ -160,6 +160,12 @@ namespace sage
         const int chunks = chunksPerSide(terrain);
         if (model.meshCount != chunks * chunks) return;
 
+        // raylib's default vertex-buffer slot numbers (mirror the rlgl macros
+        // RL_DEFAULT_SHADER_ATTRIB_LOCATION_POSITION / _NORMAL, which aren't exposed
+        // through the public headers). UpdateMeshBuffer addresses VBOs by these.
+        constexpr int kVboPositionSlot = 0;
+        constexpr int kVboNormalSlot = 2;
+
         // Normals of vertices adjacent to the edited range change too.
         const int minRow = region.minRow - 1;
         const int maxRow = region.maxRow + 1;
@@ -179,10 +185,8 @@ namespace sage
 
                 auto& mesh = model.meshes[chunkRow * chunks + chunkCol];
                 fillChunkVertexData(terrain, range, mesh);
-                // Buffer indices follow raylib's default attribute order:
-                // 0 = positions, 2 = normals.
-                UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
-                UpdateMeshBuffer(mesh, 2, mesh.normals, mesh.vertexCount * 3 * sizeof(float), 0);
+                UpdateMeshBuffer(mesh, kVboPositionSlot, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
+                UpdateMeshBuffer(mesh, kVboNormalSlot, mesh.normals, mesh.vertexCount * 3 * sizeof(float), 0);
             }
         }
     }
