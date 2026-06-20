@@ -83,8 +83,8 @@ namespace sage
         case Kind::Grid:
         {
             const int idx = f.count++;
-            auto* gridRow = static_cast<TableRow*>(f.table->children[idx / f.cols].get());
-            return static_cast<TableCell*>(gridRow->children[idx % f.cols].get());
+            auto* gridRow = downcast<TableRow>(f.table->children[idx / f.cols].get());
+            return downcast<TableCell>(gridRow->children[idx % f.cols].get());
         }
         }
         return nullptr;

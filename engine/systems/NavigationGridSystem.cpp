@@ -20,9 +20,19 @@
 
 namespace sage
 {
+    static constexpr float kMaxWalkableSlopeDegrees = 45.0f;
+
     static Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
     {
         return {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f};
+    }
+
+    // Angle in degrees between a surface normal and straight up.
+    static float slopeAngleDegrees(const Vector3& normal)
+    {
+        const Vector3 up = {0.0f, 1.0f, 0.0f};
+        const float dotProduct = normal.x * up.x + normal.y * up.y + normal.z * up.z;
+        return std::acos(dotProduct) * RAD2DEG;
     }
 
     inline double heuristic(GridSquare a, GridSquare b)
@@ -130,18 +140,13 @@ namespace sage
         int max_col = std::max(topLeftIndex.col, bottomRightIndex.col);
         int min_row = std::min(topLeftIndex.row, bottomRightIndex.row);
         int max_row = std::max(topLeftIndex.row, bottomRightIndex.row);
-        Vector3 up = {0.0f, 1.0f, 0.0f};
 
         for (int row = min_row; row <= max_row; ++row)
         {
             for (int col = min_col; col <= max_col; ++col)
             {
-                auto normal = gridSquares[row][col].heightMap.GetNormal();
-                // Calculate the angle between the normal and the up vector
-                float dotProduct = normal.x * up.x + normal.y * up.y + normal.z * up.z;
-                float angle = std::acos(dotProduct) * RAD2DEG; // Convert to degrees
-
-                if (angle > 45.0f)
+                const auto normal = gridSquares[row][col].heightMap.GetNormal();
+                if (slopeAngleDegrees(normal) > kMaxWalkableSlopeDegrees)
                 {
                     gridSquares[row][col].occupied = occupied;
                     gridSquares[row][col].drawDebug = occupied;
@@ -374,12 +379,7 @@ namespace sage
 
     float calculateTerrainCost(const Vector3& normal, float maxSlopeAngle)
     {
-        // The up vector
-        Vector3 up = {0.0f, 1.0f, 0.0f};
-
-        // Calculate the angle between the normal and the up vector
-        float dotProduct = normal.x * up.x + normal.y * up.y + normal.z * up.z;
-        float angle = std::acos(dotProduct) * RAD2DEG; // Convert to degrees
+        const float angle = slopeAngleDegrees(normal);
 
         // If the angle is greater than the max slope angle, return a very high cost
         if (angle > maxSlopeAngle)

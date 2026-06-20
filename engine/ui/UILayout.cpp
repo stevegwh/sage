@@ -18,19 +18,6 @@
 
 namespace sage
 {
-    namespace
-    {
-        // Cleaned-up replacement for the previous reinterpret_cast<T*>(child.get()) idiom
-        // — children are inserted via type-specific Create* methods so the static_cast is
-        // sound, but we keep a debug-only dynamic_cast assert to catch regressions.
-        template <typename T>
-        T* downcast(TableElement* e)
-        {
-            assert(dynamic_cast<T*>(e) != nullptr);
-            return static_cast<T*>(e);
-        }
-    } // namespace
-
     std::vector<float> distributeAlong(float availableSize, const std::vector<SizeRequest>& requests)
     {
         float totalRequestedPercent = 0.0f;

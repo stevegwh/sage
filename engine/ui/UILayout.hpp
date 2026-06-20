@@ -10,6 +10,7 @@
 
 #include "raylib.h"
 
+#include <cassert>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -204,4 +205,14 @@ namespace sage
     // share the leftover percent equally; explicit-percent children take their
     // requested share. Returned sizes are ceil-rounded.
     std::vector<float> distributeAlong(float availableSize, const std::vector<SizeRequest>& requests);
+
+    // Checked downcast for the TableElement hierarchy: children are inserted via
+    // type-specific Create* methods so the static_cast is sound, but we keep a
+    // debug-only dynamic_cast assert to catch regressions.
+    template <typename T>
+    T* downcast(TableElement* e)
+    {
+        assert(dynamic_cast<T*>(e) != nullptr);
+        return static_cast<T*>(e);
+    }
 } // namespace sage

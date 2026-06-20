@@ -9,6 +9,7 @@
 #include "GameUIEngine.hpp"
 #include "Scrollbar.hpp"
 #include "UIElements.hpp"
+#include "UILayout.hpp"
 
 #include "raylib.h"
 #include "raymath.h"
@@ -35,8 +36,7 @@ namespace sage
         for (const auto& p : children)
         {
             // Children of a Window are always Tables (added via CreateTable*).
-            assert(dynamic_cast<Table*>(p.get()) != nullptr);
-            auto* table = static_cast<Table*>(p.get());
+            auto* table = downcast<Table>(p.get());
             requests.push_back({table->autoSize, table->requestedHeight});
         }
         auto sizes = distributeAlong(availableHeight, requests);
@@ -44,8 +44,7 @@ namespace sage
         float currentY = startY;
         for (size_t i = 0; i < children.size(); ++i)
         {
-            assert(dynamic_cast<Table*>(children[i].get()) != nullptr);
-            auto* table = static_cast<Table*>(children[i].get());
+            auto* table = downcast<Table>(children[i].get());
             table->parent = this;
             table->rec = rec;
 

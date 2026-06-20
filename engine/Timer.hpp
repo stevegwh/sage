@@ -1,5 +1,7 @@
 #pragma once
 
+namespace sage
+{
 class Timer
 {
     bool active = false;
@@ -94,3 +96,4 @@ class Timer
         }
     }
 };
+} // namespace sage
