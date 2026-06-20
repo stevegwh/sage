@@ -199,6 +199,7 @@ namespace sage::editor
         [[nodiscard]] EntityState capture(entt::entity entity);
         [[nodiscard]] std::vector<EntityState> captureAll(const std::vector<entt::entity>& entities);
         void gatherSubtree(entt::entity root, std::vector<entt::entity>& out) const;
+        [[nodiscard]] std::vector<entt::entity> gatherSubtrees(const std::vector<entt::entity>& roots) const;
         void pushEntry(EditAction action, std::vector<EntityState> before, std::vector<EntityState> after);
 
         void applyEntry(const HistoryEntry& entry, bool undo);
@@ -207,7 +208,6 @@ namespace sage::editor
         void applyParent(
             const EntityState& target, const std::unordered_map<std::uint64_t, entt::entity>& idMap) const;
         void destroySingle(entt::entity entity) const;
-        void releaseNavigation(entt::entity entity) const;
-        void markNavigation(entt::entity entity) const;
+        void setNavigationOccupied(entt::entity entity, bool occupied) const;
     };
 } // namespace sage::editor

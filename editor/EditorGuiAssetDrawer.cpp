@@ -39,6 +39,18 @@ namespace sage::editor
         constexpr const char* FLATPACK_RENAME_POPUP = "Rename Flatpack";
         constexpr const char* FLATPACK_DELETE_POPUP = "Delete Flatpack";
 
+        template <typename Matches>
+        std::vector<std::size_t> FilteredIndices(const std::size_t count, Matches matches)
+        {
+            std::vector<std::size_t> indices;
+            indices.reserve(count);
+            for (std::size_t i = 0; i < count; ++i)
+            {
+                if (matches(i)) indices.push_back(i);
+            }
+            return indices;
+        }
+
         Shader LoadThumbnailShader()
         {
             auto shader = ResourceManager::GetInstance().ShaderLoad(
@@ -214,9 +226,8 @@ namespace sage::editor
 
         if (ImGui::Begin("Asset Drawer", nullptr, windowFlags))
         {
-            const bool showDefaults = selectedAssetIndex.has_value();
-            const bool splitView =
-                showDefaults && ImGui::BeginTable("asset_drawer_split", 2, ImGuiTableFlags_SizingStretchProp);
+            const bool splitView = selectedAssetIndex.has_value() &&
+                                   ImGui::BeginTable("asset_drawer_split", 2, ImGuiTableFlags_SizingStretchProp);
             if (splitView)
             {
                 ImGui::TableSetupColumn("Browser", ImGuiTableColumnFlags_WidthStretch);
@@ -339,9 +350,15 @@ namespace sage::editor
     void EditorGui::drawAssetRenamePopup()
     {
         if (!renamingAssetIndex.has_value()) return;
+        const auto clearRename = [this]() {
+            renamingAssetIndex.reset();
+            assetRenameInput.clear();
+            assetRenameStatus.clear();
+            assetRenamePopupOpenRequested = false;
+        };
         if (*renamingAssetIndex >= assetEntries.size())
         {
-            renamingAssetIndex.reset();
+            clearRename();
             return;
         }
 
@@ -377,10 +394,7 @@ namespace sage::editor
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
             {
-                renamingAssetIndex.reset();
-                assetRenameInput.clear();
-                assetRenameStatus.clear();
-                assetRenamePopupOpenRequested = false;
+                clearRename();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -394,8 +408,7 @@ namespace sage::editor
                     {
                         assetEntries[index] = std::move(*result.updatedEntry);
                     }
-                    renamingAssetIndex.reset();
-                    assetRenameInput.clear();
+                    clearRename();
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -405,10 +418,7 @@ namespace sage::editor
 
         if (!open)
         {
-            renamingAssetIndex.reset();
-            assetRenameInput.clear();
-            assetRenameStatus.clear();
-            assetRenamePopupOpenRequested = false;
+            clearRename();
         }
     }
 
@@ -425,9 +435,15 @@ namespace sage::editor
     void EditorGui::drawFlatpackRenamePopup()
     {
         if (!renamingFlatpackIndex.has_value()) return;
+        const auto clearRename = [this]() {
+            renamingFlatpackIndex.reset();
+            flatpackRenameInput.clear();
+            flatpackRenameStatus.clear();
+            flatpackRenamePopupOpenRequested = false;
+        };
         if (*renamingFlatpackIndex >= flatpackEntries.size())
         {
-            renamingFlatpackIndex.reset();
+            clearRename();
             return;
         }
 
@@ -461,9 +477,7 @@ namespace sage::editor
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
             {
-                renamingFlatpackIndex.reset();
-                flatpackRenameInput.clear();
-                flatpackRenameStatus.clear();
+                clearRename();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -476,8 +490,7 @@ namespace sage::editor
                 flatpackRenameStatus = std::move(result.message);
                 if (result.renamed)
                 {
-                    renamingFlatpackIndex.reset();
-                    flatpackRenameInput.clear();
+                    clearRename();
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -487,10 +500,7 @@ namespace sage::editor
 
         if (!open)
         {
-            renamingFlatpackIndex.reset();
-            flatpackRenameInput.clear();
-            flatpackRenameStatus.clear();
-            flatpackRenamePopupOpenRequested = false;
+            clearRename();
         }
     }
 
@@ -505,9 +515,13 @@ namespace sage::editor
     void EditorGui::drawFlatpackDeleteConfirmation()
     {
         if (!deletingFlatpackIndex.has_value()) return;
+        const auto clearDelete = [this]() {
+            deletingFlatpackIndex.reset();
+            flatpackDeletePopupOpenRequested = false;
+        };
         if (*deletingFlatpackIndex >= flatpackEntries.size())
         {
-            deletingFlatpackIndex.reset();
+            clearDelete();
             return;
         }
 
@@ -534,14 +548,14 @@ namespace sage::editor
                 // The delete callback refreshes the catalog (SetFlatpacks swaps
                 // out flatpackEntries), so copy the path before invoking.
                 const auto path = flatpack.path;
-                deletingFlatpackIndex.reset();
+                clearDelete();
                 ImGui::CloseCurrentPopup();
                 if (onFlatpackDeleteCb) onFlatpackDeleteCb(path);
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2{120.0f, 0.0f}))
             {
-                deletingFlatpackIndex.reset();
+                clearDelete();
                 ImGui::CloseCurrentPopup();
             }
 
@@ -550,8 +564,7 @@ namespace sage::editor
 
         if (!open)
         {
-            deletingFlatpackIndex.reset();
-            flatpackDeletePopupOpenRequested = false;
+            clearDelete();
         }
     }
 
@@ -640,17 +653,11 @@ namespace sage::editor
         ImGui::Spacing();
 
         // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
-        std::vector<std::size_t> visibleAssets;
-        visibleAssets.reserve(assetEntries.size());
-        for (std::size_t i = 0; i < assetEntries.size(); ++i)
-        {
+        const auto visibleAssets = FilteredIndices(assetEntries.size(), [this](const std::size_t i) {
             const auto& asset = assetEntries[i];
-            if (assetFilter.PassFilter(asset.displayName.c_str()) ||
-                assetFilter.PassFilter(asset.modelKey.c_str()))
-            {
-                visibleAssets.push_back(i);
-            }
-        }
+            return assetFilter.PassFilter(asset.displayName.c_str()) ||
+                   assetFilter.PassFilter(asset.modelKey.c_str());
+        });
 
         if (visibleAssets.empty())
         {
@@ -761,15 +768,9 @@ namespace sage::editor
         ImGui::Spacing();
 
         // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
-        std::vector<std::size_t> visibleFlatpacks;
-        visibleFlatpacks.reserve(flatpackEntries.size());
-        for (std::size_t i = 0; i < flatpackEntries.size(); ++i)
-        {
-            if (flatpackFilter.PassFilter(flatpackEntries[i].displayName.c_str()))
-            {
-                visibleFlatpacks.push_back(i);
-            }
-        }
+        const auto visibleFlatpacks = FilteredIndices(flatpackEntries.size(), [this](const std::size_t i) {
+            return flatpackFilter.PassFilter(flatpackEntries[i].displayName.c_str());
+        });
 
         if (visibleFlatpacks.empty())
         {

@@ -54,7 +54,7 @@ namespace sage::editor
 
     // ===== Select Mode =============================================================
 
-    std::string EditorSelectState::GetName(const EditorModeStateMachine& machine)
+    std::string EditorSelectState::GetName(const EditorModeStateMachine&)
     {
         return "Select";
     }
@@ -238,8 +238,6 @@ namespace sage::editor
 
         machine.hideDeleteConfirmation();
         machine.ChangeState(EditorEditState{.entities = selectedEntities});
-        machine.refreshOverlay();
-        machine.refreshSceneWindows();
     }
 
     bool EditorSelectState::HandleEscape(EditorModeStateMachine&)
@@ -252,7 +250,7 @@ namespace sage::editor
     }
 
     // ===== Place Mode ==============================================================
-    std::string EditorPlaceState::GetName(const EditorModeStateMachine& machine)
+    std::string EditorPlaceState::GetName(const EditorModeStateMachine&)
     {
         return "Place";
     }
@@ -266,7 +264,7 @@ namespace sage::editor
         {
             machine.selectPlaceableAsset(placeableIndex);
         }
-        ResetPlacementTransform(machine);
+        machine.placement().ResetTransform();
         machine.refreshOverlay();
     }
 
@@ -337,11 +335,6 @@ namespace sage::editor
         return true;
     }
 
-    void EditorPlaceState::ResetPlacementTransform(EditorModeStateMachine& machine)
-    {
-        machine.placement().ResetTransform();
-    }
-
     void EditorPlaceState::AdjustPlacementRotation(EditorModeStateMachine& machine, const float amount)
     {
         machine.placement().AdjustRotation(amount);
@@ -375,7 +368,6 @@ namespace sage::editor
         machine.refreshSceneWindows();
         machine.focusHierarchyOnEntity(*entity);
         machine.ChangeState(EditorSelectState{});
-        machine.refreshOverlay();
         return true;
     }
 
@@ -389,9 +381,8 @@ namespace sage::editor
 
     bool EditorPlaceState::HandleEscape(EditorModeStateMachine& machine)
     {
-        ResetPlacementTransform(machine);
+        machine.placement().ResetTransform();
         machine.ChangeState(EditorSelectState{});
-        machine.refreshOverlay();
         machine.refreshSceneWindows();
         return true;
     }
@@ -615,7 +606,6 @@ namespace sage::editor
     void EditorEditState::FinishEditSelectedTransform(EditorModeStateMachine& machine)
     {
         machine.ChangeState(EditorSelectState{});
-        machine.refreshOverlay();
         machine.refreshSceneWindows();
     }
 
@@ -626,7 +616,6 @@ namespace sage::editor
             machine.history().Rollback();
         }
         machine.ChangeState(EditorSelectState{});
-        machine.refreshOverlay();
         machine.refreshSceneWindows();
         return true;
     }
@@ -896,7 +885,6 @@ namespace sage::editor
             return true;
         }
         machine.ChangeState(EditorSelectState{});
-        machine.refreshOverlay();
         machine.refreshSceneWindows();
         return true;
     }
@@ -960,11 +948,6 @@ namespace sage::editor
         return *scene.selection;
     }
 
-    const EditorSelection& EditorModeStateMachine::selection() const
-    {
-        return *scene.selection;
-    }
-
     void EditorModeStateMachine::hideDeleteConfirmation() const
     {
         scene.gui->HideDeleteConfirmation();
@@ -973,11 +956,6 @@ namespace sage::editor
     void EditorModeStateMachine::showDeleteConfirmationForSelection() const
     {
         scene.gui->ShowDeleteConfirmation(scene.describeSelectedSceneEntity());
-    }
-
-    void EditorModeStateMachine::deleteEntityAndChildren(const entt::entity entity) const
-    {
-        scene.entityOperations->DeleteEntityAndChildren(entity);
     }
 
     void EditorModeStateMachine::deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const
@@ -994,7 +972,7 @@ namespace sage::editor
         history().RecordDestroy(EditAction::Delete, deletable);
         for (const auto entity : deletable)
         {
-            deleteEntityAndChildren(entity);
+            scene.entityOperations->DeleteEntityAndChildren(entity);
         }
     }
 
@@ -1016,11 +994,6 @@ namespace sage::editor
     void EditorModeStateMachine::focusSelectedObjectInHierarchy() const
     {
         scene.focusSelectedObjectInHierarchy();
-    }
-
-    bool EditorModeStateMachine::canSelectPlaceable(const std::size_t index) const
-    {
-        return index < scene.assetCatalog->Size();
     }
 
     void EditorModeStateMachine::selectPlaceableAsset(const std::size_t index)
@@ -1070,22 +1043,12 @@ namespace sage::editor
             renderPosition, *scene.sys->camera->getRaylibCam(), viewport.x, viewport.y);
     }
 
-    void EditorModeStateMachine::enableCollideableStaticOverride(const entt::entity entity) const
-    {
-        EnableCollideableStaticOverride(*scene.sys->registry, entity);
-    }
-
-    void EditorModeStateMachine::disableCollideableStaticOverride(const entt::entity entity) const
-    {
-        DisableCollideableStaticOverride(*scene.sys->registry, entity);
-    }
-
     void EditorModeStateMachine::enableCollideableStaticOverride(
         const std::vector<entt::entity>& entities) const
     {
         for (const auto entity : entities)
         {
-            enableCollideableStaticOverride(entity);
+            EnableCollideableStaticOverride(*scene.sys->registry, entity);
         }
     }
 
@@ -1094,13 +1057,13 @@ namespace sage::editor
     {
         for (const auto entity : entities)
         {
-            disableCollideableStaticOverride(entity);
+            DisableCollideableStaticOverride(*scene.sys->registry, entity);
         }
     }
 
     void EditorModeStateMachine::SelectPlaceable(const std::size_t index)
     {
-        if (!canSelectPlaceable(index)) return;
+        if (index >= scene.assetCatalog->Size()) return;
         ChangeState(EditorPlaceState{.placeableIndex = index});
     }
 
@@ -1171,16 +1134,6 @@ namespace sage::editor
     std::string EditorModeStateMachine::GetStateName() const
     {
         return std::visit([this](auto& current) { return current.GetName(*this); }, currentState);
-    }
-
-    EditorEditState* EditorModeStateMachine::CurrentEditState()
-    {
-        return std::get_if<EditorEditState>(&currentState);
-    }
-
-    const EditorEditState* EditorModeStateMachine::CurrentEditState() const
-    {
-        return std::get_if<EditorEditState>(&currentState);
     }
 
     EditorTerrainSculptState* EditorModeStateMachine::CurrentTerrainSculptState()

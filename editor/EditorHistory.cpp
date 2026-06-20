@@ -197,6 +197,14 @@ namespace sage::editor
         }
     }
 
+    std::vector<entt::entity> EditorHistory::gatherSubtrees(const std::vector<entt::entity>& roots) const
+    {
+        std::vector<entt::entity> entities;
+        for (const auto root : roots)
+            gatherSubtree(root, entities);
+        return entities;
+    }
+
     EditorHistory::EntityState EditorHistory::capture(const entt::entity entity)
     {
         auto& reg = registry();
@@ -352,10 +360,7 @@ namespace sage::editor
             }
             else
             {
-                EntityState gone;
-                gone.persistentId = before.persistentId;
-                gone.exists = false;
-                after.push_back(gone);
+                after.push_back(EntityState{.persistentId = before.persistentId});
             }
         }
 
@@ -401,11 +406,7 @@ namespace sage::editor
 
     void EditorHistory::RecordCreate(const EditAction action, const std::vector<entt::entity>& roots)
     {
-        std::vector<entt::entity> entities;
-        for (const auto root : roots)
-        {
-            gatherSubtree(root, entities);
-        }
+        const auto entities = gatherSubtrees(roots);
         if (entities.empty()) return;
 
         std::vector<EntityState> before;
@@ -414,10 +415,7 @@ namespace sage::editor
         after.reserve(entities.size());
         for (const auto entity : entities)
         {
-            EntityState absent;
-            absent.persistentId = ensureId(entity);
-            absent.exists = false;
-            before.push_back(absent);
+            before.push_back(EntityState{.persistentId = ensureId(entity)});
             after.push_back(capture(entity));
         }
         pushEntry(action, std::move(before), std::move(after));
@@ -425,11 +423,7 @@ namespace sage::editor
 
     void EditorHistory::RecordDestroy(const EditAction action, const std::vector<entt::entity>& roots)
     {
-        std::vector<entt::entity> entities;
-        for (const auto root : roots)
-        {
-            gatherSubtree(root, entities);
-        }
+        const auto entities = gatherSubtrees(roots);
         if (entities.empty()) return;
 
         std::vector<EntityState> before;
@@ -439,10 +433,7 @@ namespace sage::editor
         for (const auto entity : entities)
         {
             before.push_back(capture(entity));
-            EntityState absent;
-            absent.persistentId = before.back().persistentId;
-            absent.exists = false;
-            after.push_back(absent);
+            after.push_back(EntityState{.persistentId = before.back().persistentId});
         }
         pushEntry(action, std::move(before), std::move(after));
     }
@@ -623,7 +614,7 @@ namespace sage::editor
 
         // Collideable: release the cells the current box occupies before swapping it,
         // then re-mark from the restored box (handled after the replace, below).
-        releaseNavigation(entity);
+        setNavigationOccupied(entity, false);
         if (target.hasCollideable)
             reg.emplace_or_replace<Collideable>(entity, target.collideable);
         else if (reg.all_of<Collideable>(entity))
@@ -736,7 +727,7 @@ namespace sage::editor
         else if (reg.all_of<MetaData>(entity))
             reg.remove<MetaData>(entity);
 
-        markNavigation(entity);
+        setNavigationOccupied(entity, true);
     }
 
     void EditorHistory::applyParent(
@@ -774,11 +765,11 @@ namespace sage::editor
     {
         // TransformSystem's on_destroy hook detaches this entity from its parent and
         // orphans its children with valid-guards, so order across a subtree is safe.
-        releaseNavigation(entity);
+        setNavigationOccupied(entity, false);
         registry().destroy(entity);
     }
 
-    void EditorHistory::releaseNavigation(const entt::entity entity) const
+    void EditorHistory::setNavigationOccupied(const entt::entity entity, const bool occupied) const
     {
         auto& reg = registry();
         if (!reg.valid(entity) || !reg.all_of<Collideable>(entity)) return;
@@ -786,19 +777,8 @@ namespace sage::editor
         const auto* obstacle = reg.try_get<NavigationObstacle>(entity);
         if (obstacle != nullptr && obstacle->active)
         {
-            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
-        }
-    }
-
-    void EditorHistory::markNavigation(const entt::entity entity) const
-    {
-        auto& reg = registry();
-        if (!reg.valid(entity) || !reg.all_of<Collideable>(entity)) return;
-        const auto& collideable = reg.get<Collideable>(entity);
-        const auto* obstacle = reg.try_get<NavigationObstacle>(entity);
-        if (obstacle != nullptr && obstacle->active)
-        {
-            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
+            sys->navigationGridSystem->MarkSquareAreaOccupied(
+                collideable.worldBoundingBox, occupied, entity);
         }
     }
 } // namespace sage::editor

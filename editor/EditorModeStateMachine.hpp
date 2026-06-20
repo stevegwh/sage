@@ -63,7 +63,6 @@ namespace sage::editor
         void Update(EditorModeStateMachine& machine);
         void Draw3D(const EditorModeStateMachine& machine) const;
         bool SelectSceneEntityUnderCursor(EditorModeStateMachine& machine);
-        void ResetPlacementTransform(EditorModeStateMachine& machine);
         void AdjustPlacementRotation(EditorModeStateMachine& machine, float amount);
         void AdjustPlacementScale(EditorModeStateMachine& machine, float amount);
         [[nodiscard]] bool PlaceSelectedMesh(EditorModeStateMachine& machine);
@@ -145,16 +144,13 @@ namespace sage::editor
         [[nodiscard]] EditorGui::DeleteConfirmationAction consumeDeleteConfirmationAction();
         [[nodiscard]] std::optional<entt::entity> pickSceneEntityUnderCursor() const;
         [[nodiscard]] EditorSelection& selection();
-        [[nodiscard]] const EditorSelection& selection() const;
         void hideDeleteConfirmation() const;
         void showDeleteConfirmationForSelection() const;
-        void deleteEntityAndChildren(entt::entity entity) const;
         void deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const;
         void adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const;
         void focusHierarchyOnEntity(entt::entity entity) const;
         void focusSelectedObject() const;
         void focusSelectedObjectInHierarchy() const;
-        [[nodiscard]] bool canSelectPlaceable(std::size_t index) const;
         void selectPlaceableAsset(std::size_t index);
         [[nodiscard]] const std::optional<Vector3>& snappedPlacementPosition() const;
         [[nodiscard]] bool hasTransform(entt::entity entity) const;
@@ -165,8 +161,6 @@ namespace sage::editor
         // Mouse ray through the render viewport; nullopt when the cursor is
         // outside it.
         [[nodiscard]] std::optional<Ray> viewportMouseRay() const;
-        void enableCollideableStaticOverride(entt::entity entity) const;
-        void disableCollideableStaticOverride(entt::entity entity) const;
         void enableCollideableStaticOverride(const std::vector<entt::entity>& entities) const;
         void disableCollideableStaticOverride(const std::vector<entt::entity>& entities) const;
 
@@ -198,8 +192,6 @@ namespace sage::editor
         [[nodiscard]] bool IsPlaceMode() const;
         [[nodiscard]] bool IsEditMode() const;
         [[nodiscard]] std::string GetStateName() const;
-        [[nodiscard]] EditorEditState* CurrentEditState();
-        [[nodiscard]] const EditorEditState* CurrentEditState() const;
         [[nodiscard]] EditorTerrainSculptState* CurrentTerrainSculptState();
 
         EditorModeStateMachine(EditorScene& scene, EditorTransformEditor& transformEditor);
