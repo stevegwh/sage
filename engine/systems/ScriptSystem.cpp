@@ -43,8 +43,8 @@ namespace sage
         {
             Subscription subscription;
             sol::protected_function callback;
-            ScriptEventSource source = ScriptEventSource::Collision;
-            entt::entity sourceEntity = entt::null;
+            ScriptEventSource source;
+            entt::entity sourceEntity;
         };
 
         struct ScriptInstance
@@ -114,7 +114,11 @@ namespace sage
             triggerEnterSub.UnSubscribe();
             triggerStaySub.UnSubscribe();
             triggerExitSub.UnSubscribe();
-            unbindAllCallbacks();
+            for (auto& [entity, instance] : instances)
+            {
+                unbindMovementCallbacks(instance);
+                unbindEventCallbacks(instance);
+            }
         }
 
         // Routes a CollisionSystem trigger event to the trigger entity's script, passing
@@ -253,10 +257,13 @@ namespace sage
             const entt::entity sourceEntity)
         {
             const std::uint32_t id = ++instance.nextEventSubscriptionId;
-            auto& event = instance.eventSubscriptions[id];
-            event.callback = std::move(callback);
-            event.source = source;
-            event.sourceEntity = sourceEntity;
+            instance.eventSubscriptions.emplace(
+                id,
+                ScriptEventSubscription{
+                    .subscription = {},
+                    .callback = std::move(callback),
+                    .source = source,
+                    .sourceEntity = sourceEntity});
             return id;
         }
 
@@ -619,23 +626,6 @@ namespace sage
                     [this](const std::uint32_t e) {
                         return registry->try_get<Animation>(static_cast<entt::entity>(e));
                     }));
-
-            // Temporary compatibility aliases for scripts authored before the API
-            // moved under `sage`. LuaLS advertises only the namespaced surface.
-            for (const char* name : {
-                     "FindFirstWithArchetype",
-                     "MoveToLocation",
-                     "TryPathfindToLocation",
-                     "FindFirstWithTag",
-                     "HasTag",
-                     "GetTags",
-                     "GetArchetype",
-                     "GetTransform",
-                     "GetCollideable",
-                     "GetAnimation"})
-            {
-                env[name] = api[name];
-            }
         }
 
         template <typename... Args>
@@ -697,14 +687,6 @@ namespace sage
             instances.erase(it);
         }
 
-        void unbindAllCallbacks()
-        {
-            for (auto& [entity, instance] : instances)
-            {
-                unbindMovementCallbacks(instance);
-                unbindEventCallbacks(instance);
-            }
-        }
     };
 
     void ScriptSystem::Update()
@@ -790,7 +772,6 @@ namespace sage
 
     ScriptSystem::~ScriptSystem()
     {
-        impl->unbindAllCallbacks();
         registry->on_destroy<ScriptComponent>().disconnect<&ScriptSystem::onScriptComponentDestroyed>(this);
         registry->on_construct<MoveableActor>().disconnect<&ScriptSystem::onMoveableActorConstructed>(this);
         registry->on_destroy<MoveableActor>().disconnect<&ScriptSystem::onMoveableActorDestroyed>(this);

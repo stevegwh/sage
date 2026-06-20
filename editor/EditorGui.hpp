@@ -139,8 +139,7 @@ namespace sage
                 bool editModelDefaultsClicked = false;
                 // Renderable's model dropdown requested a coordinated model swap.
                 std::optional<std::string> selectedModelKey;
-                // A file field requested the host's file picker.
-                bool browseFileClicked = false;
+                bool selectScriptFile = false;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;
             };

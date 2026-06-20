@@ -148,8 +148,7 @@ namespace sage::editor
             result.label = fields.front().label;
             result.editable =
                 std::ranges::all_of(fields, [](const InspectorField& field) { return field.editable; });
-            result.openableFile = fields.front().openableFile;
-            result.browsableFile = fields.front().browsableFile;
+            result.scriptFile = fields.front().scriptFile;
 
             if (!std::ranges::all_of(fields, [&fields](const InspectorField& field) {
                     return field.value.index() == fields.front().value.index();

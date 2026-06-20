@@ -710,7 +710,7 @@ namespace sage
             history->Commit();
         }
 
-        if (result.browseFileClicked && scriptBrowser)
+        if (result.selectScriptFile && scriptBrowser)
         {
             std::error_code ec;
             std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);

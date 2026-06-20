@@ -567,20 +567,18 @@ namespace sage::editor
             const LeafField<std::string>& field,
             const bool editable,
             const bool mixed,
-            const bool openableFile,
-            const bool browsableFile,
-            bool& browseFile)
+            const bool scriptFile,
+            bool& selectScriptFile)
         {
             std::string value = field.data ? *field.data : std::string{};
             bool changed = false;
-            const int buttonCount = static_cast<int>(openableFile) + static_cast<int>(browsableFile);
-            const float buttonWidth = buttonCount > 0 ? ImGui::GetFrameHeight() : 0.0f;
-            const float spacing = buttonCount > 0 ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
-            const float inputWidth = buttonCount > 0
+            const float buttonWidth = scriptFile ? ImGui::GetFrameHeight() : 0.0f;
+            const float spacing = scriptFile ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
+            const float inputWidth = scriptFile
                                          ? std::max(
                                                1.0f,
-                                               ImGui::GetContentRegionAvail().x - buttonWidth * buttonCount -
-                                                   spacing * buttonCount)
+                                               ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f -
+                                                   spacing * 2.0f)
                                          : -FLT_MIN;
             if (mixed)
             {
@@ -602,13 +600,13 @@ namespace sage::editor
                     });
             }
 
-            if (browsableFile)
+            if (scriptFile)
             {
                 ImGui::SameLine(0.0f, spacing);
                 ImGui::BeginDisabled(!editable);
                 if (ImGui::Button(ICON_FA_FOLDER_OPEN "##browse_file", ImVec2{buttonWidth, 0.0f}))
                 {
-                    browseFile = true;
+                    selectScriptFile = true;
                 }
                 ImGui::EndDisabled();
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
@@ -617,7 +615,7 @@ namespace sage::editor
                 }
             }
 
-            if (openableFile)
+            if (scriptFile)
             {
                 ImGui::SameLine(0.0f, spacing);
                 std::error_code ec;
@@ -779,7 +777,7 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldRow(const InspectorField& field, bool& browseFile)
+        bool DrawInspectorFieldRow(const InspectorField& field, bool& selectScriptFile)
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -796,9 +794,8 @@ namespace sage::editor
                             value,
                             field.editable,
                             field.mixed,
-                            field.openableFile,
-                            field.browsableFile,
-                            browseFile);
+                            field.scriptFile,
+                            selectScriptFile);
                     else
                         changed = DrawInspectorFieldWidget(value, field.editable, field.mixed);
                 },
@@ -840,7 +837,7 @@ namespace sage::editor
             std::optional<InspectorComponentsResult::ComponentMoveRequest>& moveComponent,
             bool& editModelDefaults,
             std::optional<std::string>& selectedModelKey,
-            bool& browseFile)
+            bool& selectScriptFile)
         {
             ImGui::PushID(component.displayName.c_str());
             bool changed = false;
@@ -929,7 +926,7 @@ namespace sage::editor
                     }
                     for (const auto& field : component.fields)
                     {
-                        changed |= DrawInspectorFieldRow(field, browseFile);
+                        changed |= DrawInspectorFieldRow(field, selectScriptFile);
                     }
                     ImGui::EndTable();
                 }
@@ -947,12 +944,17 @@ namespace sage::editor
         std::optional<EditorComponentId> removeComponent;
         std::optional<InspectorComponentsResult::ComponentMoveRequest> moveComponent;
         bool editModelDefaults = false;
-        bool browseFile = false;
+        bool selectScriptFile = false;
         std::optional<std::string> selectedModelKey;
         for (const auto& component : components)
         {
             changed |= DrawInspectorComponent(
-                component, removeComponent, moveComponent, editModelDefaults, selectedModelKey, browseFile);
+                component,
+                removeComponent,
+                moveComponent,
+                editModelDefaults,
+                selectedModelKey,
+                selectScriptFile);
         }
         return {
             .changed = changed,
@@ -961,7 +963,7 @@ namespace sage::editor
             .removeComponent = std::move(removeComponent),
             .moveComponent = std::move(moveComponent),
             .editModelDefaults = editModelDefaults,
-            .browseFile = browseFile,
+            .selectScriptFile = selectScriptFile,
             .selectedModelKey = std::move(selectedModelKey)};
     }
 } // namespace sage::editor

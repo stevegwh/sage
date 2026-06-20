@@ -121,7 +121,7 @@ namespace sage::editor
             .addComponent = addComponent,
             .editModelDefaultsClicked = inspectorResult.editModelDefaults,
             .selectedModelKey = std::move(inspectorResult.selectedModelKey),
-            .browseFileClicked = inspectorResult.browseFile,
+            .selectScriptFile = inspectorResult.selectScriptFile,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 
