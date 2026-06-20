@@ -26,7 +26,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 namespace sage
 {
@@ -56,19 +55,6 @@ namespace sage
             sol::protected_function update;
             sol::protected_function onEnable;
             sol::protected_function onDisable;
-            sol::protected_function onTriggerEnter;
-            sol::protected_function onTriggerUpdate;
-            sol::protected_function onTriggerLeave;
-            sol::protected_function onMovementStarted;
-            sol::protected_function onDestinationReached;
-            sol::protected_function onDestinationUnreachable;
-            sol::protected_function onMovementCancelled;
-            sol::protected_function onPathChanged;
-            Subscription movementStartedSub;
-            Subscription destinationReachedSub;
-            Subscription destinationUnreachableSub;
-            Subscription movementCancelledSub;
-            Subscription pathChangedSub;
             std::unordered_map<std::uint32_t, ScriptEventSubscription> eventSubscriptions;
             std::uint32_t nextEventSubscriptionId = 0;
             bool started = false;
@@ -85,111 +71,20 @@ namespace sage
         std::unordered_map<entt::entity, ScriptInstance> instances;
         entt::registry* registry;
         EngineSystems* sys;
-        Subscription triggerEnterSub;
-        Subscription triggerStaySub;
-        Subscription triggerExitSub;
 
         Impl(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
         {
             lua.open_libraries(
                 sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::os);
             bindCoreTypes();
-
-            triggerEnterSub = sys->collisionSystem->onTriggerEnter.Subscribe(
-                [this](const entt::entity trigger, const entt::entity other) {
-                    callTriggerCallback(trigger, other, &ScriptInstance::onTriggerEnter);
-                });
-            triggerStaySub = sys->collisionSystem->onTriggerStay.Subscribe(
-                [this](const entt::entity trigger, const entt::entity other) {
-                    callTriggerCallback(trigger, other, &ScriptInstance::onTriggerUpdate);
-                });
-            triggerExitSub = sys->collisionSystem->onTriggerExit.Subscribe(
-                [this](const entt::entity trigger, const entt::entity other) {
-                    callTriggerCallback(trigger, other, &ScriptInstance::onTriggerLeave);
-                });
         }
 
         ~Impl()
         {
-            triggerEnterSub.UnSubscribe();
-            triggerStaySub.UnSubscribe();
-            triggerExitSub.UnSubscribe();
             for (auto& [entity, instance] : instances)
             {
-                unbindMovementCallbacks(instance);
                 unbindEventCallbacks(instance);
             }
-        }
-
-        // Routes a CollisionSystem trigger event to the trigger entity's script, passing
-        // the overlapping entity's id. Instances are created lazily in Update(), so events
-        // fired before the script's first tick (or while it is disabled) are dropped.
-        void callTriggerCallback(
-            const entt::entity trigger, const entt::entity other, sol::protected_function ScriptInstance::*fn)
-        {
-            const auto it = instances.find(trigger);
-            if (it == instances.end() || !it->second.wasEnabled) return;
-            call(it->second, it->second.*fn, static_cast<std::uint32_t>(other));
-        }
-
-        void callMovementCallback(
-            const entt::entity entity, sol::protected_function ScriptInstance::*fn)
-        {
-            const auto it = instances.find(entity);
-            if (it == instances.end() || !it->second.wasEnabled) return;
-            call(it->second, it->second.*fn);
-        }
-
-        void callDestinationUnreachable(const entt::entity entity, const Vector3 destination)
-        {
-            const auto it = instances.find(entity);
-            if (it == instances.end() || !it->second.wasEnabled) return;
-            call(it->second, it->second.onDestinationUnreachable, destination);
-        }
-
-        static void unbindMovementCallbacks(ScriptInstance& instance)
-        {
-            instance.movementStartedSub.UnSubscribe();
-            instance.destinationReachedSub.UnSubscribe();
-            instance.destinationUnreachableSub.UnSubscribe();
-            instance.movementCancelledSub.UnSubscribe();
-            instance.pathChangedSub.UnSubscribe();
-        }
-
-        void bindMovementCallbacks(const entt::entity entity)
-        {
-            const auto instanceIt = instances.find(entity);
-            auto* moveable = registry->try_get<MoveableActor>(entity);
-            if (instanceIt == instances.end() || moveable == nullptr) return;
-
-            auto& instance = instanceIt->second;
-            unbindMovementCallbacks(instance);
-            instance.movementStartedSub = moveable->onStartMovement.Subscribe(
-                [this](const entt::entity actor) {
-                    callMovementCallback(actor, &ScriptInstance::onMovementStarted);
-                });
-            instance.destinationReachedSub = moveable->onDestinationReached.Subscribe(
-                [this](const entt::entity actor) {
-                    callMovementCallback(actor, &ScriptInstance::onDestinationReached);
-                });
-            instance.destinationUnreachableSub = moveable->onDestinationUnreachable.Subscribe(
-                [this](const entt::entity actor, const Vector3 destination) {
-                    callDestinationUnreachable(actor, destination);
-                });
-            instance.movementCancelledSub = moveable->onMovementCancel.Subscribe(
-                [this](const entt::entity actor) {
-                    callMovementCallback(actor, &ScriptInstance::onMovementCancelled);
-                });
-            instance.pathChangedSub = moveable->onPathChanged.Subscribe(
-                [this](const entt::entity actor) {
-                    callMovementCallback(actor, &ScriptInstance::onPathChanged);
-                });
-        }
-
-        void unbindMovementCallbacks(const entt::entity entity)
-        {
-            const auto it = instances.find(entity);
-            if (it != instances.end()) unbindMovementCallbacks(it->second);
         }
 
         static bool unsubscribeEvent(ScriptInstance& instance, const std::uint32_t id)
@@ -285,11 +180,7 @@ namespace sage
                 auto handler = [this, subscriber, sourceEntity, id](
                                    const entt::entity trigger, const entt::entity other) {
                     if (trigger != sourceEntity) return;
-                    callEventCallback(
-                        subscriber,
-                        id,
-                        static_cast<std::uint32_t>(trigger),
-                        static_cast<std::uint32_t>(other));
+                    callEventCallback(subscriber, id, static_cast<std::uint32_t>(other));
                 };
 
                 auto& event = instance.eventSubscriptions.at(id);
@@ -314,15 +205,14 @@ namespace sage
                 if (name == "DestinationUnreachable")
                 {
                     event.subscription = moveable->onDestinationUnreachable.Subscribe(
-                        [this, subscriber, id](const entt::entity actor, const Vector3 destination) {
-                            callEventCallback(
-                                subscriber, id, static_cast<std::uint32_t>(actor), destination);
+                        [this, subscriber, id](const entt::entity /*actor*/, const Vector3 destination) {
+                            callEventCallback(subscriber, id, destination);
                         });
                 }
                 else
                 {
-                    auto handler = [this, subscriber, id](const entt::entity actor) {
-                        callEventCallback(subscriber, id, static_cast<std::uint32_t>(actor));
+                    auto handler = [this, subscriber, id](const entt::entity /*actor*/) {
+                        callEventCallback(subscriber, id);
                     };
                     if (name == "MovementStarted")
                         event.subscription = moveable->onStartMovement.Subscribe(std::move(handler));
@@ -342,8 +232,8 @@ namespace sage
                 if (animation == nullptr) return std::nullopt;
                 const auto id = addEventSubscription(
                     instance, std::move(callback), ScriptEventSource::Animation, sourceEntity);
-                auto handler = [this, subscriber, id](const entt::entity actor) {
-                    callEventCallback(subscriber, id, static_cast<std::uint32_t>(actor));
+                auto handler = [this, subscriber, id](const entt::entity /*actor*/) {
+                    callEventCallback(subscriber, id);
                 };
                 auto& event = instance.eventSubscriptions.at(id);
                 if (name == "AnimationStarted")
@@ -467,52 +357,54 @@ namespace sage
                 "Log", [](const std::string& msg) { TraceLog(LOG_INFO, "Lua: %s", msg.c_str()); });
         }
 
-        // Per-instance API: component accessors default to the owning entity, or take
-        // another entity id (as exposed via the `entity` global) for cross-entity access.
-        // Getters return nil when the component is missing.
+        // Per-instance API exposed as the `sage` table in each script's environment.
+        // Component accessors take an explicit entity id (use sage.GetEntity() for the
+        // owning entity) and return nil when the component is missing.
         void bindEntityApi(sol::environment& env, const entt::entity entity)
         {
-            env["entity"] = static_cast<std::uint32_t>(entity);
             sol::table api = lua.create_table();
             env["sage"] = api;
             api["Vec3"] = lua["Vec3"];
             api["Log"] = lua["Log"];
 
-            sol::table events = lua.create_table();
-            events["TriggerEnter"] = "TriggerEnter";
-            events["TriggerStay"] = "TriggerStay";
-            events["TriggerExit"] = "TriggerExit";
-            events["MovementStarted"] = "MovementStarted";
-            events["DestinationReached"] = "DestinationReached";
-            events["DestinationUnreachable"] = "DestinationUnreachable";
-            events["MovementCancelled"] = "MovementCancelled";
-            events["PathChanged"] = "PathChanged";
-            events["AnimationStarted"] = "AnimationStarted";
-            events["AnimationEnded"] = "AnimationEnded";
-            events["AnimationUpdated"] = "AnimationUpdated";
-            api["Events"] = events;
+            api.set_function("GetEntity", [entity]() { return static_cast<std::uint32_t>(entity); });
 
-            api.set_function(
-                "Subscribe",
-                [this, entity](
-                    const std::uint32_t source,
-                    const std::string& eventName,
-                    sol::protected_function callback,
-                    sol::this_state state) -> sol::object {
-                    const auto sourceEntity = static_cast<entt::entity>(source);
-                    const auto id = subscribeToEvent(entity, sourceEntity, eventName, std::move(callback));
-                    if (!id)
-                    {
-                        TraceLog(
-                            LOG_WARNING,
-                            "Lua: entity %u cannot subscribe to event '%s' on entity %u",
-                            static_cast<std::uint32_t>(entity),
-                            eventName.c_str(),
-                            source);
-                        return sol::lua_nil;
-                    }
-                    return sol::make_object(state, *id);
-                });
+            // Event subscriptions: sage.On<Event>(sourceEntity, callback). The callback
+            // receives only the event's own arguments (the source entity is the one you
+            // passed in). Returns a subscription id for sage.Unsubscribe, or nil on failure.
+            const auto bindEvent = [this, entity, &api](const char* fnName, const char* eventName) {
+                api.set_function(
+                    fnName,
+                    [this, entity, eventName](
+                        const std::uint32_t source,
+                        sol::protected_function callback,
+                        sol::this_state state) -> sol::object {
+                        const auto id = subscribeToEvent(
+                            entity, static_cast<entt::entity>(source), eventName, std::move(callback));
+                        if (!id)
+                        {
+                            TraceLog(
+                                LOG_WARNING,
+                                "Lua: entity %u cannot subscribe to '%s' on entity %u",
+                                static_cast<std::uint32_t>(entity),
+                                eventName,
+                                source);
+                            return sol::lua_nil;
+                        }
+                        return sol::make_object(state, *id);
+                    });
+            };
+            bindEvent("OnTriggerEnter", "TriggerEnter");
+            bindEvent("OnTriggerStay", "TriggerStay");
+            bindEvent("OnTriggerExit", "TriggerExit");
+            bindEvent("OnMovementStarted", "MovementStarted");
+            bindEvent("OnDestinationReached", "DestinationReached");
+            bindEvent("OnDestinationUnreachable", "DestinationUnreachable");
+            bindEvent("OnMovementCancelled", "MovementCancelled");
+            bindEvent("OnPathChanged", "PathChanged");
+            bindEvent("OnAnimationStarted", "AnimationStarted");
+            bindEvent("OnAnimationEnded", "AnimationEnded");
+            bindEvent("OnAnimationUpdated", "AnimationUpdated");
 
             api.set_function("Unsubscribe", [this, entity](const std::uint32_t id) {
                 const auto it = instances.find(entity);
@@ -527,6 +419,15 @@ namespace sage
                     return sol::make_object(state, static_cast<std::uint32_t>(*found));
                 });
 
+            api.set_function(
+                "FindFirstWithTag",
+                [this](const std::string& tag, sol::this_state state) -> sol::object {
+                    const auto found = sage::FindFirstWithTag(*registry, tag);
+                    if (found == entt::null) return sol::lua_nil;
+                    return sol::make_object(state, static_cast<std::uint32_t>(found));
+                });
+
+            // MoveToLocation / TryPathfindToLocation act on the owning entity.
             api.set_function(
                 "MoveToLocation",
                 [this, entity](const Vector3& destination) {
@@ -547,85 +448,41 @@ namespace sage
                         return sys->actorMovementSystem->TryPathfindToLocation(entity, destination, astar);
                     }));
 
-            api.set_function(
-                "FindFirstWithTag",
-                [this](const std::string& tag, sol::this_state state) -> sol::object {
-                    const auto found = sage::FindFirstWithTag(*registry, tag);
-                    if (found == entt::null) return sol::lua_nil;
-                    return sol::make_object(state, static_cast<std::uint32_t>(found));
-                });
+            api.set_function("HasTag", [this](const std::uint32_t e, const std::string& tag) {
+                const auto target = static_cast<entt::entity>(e);
+                return registry->valid(target) && sage::HasTag(*registry, target, tag);
+            });
 
-            api.set_function(
-                "HasTag",
-                sol::overload(
-                    [this, entity](const std::string& tag) { return sage::HasTag(*registry, entity, tag); },
-                    [this](const std::uint32_t e, const std::string& tag) {
-                        const auto target = static_cast<entt::entity>(e);
-                        return registry->valid(target) && sage::HasTag(*registry, target, tag);
-                    }));
+            api.set_function("GetTags", [this](const std::uint32_t e, sol::this_state state) {
+                sol::state_view luaState(state);
+                sol::table result = luaState.create_table();
+                const auto target = static_cast<entt::entity>(e);
+                if (const auto* meta =
+                        registry->valid(target) ? registry->try_get<MetaData>(target) : nullptr)
+                {
+                    ForEachSceneTag(SceneTagText(meta->tags), [&](const std::string_view tag) {
+                        result.add(std::string{tag});
+                    });
+                }
+                return result;
+            });
 
-            api.set_function(
-                "GetTags",
-                sol::overload(
-                    [this, entity](sol::this_state state) {
-                        sol::state_view luaState(state);
-                        sol::table result = luaState.create_table();
-                        if (const auto* meta = registry->try_get<MetaData>(entity))
-                        {
-                            ForEachSceneTag(SceneTagText(meta->tags), [&](const std::string_view tag) {
-                                result.add(std::string{tag});
-                            });
-                        }
-                        return result;
-                    },
-                    [this](const std::uint32_t e, sol::this_state state) {
-                        sol::state_view luaState(state);
-                        sol::table result = luaState.create_table();
-                        const auto target = static_cast<entt::entity>(e);
-                        if (registry->valid(target))
-                        {
-                            if (const auto* meta = registry->try_get<MetaData>(target))
-                            {
-                                ForEachSceneTag(SceneTagText(meta->tags), [&](const std::string_view tag) {
-                                    result.add(std::string{tag});
-                                });
-                            }
-                        }
-                        return result;
-                    }));
+            api.set_function("GetArchetype", [this](const std::uint32_t e) {
+                const auto target = static_cast<entt::entity>(e);
+                return registry->valid(target) ? registry->try_get<Archetype>(target) : nullptr;
+            });
 
-            api.set_function(
-                "GetArchetype",
-                sol::overload(
-                    [this, entity]() { return registry->try_get<Archetype>(entity); },
-                    [this](const std::uint32_t e) {
-                        const auto target = static_cast<entt::entity>(e);
-                        return registry->valid(target) ? registry->try_get<Archetype>(target) : nullptr;
-                    }));
+            api.set_function("GetTransform", [this](const std::uint32_t e) {
+                return registry->try_get<sgTransform>(static_cast<entt::entity>(e));
+            });
 
-            api.set_function(
-                "GetTransform",
-                sol::overload(
-                    [this, entity]() { return registry->try_get<sgTransform>(entity); },
-                    [this](const std::uint32_t e) {
-                        return registry->try_get<sgTransform>(static_cast<entt::entity>(e));
-                    }));
+            api.set_function("GetCollideable", [this](const std::uint32_t e) {
+                return registry->try_get<Collideable>(static_cast<entt::entity>(e));
+            });
 
-            api.set_function(
-                "GetCollideable",
-                sol::overload(
-                    [this, entity]() { return registry->try_get<Collideable>(entity); },
-                    [this](const std::uint32_t e) {
-                        return registry->try_get<Collideable>(static_cast<entt::entity>(e));
-                    }));
-
-            api.set_function(
-                "GetAnimation",
-                sol::overload(
-                    [this, entity]() { return registry->try_get<Animation>(entity); },
-                    [this](const std::uint32_t e) {
-                        return registry->try_get<Animation>(static_cast<entt::entity>(e));
-                    }));
+            api.set_function("GetAnimation", [this](const std::uint32_t e) {
+                return registry->try_get<Animation>(static_cast<entt::entity>(e));
+            });
         }
 
         template <typename... Args>
@@ -662,16 +519,6 @@ namespace sage
             instance.update = instance.env["Update"];
             instance.onEnable = instance.env["OnEnable"];
             instance.onDisable = instance.env["OnDisable"];
-            instance.onTriggerEnter = instance.env["OnTriggerEnter"];
-            instance.onTriggerUpdate = instance.env["OnTriggerUpdate"];
-            instance.onTriggerLeave = instance.env["OnTriggerLeave"];
-            instance.onMovementStarted = instance.env["OnMovementStarted"];
-            instance.onDestinationReached = instance.env["OnDestinationReached"];
-            instance.onDestinationUnreachable = instance.env["OnDestinationUnreachable"];
-            instance.onMovementCancelled = instance.env["OnMovementCancelled"];
-            instance.onPathChanged = instance.env["OnPathChanged"];
-
-            bindMovementCallbacks(entity);
 
             call(instance, instance.awake);
             return instance;
@@ -682,7 +529,6 @@ namespace sage
             const auto it = instances.find(entity);
             if (it == instances.end()) return;
             if (it->second.wasEnabled) call(it->second, it->second.onDisable);
-            unbindMovementCallbacks(it->second);
             unbindEventCallbacks(it->second);
             instances.erase(it);
         }
@@ -739,14 +585,8 @@ namespace sage
         impl->destroyInstance(entity);
     }
 
-    void ScriptSystem::onMoveableActorConstructed(entt::registry& /*reg*/, const entt::entity entity)
-    {
-        impl->bindMovementCallbacks(entity);
-    }
-
     void ScriptSystem::onMoveableActorDestroyed(entt::registry& /*reg*/, const entt::entity entity)
     {
-        impl->unbindMovementCallbacks(entity);
         impl->unbindEventCallbacksFromSource(entity, ScriptEventSource::Movement);
     }
 
@@ -764,7 +604,6 @@ namespace sage
         : impl(std::make_unique<Impl>(_registry, _sys)), registry(_registry)
     {
         registry->on_destroy<ScriptComponent>().connect<&ScriptSystem::onScriptComponentDestroyed>(this);
-        registry->on_construct<MoveableActor>().connect<&ScriptSystem::onMoveableActorConstructed>(this);
         registry->on_destroy<MoveableActor>().connect<&ScriptSystem::onMoveableActorDestroyed>(this);
         registry->on_destroy<Animation>().connect<&ScriptSystem::onAnimationDestroyed>(this);
         registry->on_destroy<Collideable>().connect<&ScriptSystem::onCollideableDestroyed>(this);
@@ -773,7 +612,6 @@ namespace sage
     ScriptSystem::~ScriptSystem()
     {
         registry->on_destroy<ScriptComponent>().disconnect<&ScriptSystem::onScriptComponentDestroyed>(this);
-        registry->on_construct<MoveableActor>().disconnect<&ScriptSystem::onMoveableActorConstructed>(this);
         registry->on_destroy<MoveableActor>().disconnect<&ScriptSystem::onMoveableActorDestroyed>(this);
         registry->on_destroy<Animation>().disconnect<&ScriptSystem::onAnimationDestroyed>(this);
         registry->on_destroy<Collideable>().disconnect<&ScriptSystem::onCollideableDestroyed>(this);
