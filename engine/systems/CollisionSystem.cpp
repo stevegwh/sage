@@ -6,6 +6,7 @@
 #include "components/CollisionIntent.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
+#include "ScriptSystem.hpp"
 #include <Serializer.hpp>
 
 #include <algorithm>
@@ -304,5 +305,12 @@ namespace sage
     CollisionSystem::CollisionSystem(entt::registry* _registry) : registry(_registry)
     {
         matrix.Load();
+    }
+
+    void CollisionSystem::RegisterLuaBindings(ScriptSystem& scripts)
+    {
+        scripts.RegisterEventLuaBinding("TriggerEnter");
+        scripts.RegisterEventLuaBinding("TriggerStay");
+        scripts.RegisterEventLuaBinding("TriggerExit");
     }
 } // namespace sage

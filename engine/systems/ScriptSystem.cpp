@@ -4,8 +4,6 @@
 
 #include "ScriptSystem.hpp"
 
-#include "Archetypes.hpp"
-#include "ActorMovementSystem.hpp"
 #include "CollisionSystem.hpp"
 #include "EngineSystems.hpp"
 #include "SceneTags.hpp"
@@ -13,14 +11,12 @@
 #include "components/Collideable.hpp"
 #include "components/MoveableActor.hpp"
 #include "components/ScriptComponent.hpp"
-#include "components/sgTransform.hpp"
 
 #include "raylib.h"
 #include "raymath.h"
 
 #include "sol/sol.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -284,83 +280,6 @@ namespace sage
 
             // Setters route through the position/rotation/scale proxy fields so
             // TransformSystem's dirty propagation runs automatically.
-            lua.new_usertype<sgTransform>(
-                "Transform",
-                sol::no_constructor,
-                "name",
-                &sgTransform::name,
-                "GetPosition",
-                [](const sgTransform& t) -> Vector3 { return t.GetWorldPos(); },
-                "SetPosition",
-                [](sgTransform& t, const Vector3& v) { t.position.world = v; },
-                "GetLocalPosition",
-                [](const sgTransform& t) -> Vector3 { return t.GetLocalPos(); },
-                "SetLocalPosition",
-                [](sgTransform& t, const Vector3& v) { t.position.local = v; },
-                "GetRotation",
-                [](const sgTransform& t) -> Vector3 { return t.GetWorldRot(); },
-                "SetRotation",
-                [](sgTransform& t, const Vector3& v) { t.rotation.world = v; },
-                "GetScale",
-                [](const sgTransform& t) -> Vector3 { return t.GetScale(); },
-                "SetScale",
-                [](sgTransform& t, const Vector3& v) { t.scale.world = v; },
-                "Forward",
-                [](const sgTransform& t) { return t.forward(); },
-                // Returns the parent entity id (usable with GetTransform(id) etc.),
-                // or nil when this transform is a root. Lets a child collider's
-                // OnTrigger forward to its logical owner (the parent).
-                "GetParent",
-                [](const sgTransform& t, sol::this_state s) -> sol::object {
-                    const auto parent = t.GetParent();
-                    if (parent == entt::null) return sol::lua_nil;
-                    return sol::make_object(s, static_cast<std::uint32_t>(parent));
-                });
-
-            lua.new_usertype<Collideable>(
-                "Collideable",
-                sol::no_constructor,
-                "active",
-                &Collideable::active,
-                "debugDraw",
-                &Collideable::debugDraw);
-
-            lua.new_usertype<Archetype>(
-                "Archetype",
-                sol::no_constructor,
-                "id",
-                sol::readonly(&Archetype::id),
-                "Is",
-                [](const Archetype& archetype, const std::string& name) {
-                    return archetype == MakeArchetype(name);
-                });
-
-            // Clip names are the GLB animation names (Blender NLA tracks). Play/PlayOneShot
-            // return false when no clip matches, so scripts can react instead of crashing.
-            lua.new_usertype<Animation>(
-                "Animation",
-                sol::no_constructor,
-                "Play",
-                sol::overload(
-                    [](Animation& a, const std::string& clip) { return a.ChangeAnimationByName(clip); },
-                    [](Animation& a, const std::string& clip, const int speed) {
-                        return a.ChangeAnimationByName(clip, speed);
-                    }),
-                "PlayOneShot",
-                sol::overload(
-                    [](Animation& a, const std::string& clip) { return a.PlayOneShotByName(clip, 1); },
-                    [](Animation& a, const std::string& clip, const int speed) {
-                        return a.PlayOneShotByName(clip, speed);
-                    }),
-                "ClipCount",
-                [](const Animation& a) { return a.animsCount; },
-                "GetClipNames",
-                [](const Animation& a) { return sol::as_table(a.clipNames); },
-                "SetBlendDuration",
-                [](Animation& a, const float seconds) { a.blendDuration = std::max(0.0f, seconds); },
-                "GetBlendDuration",
-                [](const Animation& a) { return a.blendDuration; });
-
             lua.set_function(
                 "Log", [](const std::string& msg) { TraceLog(LOG_INFO, "Lua: %s", msg.c_str()); });
         }
@@ -377,55 +296,10 @@ namespace sage
 
             api.set_function("GetEntity", [entity]() { return static_cast<std::uint32_t>(entity); });
 
-            // Event subscriptions: sage.On<Event>(sourceEntity, callback). The callback
-            // receives only the event's own arguments (the source entity is the one you
-            // passed in). Returns a subscription id for sage.Unsubscribe, or nil on failure.
-            const auto bindEvent = [this, entity, &api](const char* fnName, const char* eventName) {
-                api.set_function(
-                    fnName,
-                    [this, entity, eventName](
-                        const std::uint32_t source,
-                        sol::protected_function callback,
-                        sol::this_state state) -> sol::object {
-                        const auto id = subscribeToEvent(
-                            entity, static_cast<entt::entity>(source), eventName, std::move(callback));
-                        if (!id)
-                        {
-                            TraceLog(
-                                LOG_WARNING,
-                                "Lua: entity %u cannot subscribe to '%s' on entity %u",
-                                static_cast<std::uint32_t>(entity),
-                                eventName,
-                                source);
-                            return sol::lua_nil;
-                        }
-                        return sol::make_object(state, *id);
-                    });
-            };
-            bindEvent("OnTriggerEnter", "TriggerEnter");
-            bindEvent("OnTriggerStay", "TriggerStay");
-            bindEvent("OnTriggerExit", "TriggerExit");
-            bindEvent("OnMovementStarted", "MovementStarted");
-            bindEvent("OnDestinationReached", "DestinationReached");
-            bindEvent("OnDestinationUnreachable", "DestinationUnreachable");
-            bindEvent("OnMovementCancelled", "MovementCancelled");
-            bindEvent("OnPathChanged", "PathChanged");
-            bindEvent("OnAnimationStarted", "AnimationStarted");
-            bindEvent("OnAnimationEnded", "AnimationEnded");
-            bindEvent("OnAnimationUpdated", "AnimationUpdated");
-
             api.set_function("Unsubscribe", [this, entity](const std::uint32_t id) {
                 const auto it = instances.find(entity);
                 return it != instances.end() && unsubscribeEvent(it->second, id);
             });
-
-            api.set_function(
-                "FindFirstWithArchetype",
-                [this](const std::string& name, sol::this_state state) -> sol::object {
-                    const auto found = sage::FindFirstWithArchetype(*registry, MakeArchetype(name));
-                    if (!found) return sol::lua_nil;
-                    return sol::make_object(state, static_cast<std::uint32_t>(*found));
-                });
 
             api.set_function(
                 "FindFirstWithTag",
@@ -434,27 +308,6 @@ namespace sage
                     if (found == entt::null) return sol::lua_nil;
                     return sol::make_object(state, static_cast<std::uint32_t>(found));
                 });
-
-            // MoveToLocation / TryPathfindToLocation act on the owning entity.
-            api.set_function(
-                "MoveToLocation",
-                [this, entity](const Vector3& destination) {
-                    if (!registry->all_of<sgTransform>(entity)) return false;
-                    sys->actorMovementSystem->MoveToLocation(entity, destination);
-                    return true;
-                });
-
-            api.set_function(
-                "TryPathfindToLocation",
-                sol::overload(
-                    [this, entity](const Vector3& destination) {
-                        if (!registry->all_of<sgTransform, MoveableActor, Collideable>(entity)) return false;
-                        return sys->actorMovementSystem->TryPathfindToLocation(entity, destination);
-                    },
-                    [this, entity](const Vector3& destination, const bool astar) {
-                        if (!registry->all_of<sgTransform, MoveableActor, Collideable>(entity)) return false;
-                        return sys->actorMovementSystem->TryPathfindToLocation(entity, destination, astar);
-                    }));
 
             api.set_function("HasTag", [this](const std::uint32_t e, const std::string& tag) {
                 const auto target = static_cast<entt::entity>(e);
@@ -473,23 +326,6 @@ namespace sage
                     });
                 }
                 return result;
-            });
-
-            api.set_function("GetArchetype", [this](const std::uint32_t e) {
-                const auto target = static_cast<entt::entity>(e);
-                return registry->valid(target) ? registry->try_get<Archetype>(target) : nullptr;
-            });
-
-            api.set_function("GetTransform", [this](const std::uint32_t e) {
-                return registry->try_get<sgTransform>(static_cast<entt::entity>(e));
-            });
-
-            api.set_function("GetCollideable", [this](const std::uint32_t e) {
-                return registry->try_get<Collideable>(static_cast<entt::entity>(e));
-            });
-
-            api.set_function("GetAnimation", [this](const std::uint32_t e) {
-                return registry->try_get<Animation>(static_cast<entt::entity>(e));
             });
 
             for (const auto& extension : apiExtensions)
@@ -512,20 +348,13 @@ namespace sage
                 api = lua.create_table();
                 env[extension.namespaceName] = api;
             }
-            extension.bind(api, entity);
+            extension.bind(api, entity, *registry);
         }
 
         void registerApiExtension(std::string namespaceName, ApiExtension extension)
         {
-            auto& entry = apiExtensions.emplace_back(
+            apiExtensions.emplace_back(
                 ApiExtensionEntry{std::move(namespaceName), std::move(extension)});
-
-            // Registration normally happens during systems construction, but
-            // applying it to live instances also makes late-loaded modules safe.
-            for (auto& [entity, instance] : instances)
-            {
-                bindApiExtension(instance.env, entity, entry);
-            }
         }
 
         template <typename... Args>
@@ -627,6 +456,41 @@ namespace sage
     {
         if (namespaceName.empty() || !extension) return;
         impl->registerApiExtension(std::move(namespaceName), std::move(extension));
+    }
+
+    sol::state& ScriptSystem::GetLuaState()
+    {
+        return impl->lua;
+    }
+
+    void ScriptSystem::RegisterEventLuaBinding(std::string eventName)
+    {
+        const std::string functionName = "On" + eventName;
+        impl->registerApiExtension(
+            "sage",
+            [this, functionName = std::move(functionName), eventName = std::move(eventName)](
+                sol::table& api, const entt::entity owner, entt::registry&) {
+                api.set_function(
+                    functionName,
+                    [this, owner, eventName](
+                        const std::uint32_t source,
+                        sol::protected_function callback,
+                        sol::this_state state) -> sol::object {
+                        const auto id = impl->subscribeToEvent(
+                            owner, static_cast<entt::entity>(source), eventName, std::move(callback));
+                        if (!id)
+                        {
+                            TraceLog(
+                                LOG_WARNING,
+                                "Lua: entity %u cannot subscribe to '%s' on entity %u",
+                                static_cast<std::uint32_t>(owner),
+                                eventName.c_str(),
+                                source);
+                            return sol::lua_nil;
+                        }
+                        return sol::make_object(state, *id);
+                    });
+            });
     }
 
     void ScriptSystem::onScriptComponentDestroyed(entt::registry& /*reg*/, const entt::entity entity)

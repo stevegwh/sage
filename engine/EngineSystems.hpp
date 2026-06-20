@@ -66,6 +66,8 @@ namespace sage
             entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager);
         ~EngineSystems();
 
+        void RegisterAllLuaBindings();
+
         [[nodiscard]] GameUIEngine& UI();
         [[nodiscard]] const GameUIEngine& UI() const;
         void ReplaceUiEngine(std::unique_ptr<GameUIEngine> replacement);

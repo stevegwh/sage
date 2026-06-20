@@ -9,7 +9,9 @@
 #include "NavigationGridSystem.hpp"
 #include "Serializer.hpp"
 #include "slib.hpp"
+#include "ScriptSystem.hpp"
 #include "TransformSystem.hpp"
+#include "sol/sol.hpp"
 
 #include <format>
 #include <ranges>
@@ -479,6 +481,38 @@ namespace sage
     ActorMovementSystem::ActorMovementSystem(entt::registry* _registry, EngineSystems* _sys)
         : registry(_registry), sys(_sys)
     {
+    }
+
+    void ActorMovementSystem::RegisterLuaBindings(ScriptSystem& scripts)
+    {
+        scripts.RegisterEventLuaBinding("MovementStarted");
+        scripts.RegisterEventLuaBinding("DestinationReached");
+        scripts.RegisterEventLuaBinding("DestinationUnreachable");
+        scripts.RegisterEventLuaBinding("MovementCancelled");
+        scripts.RegisterEventLuaBinding("PathChanged");
+
+        scripts.RegisterApiExtension(
+            "sage", [this](sol::table& api, const entt::entity owner, entt::registry& registry) {
+                api.set_function("MoveToLocation", [this, owner, &registry](const Vector3& destination) {
+                    if (!registry.all_of<sgTransform>(owner)) return false;
+                    MoveToLocation(owner, destination);
+                    return true;
+                });
+
+                api.set_function(
+                    "TryPathfindToLocation",
+                    sol::overload(
+                        [this, owner, &registry](const Vector3& destination) {
+                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner))
+                                return false;
+                            return TryPathfindToLocation(owner, destination);
+                        },
+                        [this, owner, &registry](const Vector3& destination, const bool astar) {
+                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner))
+                                return false;
+                            return TryPathfindToLocation(owner, destination, astar);
+                        }));
+            });
     }
 } // namespace sage
 

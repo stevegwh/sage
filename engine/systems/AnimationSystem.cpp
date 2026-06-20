@@ -7,6 +7,7 @@
 #include "components/MoveableActor.hpp"
 #include "components/Renderable.hpp"
 #include "Event.hpp"
+#include "ScriptSystem.hpp"
 
 #include "raymath.h"
 
@@ -119,5 +120,12 @@ namespace sage
 
     AnimationSystem::AnimationSystem(entt::registry* _registry) : registry(_registry)
     {
+    }
+
+    void AnimationSystem::RegisterLuaBindings(ScriptSystem& scripts)
+    {
+        scripts.RegisterEventLuaBinding("AnimationStarted");
+        scripts.RegisterEventLuaBinding("AnimationEnded");
+        scripts.RegisterEventLuaBinding("AnimationUpdated");
     }
 } // namespace sage

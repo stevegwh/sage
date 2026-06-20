@@ -59,7 +59,7 @@ namespace sage
         // The callback is invoked once per script instance and may capture the
         // owning game's systems. Keeping registration here preserves the
         // engine -> game dependency direction.
-        using ApiExtension = std::function<void(sol::table&, entt::entity)>;
+        using ApiExtension = std::function<void(sol::table&, entt::entity, entt::registry&)>;
 
       private:
         struct Impl;
@@ -73,7 +73,9 @@ namespace sage
 
       public:
         void Update();
+        [[nodiscard]] sol::state& GetLuaState();
         void RegisterApiExtension(std::string namespaceName, ApiExtension extension);
+        void RegisterEventLuaBinding(std::string eventName);
         ScriptSystem(entt::registry* _registry, EngineSystems* _sys);
         ~ScriptSystem();
     };

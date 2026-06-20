@@ -4,8 +4,46 @@
 
 #include "Animation.hpp"
 
+#include "systems/ScriptSystem.hpp"
+#include "sol/sol.hpp"
+
+#include <algorithm>
+
 namespace sage
 {
+    void Animation::define_lua_bindings(ScriptSystem& scripts)
+    {
+        scripts.GetLuaState().new_usertype<Animation>(
+            "Animation",
+            sol::no_constructor,
+            "Play",
+            sol::overload(
+                [](Animation& animation, const std::string& clip) {
+                    return animation.ChangeAnimationByName(clip);
+                },
+                [](Animation& animation, const std::string& clip, const int speed) {
+                    return animation.ChangeAnimationByName(clip, speed);
+                }),
+            "PlayOneShot",
+            sol::overload(
+                [](Animation& animation, const std::string& clip) { return animation.PlayOneShotByName(clip, 1); },
+                [](Animation& animation, const std::string& clip, const int speed) {
+                    return animation.PlayOneShotByName(clip, speed);
+                }),
+            "ClipCount",
+            [](const Animation& animation) { return animation.animsCount; },
+            "GetClipNames",
+            [](const Animation& animation) { return sol::as_table(animation.clipNames); },
+            "SetBlendDuration",
+            [](Animation& animation, const float seconds) { animation.blendDuration = std::max(0.0f, seconds); },
+            "GetBlendDuration",
+            [](const Animation& animation) { return animation.blendDuration; });
+        scripts.RegisterApiExtension("sage", [](sol::table& api, entt::entity, entt::registry& registry) {
+            api.set_function("GetAnimation", [&registry](const std::uint32_t id) {
+                return registry.try_get<Animation>(static_cast<entt::entity>(id));
+            });
+        });
+    }
 
     int Animation::GetClipIndex(const std::string_view clipName) const
     {

@@ -5,13 +5,53 @@
 #include "sgTransform.hpp"
 #include "raymath.h"
 #include "slib.hpp"
+#include "systems/ScriptSystem.hpp"
 #include "systems/TransformSystem.hpp"
+#include "sol/sol.hpp"
 
 #include <cassert>
 #include <utility>
 
 namespace sage
 {
+    void sgTransform::define_lua_bindings(ScriptSystem& scripts)
+    {
+        scripts.GetLuaState().new_usertype<sgTransform>(
+            "Transform",
+            sol::no_constructor,
+            "name",
+            &sgTransform::name,
+            "GetPosition",
+            [](const sgTransform& transform) -> Vector3 { return transform.GetWorldPos(); },
+            "SetPosition",
+            [](sgTransform& transform, const Vector3& value) { transform.position.world = value; },
+            "GetLocalPosition",
+            [](const sgTransform& transform) -> Vector3 { return transform.GetLocalPos(); },
+            "SetLocalPosition",
+            [](sgTransform& transform, const Vector3& value) { transform.position.local = value; },
+            "GetRotation",
+            [](const sgTransform& transform) -> Vector3 { return transform.GetWorldRot(); },
+            "SetRotation",
+            [](sgTransform& transform, const Vector3& value) { transform.rotation.world = value; },
+            "GetScale",
+            [](const sgTransform& transform) -> Vector3 { return transform.GetScale(); },
+            "SetScale",
+            [](sgTransform& transform, const Vector3& value) { transform.scale.world = value; },
+            "Forward",
+            [](const sgTransform& transform) { return transform.forward(); },
+            "GetParent",
+            [](const sgTransform& transform, sol::this_state state) -> sol::object {
+                const auto parent = transform.GetParent();
+                if (parent == entt::null) return sol::lua_nil;
+                return sol::make_object(state, static_cast<std::uint32_t>(parent));
+            });
+        scripts.RegisterApiExtension("sage", [](sol::table& api, entt::entity, entt::registry& registry) {
+            api.set_function("GetTransform", [&registry](const std::uint32_t id) {
+                return registry.try_get<sgTransform>(static_cast<entt::entity>(id));
+            });
+        });
+    }
+
     void sgTransform::SetParent(const entt::entity newParent)
     {
         assert(m_transformSystem != nullptr);

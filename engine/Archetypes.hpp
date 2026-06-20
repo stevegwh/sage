@@ -10,6 +10,8 @@
 
 namespace sage
 {
+    class ScriptSystem;
+
     /*
         An archetype defines a 'noun', as opposed to a verb (component) or adjective (tag).
     */
@@ -46,6 +48,8 @@ namespace sage
         {
             i.archetypeDropdown("Kind", *this);
         }
+
+        static void define_lua_bindings(ScriptSystem& scripts);
     };
 
     [[nodiscard]] constexpr Archetype MakeArchetype(const std::string_view name)

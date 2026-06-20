@@ -5,6 +5,7 @@
 #include "EngineSystems.hpp"
 
 #include "Serializer.hpp"
+#include "Archetypes.hpp"
 
 #include "Camera.hpp"
 #include "Cursor.hpp"
@@ -23,6 +24,9 @@
 #include "systems/UberShaderSystem.hpp"
 #include "ui/GameUIEngine.hpp"
 #include "UserInput.hpp"
+#include "components/Animation.hpp"
+#include "components/Collideable.hpp"
+#include "components/sgTransform.hpp"
 
 #include <cassert>
 
@@ -51,6 +55,19 @@ namespace sage
           scriptSystem(std::make_unique<ScriptSystem>(_registry, this))
     {
         uiEngine = std::make_unique<GameUIEngine>(_registry, this);
+        RegisterAllLuaBindings();
+    }
+
+    void EngineSystems::RegisterAllLuaBindings()
+    {
+        Archetype::define_lua_bindings(*scriptSystem);
+        sgTransform::define_lua_bindings(*scriptSystem);
+        Collideable::define_lua_bindings(*scriptSystem);
+        Animation::define_lua_bindings(*scriptSystem);
+
+        collisionSystem->RegisterLuaBindings(*scriptSystem);
+        actorMovementSystem->RegisterLuaBindings(*scriptSystem);
+        animationSystem->RegisterLuaBindings(*scriptSystem);
     }
 
     EngineSystems::~EngineSystems()

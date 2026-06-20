@@ -17,6 +17,8 @@
 
 namespace sage
 {
+    class ScriptSystem;
+
     struct CollisionInfo
     {
         entt::entity collidedEntityId{};
@@ -78,6 +80,7 @@ namespace sage
         bool GetFirstCollisionBB(
             entt::entity caller, BoundingBox bb, CollisionMask mask, CollisionInfo& out) const;
         void DrawDebug() const;
+        void RegisterLuaBindings(ScriptSystem& scripts);
         explicit CollisionSystem(entt::registry* _registry);
     };
 } // namespace sage

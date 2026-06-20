@@ -16,6 +16,7 @@
 
 namespace sage
 {
+    class ScriptSystem;
     class TransformSystem;
 
     class sgTransform
@@ -180,6 +181,8 @@ namespace sage
             i.field("Rotation", rotation.local);
             i.field("Scale", scale.local);
         }
+
+        static void define_lua_bindings(ScriptSystem& scripts);
 
         [[nodiscard]] Matrix GetMatrixNoRot() const;
         [[nodiscard]] Matrix GetMatrix() const;

@@ -4,8 +4,8 @@
 --- This is a *definition file*: it is read by the Lua Language Server
 --- (sumneko.lua) for autocomplete and type-checking only. It is never loaded
 --- or executed at runtime. The real bindings live in
---- external/sage/engine/systems/ScriptSystem.cpp (bindCoreTypes /
---- bindEntityApi) — keep this file in sync with that file.
+--- component `define_lua_bindings()`, system `RegisterLuaBindings()`, and
+--- ScriptSystem core bindings — keep this file in sync with those definitions.
 
 ---An entity id. Returned by the various Find/Get functions and by
 ---`sage.GetEntity()`. Pass it into `sage.GetTransform(e)` etc.

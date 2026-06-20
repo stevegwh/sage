@@ -21,6 +21,7 @@
 
 namespace sage
 {
+    class ScriptSystem;
     struct Renderable;
 
     struct AnimationParams
@@ -102,6 +103,8 @@ namespace sage
                 i.field("Clip " + std::to_string(n), clipNames[n], false);
             }
         }
+
+        static void define_lua_bindings(ScriptSystem& scripts);
 
         Animation() = default;
         Animation(const Animation&) = delete;
