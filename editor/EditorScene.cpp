@@ -226,7 +226,10 @@ namespace sage
         }
 
         gui->SetHierarchy(
-            hierarchyTree->CollectSceneObjectEntries(), selection->SelectedWithChildren(), selection->Anchor());
+            hierarchyTree->CollectSceneObjectEntries(),
+            selection->SelectedWithChildren(),
+            selectedRoots,
+            selection->Anchor());
         gui->SetInspector(describeSelectedSceneEntity(), inspectedComponents, std::move(addComponentOptions));
     }
 
@@ -705,6 +708,14 @@ namespace sage
         if (result.committed && history->HasActiveTransaction())
         {
             history->Commit();
+        }
+
+        if (result.browseFileClicked && scriptBrowser)
+        {
+            std::error_code ec;
+            std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);
+            scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
+            scriptBrowser->Open();
         }
 
         if (!history->HasActiveTransaction())
@@ -1960,15 +1971,26 @@ namespace sage
 
     void EditorScene::moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const
     {
-        const auto dragged = request.dragged;
+        std::vector<entt::entity> draggedEntities;
+        draggedEntities.reserve(request.draggedEntities.size());
+        for (const auto dragged : request.draggedEntities)
+        {
+            if (std::ranges::find(draggedEntities, dragged) == draggedEntities.end())
+            {
+                draggedEntities.push_back(dragged);
+            }
+        }
         auto newParent = request.newParent;
         auto insertBefore = request.insertBefore;
+
+        if (draggedEntities.empty()) return;
 
         if (flatpackSession && flatpackSession->IsActive())
         {
             // The session root anchors the open flatpack: it stays at the top,
             // and anything dropped at the top level belongs under it.
-            if (dragged == flatpackSession->Root()) return;
+            std::erase(draggedEntities, flatpackSession->Root());
+            if (draggedEntities.empty()) return;
             if (newParent == entt::null)
             {
                 newParent = flatpackSession->Root();
@@ -1976,18 +1998,21 @@ namespace sage
             }
         }
 
-        if (!sys->registry->valid(dragged) || !sys->registry->any_of<sgTransform>(dragged)) return;
+        for (const auto dragged : draggedEntities)
+        {
+            if (!sys->registry->valid(dragged) || !sys->registry->any_of<sgTransform>(dragged)) return;
+        }
         if (newParent != entt::null &&
             (!sys->registry->valid(newParent) || !sys->registry->any_of<sgTransform>(newParent)))
         {
             return;
         }
-        if (dragged == newParent) return;
+        if (std::ranges::find(draggedEntities, newParent) != draggedEntities.end()) return;
 
         if (insertBefore != entt::null)
         {
             if (!sys->registry->valid(insertBefore) || !sys->registry->any_of<sgTransform>(insertBefore) ||
-                insertBefore == dragged)
+                std::ranges::find(draggedEntities, insertBefore) != draggedEntities.end())
             {
                 return;
             }
@@ -1999,18 +2024,20 @@ namespace sage
             }
         }
 
-        // Refuse cycles: walk newParent's ancestor chain. If dragged appears, the
-        // requested parenting would put dragged below itself.
+        // Refuse cycles: none of the moved roots may be an ancestor of the new parent.
         for (auto cur = newParent; cur != entt::null;)
         {
             if (!sys->registry->any_of<sgTransform>(cur)) break;
-            if (cur == dragged) return;
+            if (std::ranges::find(draggedEntities, cur) != draggedEntities.end()) return;
             cur = sys->registry->get<sgTransform>(cur).GetParent();
         }
 
-        if (history) history->Begin(editor::EditAction::Reparent, {dragged});
-        sys->transformSystem->SetParent(dragged, newParent, insertBefore);
-        hierarchyTree->NoteHierarchyMove(dragged, newParent, insertBefore);
+        if (history) history->Begin(editor::EditAction::Reparent, draggedEntities);
+        for (const auto dragged : draggedEntities)
+        {
+            sys->transformSystem->SetParent(dragged, newParent, insertBefore);
+            hierarchyTree->NoteHierarchyMove(dragged, newParent, insertBefore);
+        }
         if (history) history->Commit();
         refreshSceneWindows();
     }

@@ -50,7 +50,7 @@ namespace sage
 
             struct HierarchyMoveRequest
             {
-                entt::entity dragged = entt::null;
+                std::vector<entt::entity> draggedEntities;
                 entt::entity newParent = entt::null;
                 entt::entity insertBefore = entt::null;
             };
@@ -139,6 +139,8 @@ namespace sage
                 bool editModelDefaultsClicked = false;
                 // Renderable's model dropdown requested a coordinated model swap.
                 std::optional<std::string> selectedModelKey;
+                // A file field requested the host's file picker.
+                bool browseFileClicked = false;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;
             };
@@ -185,6 +187,7 @@ namespace sage
             std::optional<std::size_t> renamingFlatpackIndex;
             std::optional<std::size_t> deletingFlatpackIndex;
             std::vector<entt::entity> selectedSceneEntities;
+            std::vector<entt::entity> selectedSceneRoots;
             entt::entity hierarchySelectionAnchor = entt::null;
             std::optional<entt::entity> focusedHierarchyEntity;
             std::optional<entt::entity> pendingHierarchyContextEntity;
@@ -253,6 +256,7 @@ namespace sage
             void SetHierarchy(
                 const std::vector<SceneObjectEntry>& entries,
                 std::vector<entt::entity> selectedEntities,
+                std::vector<entt::entity> selectedRoots,
                 entt::entity selectionAnchor);
             void FocusHierarchyOnEntity(entt::entity entity);
             [[nodiscard]] std::optional<entt::entity> ConsumeHierarchyContextEntity();

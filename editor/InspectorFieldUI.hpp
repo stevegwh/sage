@@ -33,6 +33,8 @@ namespace sage::editor
         std::optional<ComponentMoveRequest> moveComponent;
         // Renderable header context action requested this frame.
         bool editModelDefaults = false;
+        // An inspector file field requested the host's file picker.
+        bool browseFile = false;
         // Deferred model replacement requested by Renderable's model picker.
         std::optional<std::string> selectedModelKey;
     };

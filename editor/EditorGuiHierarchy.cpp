@@ -70,8 +70,21 @@ namespace sage::editor
                 const auto dragged = EntityFromPayloadId(*static_cast<const std::uint32_t*>(payload->Data));
                 if (dragged != newParent && dragged != insertBefore)
                 {
+                    std::vector<entt::entity> draggedEntities{dragged};
+                    if (std::ranges::find(selectedSceneRoots, dragged) != selectedSceneRoots.end())
+                    {
+                        draggedEntities.clear();
+                        draggedEntities.reserve(selectedSceneRoots.size());
+                        for (const auto& entry : hierarchyEntries)
+                        {
+                            if (std::ranges::find(selectedSceneRoots, entry.entity) != selectedSceneRoots.end())
+                            {
+                                draggedEntities.push_back(entry.entity);
+                            }
+                        }
+                    }
                     hierarchyMoveRequest = HierarchyMoveRequest{
-                        .dragged = dragged,
+                        .draggedEntities = std::move(draggedEntities),
                         .newParent = newParent,
                         .insertBefore = insertBefore};
                 }
@@ -262,7 +275,15 @@ namespace sage::editor
                         {
                             const std::uint32_t payload = EntityPayloadId(entry.entity);
                             ImGui::SetDragDropPayload(HIERARCHY_DRAG_PAYLOAD, &payload, sizeof(payload));
-                            ImGui::TextUnformatted(entry.displayName.c_str());
+                            if (std::ranges::find(selectedSceneRoots, entry.entity) != selectedSceneRoots.end() &&
+                                selectedSceneRoots.size() > 1)
+                            {
+                                ImGui::Text("%zu objects", selectedSceneRoots.size());
+                            }
+                            else
+                            {
+                                ImGui::TextUnformatted(entry.displayName.c_str());
+                            }
                             ImGui::EndDragDropSource();
                         }
 
@@ -377,10 +398,12 @@ namespace sage::editor
     void EditorGui::SetHierarchy(
         const std::vector<SceneObjectEntry>& entries,
         std::vector<entt::entity> selectedEntities,
+        std::vector<entt::entity> selectedRoots,
         const entt::entity selectionAnchor)
     {
         hierarchyEntries = entries;
         selectedSceneEntities = std::move(selectedEntities);
+        selectedSceneRoots = std::move(selectedRoots);
         hierarchySelectionAnchor = selectionAnchor;
     }
 

@@ -96,6 +96,7 @@ namespace sage::editor
         // String path fields can opt into an adjacent button that opens the file
         // with the operating system's associated application.
         bool openableFile = false;
+        bool browsableFile = false;
         FieldValue value;
     };
 
@@ -235,6 +236,7 @@ namespace sage::editor
                 {.label = qualified(label),
                  .editable = rw && editableScope_,
                  .openableFile = true,
+                 .browsableFile = true,
                  .value = LeafField<std::string>{&path}});
         }
         void field(std::string label, Vector2& v, bool rw = true)
