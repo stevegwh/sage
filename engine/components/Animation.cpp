@@ -47,11 +47,8 @@ namespace sage
 
     int Animation::GetClipIndex(const std::string_view clipName) const
     {
-        for (std::size_t i = 0; i < clipNames.size(); ++i)
-        {
-            if (clipName == clipNames[i]) return static_cast<int>(i);
-        }
-        return -1;
+        const auto it = clipIndexByName.find(clipName);
+        return it != clipIndexByName.end() ? it->second : -1;
     }
 
     const char* Animation::GetClipName(const unsigned int index) const
@@ -166,14 +163,18 @@ namespace sage
         animations = nullptr;
         animsCount = 0;
         clipNames.clear();
+        clipIndexByName.clear();
         if (!modelKey.empty())
         {
             animations = ResourceManager::GetInstance().GetModelAnimation(modelKey, &animsCount);
         }
         clipNames.reserve(animsCount);
+        clipIndexByName.reserve(animsCount);
         for (int i = 0; i < animsCount; ++i)
         {
             clipNames.emplace_back(animations[i].name);
+            // First occurrence wins, matching the old linear scan when names collide.
+            clipIndexByName.emplace(clipNames.back(), i);
         }
         // A saved clip index can outlive a model re-export; fall back to clip 0 rather than read past the array.
         if (current.index >= static_cast<unsigned int>(animsCount)) current = {};

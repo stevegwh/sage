@@ -465,7 +465,7 @@ namespace sage
             // updateActor mutated the transform; refresh the world bbox so the re-mark
             // uses the post-move position (CollisionSystem::Update only runs once per frame).
             collideable.worldBoundingBox =
-                TransformBoundingBox(collideable.localBoundingBox, transform.GetMatrixNoRot());
+                TransformAabbNoRotation(collideable.localBoundingBox, transform.GetMatrixNoRot());
             sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
         }
 

@@ -125,7 +125,8 @@ namespace sage::editor_layout
     {
         std::uint32_t targetId = 0;
         float movementSpeed = 0.0f;
-        float turnSpeed = 240.0f;
+        // Matches MoveableActor::turnSpeed's default; only used pre-load (the archive overwrites it).
+        float turnSpeed = 540.0f;
         std::int32_t pathfindingBounds = 0;
         std::string moveClip;
         std::string idleClip;

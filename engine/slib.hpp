@@ -169,6 +169,10 @@ namespace sage
     Vector3 Vector3MultiplyByValue(const Vector3& vec3, float value);
     Vector2 Vector2MultiplyByValue(const Vector2& vec3, float value);
     Matrix ComposeMatrix(Vector3 translation, Quaternion rotation, Vector3 scale);
+    // The engine's canonical euler→matrix convention (Rz * Ry * Rx, degrees). This is the single
+    // definition of rotation order — sgTransform::GetMatrix, TransformSystem and BuildSrtMatrix all
+    // build their rotation from it, so the three never silently diverge.
+    [[nodiscard]] Matrix EulerToMatrix(const Vector3& eulerDegrees);
     int GetBoneIdByName(const BoneInfo* bones, int numBones, const char* boneName);
     Image GenImageGradientRadialTrans(int width, int height, float density, Color inner, Color outer);
     std::string StripPath(const std::string& fullPath);

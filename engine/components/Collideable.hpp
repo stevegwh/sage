@@ -77,8 +77,11 @@ namespace sage
     {
     };
 
-    // Fast translation/scale-only transform. The matrix must not contain rotation.
-    BoundingBox TransformBoundingBox(const BoundingBox& local, const Matrix& worldMat);
+    // Fast translation/scale-only AABB transform: transforms just the min/max corners, which is
+    // only correct when worldMat has no rotation (under rotation it yields a wrong, often
+    // too-small box). The name encodes that precondition; use TransformBoundingBoxByCorners for
+    // the rotated path.
+    BoundingBox TransformAabbNoRotation(const BoundingBox& local, const Matrix& worldMat);
     // Eight-corner transform that produces a valid axis-aligned box under rotation.
     BoundingBox TransformBoundingBoxByCorners(const BoundingBox& local, const Matrix& worldMat);
 } // namespace sage

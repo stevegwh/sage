@@ -29,7 +29,7 @@ namespace sage
         });
     }
 
-    BoundingBox TransformBoundingBox(const BoundingBox& local, const Matrix& worldMat)
+    BoundingBox TransformAabbNoRotation(const BoundingBox& local, const Matrix& worldMat)
     {
         return {Vector3Transform(local.min, worldMat), Vector3Transform(local.max, worldMat)};
     }
@@ -67,7 +67,7 @@ namespace sage
     Collideable::Collideable(const BoundingBox& local, const Matrix& worldMat)
     {
         localBoundingBox = local;
-        worldBoundingBox = TransformBoundingBox(local, worldMat);
+        worldBoundingBox = TransformAabbNoRotation(local, worldMat);
     }
 
 } // namespace sage

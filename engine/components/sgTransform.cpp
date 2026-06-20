@@ -152,9 +152,7 @@ namespace sage
     {
         Matrix trans = MatrixTranslate(GetWorldPos().x, GetWorldPos().y, GetWorldPos().z);
         Matrix _scale = MatrixScale(GetScale().x, GetScale().y, GetScale().z);
-        Matrix rot = MatrixMultiply(
-            MatrixMultiply(MatrixRotateZ(DEG2RAD * GetWorldRot().z), MatrixRotateY(DEG2RAD * GetWorldRot().y)),
-            MatrixRotateX(DEG2RAD * GetWorldRot().x));
+        Matrix rot = EulerToMatrix(GetWorldRot());
         return MatrixMultiply(MatrixMultiply(_scale, rot), trans);
     }
 

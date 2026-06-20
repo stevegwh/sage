@@ -31,7 +31,7 @@ namespace sage
             const bool forceRefresh = registry->any_of<CollideableStaticOverride>(entity);
             if (c.isStatic && !forceRefresh) return;
             c.worldBoundingBox = forceRefresh ? TransformBoundingBoxByCorners(c.localBoundingBox, t.GetMatrix())
-                                              : TransformBoundingBox(c.localBoundingBox, t.GetMatrixNoRot());
+                                              : TransformAabbNoRotation(c.localBoundingBox, t.GetMatrixNoRot());
         });
 
         UpdateTriggers();

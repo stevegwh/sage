@@ -13,6 +13,7 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -29,10 +30,8 @@ namespace sage
         AnimationId animationId{};
         int animSpeed = 1;
         bool oneShot = false;
-        float animationDelay = 0;
     };
 
-    // TODO: Use a timer for animation delay
     struct Animation
     {
         struct AnimData
@@ -43,10 +42,26 @@ namespace sage
             int speed = 1;
         };
 
+        // Transparent hash so clipIndexByName can be queried by std::string_view without allocating.
+        struct TransparentStringHash
+        {
+            using is_transparent = void;
+            std::size_t operator()(std::string_view sv) const noexcept
+            {
+                return std::hash<std::string_view>{}(sv);
+            }
+        };
+
         std::string modelKey;
+        // Legacy AnimationId→clip-index map driving ChangeAnimationById/PlayOneShot(AnimationId). The
+        // current API is the GLB-name path (ChangeAnimationByName, used by scripts and AnimationSystem);
+        // this is retained only because it is serialized. Prefer the *ByName methods for new code.
         std::unordered_map<AnimationId, int> animationMap;
         // Derived from the GLB on load (Blender NLA track names), index-aligned with `animations`.
         std::vector<std::string> clipNames;
+        // Derived alongside clipNames: name → index, for O(1) GetClipIndex (called per moving actor
+        // per frame by AnimationSystem). Not serialized; rebuilt by LoadAnimations.
+        std::unordered_map<std::string, int, TransparentStringHash, std::equal_to<>> clipIndexByName;
         ModelAnimation* animations = nullptr;
         int animsCount = 0;
 

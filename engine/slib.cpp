@@ -20,9 +20,7 @@ namespace sage
         Matrix BuildSrtMatrix(const Vector3& position, const Vector3& rotation, const Vector3& scale)
         {
             const Matrix matScale = MatrixScale(scale.x, scale.y, scale.z);
-            const Matrix matRotation = MatrixMultiply(
-                MatrixMultiply(MatrixRotateZ(rotation.z * DEG2RAD), MatrixRotateY(rotation.y * DEG2RAD)),
-                MatrixRotateX(rotation.x * DEG2RAD));
+            const Matrix matRotation = EulerToMatrix(rotation);
             const Matrix matTranslation = MatrixTranslate(position.x, position.y, position.z);
             return MatrixMultiply(MatrixMultiply(matScale, matRotation), matTranslation);
         }
@@ -37,6 +35,14 @@ namespace sage
             return colorTint;
         }
     } // namespace
+
+    Matrix EulerToMatrix(const Vector3& eulerDegrees)
+    {
+        return MatrixMultiply(
+            MatrixMultiply(
+                MatrixRotateZ(eulerDegrees.z * DEG2RAD), MatrixRotateY(eulerDegrees.y * DEG2RAD)),
+            MatrixRotateX(eulerDegrees.x * DEG2RAD));
+    }
 
     const Image& ImageSafe::GetImage() const
     {

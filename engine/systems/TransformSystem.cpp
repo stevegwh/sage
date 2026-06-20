@@ -18,16 +18,6 @@ namespace sage
             parentWorldScale.z != 0.0f ? worldScale.z / parentWorldScale.z : worldScale.z};
     }
 
-    // Mirror the Rz * Ry * Rx convention used in sgTransform::GetMatrix so the
-    // hierarchy and the rendering matrix agree on rotation order.
-    static Matrix EulerToMatrix(const Vector3& eulerDegrees)
-    {
-        return MatrixMultiply(
-            MatrixMultiply(
-                MatrixRotateZ(DEG2RAD * eulerDegrees.z), MatrixRotateY(DEG2RAD * eulerDegrees.y)),
-            MatrixRotateX(DEG2RAD * eulerDegrees.x));
-    }
-
     void TransformSystem::addChild(entt::entity parent, entt::entity child, entt::entity insertBefore) const
     {
         if (parent == entt::null) return;
