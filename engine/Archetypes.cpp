@@ -157,9 +157,7 @@ namespace sage
 
         if (registry.all_of<Archetype>(entity))
         {
-            registry.patch<Archetype>(entity, [archetype](Archetype& current) {
-                current = archetype;
-            });
+            registry.patch<Archetype>(entity, [archetype](Archetype& current) { current = archetype; });
         }
         else
         {
@@ -171,5 +169,13 @@ namespace sage
     {
         EnsureArchetypeIndex(registry);
         return registry.ctx().get<ArchetypeIndex>().Find(archetype);
+    }
+
+    std::optional<entt::entity> FindFirstWithArchetype(entt::registry& registry, const Archetype archetype)
+    {
+        EnsureArchetypeIndex(registry);
+        const auto& result = registry.ctx().get<ArchetypeIndex>().Find(archetype);
+        if (result.empty()) return std::nullopt;
+        return result.front();
     }
 } // namespace sage

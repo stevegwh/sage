@@ -4,24 +4,15 @@
 #include "entt/entity/fwd.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string_view>
 #include <vector>
 
 namespace sage
 {
-    // An entity's "kind" — a named identity (Player, Goblin, Chest). Where a
-    // component is a *verb* a system consumes (Moveable, Collideable), an Archetype
-    // is a *noun*: a queryable discriminator answering "what is this?" — e.g. when a
-    // collision is resolved and gameplay code must decide what it just hit. It is
-    // deliberately decoupled from composition: holding an Archetype implies nothing
-    // about which other components the entity has, so dispatch code still try_gets
-    // the verb-components it needs rather than assuming them from the kind.
-    //
-    // Mirrors the CollisionLayer value-type pattern: the kind set is declared once,
-    // project-side, in project/CustomArchetypes.hpp — the engine provides the
-    // mechanism but never names a kind, preserving the engine -> project dependency
-    // direction. The id (a hashed name) is the identity and the only field persisted;
-    // the name is display metadata sourced from the compile-time table.
+    /*
+        An archetype defines a 'noun', as opposed to a verb (component) or adjective (tag).
+    */
     struct Archetype
     {
         std::string_view name{};
@@ -69,6 +60,7 @@ namespace sage
     void SetArchetype(entt::registry& registry, entt::entity entity, Archetype archetype);
 
     [[nodiscard]] const std::vector<entt::entity>& FindAllWithArchetype(
-        entt::registry& registry,
-        Archetype archetype);
+        entt::registry& registry, Archetype archetype);
+    [[nodiscard]] std::optional<entt::entity> FindFirstWithArchetype(
+        entt::registry& registry, Archetype archetype);
 } // namespace sage
