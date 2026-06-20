@@ -5,25 +5,10 @@
 #include "Renderable.hpp"
 #include "engine/slib.hpp"
 
+#include <utility>
+
 namespace sage
 {
-
-    ModelView* Renderable::GetModel()
-    {
-        return std::visit(
-            []<typename T0>(T0& m) -> ModelView* {
-                using T = std::decay_t<T0>;
-                if constexpr (std::is_same_v<T, std::monostate>)
-                {
-                    return nullptr;
-                }
-                else
-                {
-                    return &m;
-                }
-            },
-            model);
-    }
 
     const ModelView* Renderable::GetModel() const
     {
@@ -40,6 +25,11 @@ namespace sage
                 }
             },
             model);
+    }
+
+    ModelView* Renderable::GetModel()
+    {
+        return const_cast<ModelView*>(std::as_const(*this).GetModel());
     }
 
     ModelMutable* Renderable::GetMutable()

@@ -361,8 +361,8 @@ namespace sage
             processKeyboardInput();
         }
 
-        DrawRectangleRec(rec, editing ? Color{255, 255, 255, 255} : Color{246, 248, 251, 255});
-        DrawRectangleLinesEx(rec, editing ? 2.0f : 1.0f, editing ? Color{37, 99, 235, 255} : Color{151, 164, 184, 255});
+        DrawRectangleRec(rec, editing ? CONTROL_BG_ACTIVE : CONTROL_BG);
+        DrawRectangleLinesEx(rec, editing ? 2.0f : 1.0f, editing ? CONTROL_BORDER_ACTIVE : CONTROL_BORDER);
 
         // Shrink the rendered font size to keep content inside the input box. The
         // input rect itself is sized by UpdateDimensions to fill the cell, so
@@ -401,7 +401,7 @@ namespace sage
                 Vector2{caretX, rec.y + 5.0f},
                 Vector2{caretX, rec.y + rec.height - 5.0f},
                 1.5f,
-                Color{37, 99, 235, 255});
+                CONTROL_BORDER_ACTIVE);
         }
     }
 

@@ -22,6 +22,9 @@ namespace sage
         std::function<std::size_t()> totalRowsProvider;
         std::function<std::size_t()> visibleRowsProvider;
 
+        [[nodiscard]] std::size_t MaxOffset() const;
+        void setOffsetClamped(std::size_t offset);
+
       public:
         static constexpr float GUTTER_WIDTH = 16.0f;
         static constexpr float BUTTON_HEIGHT = 12.0f;

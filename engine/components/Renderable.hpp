@@ -27,9 +27,6 @@ namespace sage
     class Renderable
     {
         std::variant<std::monostate, ModelView, ModelMutable> model;
-        // std::string name = "Default";
-        // std::string vanityName;
-        void setVanityName();
 
       public:
         Color hint = WHITE;
@@ -37,10 +34,6 @@ namespace sage
         Matrix initialTransform{};
         std::function<void(entt::entity)> reqShaderUpdate;
         bool serializable = true;
-
-        // [[nodiscard]] const std::string& GetName() const;
-        //  void SetName(const std::string& _name);
-        // [[nodiscard]] std::string GetVanityName() const;
 
         // Returns the underlying view (ModelView pointer; also valid when holding a
         // ModelMutable, since it derives from ModelView). Returns nullptr if the

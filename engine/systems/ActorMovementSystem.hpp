@@ -41,8 +41,7 @@ namespace sage
             entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable& collideable);
         void updateActor(entt::entity entity, MoveableActor& moveableActor, sgTransform& transform);
         [[nodiscard]] bool isNextPointOccupied(entt::entity entity, const MoveableActor& moveableActor) const;
-        void recalculatePath(
-            entt::entity entity, const MoveableActor& moveableActor, const Collideable& collideable) const;
+        void recalculatePath(entt::entity entity, const MoveableActor& moveableActor) const;
         bool hasReachedNextPoint(entt::entity entity, const MoveableActor& moveableActor) const;
         void handlePointReached(entt::entity entity, MoveableActor& moveableActor);
         void setPositionToGridCenter(entt::entity, const MoveableActor& moveableActor) const;

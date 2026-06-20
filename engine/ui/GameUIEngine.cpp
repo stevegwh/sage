@@ -118,25 +118,6 @@ namespace sage
         return settings->ScreenToViewportPosition(GetMousePosition());
     }
 
-    Rectangle GameUIEngine::GetOverlap(Rectangle rec1, Rectangle rec2)
-    {
-        float x1 = std::max(rec1.x, rec2.x);
-        float y1 = std::max(rec1.y, rec2.y);
-        float x2 = std::min(rec1.x + rec1.width, rec2.x + rec2.width);
-        float y2 = std::min(rec1.y + rec1.height, rec2.y + rec2.height);
-
-        if (x1 < x2 && y1 < y2)
-        {
-            Rectangle overlap;
-            overlap.x = x1;
-            overlap.y = y1;
-            overlap.width = x2 - x1;
-            overlap.height = y2 - y1;
-            return overlap;
-        }
-        return Rectangle{0, 0, 0, 0};
-    }
-
     void GameUIEngine::BringClickedWindowToFront(Window* clicked)
     {
         const auto it = std::ranges::find_if(
@@ -209,7 +190,7 @@ namespace sage
 
             if (auto colDist = std::distance(windows.begin(), colIt); windowDist < colDist)
             {
-                auto rec = GetOverlap(window->rec, collision->rec);
+                auto rec = GetCollisionRec(window->rec, collision->rec);
                 if (PointInsideRect(rec, mousePos))
                 {
                     // this part of the window is being obscured by another

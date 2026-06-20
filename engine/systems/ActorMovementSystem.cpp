@@ -186,7 +186,7 @@ namespace sage
     }
 
     void ActorMovementSystem::recalculatePath(
-        const entt::entity entity, const MoveableActor& moveableActor, const Collideable& collideable) const
+        const entt::entity entity, const MoveableActor& moveableActor) const
     {
         PathfindToLocation(entity, moveableActor.GetDestination());
     }
@@ -424,7 +424,7 @@ namespace sage
         {
             // std::cout << std::format(// "Entity {}: Next point occupied, rerouting \n",
             // static_cast<int>(entity));
-            recalculatePath(entity, moveableActor, collideable);
+            recalculatePath(entity, moveableActor);
             return;
         }
 
@@ -533,39 +533,3 @@ namespace sage
             });
     }
 } // namespace sage
-
-// Below: Old terrain height calculation before height maps
-//			float newY = 0;
-//			Ray ray;
-//			ray.position = actorTrans.position();
-//			ray.position.y = actorCollideable.worldBoundingBox.max.y;
-//			ray.direction = { 0, -1, 0 };
-//			debugRays.push_back(ray);
-//			auto collisions = collisionSystem->GetMeshCollisionsWithRay(entity, ray,
-// navigation collision layer); 			if (!collisions.empty())
-//			{
-//				//auto hitentt = collisions.at(0).collidedEntityId;
-//				//if (registry->any_of<Renderable>(hitentt))
-//				//{
-//				//	auto& name =
-// registry->get<Renderable>(collisions.at(0).collidedEntityId).name;
-//				//	// std::cout << "Hit with object: " << name << std::endl;
-//				//}
-//				//else
-//				//{
-//				//	auto text = TextFormat("Likely hit floor, with entity ID: %d",
-// collisions.at(0).collidedEntityId);
-//				//	// std::cout << text << std::endl;
-//				//}
-//
-//
-//				//auto newPos = Vector3Subtract(actorCollideable.localBoundingBox.max,
-// collisions.at(0).rlCollision.point); 				newY =
-// collisions.at(0).rlCollision.point.y;
-//				//debugCollisions.push_back(collisions.at(0).rlCollision);
-//
-//			}
-//			else
-//			{
-//				// std::cout << "No getFirstCollision with terrain detected \n";
-//			}

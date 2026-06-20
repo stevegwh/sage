@@ -47,6 +47,7 @@ namespace sage
         bool enabled = true;
 
         void checkMouseHover();
+        void clearHover();
         void onMouseHover() const;
         void onMouseLeftClick() const;
         void onMouseRightClick() const;

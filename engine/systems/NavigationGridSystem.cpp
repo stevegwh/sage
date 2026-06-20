@@ -18,19 +18,13 @@
 #include <limits>
 #include <queue>
 
-Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
-{
-    Vector3 size = {0};
-
-    size.x = fabsf(max.x - min.x);
-    size.y = fabsf(max.y - min.y);
-    size.z = fabsf(max.z - min.z);
-
-    return {min.x + size.x / 2.0f, min.y + size.y / 2.0f, min.z + size.z / 2.0f};
-}
-
 namespace sage
 {
+    static Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
+    {
+        return {(min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f, (min.z + max.z) * 0.5f};
+    }
+
     inline double heuristic(GridSquare a, GridSquare b)
     {
         return std::abs(a.row - b.row) + std::abs(a.col - b.col);

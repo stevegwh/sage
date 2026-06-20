@@ -33,46 +33,41 @@ namespace sage
         return scrollOffset;
     }
 
-    void Scrollbar::Scroll(const int signedDelta)
+    std::size_t Scrollbar::MaxOffset() const
     {
         const std::size_t total = TotalRows();
         const std::size_t visible = VisibleRows();
-        const std::size_t maxOffset = total > visible ? total - visible : 0;
+        return total > visible ? total - visible : 0;
+    }
 
+    void Scrollbar::setOffsetClamped(const std::size_t offset)
+    {
         const std::size_t previous = scrollOffset;
+        scrollOffset = std::min(offset, MaxOffset());
+        if (scrollOffset != previous) onScrollChanged.Publish();
+    }
+
+    void Scrollbar::Scroll(const int signedDelta)
+    {
         if (signedDelta < 0)
         {
             const auto positive = static_cast<std::size_t>(-signedDelta);
-            scrollOffset = positive > scrollOffset ? 0 : scrollOffset - positive;
+            setOffsetClamped(positive > scrollOffset ? 0 : scrollOffset - positive);
         }
         else if (signedDelta > 0)
         {
-            scrollOffset = std::min(maxOffset, scrollOffset + static_cast<std::size_t>(signedDelta));
+            setOffsetClamped(scrollOffset + static_cast<std::size_t>(signedDelta));
         }
-
-        if (scrollOffset != previous) onScrollChanged.Publish();
     }
 
     void Scrollbar::SetScrollOffset(const std::size_t offset)
     {
-        const std::size_t total = TotalRows();
-        const std::size_t visible = VisibleRows();
-        const std::size_t maxOffset = total > visible ? total - visible : 0;
-
-        const std::size_t previous = scrollOffset;
-        scrollOffset = std::min(offset, maxOffset);
-        if (scrollOffset != previous) onScrollChanged.Publish();
+        setOffsetClamped(offset);
     }
 
     void Scrollbar::ClampOffset()
     {
-        const std::size_t total = TotalRows();
-        const std::size_t visible = VisibleRows();
-        const std::size_t maxOffset = total > visible ? total - visible : 0;
-
-        const std::size_t previous = scrollOffset;
-        scrollOffset = std::min(scrollOffset, maxOffset);
-        if (scrollOffset != previous) onScrollChanged.Publish();
+        setOffsetClamped(scrollOffset);
     }
 
     void Scrollbar::HandleInput(const Rectangle& windowRect, const Rectangle& gutterRect, const Vector2 mousePos)
@@ -159,7 +154,7 @@ namespace sage
         const float thumbHeight = totalCount <= visibleCount
                                       ? trackRec.height
                                       : std::max(18.0f, trackRec.height * (visibleCount / totalCount));
-        const std::size_t maxOffset = TotalRows() > VisibleRows() ? TotalRows() - VisibleRows() : 0;
+        const std::size_t maxOffset = MaxOffset();
         const float scrollRatio =
             maxOffset == 0
                 ? 0.0f

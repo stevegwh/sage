@@ -103,7 +103,6 @@ namespace sage
             return created;
         }
 
-        [[nodiscard]] static Rectangle GetOverlap(Rectangle rec1, Rectangle rec2);
         [[nodiscard]] bool ObjectBeingDragged() const;
         [[nodiscard]] Window* GetWindowCollision(const Window* toCheck) const;
         [[nodiscard]] CellElement* GetCellUnderCursor() const;

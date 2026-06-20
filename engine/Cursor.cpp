@@ -16,27 +16,28 @@
 
 namespace sage
 {
+    void Cursor::clearHover()
+    {
+        if (m_hoverInfo.has_value())
+        {
+            onStopHover.Publish();
+        }
+        m_hoverInfo.reset();
+    }
+
     void Cursor::checkMouseHover()
     {
         const auto& mouseHitInfo = getMouseHitInfo();
         if (!mouseHitInfo.rlCollision.hit || !mouseHitInfo.collisionLayer.IsValid())
         {
-            if (m_hoverInfo.has_value())
-            {
-                onStopHover.Publish();
-            }
-            m_hoverInfo.reset();
+            clearHover();
             return;
         }
 
         const auto* cursorTarget = registry->try_get<CursorTarget>(mouseHitInfo.collidedEntityId);
         if (cursorTarget == nullptr || !cursorTarget->hoverable)
         {
-            if (m_hoverInfo.has_value())
-            {
-                onStopHover.Publish();
-            }
-            m_hoverInfo.reset();
+            clearHover();
             return;
         }
         if (!m_hoverInfo.has_value() || mouseHitInfo.collidedEntityId != m_hoverInfo->target)
