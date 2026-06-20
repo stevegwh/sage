@@ -6,7 +6,14 @@
 
 #include "entt/entt.hpp"
 
+#ifndef SOL_ALL_SAFETIES_ON
+#define SOL_ALL_SAFETIES_ON 1
+#endif
+#include "sol/forward.hpp"
+
+#include <functional>
 #include <memory>
+#include <string>
 
 namespace sage
 {
@@ -43,10 +50,18 @@ namespace sage
     // script error logs once and halts that instance. Changing ScriptComponent::scriptPath
     // hot-swaps the script (the old instance is disabled and a fresh one Awakes).
     //
-    // sol2/Lua stay private to the .cpp (Impl) so the 29k-line sol header is compiled
-    // exactly once.
+    // The full sol2/Lua implementation stays private to the .cpp (Impl). This
+    // header uses only sol's lightweight forward declarations for API extensions.
     class ScriptSystem
     {
+      public:
+        // Adds functions to a namespaced table in every script environment.
+        // The callback is invoked once per script instance and may capture the
+        // owning game's systems. Keeping registration here preserves the
+        // engine -> game dependency direction.
+        using ApiExtension = std::function<void(sol::table&, entt::entity)>;
+
+      private:
         struct Impl;
         std::unique_ptr<Impl> impl;
         entt::registry* registry;
@@ -58,6 +73,7 @@ namespace sage
 
       public:
         void Update();
+        void RegisterApiExtension(std::string namespaceName, ApiExtension extension);
         ScriptSystem(entt::registry* _registry, EngineSystems* _sys);
         ~ScriptSystem();
     };

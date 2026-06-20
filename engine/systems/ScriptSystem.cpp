@@ -18,7 +18,6 @@
 #include "raylib.h"
 #include "raymath.h"
 
-#define SOL_ALL_SAFETIES_ON 1
 #include "sol/sol.hpp"
 
 #include <algorithm>
@@ -26,6 +25,8 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 namespace sage
 {
@@ -67,8 +68,15 @@ namespace sage
 
     struct ScriptSystem::Impl
     {
+        struct ApiExtensionEntry
+        {
+            std::string namespaceName;
+            ApiExtension bind;
+        };
+
         sol::state lua;
         std::unordered_map<entt::entity, ScriptInstance> instances;
+        std::vector<ApiExtensionEntry> apiExtensions;
         entt::registry* registry;
         EngineSystems* sys;
 
@@ -483,6 +491,41 @@ namespace sage
             api.set_function("GetAnimation", [this](const std::uint32_t e) {
                 return registry->try_get<Animation>(static_cast<entt::entity>(e));
             });
+
+            for (const auto& extension : apiExtensions)
+            {
+                bindApiExtension(env, entity, extension);
+            }
+        }
+
+        void bindApiExtension(
+            sol::environment& env, const entt::entity entity, const ApiExtensionEntry& extension)
+        {
+            sol::object existing = env[extension.namespaceName];
+            sol::table api;
+            if (existing.valid() && existing.get_type() == sol::type::table)
+            {
+                api = existing.as<sol::table>();
+            }
+            else
+            {
+                api = lua.create_table();
+                env[extension.namespaceName] = api;
+            }
+            extension.bind(api, entity);
+        }
+
+        void registerApiExtension(std::string namespaceName, ApiExtension extension)
+        {
+            auto& entry = apiExtensions.emplace_back(
+                ApiExtensionEntry{std::move(namespaceName), std::move(extension)});
+
+            // Registration normally happens during systems construction, but
+            // applying it to live instances also makes late-loaded modules safe.
+            for (auto& [entity, instance] : instances)
+            {
+                bindApiExtension(instance.env, entity, entry);
+            }
         }
 
         template <typename... Args>
@@ -578,6 +621,12 @@ namespace sage
             }
             impl->call(instance, instance.update, dt);
         }
+    }
+
+    void ScriptSystem::RegisterApiExtension(std::string namespaceName, ApiExtension extension)
+    {
+        if (namespaceName.empty() || !extension) return;
+        impl->registerApiExtension(std::move(namespaceName), std::move(extension));
     }
 
     void ScriptSystem::onScriptComponentDestroyed(entt::registry& /*reg*/, const entt::entity entity)
