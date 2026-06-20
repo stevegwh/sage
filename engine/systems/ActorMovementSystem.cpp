@@ -485,11 +485,31 @@ namespace sage
 
     void ActorMovementSystem::RegisterLuaBindings(ScriptSystem& scripts)
     {
-        scripts.RegisterEventLuaBinding("MovementStarted");
-        scripts.RegisterEventLuaBinding("DestinationReached");
-        scripts.RegisterEventLuaBinding("DestinationUnreachable");
-        scripts.RegisterEventLuaBinding("MovementCancelled");
-        scripts.RegisterEventLuaBinding("PathChanged");
+        const auto registerMovementEvent = [this, &scripts](
+                                               const std::string& name,
+                                               Event<entt::entity> MoveableActor::* event) {
+            scripts.RegisterEventLuaBinding<MoveableActor>(
+                name, [this, event](const entt::entity source, const LuaEventCallback& callback) {
+                    auto* moveable = registry->try_get<MoveableActor>(source);
+                    if (moveable == nullptr) return Subscription{};
+                    return (moveable->*event).Subscribe([callback](const entt::entity /*actor*/) { callback(); });
+                });
+        };
+
+        registerMovementEvent("MovementStarted", &MoveableActor::onStartMovement);
+        registerMovementEvent("DestinationReached", &MoveableActor::onDestinationReached);
+        registerMovementEvent("MovementCancelled", &MoveableActor::onMovementCancel);
+        registerMovementEvent("PathChanged", &MoveableActor::onPathChanged);
+
+        scripts.RegisterEventLuaBinding<MoveableActor>(
+            "DestinationUnreachable", [this](const entt::entity source, const LuaEventCallback& callback) {
+                auto* moveable = registry->try_get<MoveableActor>(source);
+                if (moveable == nullptr) return Subscription{};
+                return moveable->onDestinationUnreachable.Subscribe(
+                    [callback](const entt::entity /*actor*/, const Vector3 destination) {
+                        callback(destination);
+                    });
+            });
 
         scripts.RegisterApiExtension(
             "sage", [this](sol::table& api, const entt::entity owner, entt::registry& registry) {
@@ -503,13 +523,11 @@ namespace sage
                     "TryPathfindToLocation",
                     sol::overload(
                         [this, owner, &registry](const Vector3& destination) {
-                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner))
-                                return false;
+                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
                             return TryPathfindToLocation(owner, destination);
                         },
                         [this, owner, &registry](const Vector3& destination, const bool astar) {
-                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner))
-                                return false;
+                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
                             return TryPathfindToLocation(owner, destination, astar);
                         }));
             });

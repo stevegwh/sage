@@ -309,8 +309,19 @@ namespace sage
 
     void CollisionSystem::RegisterLuaBindings(ScriptSystem& scripts)
     {
-        scripts.RegisterEventLuaBinding("TriggerEnter");
-        scripts.RegisterEventLuaBinding("TriggerStay");
-        scripts.RegisterEventLuaBinding("TriggerExit");
+        const auto registerTriggerEvent = [&scripts](const std::string& name, auto& event) {
+            auto* sourceEvent = &event;
+            scripts.RegisterEventLuaBinding<Collideable>(
+                name, [sourceEvent](const entt::entity source, const LuaEventCallback& callback) {
+                    return sourceEvent->Subscribe(
+                        [source, callback](const entt::entity trigger, const entt::entity other) {
+                            if (trigger == source) callback(static_cast<std::uint32_t>(other));
+                        });
+                });
+        };
+
+        registerTriggerEvent("TriggerEnter", onTriggerEnter);
+        registerTriggerEvent("TriggerStay", onTriggerStay);
+        registerTriggerEvent("TriggerExit", onTriggerExit);
     }
 } // namespace sage

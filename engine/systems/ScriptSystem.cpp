@@ -4,12 +4,7 @@
 
 #include "ScriptSystem.hpp"
 
-#include "CollisionSystem.hpp"
-#include "EngineSystems.hpp"
 #include "SceneTags.hpp"
-#include "components/Animation.hpp"
-#include "components/Collideable.hpp"
-#include "components/MoveableActor.hpp"
 #include "components/ScriptComponent.hpp"
 
 #include "raylib.h"
@@ -28,18 +23,11 @@ namespace sage
 {
     namespace
     {
-        enum class ScriptEventSource
-        {
-            Collision,
-            Movement,
-            Animation,
-        };
-
         struct ScriptEventSubscription
         {
             Subscription subscription;
             sol::protected_function callback;
-            ScriptEventSource source;
+            entt::id_type sourceType;
             entt::entity sourceEntity;
         };
 
@@ -74,9 +62,8 @@ namespace sage
         std::unordered_map<entt::entity, ScriptInstance> instances;
         std::vector<ApiExtensionEntry> apiExtensions;
         entt::registry* registry;
-        EngineSystems* sys;
 
-        Impl(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)
+        explicit Impl(entt::registry* _registry) : registry(_registry)
         {
             lua.open_libraries(
                 sol::lib::base, sol::lib::math, sol::lib::string, sol::lib::table, sol::lib::os);
@@ -110,11 +97,11 @@ namespace sage
         }
 
         static void unbindEventCallbacks(
-            ScriptInstance& instance, const ScriptEventSource source, const entt::entity sourceEntity)
+            ScriptInstance& instance, const entt::id_type sourceType, const entt::entity sourceEntity)
         {
             for (auto it = instance.eventSubscriptions.begin(); it != instance.eventSubscriptions.end();)
             {
-                if (it->second.source != source || it->second.sourceEntity != sourceEntity)
+                if (it->second.sourceType != sourceType || it->second.sourceEntity != sourceEntity)
                 {
                     ++it;
                     continue;
@@ -125,11 +112,11 @@ namespace sage
         }
 
         void unbindEventCallbacksFromSource(
-            const entt::entity sourceEntity, const ScriptEventSource source)
+            const entt::entity sourceEntity, const entt::id_type sourceType)
         {
             for (auto& [subscriber, instance] : instances)
             {
-                unbindEventCallbacks(instance, source, sourceEntity);
+                unbindEventCallbacks(instance, sourceType, sourceEntity);
             }
         }
 
@@ -152,7 +139,7 @@ namespace sage
         std::uint32_t addEventSubscription(
             ScriptInstance& instance,
             sol::protected_function callback,
-            const ScriptEventSource source,
+            const entt::id_type sourceType,
             const entt::entity sourceEntity)
         {
             const std::uint32_t id = ++instance.nextEventSubscriptionId;
@@ -161,7 +148,7 @@ namespace sage
                 ScriptEventSubscription{
                     .subscription = {},
                     .callback = std::move(callback),
-                    .source = source,
+                    .sourceType = sourceType,
                     .sourceEntity = sourceEntity});
             return id;
         }
@@ -169,86 +156,25 @@ namespace sage
         std::optional<std::uint32_t> subscribeToEvent(
             const entt::entity subscriber,
             const entt::entity sourceEntity,
-            const std::string& name,
-            sol::protected_function callback)
+            const entt::id_type sourceType,
+            sol::protected_function callback,
+            const EventSubscriber& subscribe)
         {
             const auto instanceIt = instances.find(subscriber);
             if (instanceIt == instances.end() || !registry->valid(sourceEntity) || !callback.valid())
                 return std::nullopt;
             auto& instance = instanceIt->second;
+            const auto id = addEventSubscription(instance, std::move(callback), sourceType, sourceEntity);
+            const LuaEventCallback dispatch{
+                [this, subscriber, id] { callEventCallback(subscriber, id); },
+                [this, subscriber, id](const std::uint32_t entity) { callEventCallback(subscriber, id, entity); },
+                [this, subscriber, id](const Vector3 value) { callEventCallback(subscriber, id, value); }};
 
-            if (name == "TriggerEnter" || name == "TriggerStay" || name == "TriggerExit")
-            {
-                const auto id = addEventSubscription(
-                    instance, std::move(callback), ScriptEventSource::Collision, sourceEntity);
-                auto handler = [this, subscriber, sourceEntity, id](
-                                   const entt::entity trigger, const entt::entity other) {
-                    if (trigger != sourceEntity) return;
-                    callEventCallback(subscriber, id, static_cast<std::uint32_t>(other));
-                };
+            auto& event = instance.eventSubscriptions.at(id);
+            event.subscription = subscribe(sourceEntity, dispatch);
+            if (event.subscription.IsActive()) return id;
 
-                auto& event = instance.eventSubscriptions.at(id);
-                if (name == "TriggerEnter")
-                    event.subscription = sys->collisionSystem->onTriggerEnter.Subscribe(std::move(handler));
-                else if (name == "TriggerStay")
-                    event.subscription = sys->collisionSystem->onTriggerStay.Subscribe(std::move(handler));
-                else
-                    event.subscription = sys->collisionSystem->onTriggerExit.Subscribe(std::move(handler));
-                return id;
-            }
-
-            if (name == "MovementStarted" || name == "DestinationReached" ||
-                name == "DestinationUnreachable" || name == "MovementCancelled" || name == "PathChanged")
-            {
-                auto* moveable = registry->try_get<MoveableActor>(sourceEntity);
-                if (moveable == nullptr) return std::nullopt;
-                const auto id = addEventSubscription(
-                    instance, std::move(callback), ScriptEventSource::Movement, sourceEntity);
-                auto& event = instance.eventSubscriptions.at(id);
-
-                if (name == "DestinationUnreachable")
-                {
-                    event.subscription = moveable->onDestinationUnreachable.Subscribe(
-                        [this, subscriber, id](const entt::entity /*actor*/, const Vector3 destination) {
-                            callEventCallback(subscriber, id, destination);
-                        });
-                }
-                else
-                {
-                    auto handler = [this, subscriber, id](const entt::entity /*actor*/) {
-                        callEventCallback(subscriber, id);
-                    };
-                    if (name == "MovementStarted")
-                        event.subscription = moveable->onStartMovement.Subscribe(std::move(handler));
-                    else if (name == "DestinationReached")
-                        event.subscription = moveable->onDestinationReached.Subscribe(std::move(handler));
-                    else if (name == "MovementCancelled")
-                        event.subscription = moveable->onMovementCancel.Subscribe(std::move(handler));
-                    else
-                        event.subscription = moveable->onPathChanged.Subscribe(std::move(handler));
-                }
-                return id;
-            }
-
-            if (name == "AnimationStarted" || name == "AnimationEnded" || name == "AnimationUpdated")
-            {
-                auto* animation = registry->try_get<Animation>(sourceEntity);
-                if (animation == nullptr) return std::nullopt;
-                const auto id = addEventSubscription(
-                    instance, std::move(callback), ScriptEventSource::Animation, sourceEntity);
-                auto handler = [this, subscriber, id](const entt::entity /*actor*/) {
-                    callEventCallback(subscriber, id);
-                };
-                auto& event = instance.eventSubscriptions.at(id);
-                if (name == "AnimationStarted")
-                    event.subscription = animation->onAnimationStart.Subscribe(std::move(handler));
-                else if (name == "AnimationEnded")
-                    event.subscription = animation->onAnimationEnd.Subscribe(std::move(handler));
-                else
-                    event.subscription = animation->onAnimationUpdated.Subscribe(std::move(handler));
-                return id;
-            }
-
+            instance.eventSubscriptions.erase(id);
             return std::nullopt;
         }
 
@@ -274,12 +200,8 @@ namespace sage
                 sol::meta_function::multiplication,
                 [](const Vector3& a, const float s) { return Vector3Scale(a, s); },
                 sol::meta_function::to_string,
-                [](const Vector3& v) {
-                    return std::string(TextFormat("(%.3f, %.3f, %.3f)", v.x, v.y, v.z));
-                });
+                [](const Vector3& v) { return std::string(TextFormat("(%.3f, %.3f, %.3f)", v.x, v.y, v.z)); });
 
-            // Setters route through the position/rotation/scale proxy fields so
-            // TransformSystem's dirty propagation runs automatically.
             lua.set_function(
                 "Log", [](const std::string& msg) { TraceLog(LOG_INFO, "Lua: %s", msg.c_str()); });
         }
@@ -463,21 +385,25 @@ namespace sage
         return impl->lua;
     }
 
-    void ScriptSystem::RegisterEventLuaBinding(std::string eventName)
+    void ScriptSystem::registerEventLuaBinding(
+        std::string eventName, const entt::id_type sourceType, EventSubscriber subscribe)
     {
         const std::string functionName = "On" + eventName;
         impl->registerApiExtension(
             "sage",
-            [this, functionName = std::move(functionName), eventName = std::move(eventName)](
-                sol::table& api, const entt::entity owner, entt::registry&) {
+            [this,
+             functionName = std::move(functionName),
+             eventName = std::move(eventName),
+             sourceType,
+             subscribe = std::move(subscribe)](sol::table& api, const entt::entity owner, entt::registry&) {
                 api.set_function(
                     functionName,
-                    [this, owner, eventName](
+                    [this, owner, eventName, sourceType, subscribe](
                         const std::uint32_t source,
                         sol::protected_function callback,
                         sol::this_state state) -> sol::object {
                         const auto id = impl->subscribeToEvent(
-                            owner, static_cast<entt::entity>(source), eventName, std::move(callback));
+                            owner, static_cast<entt::entity>(source), sourceType, std::move(callback), subscribe);
                         if (!id)
                         {
                             TraceLog(
@@ -493,40 +419,24 @@ namespace sage
             });
     }
 
+    void ScriptSystem::removeEventSubscriptions(const entt::entity source, const entt::id_type sourceType)
+    {
+        impl->unbindEventCallbacksFromSource(source, sourceType);
+    }
+
     void ScriptSystem::onScriptComponentDestroyed(entt::registry& /*reg*/, const entt::entity entity)
     {
         impl->destroyInstance(entity);
     }
 
-    void ScriptSystem::onMoveableActorDestroyed(entt::registry& /*reg*/, const entt::entity entity)
-    {
-        impl->unbindEventCallbacksFromSource(entity, ScriptEventSource::Movement);
-    }
-
-    void ScriptSystem::onAnimationDestroyed(entt::registry& /*reg*/, const entt::entity entity)
-    {
-        impl->unbindEventCallbacksFromSource(entity, ScriptEventSource::Animation);
-    }
-
-    void ScriptSystem::onCollideableDestroyed(entt::registry& /*reg*/, const entt::entity entity)
-    {
-        impl->unbindEventCallbacksFromSource(entity, ScriptEventSource::Collision);
-    }
-
-    ScriptSystem::ScriptSystem(entt::registry* _registry, EngineSystems* _sys)
-        : impl(std::make_unique<Impl>(_registry, _sys)), registry(_registry)
+    ScriptSystem::ScriptSystem(entt::registry* _registry)
+        : impl(std::make_unique<Impl>(_registry)), registry(_registry)
     {
         registry->on_destroy<ScriptComponent>().connect<&ScriptSystem::onScriptComponentDestroyed>(this);
-        registry->on_destroy<MoveableActor>().connect<&ScriptSystem::onMoveableActorDestroyed>(this);
-        registry->on_destroy<Animation>().connect<&ScriptSystem::onAnimationDestroyed>(this);
-        registry->on_destroy<Collideable>().connect<&ScriptSystem::onCollideableDestroyed>(this);
     }
 
     ScriptSystem::~ScriptSystem()
     {
         registry->on_destroy<ScriptComponent>().disconnect<&ScriptSystem::onScriptComponentDestroyed>(this);
-        registry->on_destroy<MoveableActor>().disconnect<&ScriptSystem::onMoveableActorDestroyed>(this);
-        registry->on_destroy<Animation>().disconnect<&ScriptSystem::onAnimationDestroyed>(this);
-        registry->on_destroy<Collideable>().disconnect<&ScriptSystem::onCollideableDestroyed>(this);
     }
 } // namespace sage
