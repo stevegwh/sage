@@ -257,7 +257,18 @@ namespace sage::editor
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                         {
-                            sceneSelectionRequest = makeSceneSelectionRequest(entry.entity);
+                            pendingHierarchyClick.reset();
+                            const ImGuiIO& io = ImGui::GetIO();
+                            const bool explicitlySelected =
+                                std::ranges::find(selectedSceneRoots, entry.entity) != selectedSceneRoots.end();
+                            if (!io.KeyShift && !io.KeyAlt && explicitlySelected && selectedSceneRoots.size() > 1)
+                            {
+                                pendingHierarchyClick = entry.entity;
+                            }
+                            else
+                            {
+                                sceneSelectionRequest = makeSceneSelectionRequest(entry.entity);
+                            }
                         }
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
@@ -342,6 +353,20 @@ namespace sage::editor
 
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(5);
+
+        if (pendingHierarchyClick.has_value())
+        {
+            if (ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+            {
+                pendingHierarchyClick.reset();
+            }
+            else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                sceneSelectionRequest = SceneSelectionRequest{
+                    .entity = *pendingHierarchyClick, .mode = SceneSelectionMode::Replace};
+                pendingHierarchyClick.reset();
+            }
+        }
 
         if (sceneSelectionRequest.has_value() && onSceneObjectSelectedCb)
         {

@@ -187,6 +187,9 @@ namespace sage
             std::optional<std::size_t> deletingFlatpackIndex;
             std::vector<entt::entity> selectedSceneEntities;
             std::vector<entt::entity> selectedSceneRoots;
+            // A plain click on one member of a multi-selection is applied on
+            // release so beginning a drag does not collapse the selection first.
+            std::optional<entt::entity> pendingHierarchyClick;
             entt::entity hierarchySelectionAnchor = entt::null;
             std::optional<entt::entity> focusedHierarchyEntity;
             std::optional<entt::entity> pendingHierarchyContextEntity;
