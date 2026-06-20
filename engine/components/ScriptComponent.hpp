@@ -32,7 +32,7 @@ namespace sage
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.field("Script Path", scriptPath);
+            i.openableFile("Script Path", scriptPath);
             i.field("Enabled", enabled);
         }
     };

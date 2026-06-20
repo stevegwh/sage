@@ -961,8 +961,8 @@ namespace sage
         {
             std::ofstream out{file};
             out << "-- Lifecycle callbacks are optional globals; delete the ones you don't need.\n"
-                   "-- API: entity, GetTransform([entity]), GetCollideable([entity]), GetAnimation([entity]),\n"
-                   "--      Vec3(x,y,z), Log(msg)\n"
+                   "-- API: entity, sage.GetTransform([entity]), sage.GetCollideable([entity]),\n"
+                   "--      sage.GetAnimation([entity]), sage.Vec3(x,y,z), sage.Log(msg)\n"
                    "\n"
                    "function Awake()\n"
                    "end\n"

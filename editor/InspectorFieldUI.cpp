@@ -6,6 +6,8 @@
 #include "imgui_internal.h"
 #include "imgui_stdlib.h"
 
+#include "extras/IconsFontAwesome6.h"
+
 #include "raylib.h"
 #include "raymath.h"
 
@@ -15,6 +17,7 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <filesystem>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -559,7 +562,11 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldWidget(const LeafField<std::string>& field, const bool editable, const bool mixed)
+        bool DrawInspectorFieldWidget(
+            const LeafField<std::string>& field,
+            const bool editable,
+            const bool mixed,
+            const bool openableFile = false)
         {
             if (mixed)
             {
@@ -568,7 +575,10 @@ namespace sage::editor
 
             std::string value = field.data ? *field.data : std::string{};
             bool changed = false;
-            ImGui::SetNextItemWidth(-FLT_MIN);
+            const float buttonWidth = openableFile ? ImGui::GetFrameHeight() : 0.0f;
+            const float spacing = openableFile ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
+            ImGui::SetNextItemWidth(openableFile ? std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonWidth - spacing)
+                                                : -FLT_MIN);
             const auto flags = editable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
             DrawMaybeDisabled(editable, [&]() {
                 if (ImGui::InputText("##value", &value, flags) && editable)
@@ -580,6 +590,26 @@ namespace sage::editor
                 DrawFieldClipboardMenu(FormatLeafValue(field), editable, [field](const std::string_view text) {
                     return CommitField(field, std::string{text});
                 });
+
+            if (openableFile)
+            {
+                ImGui::SameLine(0.0f, spacing);
+                std::error_code ec;
+                const std::filesystem::path path =
+                    value.empty() ? std::filesystem::path{} : std::filesystem::absolute(value, ec);
+                const bool canOpen = !ec && !path.empty() && std::filesystem::is_regular_file(path, ec);
+                ImGui::BeginDisabled(!canOpen);
+                if (ImGui::Button(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE "##open_file", ImVec2{buttonWidth, 0.0f}))
+                {
+                    OpenURL(path.string().c_str());
+                }
+                ImGui::EndDisabled();
+                if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                {
+                    ImGui::SetTooltip(
+                        "%s", canOpen ? "Open in default application" : "File does not exist");
+                }
+            }
             return changed;
         }
 
@@ -734,7 +764,13 @@ namespace sage::editor
             ImGui::PushID(field.label.c_str());
             bool changed = false;
             std::visit(
-                [&](const auto& value) { changed = DrawInspectorFieldWidget(value, field.editable, field.mixed); },
+                [&]<typename T>(const T& value) {
+                    if constexpr (std::is_same_v<T, LeafField<std::string>>)
+                        changed = DrawInspectorFieldWidget(
+                            value, field.editable, field.mixed, field.openableFile);
+                    else
+                        changed = DrawInspectorFieldWidget(value, field.editable, field.mixed);
+                },
                 field.value);
             ImGui::PopID();
             return changed;
