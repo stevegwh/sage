@@ -21,7 +21,7 @@ namespace sage
         constexpr int TERRAIN_CHUNK_QUADS = 64;
         constexpr const char* TERRAIN_LIGHTING_VS = "resources/shaders/custom/lighting.vs";
         constexpr const char* TERRAIN_LIGHTING_FS = "resources/shaders/custom/lighting.fs";
-        constexpr Color TERRAIN_TINT = {126, 138, 102, 255};
+        constexpr Color TERRAIN_TINT = {92, 142, 74, 255};
         // Minimum half-thickness so a freshly created flat terrain still has a
         // pickable bounding box.
         constexpr float TERRAIN_BOUNDS_PADDING = 0.05f;

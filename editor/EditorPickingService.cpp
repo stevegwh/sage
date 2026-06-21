@@ -8,8 +8,10 @@
 #include "engine/EngineSystems.hpp"
 #include "engine/Settings.hpp"
 #include "engine/components/CollisionIntent.hpp"
+#include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 
@@ -49,7 +51,33 @@ namespace sage::editor
                 continue;
             }
 
-            if (sys->registry->any_of<Renderable>(entity))
+            if (sys->registry->all_of<Terrain, DynamicRenderable>(entity))
+            {
+                const auto& renderable = sys->registry->get<DynamicRenderable>(entity);
+                const auto* model = renderable.GetModel();
+                if (!renderable.active || model == nullptr) continue;
+
+                const auto& transform = sys->registry->get<sgTransform>(entity);
+                const Vector3 yRotation = {0.0f, transform.GetWorldRot().y, 0.0f};
+                const Matrix entityMatrix =
+                    BuildRenderableEntityMatrix(transform.GetWorldPos(), yRotation, transform.GetScale());
+                const Matrix modelMatrix = MatrixMultiply(model->transform, entityMatrix);
+                RayCollision closestMeshHit{};
+                closestMeshHit.distance = std::numeric_limits<float>::max();
+
+                for (int meshIndex = 0; meshIndex < model->meshCount; ++meshIndex)
+                {
+                    const auto meshCollision = GetRayCollisionMesh(ray, model->meshes[meshIndex], modelMatrix);
+                    if (meshCollision.hit && meshCollision.distance < closestMeshHit.distance)
+                    {
+                        closestMeshHit = meshCollision;
+                    }
+                }
+
+                if (!closestMeshHit.hit) continue;
+                collision.rlCollision = closestMeshHit;
+            }
+            else if (sys->registry->any_of<Renderable>(entity))
             {
                 const auto& renderable = sys->registry->get<Renderable>(entity);
                 const auto* model = renderable.GetModel();
