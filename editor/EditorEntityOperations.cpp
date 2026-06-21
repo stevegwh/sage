@@ -69,7 +69,7 @@ namespace sage::editor
         sys->registry->emplace<Light>(
             entity,
             Light{
-                .type = LIGHT_POINT,
+                .type = LightType::Point,
                 .enabled = true,
                 .position = position,
                 .target = Vector3Zero(),

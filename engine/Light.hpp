@@ -9,9 +9,15 @@
 
 namespace sage
 {
+    enum class LightType : int
+    {
+        Sun = 0,
+        Point = 1
+    };
+
     struct Light
     {
-        int type;
+        LightType type;
         bool enabled;
         Vector3 position;
         Vector3 target;
@@ -45,7 +51,8 @@ namespace sage
                 static_cast<float>(color.a) / static_cast<float>(255)};
             const int enabledValue = enabled ? 1 : 0;
             SetShaderValue(shader, enabledLoc, &enabledValue, SHADER_UNIFORM_INT);
-            SetShaderValue(shader, typeLoc, &type, SHADER_UNIFORM_INT);
+            const int typeValue = static_cast<int>(type);
+            SetShaderValue(shader, typeLoc, &typeValue, SHADER_UNIFORM_INT);
             SetShaderValue(shader, positionLoc, _position, SHADER_UNIFORM_VEC3);
             SetShaderValue(shader, targetLoc, _target, SHADER_UNIFORM_VEC3);
             SetShaderValue(shader, colorLoc, _color, SHADER_UNIFORM_VEC4);

@@ -507,6 +507,7 @@ namespace sage
         mapController->DrawBrowsers();
         drawScriptBrowser();
         drawCollisionMatrixWindow();
+        drawLightSettingsModal();
         drawTerrainBrushWindow();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
@@ -780,7 +781,7 @@ namespace sage
                         sys->registry->emplace<Light>(
                             entity,
                             Light{
-                                .type = LIGHT_POINT,
+                                .type = LightType::Point,
                                 .enabled = true,
                                 .position = position,
                                 .target = Vector3Zero(),
@@ -1571,6 +1572,11 @@ namespace sage
             {
                 editorModes->BeginTerrainSculptOnSelection();
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Light Settings..."))
+            {
+                lightSettingsPopupRequested = true;
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View"))
@@ -1756,6 +1762,58 @@ namespace sage
         }
         ImGui::End();
         collisionMatrixWindowOpen = open;
+    }
+
+    void EditorScene::drawLightSettingsModal() const
+    {
+        constexpr const char* popupId = "Light Settings";
+        if (lightSettingsPopupRequested)
+        {
+            lightSettingsDraft = sys->settings->GetLightSettings();
+            ImGui::OpenPopup(popupId);
+            lightSettingsPopupRequested = false;
+        }
+
+        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2{0.5f, 0.5f});
+        if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+
+        ImGui::TextUnformatted("Global lighting defaults for this project.");
+        ImGui::Spacing();
+        ImGui::ColorEdit3("Ambient Color", &lightSettingsDraft.ambient.x);
+        ImGui::SliderFloat("Gamma", &lightSettingsDraft.gamma, 0.1f, 4.0f, "%.2f");
+
+        ImGui::Spacing();
+        if (ImGui::Button("Restore Defaults"))
+        {
+            lightSettingsDraft = LightSettings{};
+        }
+
+        ImGui::Spacing();
+        constexpr float buttonWidth = 100.0f;
+        const float buttonsWidth = buttonWidth * 2.0f + ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetCursorPosX(ImGui::GetWindowSize().x - buttonsWidth - ImGui::GetStyle().WindowPadding.x);
+        if (ImGui::Button("Save", ImVec2{buttonWidth, 0.0f}))
+        {
+            const LightSettings previous = sys->settings->GetLightSettings();
+            sys->settings->SetLightSettings(lightSettingsDraft);
+            if (sys->settings->SaveProjectSettings())
+            {
+                sys->lightSubSystem->ApplyLightSettings(lightSettingsDraft);
+                ImGui::CloseCurrentPopup();
+            }
+            else
+            {
+                sys->settings->SetLightSettings(previous);
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2{buttonWidth, 0.0f}))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 
     void EditorScene::drawTerrainBrushWindow() const

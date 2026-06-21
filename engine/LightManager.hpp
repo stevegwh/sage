@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Light.hpp"
+
 #include "entt/entt.hpp"
 #include "raylib.h"
 
@@ -8,13 +10,7 @@
 namespace sage
 {
     class Camera;
-    struct Light;
-
-    enum LightType
-    {
-        LIGHT_DIRECTIONAL = 0,
-        LIGHT_POINT
-    };
+    struct LightSettings;
 
     class LightManager
     {
@@ -32,18 +28,17 @@ namespace sage
       public:
         void RemoveLight(entt::entity light);
         entt::entity CreateLight(
-            int type,
+            LightType type,
             Vector3 position,
             Vector3 target,
             Color color,
             float intensity); // Create a light and get shader locations
         void LinkShaderToLights(Shader& _shader);
-        void SetAmbientLight(float r, float g, float b, float a);
-        void SetGamma(float g);
+        void ApplyLightSettings(const LightSettings& settings);
         void RefreshLights();
         void LinkRenderableToLight(entt::entity entity) const;
         void DrawDebugLights() const;
         void Update() const;
-        explicit LightManager(entt::registry* _registry, Camera* _camera);
+        explicit LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings);
     };
 } // namespace sage

@@ -14,6 +14,34 @@
 
 namespace sage
 {
+    struct LightSettings
+    {
+        Vector4 ambient{0.6f, 0.2f, 0.8f, 1.0f};
+        float gamma = 1.9f;
+
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(
+                cereal::make_nvp("ambient_red", ambient.x),
+                cereal::make_nvp("ambient_green", ambient.y),
+                cereal::make_nvp("ambient_blue", ambient.z),
+                cereal::make_nvp("ambient_alpha", ambient.w),
+                CEREAL_NVP(gamma));
+        }
+    };
+
+    struct ProjectSettings
+    {
+        LightSettings lightSettings{};
+
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(cereal::make_nvp("light_settings", lightSettings));
+        }
+    };
+
     struct Settings
     {
       private:
@@ -36,15 +64,18 @@ namespace sage
         bool useViewportOffsetOverride = false;
         Vector2 viewportOffsetOverride{};
 
-        // Serialized settings (loaded from settings.xml)
+        // Serialized local-user and project settings.
         int screenWidthUser{};
         int screenHeightUser{};
+        ProjectSettings projectSettings{};
 
         // Hardcoded defaults
         static constexpr int SCREEN_WIDTH = 1920;
         static constexpr int SCREEN_HEIGHT = 1080;
 
       public:
+        static constexpr const char* USER_SETTINGS_PATH = "resources/settings.json";
+        static constexpr const char* PROJECT_SETTINGS_PATH = "resources/project-settings.json";
         static constexpr float TARGET_SCREEN_WIDTH = 1920.0f;
         static constexpr float TARGET_SCREEN_HEIGHT = 1080.0f;
 
@@ -264,9 +295,25 @@ namespace sage
             ResetToUserDefined();
         }
 
+        [[nodiscard]] const LightSettings& GetLightSettings() const
+        {
+            return projectSettings.lightSettings;
+        }
+
+        void SetLightSettings(const LightSettings& value)
+        {
+            projectSettings.lightSettings = value;
+        }
+
+        [[nodiscard]] bool SaveProjectSettings() const
+        {
+            return serializer::SaveClassJson(PROJECT_SETTINGS_PATH, projectSettings);
+        }
+
         explicit Settings(bool* _exitProgram) : exitProgram(_exitProgram)
         {
-            serializer::DeserializeJsonFile<Settings>("resources/settings.json", *this);
+            serializer::DeserializeJsonFile<Settings>(USER_SETTINGS_PATH, *this);
+            serializer::DeserializeJsonFile<ProjectSettings>(PROJECT_SETTINGS_PATH, projectSettings);
         }
 
         template <class Archive>

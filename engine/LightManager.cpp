@@ -5,6 +5,7 @@
 #include "Camera.hpp"
 #include "components/Renderable.hpp"
 #include "Light.hpp"
+#include "Settings.hpp"
 
 #include <algorithm>
 
@@ -51,7 +52,7 @@ namespace sage
     }
 
     entt::entity LightManager::CreateLight(
-        int type, Vector3 position, Vector3 target, Color color, float intensity)
+        LightType type, Vector3 position, Vector3 target, Color color, float intensity)
     {
         if (lightsCount < MAX_LIGHTS)
         {
@@ -84,15 +85,10 @@ namespace sage
         updateShaderLights(_shader);
     }
 
-    void LightManager::SetAmbientLight(float r, float g, float b, float a)
+    void LightManager::ApplyLightSettings(const LightSettings& settings)
     {
-        ambient = {r, g, b, a};
-        RefreshLights();
-    }
-
-    void LightManager::SetGamma(float g)
-    {
-        gamma = g;
+        ambient = {settings.ambient.x, settings.ambient.y, settings.ambient.z, settings.ambient.w};
+        gamma = settings.gamma;
         RefreshLights();
     }
 
@@ -140,13 +136,14 @@ namespace sage
         }
     }
 
-    LightManager::LightManager(entt::registry* _registry, Camera* _camera) : registry(_registry), camera(_camera)
+    LightManager::LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings)
+        : registry(_registry), camera(_camera)
     {
         registry->on_construct<Light>().connect<&LightManager::onLightAdded>(this);
         defaultShader = ResourceManager::GetInstance().ShaderLoad(
             "resources/shaders/custom/lighting.vs", "resources/shaders/custom/lighting.fs");
 
-        SetAmbientLight(0.6f, 0.2f, 0.8f, 1.0f);
+        ApplyLightSettings(settings);
         LinkShaderToLights(defaultShader);
     }
 } // namespace sage

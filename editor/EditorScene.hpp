@@ -16,6 +16,8 @@
 #include "EditorSettings.hpp"
 #include "EditorTransformEditor.hpp"
 
+#include "engine/Settings.hpp"
+
 #include "entt/entt.hpp"
 
 #include <cstddef>
@@ -74,6 +76,8 @@ namespace sage
         mutable bool snapToGrid = false;
         mutable bool navigationGridVisible = false;
         mutable bool collisionMatrixWindowOpen = false;
+        mutable bool lightSettingsPopupRequested = false;
+        mutable LightSettings lightSettingsDraft{};
         mutable bool newMapRequested = false;
         mutable std::string newCollisionLayerName;
         mutable bool orbitingCamera = false;
@@ -94,6 +98,7 @@ namespace sage
         // is pinned to this so its UI lines up with the play area.
         [[nodiscard]] Rectangle gameViewportScreenRect() const;
         void drawCollisionMatrixWindow() const;
+        void drawLightSettingsModal() const;
         void addLight() const;
         void addSpawnPoint() const;
         void addTriggerVolume() const;
@@ -107,8 +112,7 @@ namespace sage
         void syncLightTransforms() const;
         void refreshAfterMapLoad() const;
         editor::EditorGui::AssetRenameResult handleAssetFileRename(
-            std::size_t index,
-            const std::string& requestedFileName) const;
+            std::size_t index, const std::string& requestedFileName) const;
         void moveHierarchyEntity(const editor::EditorGui::HierarchyMoveRequest& request) const;
         void drawHierarchyContextMenu() const;
         void drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed) const;

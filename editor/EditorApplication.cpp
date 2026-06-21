@@ -78,10 +78,6 @@ namespace sage
             std::make_unique<EngineSystems>(registry.get(), keyMapping.get(), settings.get(), audioManager.get());
 
         serializer::LoadAssetBinFile(registry.get(), "resources/assets.bin");
-        if (FileExists("resources/editor-map-assets.bin"))
-        {
-            serializer::LoadAssetBinFile(registry.get(), "resources/editor-map-assets.bin");
-        }
         scene = std::make_unique<EditorScene>(
             systems.get(), &dockLayout, &editorSettings, [this]() { saveEditorSettings(); });
 

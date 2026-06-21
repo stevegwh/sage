@@ -4,14 +4,18 @@
 
 #include "EngineSystems.hpp"
 
-#include "Serializer.hpp"
 #include "Archetypes.hpp"
+#include "Serializer.hpp"
 
 #include "Camera.hpp"
+#include "components/Animation.hpp"
+#include "components/Collideable.hpp"
+#include "components/sgTransform.hpp"
 #include "Cursor.hpp"
 #include "FullscreenTextOverlayManager.hpp"
 #include "LightManager.hpp"
 #include "MousePicker.hpp"
+#include "Settings.hpp"
 #include "systems/ActorMovementSystem.hpp"
 #include "systems/AnimationSystem.hpp"
 #include "systems/CollisionSystem.hpp"
@@ -24,9 +28,6 @@
 #include "systems/UberShaderSystem.hpp"
 #include "ui/GameUIEngine.hpp"
 #include "UserInput.hpp"
-#include "components/Animation.hpp"
-#include "components/Collideable.hpp"
-#include "components/sgTransform.hpp"
 
 #include <cassert>
 
@@ -41,7 +42,7 @@ namespace sage
           camera(std::make_unique<Camera>(_registry, userInput.get(), this)),
           picker(std::make_unique<MousePicker>(_registry, this)),
           cursor(std::make_unique<Cursor>(_registry, this)),
-          lightSubSystem(std::make_unique<LightManager>(_registry, camera.get())),
+          lightSubSystem(std::make_unique<LightManager>(_registry, camera.get(), _settings->GetLightSettings())),
           transformSystem(std::make_unique<TransformSystem>(_registry)),
           renderSystem(std::make_unique<RenderSystem>(_registry)),
           collisionSystem(std::make_unique<CollisionSystem>(_registry)),
