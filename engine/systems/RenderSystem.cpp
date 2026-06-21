@@ -10,9 +10,92 @@
 
 #include "components/UberShaderComponent.hpp"
 #include "raylib.h"
+#include "ResourceManager.hpp"
+#include "rlgl.h"
+
+#include <memory>
+#include <stdexcept>
+#include <string>
 
 namespace sage
 {
+    namespace
+    {
+#if defined(PLATFORM_DESKTOP)
+        constexpr const char* SKYBOX_VERTEX_SHADER = "resources/shaders/glsl330/skybox.vs";
+        constexpr const char* SKYBOX_FRAGMENT_SHADER = "resources/shaders/glsl330/skybox.fs";
+#else
+        constexpr const char* SKYBOX_VERTEX_SHADER = "resources/shaders/glsl100/skybox.vs";
+        constexpr const char* SKYBOX_FRAGMENT_SHADER = "resources/shaders/glsl100/skybox.fs";
+#endif
+    } // namespace
+
+    class Skybox
+    {
+        Model model{};
+        TextureCubemap cubemap{};
+
+      public:
+        explicit Skybox(const std::string& imageKey)
+        {
+            auto image = ResourceManager::GetInstance().GetImage(imageKey);
+            const Image& source = image.GetImage();
+            if (source.width % 4 != 0 || source.height % 3 != 0 || source.width / 4 != source.height / 3)
+            {
+                throw std::runtime_error("Skybox image '" + imageKey + "' must use a 4x3 cubemap cross layout");
+            }
+
+            model = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
+            model.materials[0].shader =
+                ResourceManager::GetInstance().ShaderLoad(SKYBOX_VERTEX_SHADER, SKYBOX_FRAGMENT_SHADER);
+
+            const int environmentMap = MATERIAL_MAP_CUBEMAP;
+            const int disabled = 0;
+            SetShaderValue(
+                model.materials[0].shader,
+                GetShaderLocation(model.materials[0].shader, "environmentMap"),
+                &environmentMap,
+                SHADER_UNIFORM_INT);
+            SetShaderValue(
+                model.materials[0].shader,
+                GetShaderLocation(model.materials[0].shader, "vflipped"),
+                &disabled,
+                SHADER_UNIFORM_INT);
+            SetShaderValue(
+                model.materials[0].shader,
+                GetShaderLocation(model.materials[0].shader, "doGamma"),
+                &disabled,
+                SHADER_UNIFORM_INT);
+
+            cubemap = LoadTextureCubemap(source, CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE);
+            if (cubemap.id == 0)
+            {
+                UnloadModel(model);
+                model = {};
+                throw std::runtime_error("Could not upload skybox image '" + imageKey + "'");
+            }
+            SetTextureFilter(cubemap, TEXTURE_FILTER_BILINEAR);
+            model.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = cubemap;
+        }
+
+        ~Skybox()
+        {
+            if (cubemap.id != 0) UnloadTexture(cubemap);
+            if (model.meshCount != 0) UnloadModel(model);
+        }
+
+        Skybox(const Skybox&) = delete;
+        Skybox& operator=(const Skybox&) = delete;
+
+        void Draw() const
+        {
+            rlDisableBackfaceCulling();
+            rlDisableDepthMask();
+            DrawModel(model, Vector3Zero(), 1.0f, WHITE);
+            rlEnableDepthMask();
+            rlEnableBackfaceCulling();
+        }
+    };
 
     void RenderSystem::Update()
     {
@@ -20,6 +103,8 @@ namespace sage
 
     void RenderSystem::Draw() // Can't be const as GetModel returns pointers
     {
+        if (skybox) skybox->Draw();
+
         auto normalView =
             registry->view<Renderable, sgTransform>(entt::exclude<RenderableDeferred, UberShaderComponent>);
         auto deferredView =
@@ -87,5 +172,17 @@ namespace sage
 
     RenderSystem::RenderSystem(entt::registry* _registry) : registry(_registry)
     {
+    }
+
+    RenderSystem::~RenderSystem() = default;
+
+    void RenderSystem::SetSkybox(const std::string& imageKey)
+    {
+        skybox = std::make_unique<Skybox>(imageKey);
+    }
+
+    void RenderSystem::ClearSkybox()
+    {
+        skybox.reset();
     }
 } // namespace sage

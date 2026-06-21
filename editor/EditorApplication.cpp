@@ -8,6 +8,7 @@
 #include "engine/KeyMapping.hpp"
 #include "engine/Serializer.hpp"
 #include "engine/Settings.hpp"
+#include "engine/systems/RenderSystem.hpp"
 #include "engine/UserInput.hpp"
 
 #include "imgui.h"
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace sage
 {
@@ -78,6 +80,7 @@ namespace sage
             std::make_unique<EngineSystems>(registry.get(), keyMapping.get(), settings.get(), audioManager.get());
 
         serializer::LoadAssetBinFile(registry.get(), "resources/assets.bin");
+        if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
         scene = std::make_unique<EditorScene>(
             systems.get(), &dockLayout, &editorSettings, [this]() { saveEditorSettings(); });
 
@@ -251,11 +254,12 @@ namespace sage
         }
     }
 
-    EditorApplication::EditorApplication()
+    EditorApplication::EditorApplication(std::string _skyboxImageKey)
         : registry(std::make_unique<entt::registry>()),
           keyMapping(std::make_unique<KeyMapping>()),
           settings(std::make_unique<Settings>(&exitWindow)),
-          audioManager(std::make_unique<AudioManager>())
+          audioManager(std::make_unique<AudioManager>()),
+          skyboxImageKey(std::move(_skyboxImageKey))
     {
         serializer::DeserializeXMLFile<EditorSettings>(EDITOR_SETTINGS_PATH, editorSettings);
     }
@@ -265,6 +269,8 @@ namespace sage
         rlImGuiShutdown();
         UnloadRenderTexture(renderTexture);
         UnloadRenderTexture(gameUiTexture);
+        scene.reset();
+        systems.reset();
         CloseWindow();
     }
 } // namespace sage

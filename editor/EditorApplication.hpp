@@ -7,6 +7,7 @@
 #include "raylib.h"
 
 #include <memory>
+#include <string>
 
 namespace sage
 {
@@ -36,6 +37,7 @@ namespace sage
         bool exitWindowRequested = false;
         bool exitWindow = false;
         bool viewportFullscreen = false;
+        std::string skyboxImageKey;
 
         void init();
         void draw();
@@ -47,7 +49,7 @@ namespace sage
 
       public:
         void Update();
-        EditorApplication();
+        explicit EditorApplication(std::string _skyboxImageKey = {});
         ~EditorApplication();
 
         EditorApplication(const EditorApplication&) = delete;
