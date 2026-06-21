@@ -831,12 +831,44 @@ namespace sage::editor
             }
         }
 
+        void DrawMaterialPickerRow(
+            const MaterialPickerField& picker,
+            std::optional<InspectorComponentsResult::MaterialSelection>& selectedMaterial)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            const std::string label = "Material " + std::to_string(picker.materialIndex);
+            ImGui::TextUnformatted(label.c_str());
+
+            ImGui::TableSetColumnIndex(1);
+            const char* preview = picker.mixed ? "-" : picker.currentKey.c_str();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::PushID(static_cast<int>(picker.materialIndex));
+            if (ImGui::BeginCombo("##material", preview))
+            {
+                for (const auto& option : picker.options)
+                {
+                    const bool selected = !picker.mixed && option == picker.currentKey;
+                    if (ImGui::Selectable(option.c_str(), selected))
+                    {
+                        selectedMaterial = InspectorComponentsResult::MaterialSelection{
+                            .materialIndex = picker.materialIndex, .materialKey = option};
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopID();
+        }
+
         bool DrawInspectorComponent(
             const InspectedComponent& component,
             std::optional<EditorComponentId>& removeComponent,
             std::optional<InspectorComponentsResult::ComponentMoveRequest>& moveComponent,
             bool& editModelDefaults,
             std::optional<std::string>& selectedModelKey,
+            std::optional<InspectorComponentsResult::MaterialSelection>& selectedMaterial,
             bool& selectScriptFile)
         {
             ImGui::PushID(component.displayName.c_str());
@@ -924,6 +956,10 @@ namespace sage::editor
                     {
                         DrawModelPickerRow(*component.modelPicker, selectedModelKey);
                     }
+                    for (const auto& picker : component.materialPickers)
+                    {
+                        DrawMaterialPickerRow(picker, selectedMaterial);
+                    }
                     for (const auto& field : component.fields)
                     {
                         changed |= DrawInspectorFieldRow(field, selectScriptFile);
@@ -946,6 +982,7 @@ namespace sage::editor
         bool editModelDefaults = false;
         bool selectScriptFile = false;
         std::optional<std::string> selectedModelKey;
+        std::optional<InspectorComponentsResult::MaterialSelection> selectedMaterial;
         for (const auto& component : components)
         {
             changed |= DrawInspectorComponent(
@@ -954,6 +991,7 @@ namespace sage::editor
                 moveComponent,
                 editModelDefaults,
                 selectedModelKey,
+                selectedMaterial,
                 selectScriptFile);
         }
         return {
@@ -964,6 +1002,7 @@ namespace sage::editor
             .moveComponent = std::move(moveComponent),
             .editModelDefaults = editModelDefaults,
             .selectScriptFile = selectScriptFile,
-            .selectedModelKey = std::move(selectedModelKey)};
+            .selectedModelKey = std::move(selectedModelKey),
+            .selectedMaterial = std::move(selectedMaterial)};
     }
 } // namespace sage::editor

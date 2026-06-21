@@ -128,6 +128,12 @@ namespace sage
             // gesture so undo/redo can open and close a single transaction.
             struct InspectorEditResult
             {
+                struct MaterialSelection
+                {
+                    unsigned int materialIndex = 0;
+                    std::string materialKey;
+                };
+
                 bool changed = false;
                 bool began = false;
                 bool committed = false;
@@ -139,6 +145,7 @@ namespace sage
                 bool editModelDefaultsClicked = false;
                 // Renderable's model dropdown requested a coordinated model swap.
                 std::optional<std::string> selectedModelKey;
+                std::optional<MaterialSelection> selectedMaterial;
                 bool selectScriptFile = false;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;

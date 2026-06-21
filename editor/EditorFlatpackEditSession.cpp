@@ -1,10 +1,10 @@
 #include "EditorFlatpackEditSession.hpp"
 
-#include "EditorFlatpack.hpp"
 #include "EditorHistory.hpp"
 #include "EditorMapLoader.hpp"
 #include "engine/Camera.hpp"
 #include "engine/EngineSystems.hpp"
+#include "engine/Flatpack.hpp"
 
 #include "imgui.h"
 #include "raylib.h"
@@ -54,7 +54,7 @@ namespace sage::editor
 
     void EditorFlatpackEditSession::open(const std::filesystem::path& path)
     {
-        if (!IsFlatpackFile(path.string().c_str()))
+        if (!sage::IsFlatpackFile(path.string().c_str()))
         {
             std::cerr << "ERROR: Not a flatpack file: " << path << std::endl;
             return;
@@ -93,7 +93,7 @@ namespace sage::editor
     {
         if (!active) return;
 
-        if (!SaveFlatpack(*sys->registry, root, flatpackPath.string().c_str()))
+        if (!sage::SaveFlatpack(*sys->registry, root, flatpackPath.string().c_str()))
         {
             std::cerr << "ERROR: Failed to save flatpack: " << flatpackPath << std::endl;
             return;

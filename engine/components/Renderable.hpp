@@ -15,6 +15,7 @@
 #include <functional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace sage
 {
@@ -27,6 +28,11 @@ namespace sage
     class Renderable
     {
         std::variant<std::monostate, ModelView, ModelMutable> model;
+        std::vector<std::string> materialKeys;
+
+        void ResetMaterialKeys();
+        [[nodiscard]] std::string SerializedModelKey(const std::string& modelKey) const;
+        static std::vector<std::string> ParseMaterialKeys(std::string& modelKey);
 
       public:
         Color hint = WHITE;
@@ -49,6 +55,8 @@ namespace sage
 
         void SetModel(ModelView _model);
         void SetModel(ModelMutable _model);
+        [[nodiscard]] const std::vector<std::string>& GetMaterialKeys() const;
+        bool SetMaterialKey(unsigned int materialIndex, const std::string& materialKey);
 
         void Enable();
         void Disable();
@@ -78,6 +86,7 @@ namespace sage
                 kind = 1;
                 key = view->GetKey();
             }
+            key = SerializedModelKey(key);
             archive(kind, key, initialTransform);
         }
 
@@ -87,6 +96,7 @@ namespace sage
             std::uint8_t kind = 0;
             std::string key;
             archive(kind, key, initialTransform);
+            const auto loadedMaterialKeys = ParseMaterialKeys(key);
 
             if (kind == 1)
             {
@@ -105,6 +115,12 @@ namespace sage
             else
             {
                 model = std::monostate{};
+            }
+
+            ResetMaterialKeys();
+            for (unsigned int i = 0; i < loadedMaterialKeys.size() && i < materialKeys.size(); ++i)
+            {
+                if (loadedMaterialKeys[i] != materialKeys[i]) SetMaterialKey(i, loadedMaterialKeys[i]);
             }
         }
 

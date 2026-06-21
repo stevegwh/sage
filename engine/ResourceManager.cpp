@@ -623,6 +623,27 @@ namespace sage
         return view;
     }
 
+    std::vector<std::string> ResourceManager::GetMaterialKeys() const
+    {
+        std::vector<std::string> keys;
+        keys.reserve(materialMap.size());
+        for (const auto& [key, material] : materialMap) keys.push_back(key);
+        std::ranges::sort(keys);
+        return keys;
+    }
+
+    const std::vector<std::string>& ResourceManager::GetModelMaterialKeys(const std::string& modelKey) const
+    {
+        assert(modelCopies.contains(modelKey));
+        return modelCopies.at(modelKey).materialNames;
+    }
+
+    const Material& ResourceManager::GetMaterial(const std::string& key) const
+    {
+        assert(materialMap.contains(key));
+        return materialMap.at(key);
+    }
+
     /* Create a new deep-copy entry in the mutable pool from the asset stored under
     viewKey, and returns a ModelMutable view onto it. The deep copy has private
     materials, so mutations through the returned view are isolated. Lifetime of

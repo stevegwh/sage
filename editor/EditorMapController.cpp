@@ -174,6 +174,11 @@ namespace sage::editor
         return defaultBrowserDirectory(currentMapPath, editorSettings);
     }
 
+    void EditorMapController::NewMap()
+    {
+        loadBlankMap();
+    }
+
     void EditorMapController::LoadMap(const std::filesystem::path& path)
     {
         const auto selectedPath = ensureMapExtension(path);

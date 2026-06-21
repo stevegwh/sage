@@ -60,6 +60,7 @@ namespace sage
             void DrawBrowsers();
             void OpenLoadBrowser();
             void OpenSaveBrowser();
+            void NewMap();
             void LoadMap(const std::filesystem::path& path);
             void SaveMap();
             void RestoreLastOpenedMap();
@@ -72,7 +73,7 @@ namespace sage
             void saveMapAs(const std::filesystem::path& path);
             void rememberCurrentMapPath();
             void markSaved(const std::filesystem::path& path);
-            // Clears the scene to a fresh, unsaved blank map (no current path).
+            // Clears the scene to a fresh blank map (no current path).
             void loadBlankMap();
             // Modal shown when a selected map fails the magic check (outdated format).
             void drawOutdatedMapDialog();

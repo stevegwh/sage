@@ -8,6 +8,7 @@
 #include "raymath.h"
 #include "ResourceManager.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <regex>
@@ -452,7 +453,11 @@ namespace sage
 
     void ModelMutable::SetMaterial(unsigned int idx, Material mat) const
     {
+        assert(idx < static_cast<unsigned int>(rlmodel.materialCount));
+        MaterialMap* ownedMaps = rlmodel.materials[idx].maps;
         rlmodel.materials[idx] = mat;
+        rlmodel.materials[idx].maps = ownedMaps;
+        std::copy_n(mat.maps, MAX_MATERIAL_MAPS, ownedMaps);
     }
 
     Model& ModelMutable::GetRlModelMut()

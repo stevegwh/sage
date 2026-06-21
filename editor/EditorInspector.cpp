@@ -60,6 +60,38 @@ namespace sage::editor
             return picker;
         }
 
+        std::vector<MaterialPickerField> DescribeMaterialPickers(
+            const entt::registry& registry, const std::vector<entt::entity>& entities)
+        {
+            if (entities.empty() || !registry.valid(entities.front())) return {};
+            const auto* first = registry.try_get<Renderable>(entities.front());
+            if (first == nullptr || first->GetModel() == nullptr) return {};
+
+            const auto& firstKeys = first->GetMaterialKeys();
+            if (std::ranges::any_of(entities, [&](const entt::entity entity) {
+                    const auto* renderable = registry.valid(entity) ? registry.try_get<Renderable>(entity) : nullptr;
+                    return renderable == nullptr || renderable->GetModel() == nullptr ||
+                           renderable->GetMaterialKeys().size() != firstKeys.size();
+                }))
+            {
+                return {};
+            }
+
+            const auto options = ResourceManager::GetInstance().GetMaterialKeys();
+            std::vector<MaterialPickerField> pickers;
+            pickers.reserve(firstKeys.size());
+            for (unsigned int i = 0; i < firstKeys.size(); ++i)
+            {
+                MaterialPickerField picker{
+                    .materialIndex = i, .currentKey = firstKeys[i], .options = options};
+                picker.mixed = std::ranges::any_of(entities, [&](const entt::entity entity) {
+                    return registry.get<Renderable>(entity).GetMaterialKeys()[i] != picker.currentKey;
+                });
+                pickers.push_back(std::move(picker));
+            }
+            return pickers;
+        }
+
         bool HasCatalogModel(const std::optional<ModelPickerField>& picker)
         {
             return picker.has_value() && !picker->mixed && !picker->currentKey.empty() &&
@@ -574,6 +606,9 @@ namespace sage::editor
             const auto modelPicker = component.entry->componentId == ComponentIdOf<Renderable>()
                                          ? DescribeModelPicker(registry, {entity})
                                          : std::nullopt;
+            const auto materialPickers = component.entry->componentId == ComponentIdOf<Renderable>()
+                                             ? DescribeMaterialPickers(registry, {entity})
+                                             : std::vector<MaterialPickerField>{};
             result.push_back(
                 {.componentId = component.entry->componentId,
                  .displayName = component.entry->displayName,
@@ -582,6 +617,7 @@ namespace sage::editor
                  .removeAllowed = removal.allowed,
                  .removeBlockedReason = removal.blockedReason,
                  .modelPicker = modelPicker,
+                 .materialPickers = materialPickers,
                  .modelDefaultsAvailable = HasCatalogModel(modelPicker)});
         }
         return result;
@@ -626,6 +662,9 @@ namespace sage::editor
             const auto modelPicker = entry.componentId == ComponentIdOf<Renderable>()
                                          ? DescribeModelPicker(registry, entities)
                                          : std::nullopt;
+            const auto materialPickers = entry.componentId == ComponentIdOf<Renderable>()
+                                             ? DescribeMaterialPickers(registry, entities)
+                                             : std::vector<MaterialPickerField>{};
             InspectedComponent component{
                 .componentId = entry.componentId,
                 .displayName = entry.displayName,
@@ -633,6 +672,7 @@ namespace sage::editor
                 .removeAllowed = removal.allowed,
                 .removeBlockedReason = removal.blockedReason,
                 .modelPicker = modelPicker,
+                .materialPickers = materialPickers,
                 .modelDefaultsAvailable = HasCatalogModel(modelPicker)};
             for (const auto& firstField : describedFields.front())
             {

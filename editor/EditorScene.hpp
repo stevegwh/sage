@@ -74,6 +74,7 @@ namespace sage
         mutable bool snapToGrid = false;
         mutable bool navigationGridVisible = false;
         mutable bool collisionMatrixWindowOpen = false;
+        mutable bool newMapRequested = false;
         mutable std::string newCollisionLayerName;
         mutable bool orbitingCamera = false;
         mutable bool panningCamera = false;
@@ -122,6 +123,7 @@ namespace sage
         void addAnimationToSelection() const;
         void removeAnimationFromSelection() const;
         void changeSelectedModels(const std::string& modelKey) const;
+        void changeSelectedMaterials(unsigned int materialIndex, const std::string& materialKey) const;
         void addMoveableActorToSelection() const;
         void removeMoveableActorFromSelection() const;
         void onHistoryApplied(const std::vector<entt::entity>& restored) const;

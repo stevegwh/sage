@@ -2,7 +2,6 @@
 
 #include "EditorAssetRename.hpp"
 #include "EditorComponents.hpp"
-#include "EditorFlatpack.hpp"
 #include "EditorFocus.hpp"
 #include "EditorMapLoader.hpp"
 #include "engine/Archetypes.hpp"
@@ -22,6 +21,7 @@
 #include "engine/Cursor.hpp"
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
+#include "engine/Flatpack.hpp"
 #include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
@@ -518,7 +518,7 @@ namespace sage
 
     void EditorScene::drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed) const
     {
-        constexpr const char* kPopupId = "Exit Editor";
+        constexpr const char* kPopupId = "Unsaved Changes";
 
         // While a flatpack is open the live history belongs to it, and the map's
         // own dirty flag is parked in the session stash — check both.
@@ -532,7 +532,14 @@ namespace sage
             return;
         }
 
-        if (exitRequested && !ImGui::IsPopupOpen(kPopupId))
+        if (newMapRequested && !mapController->HasUnsavedChanges())
+        {
+            newMapRequested = false;
+            mapController->NewMap();
+            return;
+        }
+
+        if ((exitRequested || newMapRequested) && !ImGui::IsPopupOpen(kPopupId))
         {
             ImGui::OpenPopup(kPopupId);
         }
@@ -542,26 +549,39 @@ namespace sage
         ImGui::SetNextWindowSize(ImVec2{440.0f, 0.0f}, ImGuiCond_Appearing);
         if (ImGui::BeginPopupModal(kPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
         {
-            ImGui::TextWrapped("You have unsaved changes. Exit without saving? [Y/N]");
+            const bool creatingNewMap = newMapRequested && !exitRequested;
+            ImGui::TextWrapped(
+                creatingNewMap ? "You have unsaved changes. Create a new map without saving? [Y/N]"
+                               : "You have unsaved changes. Exit without saving? [Y/N]");
             ImGui::Spacing();
-            constexpr float exitButtonWidth = 180.0f;
+            constexpr float confirmButtonWidth = 210.0f;
             constexpr float cancelButtonWidth = 120.0f;
-            const float buttonsWidth = exitButtonWidth + cancelButtonWidth + ImGui::GetStyle().ItemSpacing.x;
+            const float buttonsWidth = confirmButtonWidth + cancelButtonWidth + ImGui::GetStyle().ItemSpacing.x;
             ImGui::SetCursorPosX((ImGui::GetWindowSize().x - buttonsWidth) * 0.5f);
-            const bool confirm = ImGui::Button("Exit Without Saving (Y)", ImVec2{exitButtonWidth, 0.0f}) ||
-                                 ImGui::IsKeyPressed(ImGuiKey_Y);
+            const char* confirmLabel = creatingNewMap ? "New Map Without Saving (Y)" : "Exit Without Saving (Y)";
+            const bool confirm =
+                ImGui::Button(confirmLabel, ImVec2{confirmButtonWidth, 0.0f}) || ImGui::IsKeyPressed(ImGuiKey_Y);
             ImGui::SameLine();
             const bool cancel =
                 ImGui::Button("Cancel (N)", ImVec2{cancelButtonWidth, 0.0f}) || ImGui::IsKeyPressed(ImGuiKey_N);
             if (confirm)
             {
-                exitRequested = false;
-                exitConfirmed = true;
+                if (creatingNewMap)
+                {
+                    newMapRequested = false;
+                    mapController->NewMap();
+                }
+                else
+                {
+                    exitRequested = false;
+                    exitConfirmed = true;
+                }
                 ImGui::CloseCurrentPopup();
             }
             else if (cancel)
             {
                 exitRequested = false;
+                newMapRequested = false;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -821,6 +841,11 @@ namespace sage
             }
 
             if (result.selectedModelKey.has_value()) changeSelectedModels(*result.selectedModelKey);
+            if (result.selectedMaterial.has_value())
+            {
+                changeSelectedMaterials(
+                    result.selectedMaterial->materialIndex, result.selectedMaterial->materialKey);
+            }
 
             if (result.editModelDefaultsClicked)
             {
@@ -1088,14 +1113,18 @@ namespace sage
             if (!reg.any_of<Animation>(entity)) continue;
             reg.remove<Animation>(entity);
 
-            // Return the renderable to the shared view; the private mutable copy
-            // only existed for skinning.
+            // Return to the shared view only when the private copy existed solely
+            // for skinning. Material overrides also require private storage.
             if (auto* renderable = reg.try_get<Renderable>(entity);
                 renderable != nullptr && renderable->GetMutable() != nullptr)
             {
-                auto view = resources.GetModelView(renderable->GetModel()->GetKey());
-                view.SetTransform(renderable->initialTransform);
-                renderable->SetModel(std::move(view));
+                const auto& defaults = resources.GetModelMaterialKeys(renderable->GetModel()->GetKey());
+                if (renderable->GetMaterialKeys() == defaults)
+                {
+                    auto view = resources.GetModelView(renderable->GetModel()->GetKey());
+                    view.SetTransform(renderable->initialTransform);
+                    renderable->SetModel(std::move(view));
+                }
             }
             if (auto* uber = reg.try_get<UberShaderComponent>(entity))
             {
@@ -1184,6 +1213,34 @@ namespace sage
             }
 
             if (transformEditor) transformEditor->RefreshCollisionBounds(entity);
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::changeSelectedMaterials(
+        const unsigned int materialIndex, const std::string& materialKey) const
+    {
+        auto& registry = *sys->registry;
+        std::vector<entt::entity> targets;
+        for (const auto entity : selection->Selected())
+        {
+            const auto* renderable = registry.valid(entity) ? registry.try_get<Renderable>(entity) : nullptr;
+            if (renderable == nullptr || renderable->GetModel() == nullptr ||
+                materialIndex >= static_cast<unsigned int>(renderable->GetModel()->GetMaterialCount()))
+            {
+                continue;
+            }
+            targets.push_back(entity);
+        }
+        if (targets.empty()) return;
+
+        history->Begin(editor::EditAction::EditField, targets);
+        for (const auto entity : targets)
+        {
+            auto& renderable = registry.get<Renderable>(entity);
+            if (!renderable.SetMaterialKey(materialIndex, materialKey)) continue;
+            if (registry.any_of<UberShaderComponent>(entity)) sys->uberShaderSystem->RebindRenderable(entity);
         }
         history->Commit();
         refreshSceneWindows();
@@ -1319,7 +1376,7 @@ namespace sage
                                             : std::format("entity_{}", entt::to_integral(entity));
         const std::filesystem::path flatpacksDir{"resources/flatpacks"};
         const auto outputPath = flatpacksDir / (safeName + ".flatpack");
-        if (editor::SaveFlatpack(*sys->registry, entity, outputPath.string().c_str()))
+        if (sage::SaveFlatpack(*sys->registry, entity, outputPath.string().c_str()))
         {
             std::cout << "Flatpack saved: " << outputPath << std::endl;
             refreshFlatpackCatalog();
@@ -1332,7 +1389,7 @@ namespace sage
 
     void EditorScene::refreshFlatpackCatalog() const
     {
-        auto catalog = editor::ListFlatpacks(std::filesystem::path{"resources/flatpacks"});
+        auto catalog = sage::ListFlatpacks(std::filesystem::path{"resources/flatpacks"});
         std::vector<editor::EditorGui::FlatpackEntry> entries;
         entries.reserve(catalog.size());
         for (auto& item : catalog)
@@ -1406,16 +1463,20 @@ namespace sage
     std::optional<entt::entity> EditorScene::PlaceFlatpackAt(
         const std::filesystem::path& path, const Vector3 anchor) const
     {
-        const auto root = editor::LoadFlatpack(*sys->registry, path.string().c_str(), anchor);
-        if (root == entt::null) return std::nullopt;
+        auto instance = sage::LoadFlatpack(*sys->registry, path.string().c_str(), anchor);
+        if (!instance) return std::nullopt;
+        for (const auto entity : instance.entities)
+        {
+            sys->registry->emplace<editor::EditorMapEntity>(entity);
+        }
 
         // The loaded subtree has Renderables without an UberShaderComponent;
         // applyLitShaderToLoadedRenderables attaches one with Lit set, matching
         // the shader hookup the rest of the editor relies on. Bounds need to be
         // re-derived from the new world transforms (the saved boxes are stale).
         applyLitShaderToLoadedRenderables();
-        if (transformEditor) transformEditor->RefreshCollisionBoundsRecursive(root);
-        return root;
+        if (transformEditor) transformEditor->RefreshCollisionBoundsRecursive(instance.root);
+        return instance.root;
     }
 
     void EditorScene::adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const
@@ -1450,6 +1511,10 @@ namespace sage
                     flatpackSession->RequestClose();
                 }
                 ImGui::Separator();
+            }
+            if (ImGui::MenuItem("New Map", nullptr, false, !flatpackOpen))
+            {
+                newMapRequested = true;
             }
             if (ImGui::MenuItem("Load Map", "Ctrl+O", false, !flatpackOpen))
             {

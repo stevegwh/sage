@@ -17,6 +17,12 @@ namespace sage::editor
 {
     struct InspectorComponentsResult
     {
+        struct MaterialSelection
+        {
+            unsigned int materialIndex = 0;
+            std::string materialKey;
+        };
+
         struct ComponentMoveRequest
         {
             EditorComponentId dragged{};
@@ -36,6 +42,7 @@ namespace sage::editor
         bool selectScriptFile = false;
         // Deferred model replacement requested by Renderable's model picker.
         std::optional<std::string> selectedModelKey;
+        std::optional<MaterialSelection> selectedMaterial;
     };
 
     // Draws every component (collapsing header + field table). Caller supplies the

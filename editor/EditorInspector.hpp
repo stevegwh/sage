@@ -372,6 +372,14 @@ namespace sage::editor
         bool animationCompatibleOnly = false;
     };
 
+    struct MaterialPickerField
+    {
+        unsigned int materialIndex = 0;
+        std::string currentKey;
+        std::vector<std::string> options;
+        bool mixed = false;
+    };
+
     struct InspectedComponent
     {
         EditorComponentId componentId{};
@@ -386,6 +394,7 @@ namespace sage::editor
         // Renderable owns model selection and the shortcut to that model's
         // defaults. The picker is populated only for Renderable components.
         std::optional<ModelPickerField> modelPicker;
+        std::vector<MaterialPickerField> materialPickers;
         bool modelDefaultsAvailable = false;
     };
 

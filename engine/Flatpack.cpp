@@ -1,6 +1,6 @@
-#include "EditorFlatpack.hpp"
+#include "Flatpack.hpp"
 
-#include "EditorComponents.hpp"
+#include "Archetypes.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
@@ -24,11 +24,12 @@
 #include <iostream>
 #include <unordered_map>
 
-namespace sage::editor
+namespace sage
 {
     namespace
     {
-        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '2'};
+        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '3'};
+        constexpr char kVersionTwoFlatpackMagic[4] = {'L', 'Q', 'F', '2'};
         constexpr char kLegacyFlatpackMagic[4] = {'L', 'Q', 'F', 'P'};
 
         // A serialized entity from the source registry. parentLocalId points into
@@ -125,6 +126,18 @@ namespace sage::editor
             }
         };
 
+        struct FlatpackArchetypeRecord
+        {
+            std::uint32_t localId = 0;
+            Archetype archetype{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(localId, archetype);
+            }
+        };
+
         struct LegacyFlatpackMoveableActorRecord
         {
             std::uint32_t localId = 0;
@@ -151,6 +164,7 @@ namespace sage::editor
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
                (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0);
     }
 
@@ -184,6 +198,7 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
+        std::vector<FlatpackArchetypeRecord> archetypes;
         records.reserve(subtreeOrder.size());
         names.reserve(subtreeOrder.size());
         for (const auto entity : subtreeOrder)
@@ -192,6 +207,11 @@ namespace sage::editor
             auto& record = records.emplace_back();
             const auto& transform = source.get<sgTransform>(entity);
             names.push_back(transform.name);
+
+            if (const auto* archetype = source.try_get<Archetype>(entity))
+            {
+                archetypes.push_back(FlatpackArchetypeRecord{localId, *archetype});
+            }
 
             if (const auto* script = source.try_get<ScriptComponent>(entity);
                 script != nullptr && !script->scriptPath.empty())
@@ -275,18 +295,19 @@ namespace sage::editor
             output(scripts);
             output(animations);
             output(moveables);
+            output(archetypes);
         });
 
         return true;
     }
 
-    entt::entity LoadFlatpack(
+    FlatpackInstance LoadFlatpack(
         entt::registry& destination, const char* path, const Vector3 anchorWorldPos)
     {
         if (!IsFlatpackFile(path))
         {
             std::cerr << "ERROR: Not a flatpack file: " << path << std::endl;
-            return entt::null;
+            return {};
         }
 
         std::vector<FlatpackEntityRecord> records;
@@ -294,14 +315,16 @@ namespace sage::editor
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
+        std::vector<FlatpackArchetypeRecord> archetypes;
         std::ifstream header(path, std::ios::binary);
         char fileMagic[4]{};
         header.read(fileMagic, sizeof(fileMagic));
         const bool legacyFormat = std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0;
-        sage::serializer::ReadCompressedBinary(
-            path,
-            legacyFormat ? kLegacyFlatpackMagic : kFlatpackMagic,
-            [&](cereal::BinaryInputArchive& input, std::istream&) {
+        const bool versionTwoFormat =
+            std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0;
+        const auto readArchive = [&](const auto& magic) {
+            sage::serializer::ReadCompressedBinary(
+                path, magic, [&](cereal::BinaryInputArchive& input, std::istream&) {
                 input(records, names, scripts, animations);
                 if (legacyFormat)
                 {
@@ -324,8 +347,19 @@ namespace sage::editor
                 {
                     input(moveables);
                 }
+                if (!legacyFormat && !versionTwoFormat)
+                {
+                    input(archetypes);
+                }
             });
-        if (records.empty()) return entt::null;
+        };
+        if (legacyFormat)
+            readArchive(kLegacyFlatpackMagic);
+        else if (versionTwoFormat)
+            readArchive(kVersionTwoFlatpackMagic);
+        else
+            readArchive(kFlatpackMagic);
+        if (records.empty()) return {};
 
         // Create entities up-front so parent local ids resolve to real entt::entity values.
         std::vector<entt::entity> created;
@@ -366,8 +400,6 @@ namespace sage::editor
         {
             const auto& record = records[i];
             const auto entity = created[i];
-
-            destination.emplace<EditorMapEntity>(entity);
 
             if (record.hasCollideable)
             {
@@ -414,7 +446,7 @@ namespace sage::editor
             if (record.localId >= created.size()) continue;
             if (!ResourceManager::GetInstance().HasModelAnimation(record.modelKey))
             {
-                std::cerr << "EditorFlatpack: no packed animation data for '" << record.modelKey
+                std::cerr << "Flatpack: no packed animation data for '" << record.modelKey
                           << "', skipping Animation component.\n";
                 continue;
             }
@@ -435,7 +467,13 @@ namespace sage::editor
             moveable.idleClip = record.idleClip;
         }
 
-        return created.front();
+        for (const auto& record : archetypes)
+        {
+            if (record.localId >= created.size()) continue;
+            SetArchetype(destination, created[record.localId], record.archetype);
+        }
+
+        return FlatpackInstance{created.front(), std::move(created)};
     }
 
     std::vector<FlatpackCatalogEntry> ListFlatpacks(const std::filesystem::path& directory)
@@ -447,7 +485,7 @@ namespace sage::editor
         {
             if (!dirEntry.is_regular_file()) continue;
             const auto& path = dirEntry.path();
-            if (path.extension() != ".flatpack") continue;
+            if (path.extension() != ".flatpack" && path.extension() != ".bin") continue;
             if (!IsFlatpackFile(path.string().c_str())) continue;
             entries.push_back({.displayName = path.stem().string(), .path = path});
         }
@@ -457,4 +495,4 @@ namespace sage::editor
         });
         return entries;
     }
-} // namespace sage::editor
+} // namespace sage

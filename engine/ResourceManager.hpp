@@ -104,6 +104,9 @@ namespace sage
         [[nodiscard]] ImageSafe GetImage(const std::string& key);
         [[nodiscard]] bool HasModelKey(const std::string& key) const;
         [[nodiscard]] std::vector<std::string> GetModelKeys(bool includeGenerated = false) const;
+        [[nodiscard]] std::vector<std::string> GetMaterialKeys() const;
+        [[nodiscard]] const std::vector<std::string>& GetModelMaterialKeys(const std::string& modelKey) const;
+        [[nodiscard]] const Material& GetMaterial(const std::string& key) const;
         [[nodiscard]] std::string GetModelSourcePath(const std::string& key) const;
         bool RenameModelAsset(
             const std::string& oldKey,
