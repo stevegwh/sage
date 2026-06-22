@@ -59,6 +59,7 @@ namespace sage::editor
         RemoveComponent,
         AddTerrain,
         AddEmptyTransform,
+        AddMesh,
         SculptTerrain
     };
 
@@ -119,7 +120,7 @@ namespace sage::editor
         {
             std::uint64_t persistentId = 0;
             bool exists = false;
-            std::uint64_t parentId = 0; // 0 = no parent (root)
+            std::uint64_t parentId = 0;      // 0 = no parent (root)
             std::uint64_t nextSiblingId = 0; // 0 = append within parent/root
             std::string name;
             Vector3 worldPos{};
@@ -207,8 +208,7 @@ namespace sage::editor
         void pushEntry(EditAction action, std::vector<EntityState> before, std::vector<EntityState> after);
 
         void applyEntry(const HistoryEntry& entry, bool undo);
-        void materialize(
-            const EntityState& target, std::unordered_map<std::uint64_t, entt::entity>& idMap);
+        void materialize(const EntityState& target, std::unordered_map<std::uint64_t, entt::entity>& idMap);
         void applyParent(
             const EntityState& target, const std::unordered_map<std::uint64_t, entt::entity>& idMap) const;
         void destroySingle(entt::entity entity) const;

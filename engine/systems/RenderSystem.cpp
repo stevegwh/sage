@@ -4,6 +4,7 @@
 
 #include "RenderSystem.hpp"
 
+#include "components/CustomShaderComponent.hpp"
 #include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
@@ -105,11 +106,16 @@ namespace sage
     {
         if (skybox) skybox->Draw();
 
-        auto normalView =
-            registry->view<Renderable, sgTransform>(entt::exclude<RenderableDeferred, UberShaderComponent>);
-        auto deferredView =
-            registry->view<Renderable, sgTransform, RenderableDeferred>(entt::exclude<UberShaderComponent>);
-        auto uberView = registry->view<Renderable, sgTransform, UberShaderComponent>();
+        auto normalView = registry->view<Renderable, sgTransform>(
+            entt::exclude<RenderableDeferred, UberShaderComponent, CustomShaderComponent>);
+        auto deferredView = registry->view<Renderable, sgTransform, RenderableDeferred>(
+            entt::exclude<UberShaderComponent, CustomShaderComponent>);
+        auto customShaderView =
+            registry->view<Renderable, sgTransform, CustomShaderComponent>(entt::exclude<RenderableDeferred>);
+        auto customShaderDeferredView =
+            registry->view<Renderable, sgTransform, CustomShaderComponent, RenderableDeferred>();
+        auto uberView =
+            registry->view<Renderable, sgTransform, UberShaderComponent>(entt::exclude<CustomShaderComponent>);
         auto dynamicView = registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>);
         auto dynamicDeferredView = registry->view<DynamicRenderable, sgTransform, RenderableDeferred>();
 
@@ -119,10 +125,7 @@ namespace sage
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
             renderable.GetModel()->Draw(
-                transform.GetWorldPos(),
-                transform.GetWorldRot(),
-                transform.GetScale(),
-                renderable.hint);
+                transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
         };
 
         auto renderDynamicEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
@@ -141,13 +144,24 @@ namespace sage
         };
 
         const auto drawAll = [](auto& view, const auto& draw) {
-            for (auto [entity, renderable, transform] : view.each()) draw(renderable, transform, entity);
+            for (auto [entity, renderable, transform] : view.each())
+                draw(renderable, transform, entity);
+        };
+        const auto drawCustomAll = [&renderEntity](auto& view) {
+            for (const auto entity : view)
+            {
+                auto& renderable = view.template get<Renderable>(entity);
+                view.template get<CustomShaderComponent>(entity).Update(renderable);
+                renderEntity(renderable, view.template get<sgTransform>(entity), entity);
+            }
         };
 
         // Pass order is intentional: ordinary forward geometry first, then dynamic geometry,
         // uber-shader objects, deferred objects, and finally dynamic deferred objects.
         drawAll(normalView, renderEntity);
         drawAll(dynamicView, renderDynamicEntity);
+
+        drawCustomAll(customShaderView);
 
         for (auto entity : uberView)
         {
@@ -159,14 +173,11 @@ namespace sage
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
             renderable.GetModel()->DrawUber(
-                &uber,
-                transform.GetWorldPos(),
-                transform.GetWorldRot(),
-                transform.GetScale(),
-                renderable.hint);
+                &uber, transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
         }
 
         drawAll(deferredView, renderEntity);
+        drawCustomAll(customShaderDeferredView);
         drawAll(dynamicDeferredView, renderDynamicEntity);
     }
 

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "entt/entt.hpp"
 #include "cereal/archives/binary.hpp"
+#include "entt/entt.hpp"
 #include "magic_enum.hpp"
 #include "raylib.h"
 
@@ -21,6 +21,12 @@
 
 namespace sage::editor
 {
+    enum class ShaderFileSlot
+    {
+        Vertex,
+        Fragment
+    };
+
     using EditorComponentId = entt::id_type;
 
     template <class T>
@@ -97,6 +103,7 @@ namespace sage::editor
         bool mixed = false;
         // Script paths show buttons to choose the file and open it in the OS-associated app.
         bool scriptFile = false;
+        std::optional<ShaderFileSlot> shaderFile;
         FieldValue value;
     };
 
@@ -238,6 +245,23 @@ namespace sage::editor
                  .scriptFile = true,
                  .value = LeafField<std::string>{&path}});
         }
+        void shaderFile(std::string label, std::string& path, const ShaderFileSlot slot, const bool rw)
+        {
+            fields_.push_back(
+                {.label = qualified(label),
+                 .editable = rw && editableScope_,
+                 .shaderFile = slot,
+                 .value = LeafField<std::string>{&path}});
+        }
+        void vertexShaderFile(std::string label, std::string& path, bool rw = true)
+        {
+            shaderFile(std::move(label), path, ShaderFileSlot::Vertex, rw);
+        }
+        void fragmentShaderFile(std::string label, std::string& path, bool rw = true)
+        {
+            shaderFile(std::move(label), path, ShaderFileSlot::Fragment, rw);
+        }
+        void textureDropdown(const std::string& label, std::string& value, bool rw = true);
         void field(std::string label, Vector2& v, bool rw = true)
         {
             addLeaf(std::move(label), &v, rw);
@@ -457,10 +481,7 @@ namespace sage::editor
 
       public:
         template <class T>
-        void Register(
-            std::string displayName,
-            bool removable = false,
-            bool addable = false)
+        void Register(std::string displayName, bool removable = false, bool addable = false)
         {
             T defaultComponent{};
             ComponentInspector defaultInspector;
@@ -470,15 +491,15 @@ namespace sage::editor
             Entry entry{
                 .componentId = ComponentIdOf<T>(),
                 .displayName = std::move(displayName),
-                .has = [](const entt::registry& r, const entt::entity e) {
-                    return r.valid(e) && r.template any_of<T>(e);
-                },
-                .describe = [](entt::registry& r, const entt::entity e) {
-                    ComponentInspector ci;
-                    ci.SetContext(&r, e);
-                    r.template get<T>(e).define_editor_options(ci);
-                    return std::move(ci).Take();
-                },
+                .has = [](const entt::registry& r,
+                          const entt::entity e) { return r.valid(e) && r.template any_of<T>(e); },
+                .describe =
+                    [](entt::registry& r, const entt::entity e) {
+                        ComponentInspector ci;
+                        ci.SetContext(&r, e);
+                        r.template get<T>(e).define_editor_options(ci);
+                        return std::move(ci).Take();
+                    },
                 .requirements = std::move(defaultDescription.requirements),
                 .incompatibleComponents = std::move(defaultDescription.incompatibleComponents),
                 .removable = removable,

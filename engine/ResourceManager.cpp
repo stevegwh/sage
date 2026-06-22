@@ -44,8 +44,8 @@ namespace sage
             {
                 if (existing->second == path) return;
                 throw std::runtime_error(
-                    kind + " resource key collision for '" + key + "': '" + existing->second + "' and '" +
-                    path + "'");
+                    kind + " resource key collision for '" + key + "': '" + existing->second + "' and '" + path +
+                    "'");
             }
             sources.emplace(key, path);
         }
@@ -136,7 +136,8 @@ namespace sage
             for (unsigned int i = 0; i < materialCount; ++i)
             {
                 const char* name = materials[i].name;
-                names.emplace_back((name != nullptr && name[0] != '\0') ? name : FallbackMaterialName(fileName, i));
+                names.emplace_back(
+                    (name != nullptr && name[0] != '\0') ? name : FallbackMaterialName(fileName, i));
             }
 
             tinyobj_materials_free(materials, materialCount);
@@ -482,8 +483,8 @@ namespace sage
         {
             if (existing->second.sourcePath != path)
                 throw std::runtime_error(
-                    "Model resource key collision for '" + key + "': '" + existing->second.sourcePath +
-                    "' and '" + path + "'");
+                    "Model resource key collision for '" + key + "': '" + existing->second.sourcePath + "' and '" +
+                    path + "'");
             return;
         }
         assert(FileExists(path.c_str()));
@@ -592,9 +593,7 @@ namespace sage
     }
 
     bool ResourceManager::RenameModelAsset(
-        const std::string& oldKey,
-        const std::string& newKey,
-        const std::string& newSourcePath)
+        const std::string& oldKey, const std::string& newKey, const std::string& newSourcePath)
     {
         if (oldKey.empty() || newKey.empty()) return false;
         if (!modelCopies.contains(oldKey)) return false;
@@ -627,7 +626,20 @@ namespace sage
     {
         std::vector<std::string> keys;
         keys.reserve(materialMap.size());
-        for (const auto& [key, material] : materialMap) keys.push_back(key);
+        for (const auto& [key, material] : materialMap)
+            keys.push_back(key);
+        std::ranges::sort(keys);
+        return keys;
+    }
+
+    std::vector<std::string> ResourceManager::GetImageKeys(const std::string& prefix) const
+    {
+        std::vector<std::string> keys;
+        keys.reserve(images.size());
+        for (const auto& key : images | std::views::keys)
+        {
+            if (prefix.empty() || key.starts_with(prefix)) keys.push_back(key);
+        }
         std::ranges::sort(keys);
         return keys;
     }

@@ -52,6 +52,9 @@ namespace sage
         // (SetTexture, SetMaterial) that don't exist on ModelView.
         [[nodiscard]] ModelMutable* GetMutable();
         [[nodiscard]] const ModelMutable* GetMutable() const;
+        // Promotes a shared model view to an entity-local copy before changing
+        // materials, textures, or shaders.
+        [[nodiscard]] ModelMutable* EnsureMutable();
 
         void SetModel(ModelView _model);
         void SetModel(ModelMutable _model);

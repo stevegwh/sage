@@ -13,7 +13,7 @@ namespace sage
     {
         constexpr char MaterialListMarker = '\x1f';
         constexpr char MaterialKeySeparator = '\x1e';
-    }
+    } // namespace
 
     const ModelView* Renderable::GetModel() const
     {
@@ -47,6 +47,18 @@ namespace sage
         return std::get_if<ModelMutable>(&model);
     }
 
+    ModelMutable* Renderable::EnsureMutable()
+    {
+        if (auto* mutableModel = GetMutable()) return mutableModel;
+        const auto* currentModel = GetModel();
+        if (currentModel == nullptr) return nullptr;
+
+        auto mutableModel = ResourceManager::GetInstance().CreateModelMutable(currentModel->GetKey());
+        mutableModel.SetTransform(currentModel->GetTransform());
+        model = std::move(mutableModel);
+        return GetMutable();
+    }
+
     void Renderable::SetModel(ModelView _model)
     {
         model = std::move(_model);
@@ -67,22 +79,17 @@ namespace sage
     bool Renderable::SetMaterialKey(const unsigned int materialIndex, const std::string& materialKey)
     {
         auto* currentModel = GetModel();
-        if (currentModel == nullptr || materialIndex >= static_cast<unsigned int>(currentModel->GetMaterialCount()) ||
-            materialKey.empty())
+        if (currentModel == nullptr ||
+            materialIndex >= static_cast<unsigned int>(currentModel->GetMaterialCount()) || materialKey.empty())
         {
             return false;
         }
         if (materialKeys.size() != static_cast<std::size_t>(currentModel->GetMaterialCount())) ResetMaterialKeys();
         if (materialKeys[materialIndex] == materialKey) return false;
 
-        if (GetMutable() == nullptr)
-        {
-            auto mutableModel = ResourceManager::GetInstance().CreateModelMutable(currentModel->GetKey());
-            mutableModel.SetTransform(currentModel->GetTransform());
-            model = std::move(mutableModel);
-        }
-
-        GetMutable()->SetMaterial(materialIndex, ResourceManager::GetInstance().GetMaterial(materialKey));
+        auto* mutableModel = EnsureMutable();
+        if (mutableModel == nullptr) return false;
+        mutableModel->SetMaterial(materialIndex, ResourceManager::GetInstance().GetMaterial(materialKey));
         materialKeys[materialIndex] = materialKey;
         return true;
     }

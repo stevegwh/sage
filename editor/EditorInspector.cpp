@@ -5,6 +5,7 @@
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
+#include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -69,7 +70,8 @@ namespace sage::editor
 
             const auto& firstKeys = first->GetMaterialKeys();
             if (std::ranges::any_of(entities, [&](const entt::entity entity) {
-                    const auto* renderable = registry.valid(entity) ? registry.try_get<Renderable>(entity) : nullptr;
+                    const auto* renderable =
+                        registry.valid(entity) ? registry.try_get<Renderable>(entity) : nullptr;
                     return renderable == nullptr || renderable->GetModel() == nullptr ||
                            renderable->GetMaterialKeys().size() != firstKeys.size();
                 }))
@@ -82,8 +84,7 @@ namespace sage::editor
             pickers.reserve(firstKeys.size());
             for (unsigned int i = 0; i < firstKeys.size(); ++i)
             {
-                MaterialPickerField picker{
-                    .materialIndex = i, .currentKey = firstKeys[i], .options = options};
+                MaterialPickerField picker{.materialIndex = i, .currentKey = firstKeys[i], .options = options};
                 picker.mixed = std::ranges::any_of(entities, [&](const entt::entity entity) {
                     return registry.get<Renderable>(entity).GetMaterialKeys()[i] != picker.currentKey;
                 });
@@ -181,6 +182,7 @@ namespace sage::editor
             result.editable =
                 std::ranges::all_of(fields, [](const InspectorField& field) { return field.editable; });
             result.scriptFile = fields.front().scriptFile;
+            result.shaderFile = fields.front().shaderFile;
 
             if (!std::ranges::all_of(fields, [&fields](const InspectorField& field) {
                     return field.value.index() == fields.front().value.index();
@@ -363,6 +365,27 @@ namespace sage::editor
         };
 
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
+    }
+
+    void ComponentInspector::textureDropdown(const std::string& label, std::string& value, const bool rw)
+    {
+        EnumField field{.data = &value};
+        field.options = ResourceManager::GetInstance().GetImageKeys("T_");
+        field.options.insert(field.options.begin(), "(none)");
+        if (!value.empty() && std::ranges::find(field.options, value) == field.options.end())
+            field.options.push_back(value);
+
+        field.getIndex = [&value, options = field.options]() {
+            const auto& selected = value.empty() ? options.front() : value;
+            const auto found = std::ranges::find(options, selected);
+            return found == options.end() ? std::size_t{0} : static_cast<std::size_t>(found - options.begin());
+        };
+        field.setIndex = [&value, options = field.options](const std::size_t index) {
+            if (index < options.size()) value = index == 0 ? std::string{} : options[index];
+        };
+
+        fields_.push_back(
+            {.label = qualified(label), .editable = rw && editableScope_, .value = std::move(field)});
     }
 
     void ComponentInspector::archetypeDropdown(const std::string& label, sage::Archetype& v, const bool ed)
@@ -775,6 +798,7 @@ namespace sage::editor
         registry.Register<AssetReference>("Asset Reference", true);
         registry.Register<MetaData>("Meta Data");
         registry.Register<Renderable>("Renderable", true, true);
+        registry.RegisterPersistent<CustomShaderComponent>("Custom Shader", "sage.CustomShader", true, true);
         registry.Register<Collideable>("Collideable", true, true);
         registry.Register<NavigationSurface>("Navigation Surface", true, true);
         registry.Register<NavigationObstacle>("Navigation Obstacle", true, true);

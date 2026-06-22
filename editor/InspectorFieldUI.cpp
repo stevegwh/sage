@@ -16,8 +16,8 @@
 #include <cfloat>
 #include <cmath>
 #include <cstdint>
-#include <format>
 #include <filesystem>
+#include <format>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -568,45 +568,49 @@ namespace sage::editor
             const bool editable,
             const bool mixed,
             const bool scriptFile,
-            bool& selectScriptFile)
+            const std::optional<ShaderFileSlot> shaderFile,
+            bool& selectScriptFile,
+            std::optional<ShaderFileSlot>& selectShaderFile)
         {
             std::string value = field.data ? *field.data : std::string{};
             bool changed = false;
-            const float buttonWidth = scriptFile ? ImGui::GetFrameHeight() : 0.0f;
-            const float spacing = scriptFile ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
-            const float inputWidth = scriptFile
-                                         ? std::max(
-                                               1.0f,
-                                               ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f -
-                                                   spacing * 2.0f)
-                                         : -FLT_MIN;
+            const bool fileField = scriptFile || shaderFile.has_value();
+            const bool textEditable = editable && !shaderFile.has_value();
+            const float buttonWidth = fileField ? ImGui::GetFrameHeight() : 0.0f;
+            const float spacing = fileField ? ImGui::GetStyle().ItemInnerSpacing.x : 0.0f;
+            const float inputWidth =
+                fileField ? std::max(1.0f, ImGui::GetContentRegionAvail().x - buttonWidth * 2.0f - spacing * 2.0f)
+                          : -FLT_MIN;
             if (mixed)
             {
-                changed = DrawMixedStringField(field, editable, inputWidth);
+                changed = DrawMixedStringField(field, textEditable, inputWidth);
             }
             else
             {
                 ImGui::SetNextItemWidth(inputWidth);
-                const auto flags = editable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
+                const auto flags = textEditable ? ImGuiInputTextFlags_None : ImGuiInputTextFlags_ReadOnly;
                 DrawMaybeDisabled(editable, [&]() {
-                    if (ImGui::InputText("##value", &value, flags) && editable)
+                    if (ImGui::InputText("##value", &value, flags) && textEditable)
                     {
                         changed = CommitField(field, value);
                     }
                 });
                 changed |= DrawFieldClipboardMenu(
-                    FormatLeafValue(field), editable, [field](const std::string_view text) {
+                    FormatLeafValue(field), textEditable, [field](const std::string_view text) {
                         return CommitField(field, std::string{text});
                     });
             }
 
-            if (scriptFile)
+            if (fileField)
             {
                 ImGui::SameLine(0.0f, spacing);
                 ImGui::BeginDisabled(!editable);
                 if (ImGui::Button(ICON_FA_FOLDER_OPEN "##browse_file", ImVec2{buttonWidth, 0.0f}))
                 {
-                    selectScriptFile = true;
+                    if (scriptFile)
+                        selectScriptFile = true;
+                    else
+                        selectShaderFile = shaderFile;
                 }
                 ImGui::EndDisabled();
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
@@ -615,7 +619,7 @@ namespace sage::editor
                 }
             }
 
-            if (scriptFile)
+            if (fileField)
             {
                 ImGui::SameLine(0.0f, spacing);
                 std::error_code ec;
@@ -630,8 +634,7 @@ namespace sage::editor
                 ImGui::EndDisabled();
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 {
-                    ImGui::SetTooltip(
-                        "%s", canOpen ? "Open in default application" : "File does not exist");
+                    ImGui::SetTooltip("%s", canOpen ? "Open in default application" : "File does not exist");
                 }
             }
             return changed;
@@ -777,7 +780,8 @@ namespace sage::editor
             return changed;
         }
 
-        bool DrawInspectorFieldRow(const InspectorField& field, bool& selectScriptFile)
+        bool DrawInspectorFieldRow(
+            const InspectorField& field, bool& selectScriptFile, std::optional<ShaderFileSlot>& selectShaderFile)
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -795,7 +799,9 @@ namespace sage::editor
                             field.editable,
                             field.mixed,
                             field.scriptFile,
-                            selectScriptFile);
+                            field.shaderFile,
+                            selectScriptFile,
+                            selectShaderFile);
                     else
                         changed = DrawInspectorFieldWidget(value, field.editable, field.mixed);
                 },
@@ -804,8 +810,7 @@ namespace sage::editor
             return changed;
         }
 
-        void DrawModelPickerRow(
-            const ModelPickerField& picker, std::optional<std::string>& selectedModelKey)
+        void DrawModelPickerRow(const ModelPickerField& picker, std::optional<std::string>& selectedModelKey)
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -869,7 +874,8 @@ namespace sage::editor
             bool& editModelDefaults,
             std::optional<std::string>& selectedModelKey,
             std::optional<InspectorComponentsResult::MaterialSelection>& selectedMaterial,
-            bool& selectScriptFile)
+            bool& selectScriptFile,
+            std::optional<ShaderFileSlot>& selectShaderFile)
         {
             ImGui::PushID(component.displayName.c_str());
             bool changed = false;
@@ -962,7 +968,7 @@ namespace sage::editor
                     }
                     for (const auto& field : component.fields)
                     {
-                        changed |= DrawInspectorFieldRow(field, selectScriptFile);
+                        changed |= DrawInspectorFieldRow(field, selectScriptFile, selectShaderFile);
                     }
                     ImGui::EndTable();
                 }
@@ -981,6 +987,7 @@ namespace sage::editor
         std::optional<InspectorComponentsResult::ComponentMoveRequest> moveComponent;
         bool editModelDefaults = false;
         bool selectScriptFile = false;
+        std::optional<ShaderFileSlot> selectShaderFile;
         std::optional<std::string> selectedModelKey;
         std::optional<InspectorComponentsResult::MaterialSelection> selectedMaterial;
         for (const auto& component : components)
@@ -992,7 +999,8 @@ namespace sage::editor
                 editModelDefaults,
                 selectedModelKey,
                 selectedMaterial,
-                selectScriptFile);
+                selectScriptFile,
+                selectShaderFile);
         }
         return {
             .changed = changed,
@@ -1002,6 +1010,7 @@ namespace sage::editor
             .moveComponent = std::move(moveComponent),
             .editModelDefaults = editModelDefaults,
             .selectScriptFile = selectScriptFile,
+            .selectShaderFile = selectShaderFile,
             .selectedModelKey = std::move(selectedModelKey),
             .selectedMaterial = std::move(selectedMaterial)};
     }

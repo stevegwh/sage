@@ -116,13 +116,14 @@ namespace sage::editor
             .addComponent = addComponent,
             .editModelDefaultsClicked = inspectorResult.editModelDefaults,
             .selectedModelKey = std::move(inspectorResult.selectedModelKey),
-            .selectedMaterial = inspectorResult.selectedMaterial.has_value()
-                                    ? std::optional<InspectorEditResult::MaterialSelection>{
-                                          InspectorEditResult::MaterialSelection{
-                                              .materialIndex = inspectorResult.selectedMaterial->materialIndex,
-                                              .materialKey = std::move(inspectorResult.selectedMaterial->materialKey)}}
-                                    : std::nullopt,
+            .selectedMaterial =
+                inspectorResult.selectedMaterial.has_value()
+                    ? std::optional<InspectorEditResult::MaterialSelection>{InspectorEditResult::MaterialSelection{
+                          .materialIndex = inspectorResult.selectedMaterial->materialIndex,
+                          .materialKey = std::move(inspectorResult.selectedMaterial->materialKey)}}
+                    : std::nullopt,
             .selectScriptFile = inspectorResult.selectScriptFile,
+            .selectShaderFile = inspectorResult.selectShaderFile,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
 

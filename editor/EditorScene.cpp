@@ -11,6 +11,7 @@
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
+#include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
@@ -64,6 +65,7 @@ namespace sage
         constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
         constexpr const char* SCRIPTS_DIRECTORY = "resources/scripts";
+        constexpr const char* SHADERS_DIRECTORY = "resources/shaders";
         // Temp map the editor snapshots the authored scene into when entering
         // play mode; the game runtime loads it, and Stop deletes it.
         constexpr const char* kPlaySessionMapPath = "resources/.play_session.map";
@@ -80,6 +82,14 @@ namespace sage
         {
             const auto keys = ResourceManager::GetInstance().GetModelKeys(true);
             return std::ranges::find(keys, key) != keys.end();
+        }
+
+        std::string projectRelativePath(const std::filesystem::path& file)
+        {
+            std::error_code error;
+            const auto relative = std::filesystem::relative(file, std::filesystem::current_path(), error);
+            const bool outsideProject = error || relative.empty() || relative.native().starts_with("..");
+            return outsideProject ? file.generic_string() : relative.generic_string();
         }
 
     } // namespace
@@ -133,6 +143,12 @@ namespace sage
         {
             auto& renderable = sys->registry->get<Renderable>(entity);
             if (renderable.GetModel() == nullptr) continue;
+            if (sys->registry->any_of<CustomShaderComponent>(entity))
+            {
+                if (sys->registry->any_of<UberShaderComponent>(entity))
+                    sys->registry->remove<UberShaderComponent>(entity);
+                continue;
+            }
             if (!sys->registry->any_of<UberShaderComponent>(entity))
             {
                 auto& uber =
@@ -494,6 +510,7 @@ namespace sage
         handleFileShortcuts();
         mapController->DrawBrowsers();
         drawScriptBrowser();
+        drawShaderBrowser();
         drawCollisionMatrixWindow();
         drawLightSettingsModal();
         drawTerrainBrushWindow();
@@ -726,6 +743,16 @@ namespace sage
             scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
             scriptBrowser->Open();
         }
+        if (result.selectShaderFile.has_value() && shaderBrowser)
+        {
+            pendingShaderFileSlot = result.selectShaderFile;
+            shaderBrowser->SetDirectory(SHADERS_DIRECTORY);
+            shaderBrowser->SetTypeFilters(
+                *pendingShaderFileSlot == editor::ShaderFileSlot::Vertex
+                    ? std::vector<std::string>{".vs", ".glsl"}
+                    : std::vector<std::string>{".fs", ".glsl"});
+            shaderBrowser->Open();
+        }
 
         if (!history->HasActiveTransaction())
         {
@@ -776,6 +803,13 @@ namespace sage
                                 .color = DEFAULT_COMPONENT_LIGHT_COLOR,
                                 .brightness = DEFAULT_COMPONENT_LIGHT_BRIGHTNESS});
                     }
+                    else if constexpr (std::is_same_v<Component, CustomShaderComponent>)
+                    {
+                        (void)sys->registry->get<Renderable>(entity).EnsureMutable();
+                        if (sys->registry->any_of<UberShaderComponent>(entity))
+                            sys->registry->remove<UberShaderComponent>(entity);
+                        sys->registry->emplace<CustomShaderComponent>(entity);
+                    }
                     else
                     {
                         auto& component = sys->registry->emplace<Component>(entity);
@@ -817,6 +851,8 @@ namespace sage
                     addRegisteredComponent.template operator()<Collideable>();
                 else if (requestedComponent == editor::ComponentIdOf<Light>())
                     addRegisteredComponent.template operator()<Light>();
+                else if (requestedComponent == editor::ComponentIdOf<CustomShaderComponent>())
+                    addRegisteredComponent.template operator()<CustomShaderComponent>();
                 else if (requestedComponent == editor::ComponentIdOf<NavigationSurface>())
                     addRegisteredComponent.template operator()<NavigationSurface>();
                 else if (requestedComponent == editor::ComponentIdOf<NavigationObstacle>())
@@ -925,6 +961,19 @@ namespace sage
                             }
                         }
 
+                        if constexpr (std::is_same_v<Component, CustomShaderComponent>)
+                        {
+                            sys->registry->remove<CustomShaderComponent>(entity);
+                            if (const auto* renderable = sys->registry->try_get<Renderable>(entity);
+                                renderable != nullptr && renderable->GetModel() != nullptr)
+                            {
+                                auto& uber = sys->registry->emplace<UberShaderComponent>(
+                                    entity, renderable->GetModel()->GetMaterialCount());
+                                uber.SetFlagAll(UberShaderComponent::Flags::Lit);
+                            }
+                            continue;
+                        }
+
                         sys->registry->remove<Component>(entity);
                     }
 
@@ -968,6 +1017,10 @@ namespace sage
                 {
                     removeRegisteredComponent.template operator()<Light>();
                 }
+                else if (componentId == editor::ComponentIdOf<CustomShaderComponent>())
+                {
+                    removeRegisteredComponent.template operator()<CustomShaderComponent>();
+                }
                 else
                 {
                     history->Begin(editor::EditAction::RemoveComponent, selected);
@@ -994,6 +1047,39 @@ namespace sage
             attachScriptToSelection(scriptBrowser->GetSelected());
             scriptBrowser->ClearSelected();
         }
+    }
+
+    void EditorScene::drawShaderBrowser() const
+    {
+        if (!shaderBrowser) return;
+        shaderBrowser->Display();
+        if (shaderBrowser->HasSelected() && pendingShaderFileSlot.has_value())
+        {
+            setShaderFileOnSelection(*pendingShaderFileSlot, shaderBrowser->GetSelected());
+            shaderBrowser->ClearSelected();
+            pendingShaderFileSlot.reset();
+        }
+    }
+
+    void EditorScene::setShaderFileOnSelection(
+        const editor::ShaderFileSlot slot, const std::filesystem::path& shaderFile) const
+    {
+        const auto selected = selection->Selected();
+        if (selected.empty()) return;
+
+        const auto path = projectRelativePath(shaderFile);
+        history->Begin(editor::EditAction::EditField, selected);
+        for (const auto entity : selected)
+        {
+            auto* shader = sys->registry->try_get<CustomShaderComponent>(entity);
+            if (shader == nullptr) continue;
+            if (slot == editor::ShaderFileSlot::Vertex)
+                shader->vertexShaderPath = path;
+            else
+                shader->fragmentShaderPath = path;
+        }
+        history->Commit();
+        refreshSceneWindows();
     }
 
     void EditorScene::attachScriptToSelection(const std::filesystem::path& scriptFile) const
@@ -1025,10 +1111,7 @@ namespace sage
         // ScriptSystem resolves paths against the working directory, so store the
         // path relative to it (forward slashes); keep the absolute path only if
         // the file lives outside the project tree.
-        std::error_code ec;
-        auto relative = std::filesystem::relative(file, std::filesystem::current_path(), ec);
-        const bool outsideProject = ec || relative.empty() || relative.native().starts_with("..");
-        const auto path = outsideProject ? file.generic_string() : relative.generic_string();
+        const auto path = projectRelativePath(file);
 
         history->Begin(editor::EditAction::AddScript, selected);
         for (const auto entity : selected)
@@ -1252,6 +1335,7 @@ namespace sage
         {
             auto& renderable = registry.get<Renderable>(entity);
             if (!renderable.SetMaterialKey(materialIndex, materialKey)) continue;
+            if (auto* shader = registry.try_get<CustomShaderComponent>(entity)) shader->RebindOnNextUpdate();
             if (registry.any_of<UberShaderComponent>(entity)) sys->uberShaderSystem->RebindRenderable(entity);
         }
         history->Commit();
@@ -1605,6 +1689,30 @@ namespace sage
         }
         if (ImGui::BeginMenu("Add"))
         {
+            if (ImGui::BeginMenu("Mesh"))
+            {
+                struct PrimitiveMenuItem
+                {
+                    const char* label;
+                    const char* key;
+                };
+                constexpr PrimitiveMenuItem primitives[] = {
+                    {"Sphere", "primitive_sphere"},
+                    {"Hemisphere", "primitive_hemisphere"},
+                    {"Plane", "primitive_plane"},
+                    {"Cube", "primitive_cube"},
+                    {"Cylinder", "primitive_cylinder"},
+                    {"Cone", "primitive_cone"},
+                    {"Torus", "primitive_torus"},
+                    {"Knot", "primitive_knot"},
+                    {"Polygon", "primitive_poly"},
+                };
+                for (const auto& primitive : primitives)
+                {
+                    if (ImGui::MenuItem(primitive.label)) addMesh(primitive.key, primitive.label);
+                }
+                ImGui::EndMenu();
+            }
             if (ImGui::MenuItem("Light"))
             {
                 addLight();
@@ -1948,6 +2056,21 @@ namespace sage
 
         const auto entity = entityOperations->CreateEmptyTransform(position);
         if (history) history->RecordCreate(editor::EditAction::AddEmptyTransform, {entity});
+        editorModes->SelectSceneEntity(entity);
+    }
+
+    void EditorScene::addMesh(const char* modelKey, const char* name) const
+    {
+        Vector3 position = sys->camera->getRaylibCam()->target;
+        if (const auto snappedPosition = placementController->SnappedPlacementPosition();
+            snappedPosition.has_value())
+        {
+            position = *snappedPosition;
+        }
+
+        const auto entity = entityOperations->CreateMesh(position, modelKey, name);
+        adoptIntoFlatpackRoot({entity});
+        if (history) history->RecordCreate(editor::EditAction::AddMesh, {entity});
         editorModes->SelectSceneEntity(entity);
     }
 
@@ -2302,9 +2425,9 @@ namespace sage
             }
         });
         history = std::make_unique<editor::EditorHistory>(
-            sys,
-            &inspectorRegistry,
-            [this](const std::vector<entt::entity>& restored) { onHistoryApplied(restored); });
+            sys, &inspectorRegistry, [this](const std::vector<entt::entity>& restored) {
+                onHistoryApplied(restored);
+            });
         editorModes = std::make_unique<editor::EditorModeStateMachine>(*this, *transformEditor);
 
         gui = std::make_unique<editor::EditorGui>(
@@ -2334,6 +2457,10 @@ namespace sage
             ImGuiFileBrowserFlags_EnterNewFilename);
         scriptBrowser->SetTitle("Select script");
         scriptBrowser->SetTypeFilters({".lua"});
+
+        shaderBrowser = std::make_unique<ImGui::FileBrowser>(
+            ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError);
+        shaderBrowser->SetTitle("Select shader");
 
         mapController = std::make_unique<editor::EditorMapController>(
             sys,

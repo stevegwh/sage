@@ -6,13 +6,15 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
+#include "engine/components/UberShaderComponent.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
-#include "engine/TerrainMesh.hpp"
+#include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
+#include "engine/TerrainMesh.hpp"
 
 #include "cereal/archives/binary.hpp"
 
@@ -129,6 +131,23 @@ namespace sage::editor
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.position.world = position;
         transform.name = emptyTransformLabel(entity);
+        return entity;
+    }
+
+    entt::entity EditorEntityOperations::CreateMesh(
+        const Vector3 position, const std::string& modelKey, const std::string& name) const
+    {
+        const auto entity = sys->registry->create();
+        sys->registry->emplace<EditorMapEntity>(entity);
+        auto& transform = sys->registry->emplace<sgTransform>(entity);
+        transform.position.world = position;
+        transform.name = name;
+
+        auto model = ResourceManager::GetInstance().GetModelView(modelKey);
+        auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), MatrixIdentity());
+        auto& uber =
+            sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
+        uber.SetFlagAll(UberShaderComponent::Flags::Lit);
         return entity;
     }
 
@@ -277,6 +296,11 @@ namespace sage::editor
                 record.hasLight = true;
                 record.light = sys->registry->get<Light>(entity);
             }
+            if (sys->registry->any_of<CustomShaderComponent>(entity))
+            {
+                record.hasCustomShader = true;
+                record.customShader = sys->registry->get<CustomShaderComponent>(entity);
+            }
             if (sys->registry->any_of<MetaData>(entity))
             {
                 record.hasMetaData = true;
@@ -328,8 +352,7 @@ namespace sage::editor
             transform.scale.world = record.worldScale;
             transform.name = (i == 0) ? record.name + " (Copy)" : record.name;
 
-            if (record.parentLocalId >= 0 &&
-                static_cast<std::size_t>(record.parentLocalId) < created.size())
+            if (record.parentLocalId >= 0 && static_cast<std::size_t>(record.parentLocalId) < created.size())
             {
                 transform.SetParent(created[static_cast<std::size_t>(record.parentLocalId)]);
             }
@@ -380,6 +403,10 @@ namespace sage::editor
             if (record.hasLight)
             {
                 sys->registry->emplace<Light>(entity, record.light);
+            }
+            if (record.hasCustomShader)
+            {
+                sys->registry->emplace<CustomShaderComponent>(entity, record.customShader);
             }
             if (record.hasMetaData)
             {

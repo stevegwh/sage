@@ -2,6 +2,7 @@
 
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
+#include "engine/components/CustomShaderComponent.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -51,6 +52,8 @@ namespace sage::editor
             std::string renderableBlob;
             bool hasLight = false;
             Light light{};
+            bool hasCustomShader = false;
+            CustomShaderComponent customShader{};
             bool hasMetaData = false;
             MetaData metaData{};
         };
@@ -82,6 +85,8 @@ namespace sage::editor
         [[nodiscard]] entt::entity CreateTriggerVolume(Vector3 position) const;
         [[nodiscard]] entt::entity CreateTerrain(Vector3 position) const;
         [[nodiscard]] entt::entity CreateEmptyTransform(Vector3 position) const;
+        [[nodiscard]] entt::entity CreateMesh(
+            Vector3 position, const std::string& modelKey, const std::string& name) const;
 
         // Captures the given entities (and their descendants) into the clipboard,
         // replacing any previous contents. Entries that are descendants of another

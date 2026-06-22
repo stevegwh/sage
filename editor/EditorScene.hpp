@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -71,6 +72,8 @@ namespace sage
         // Picks the lua file for "Add Component > Script" (save-style: typing a
         // new filename creates a template script).
         std::unique_ptr<ImGui::FileBrowser> scriptBrowser;
+        std::unique_ptr<ImGui::FileBrowser> shaderBrowser;
+        mutable std::optional<editor::ShaderFileSlot> pendingShaderFileSlot;
         mutable entt::entity hierarchyContextEntity = entt::null;
         bool viewportFullscreen = false;
         mutable bool snapToGrid = false;
@@ -104,6 +107,7 @@ namespace sage
         void addTriggerVolume() const;
         void addTerrain() const;
         void addEmptyTransform() const;
+        void addMesh(const char* modelKey, const char* name) const;
         // Brush settings panel, shown only while terrain sculpting is active.
         void drawTerrainBrushWindow() const;
         void clearCurrentMap() const;
@@ -122,7 +126,9 @@ namespace sage
         void refitMeshColliderBounds() const;
         void handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const;
         void drawScriptBrowser() const;
+        void drawShaderBrowser() const;
         void attachScriptToSelection(const std::filesystem::path& scriptFile) const;
+        void setShaderFileOnSelection(editor::ShaderFileSlot slot, const std::filesystem::path& shaderFile) const;
         void removeScriptFromSelection() const;
         void addAnimationToSelection() const;
         void removeAnimationFromSelection() const;

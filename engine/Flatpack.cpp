@@ -4,6 +4,7 @@
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
+#include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -29,7 +30,8 @@ namespace sage
 {
     namespace
     {
-        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '3'};
+        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '4'};
+        constexpr char kVersionThreeFlatpackMagic[4] = {'L', 'Q', 'F', '3'};
         constexpr char kVersionTwoFlatpackMagic[4] = {'L', 'Q', 'F', '2'};
         constexpr char kLegacyFlatpackMagic[4] = {'L', 'Q', 'F', 'P'};
 
@@ -139,6 +141,18 @@ namespace sage
             }
         };
 
+        struct FlatpackCustomShaderRecord
+        {
+            std::uint32_t localId = 0;
+            CustomShaderComponent shader{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(localId, shader);
+            }
+        };
+
         struct LegacyFlatpackMoveableActorRecord
         {
             std::uint32_t localId = 0;
@@ -165,6 +179,7 @@ namespace sage
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
                (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0);
     }
@@ -200,6 +215,7 @@ namespace sage
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
         std::vector<FlatpackArchetypeRecord> archetypes;
+        std::vector<FlatpackCustomShaderRecord> customShaders;
         records.reserve(subtreeOrder.size());
         names.reserve(subtreeOrder.size());
         for (const auto entity : subtreeOrder)
@@ -212,6 +228,10 @@ namespace sage
             if (const auto* archetype = source.try_get<Archetype>(entity))
             {
                 archetypes.push_back(FlatpackArchetypeRecord{localId, *archetype});
+            }
+            if (const auto* shader = source.try_get<CustomShaderComponent>(entity))
+            {
+                customShaders.push_back(FlatpackCustomShaderRecord{localId, *shader});
             }
 
             if (const auto* script = source.try_get<ScriptComponent>(entity);
@@ -297,13 +317,13 @@ namespace sage
             output(animations);
             output(moveables);
             output(archetypes);
+            output(customShaders);
         });
 
         return true;
     }
 
-    FlatpackInstance LoadFlatpack(
-        entt::registry& destination, const char* path, const Vector3 anchorWorldPos)
+    FlatpackInstance LoadFlatpack(entt::registry& destination, const char* path, const Vector3 anchorWorldPos)
     {
         if (!IsFlatpackFile(path))
         {
@@ -317,47 +337,54 @@ namespace sage
         std::vector<FlatpackAnimationRecord> animations;
         std::vector<FlatpackMoveableActorRecord> moveables;
         std::vector<FlatpackArchetypeRecord> archetypes;
+        std::vector<FlatpackCustomShaderRecord> customShaders;
         std::ifstream header(path, std::ios::binary);
         char fileMagic[4]{};
         header.read(fileMagic, sizeof(fileMagic));
         const bool legacyFormat = std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0;
-        const bool versionTwoFormat =
-            std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0;
+        const bool versionTwoFormat = std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0;
+        const bool versionThreeFormat = std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0;
         const auto readArchive = [&](const auto& magic) {
             sage::serializer::ReadCompressedBinary(
                 path, magic, [&](cereal::BinaryInputArchive& input, std::istream&) {
-                input(records, names, scripts, animations);
-                if (legacyFormat)
-                {
-                    std::vector<LegacyFlatpackMoveableActorRecord> legacyMoveables;
-                    input(legacyMoveables);
-                    moveables.reserve(legacyMoveables.size());
-                    for (auto& record : legacyMoveables)
+                    input(records, names, scripts, animations);
+                    if (legacyFormat)
                     {
-                        moveables.push_back(
-                            FlatpackMoveableActorRecord{
-                                record.localId,
-                                record.movementSpeed,
-                                240.0f,
-                                record.pathfindingBounds,
-                                std::move(record.moveClip),
-                                std::move(record.idleClip)});
+                        std::vector<LegacyFlatpackMoveableActorRecord> legacyMoveables;
+                        input(legacyMoveables);
+                        moveables.reserve(legacyMoveables.size());
+                        for (auto& record : legacyMoveables)
+                        {
+                            moveables.push_back(
+                                FlatpackMoveableActorRecord{
+                                    record.localId,
+                                    record.movementSpeed,
+                                    240.0f,
+                                    record.pathfindingBounds,
+                                    std::move(record.moveClip),
+                                    std::move(record.idleClip)});
+                        }
                     }
-                }
-                else
-                {
-                    input(moveables);
-                }
-                if (!legacyFormat && !versionTwoFormat)
-                {
-                    input(archetypes);
-                }
-            });
+                    else
+                    {
+                        input(moveables);
+                    }
+                    if (!legacyFormat && !versionTwoFormat)
+                    {
+                        input(archetypes);
+                    }
+                    if (!legacyFormat && !versionTwoFormat && !versionThreeFormat)
+                    {
+                        input(customShaders);
+                    }
+                });
         };
         if (legacyFormat)
             readArchive(kLegacyFlatpackMagic);
         else if (versionTwoFormat)
             readArchive(kVersionTwoFlatpackMagic);
+        else if (versionThreeFormat)
+            readArchive(kVersionThreeFlatpackMagic);
         else
             readArchive(kFlatpackMagic);
         if (records.empty()) return {};
@@ -387,8 +414,7 @@ namespace sage
             transform.rotation.world = record.worldRot;
             transform.scale.world = record.worldScale;
 
-            if (record.parentLocalId >= 0 &&
-                static_cast<std::size_t>(record.parentLocalId) < created.size())
+            if (record.parentLocalId >= 0 && static_cast<std::size_t>(record.parentLocalId) < created.size())
             {
                 transform.SetParent(created[static_cast<std::size_t>(record.parentLocalId)]);
             }
@@ -474,6 +500,13 @@ namespace sage
             SetArchetype(destination, created[record.localId], record.archetype);
         }
 
+        for (auto& record : customShaders)
+        {
+            if (record.localId >= created.size()) continue;
+            destination.emplace_or_replace<CustomShaderComponent>(
+                created[record.localId], std::move(record.shader));
+        }
+
         return FlatpackInstance{created.front(), std::move(created)};
     }
 
@@ -521,10 +554,11 @@ namespace sage
             if (applyLitShader)
             {
                 auto* renderable = destination.try_get<Renderable>(entity);
-                if (renderable && renderable->GetModel() && !destination.any_of<UberShaderComponent>(entity))
+                if (renderable && renderable->GetModel() &&
+                    !destination.any_of<UberShaderComponent, CustomShaderComponent>(entity))
                 {
-                    auto& uber =
-                        destination.emplace<UberShaderComponent>(entity, renderable->GetModel()->GetMaterialCount());
+                    auto& uber = destination.emplace<UberShaderComponent>(
+                        entity, renderable->GetModel()->GetMaterialCount());
                     uber.SetFlagAll(UberShaderComponent::Flags::Lit);
                     if (destination.any_of<Animation>(entity))
                     {

@@ -58,7 +58,7 @@ namespace sage
         std::unordered_map<std::string, Font> fonts{};
         std::unordered_map<std::string, Shader> shaders{};
         std::unordered_map<std::string, Material> materialMap;
-        std::unordered_map<std::string, Image> images{};             // Image (CPU) data
+        std::unordered_map<std::string, Image> images{};                 // Image (CPU) data
         std::unordered_map<std::string, std::string> imageSourcePaths{}; // transient collision diagnostics
         std::unordered_map<std::string, Texture> nonModelTextures{}; // Textures loaded outside of model loading
         std::unordered_map<std::string, ModelInfo> modelCopies{};
@@ -105,13 +105,12 @@ namespace sage
         [[nodiscard]] bool HasModelKey(const std::string& key) const;
         [[nodiscard]] std::vector<std::string> GetModelKeys(bool includeGenerated = false) const;
         [[nodiscard]] std::vector<std::string> GetMaterialKeys() const;
+        [[nodiscard]] std::vector<std::string> GetImageKeys(const std::string& prefix = {}) const;
         [[nodiscard]] const std::vector<std::string>& GetModelMaterialKeys(const std::string& modelKey) const;
         [[nodiscard]] const Material& GetMaterial(const std::string& key) const;
         [[nodiscard]] std::string GetModelSourcePath(const std::string& key) const;
         bool RenameModelAsset(
-            const std::string& oldKey,
-            const std::string& newKey,
-            const std::string& newSourcePath);
+            const std::string& oldKey, const std::string& newKey, const std::string& newSourcePath);
         [[nodiscard]] ModelView GetModelView(const std::string& viewKey) const;
         [[nodiscard]] ModelMutable CreateModelMutable(const std::string& viewKey);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount) const;
