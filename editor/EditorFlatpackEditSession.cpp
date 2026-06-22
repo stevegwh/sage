@@ -27,8 +27,11 @@ namespace sage::editor
     } // namespace
 
     EditorFlatpackEditSession::EditorFlatpackEditSession(
-        EngineSystems* _sys, EditorHistory* _history, Callbacks _callbacks)
-        : sys(_sys), history(_history), callbacks(std::move(_callbacks))
+        EngineSystems* _sys,
+        EditorHistory* _history,
+        const InspectorRegistry* _components,
+        Callbacks _callbacks)
+        : sys(_sys), history(_history), components(_components), callbacks(std::move(_callbacks))
     {
     }
 
@@ -65,7 +68,7 @@ namespace sage::editor
         std::vector<entt::entity> hierarchyOrder;
         if (callbacks.prepareMapStash) hierarchyOrder = callbacks.prepareMapStash();
         stashPath = mapStashPath();
-        SaveMap(*sys->registry, stashPath.string().c_str(), hierarchyOrder);
+        SaveMap(*sys->registry, stashPath.string().c_str(), hierarchyOrder, components);
         stashedMapDirty = history && history->HasUnsavedChanges();
         stashedCamera = *sys->camera->getRaylibCam();
 
@@ -137,7 +140,7 @@ namespace sage::editor
     {
         if (!stashPath.empty() && std::filesystem::is_regular_file(stashPath))
         {
-            LoadMap(sys->registry, stashPath.string().c_str());
+            LoadMap(sys->registry, stashPath.string().c_str(), components);
             std::filesystem::remove(stashPath);
         }
         stashPath.clear();

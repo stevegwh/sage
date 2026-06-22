@@ -1,6 +1,7 @@
 #pragma once
 
 #include "entt/entt.hpp"
+#include "cereal/archives/binary.hpp"
 #include "magic_enum.hpp"
 #include "raylib.h"
 
@@ -11,6 +12,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -400,6 +402,22 @@ namespace sage::editor
 
     class InspectorRegistry
     {
+      public:
+        struct ComponentOption
+        {
+            EditorComponentId componentId{};
+            std::string displayName;
+        };
+
+        struct PersistentComponent
+        {
+            std::string key;
+            std::string data;
+
+            bool operator==(const PersistentComponent&) const = default;
+        };
+
+      private:
         struct Entry
         {
             EditorComponentId componentId{};
@@ -409,6 +427,12 @@ namespace sage::editor
             std::vector<EditorComponentId> requirements;
             std::vector<EditorComponentId> incompatibleComponents;
             bool removable = false;
+            bool addable = false;
+            std::string persistenceKey;
+            std::function<void(entt::registry&, entt::entity)> add;
+            std::function<void(entt::registry&, entt::entity)> remove;
+            std::function<std::string(const entt::registry&, entt::entity)> serialize;
+            std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
         };
 
         struct DescribedEntry
@@ -433,29 +457,73 @@ namespace sage::editor
 
       public:
         template <class T>
-        void Register(std::string displayName, bool removable = false)
+        void Register(
+            std::string displayName,
+            bool removable = false,
+            bool addable = false)
         {
             T defaultComponent{};
             ComponentInspector defaultInspector;
             defaultComponent.define_editor_options(defaultInspector);
             auto defaultDescription = std::move(defaultInspector).Take();
 
-            entries_.push_back(
-                {ComponentIdOf<T>(),
-                 std::move(displayName),
-                 [](const entt::registry& r, const entt::entity e) {
-                     return r.valid(e) && r.template any_of<T>(e);
-                 },
-                 [](entt::registry& r, const entt::entity e) {
-                     ComponentInspector ci;
-                     ci.SetContext(&r, e);
-                     r.template get<T>(e).define_editor_options(ci);
-                     return std::move(ci).Take();
-                 },
-                 std::move(defaultDescription.requirements),
-                 std::move(defaultDescription.incompatibleComponents),
-                 removable});
+            Entry entry{
+                .componentId = ComponentIdOf<T>(),
+                .displayName = std::move(displayName),
+                .has = [](const entt::registry& r, const entt::entity e) {
+                    return r.valid(e) && r.template any_of<T>(e);
+                },
+                .describe = [](entt::registry& r, const entt::entity e) {
+                    ComponentInspector ci;
+                    ci.SetContext(&r, e);
+                    r.template get<T>(e).define_editor_options(ci);
+                    return std::move(ci).Take();
+                },
+                .requirements = std::move(defaultDescription.requirements),
+                .incompatibleComponents = std::move(defaultDescription.incompatibleComponents),
+                .removable = removable,
+                .addable = addable,
+                .add = [](entt::registry& r, const entt::entity e) { r.template emplace<T>(e); },
+                .remove = [](entt::registry& r, const entt::entity e) { r.template remove<T>(e); }};
+
+            entries_.push_back(std::move(entry));
         }
+
+        template <class T>
+        void RegisterPersistent(
+            std::string displayName, std::string persistenceKey, bool removable = true, bool addable = true)
+        {
+            // Game-owned components use a stable key because their C++ type id is
+            // process-local implementation detail. The opaque cereal payload is
+            // shared by map persistence and editor undo/redo.
+            Register<T>(std::move(displayName), removable, addable);
+            auto& entry = entries_.back();
+            entry.persistenceKey = std::move(persistenceKey);
+            entry.serialize = [](const entt::registry& r, const entt::entity e) {
+                std::ostringstream stream(std::ios::binary);
+                cereal::BinaryOutputArchive archive(stream);
+                archive(r.template get<T>(e));
+                return stream.str();
+            };
+            entry.deserialize = [](entt::registry& r, const entt::entity e, const std::string& data) {
+                std::istringstream stream(data, std::ios::binary);
+                T component{};
+                cereal::BinaryInputArchive archive(stream);
+                archive(component);
+                if (r.template any_of<T>(e)) r.template remove<T>(e);
+                r.template emplace<T>(e, std::move(component));
+            };
+        }
+
+        [[nodiscard]] std::vector<ComponentOption> AddableComponents() const;
+        bool Add(entt::registry& registry, EditorComponentId componentId, entt::entity entity) const;
+        bool Remove(entt::registry& registry, EditorComponentId componentId, entt::entity entity) const;
+        [[nodiscard]] std::vector<PersistentComponent> CapturePersistent(
+            const entt::registry& registry, entt::entity entity) const;
+        void RestorePersistent(
+            entt::registry& registry,
+            entt::entity entity,
+            const std::vector<PersistentComponent>& components) const;
 
         [[nodiscard]] ComponentAddState CanAdd(
             entt::registry& registry,

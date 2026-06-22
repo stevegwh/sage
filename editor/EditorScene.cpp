@@ -200,24 +200,12 @@ namespace sage
         auto inspectedComponents = !selectedRoots.empty()
                                        ? inspectorRegistry.Inspect(*sys->registry, selectedRoots)
                                        : std::vector<editor::InspectedComponent>{};
-        std::vector<editor::EditorGui::AddComponentOption> addComponentOptions{
-            {.componentId = editor::ComponentIdOf<Renderable>(), .displayName = "Renderable"},
-            {.componentId = editor::ComponentIdOf<Collideable>(), .displayName = "Collideable"},
-            {.componentId = editor::ComponentIdOf<Light>(), .displayName = "Light"},
-            {.componentId = editor::ComponentIdOf<ScriptComponent>(),
-             .displayName = "Script",
-             .separatorBefore = true},
-            {.componentId = editor::ComponentIdOf<Animation>(), .displayName = "Animation"},
-            {.componentId = editor::ComponentIdOf<MoveableActor>(), .displayName = "Moveable Actor"},
-            {.componentId = editor::ComponentIdOf<NavigationSurface>(),
-             .displayName = "Navigation Surface",
-             .separatorBefore = true},
-            {.componentId = editor::ComponentIdOf<NavigationObstacle>(), .displayName = "Navigation Obstacle"},
-            {.componentId = editor::ComponentIdOf<TriggerVolume>(), .displayName = "Trigger Volume"},
-            {.componentId = editor::ComponentIdOf<CursorTarget>(), .displayName = "Cursor Target"},
-            {.componentId = editor::ComponentIdOf<Archetype>(),
-             .displayName = "Archetype",
-             .separatorBefore = true}};
+        std::vector<editor::EditorGui::AddComponentOption> addComponentOptions;
+        for (const auto& component : inspectorRegistry.AddableComponents())
+        {
+            addComponentOptions.push_back(
+                {.componentId = component.componentId, .displayName = component.displayName});
+        }
         for (auto& option : addComponentOptions)
         {
             const auto state = inspectorRegistry.CanAdd(*sys->registry, option.componentId, selectedRoots);
@@ -839,6 +827,18 @@ namespace sage
                     addRegisteredComponent.template operator()<CursorTarget>();
                 else if (requestedComponent == editor::ComponentIdOf<Archetype>())
                     addRegisteredComponent.template operator()<Archetype>();
+                else
+                {
+                    const auto selected = selection->Selected();
+                    history->Begin(editor::EditAction::AddComponent, selected);
+                    for (const auto entity : selected)
+                    {
+                        if (sys->registry->valid(entity))
+                            inspectorRegistry.Add(*sys->registry, requestedComponent, entity);
+                    }
+                    history->Commit();
+                    refreshSceneWindows();
+                }
             }
 
             if (result.selectedModelKey.has_value()) changeSelectedModels(*result.selectedModelKey);
@@ -967,6 +967,17 @@ namespace sage
                 else if (componentId == editor::ComponentIdOf<Light>())
                 {
                     removeRegisteredComponent.template operator()<Light>();
+                }
+                else
+                {
+                    history->Begin(editor::EditAction::RemoveComponent, selected);
+                    for (const auto entity : selected)
+                    {
+                        if (sys->registry->valid(entity))
+                            inspectorRegistry.Remove(*sys->registry, componentId, entity);
+                    }
+                    history->Commit();
+                    refreshSceneWindows();
                 }
             };
 
@@ -2211,7 +2222,7 @@ namespace sage
         // runtime loads into its own registry. collectMapHierarchyOrder() also
         // ensures the default map base exists before serialising.
         const auto hierarchyOrder = collectMapHierarchyOrder();
-        editor::SaveMap(*sys->registry, kPlaySessionMapPath, hierarchyOrder);
+        editor::SaveMap(*sys->registry, kPlaySessionMapPath, hierarchyOrder, &inspectorRegistry);
 
         GameRuntimeContext context;
         context.audioManager = sys->audioManager;
@@ -2262,10 +2273,12 @@ namespace sage
         EngineSystems* _sys,
         editor::EditorDockLayout* dockLayout,
         EditorSettings* _editorSettings,
-        std::function<void()> _onEditorSettingsChanged)
+        std::function<void()> _onEditorSettingsChanged,
+        std::function<void(editor::InspectorRegistry&)> registerGameComponents)
         : sys(_sys)
     {
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
+        if (registerGameComponents) registerGameComponents(inspectorRegistry);
         assetCatalog =
             std::make_unique<editor::EditorAssetCatalog>(editor::EditorAssetCatalog::FromLoadedModels());
         assetCatalog->LoadDefaults();
@@ -2289,7 +2302,9 @@ namespace sage
             }
         });
         history = std::make_unique<editor::EditorHistory>(
-            sys, [this](const std::vector<entt::entity>& restored) { onHistoryApplied(restored); });
+            sys,
+            &inspectorRegistry,
+            [this](const std::vector<entt::entity>& restored) { onHistoryApplied(restored); });
         editorModes = std::make_unique<editor::EditorModeStateMachine>(*this, *transformEditor);
 
         gui = std::make_unique<editor::EditorGui>(
@@ -2325,6 +2340,7 @@ namespace sage
             _editorSettings,
             std::move(_onEditorSettingsChanged),
             history.get(),
+            &inspectorRegistry,
             editor::EditorMapController::Callbacks{
                 .prepareForLoad = [this]() { clearCurrentMap(); },
                 .finishLoad = [this]() { refreshAfterMapLoad(); },
@@ -2334,6 +2350,7 @@ namespace sage
         flatpackSession = std::make_unique<editor::EditorFlatpackEditSession>(
             sys,
             history.get(),
+            &inspectorRegistry,
             editor::EditorFlatpackEditSession::Callbacks{
                 .clearScene = [this]() { clearCurrentMap(); },
                 .loadFlatpack =

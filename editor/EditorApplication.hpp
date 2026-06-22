@@ -6,6 +6,7 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -16,6 +17,10 @@ namespace sage
     class KeyMapping;
     struct Settings;
     class EditorScene;
+    namespace editor
+    {
+        class InspectorRegistry;
+    }
 
     class EditorApplication
     {
@@ -38,6 +43,7 @@ namespace sage
         bool exitWindow = false;
         bool viewportFullscreen = false;
         std::string skyboxImageKey;
+        std::function<void(editor::InspectorRegistry&)> registerGameComponents;
 
         void init();
         void draw();
@@ -49,7 +55,9 @@ namespace sage
 
       public:
         void Update();
-        explicit EditorApplication(std::string _skyboxImageKey = {});
+        explicit EditorApplication(
+            std::string _skyboxImageKey = {},
+            std::function<void(editor::InspectorRegistry&)> _registerGameComponents = {});
         ~EditorApplication();
 
         EditorApplication(const EditorApplication&) = delete;

@@ -189,7 +189,8 @@ namespace sage
             EngineSystems* _sys,
             editor::EditorDockLayout* dockLayout,
             EditorSettings* editorSettings,
-            std::function<void()> onEditorSettingsChanged);
+            std::function<void()> onEditorSettingsChanged,
+            std::function<void(editor::InspectorRegistry&)> registerGameComponents = {});
         ~EditorScene();
     };
 } // namespace sage

@@ -82,7 +82,11 @@ namespace sage
         serializer::LoadAssetBinFile(registry.get(), "resources/assets.bin");
         if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
         scene = std::make_unique<EditorScene>(
-            systems.get(), &dockLayout, &editorSettings, [this]() { saveEditorSettings(); });
+            systems.get(),
+            &dockLayout,
+            &editorSettings,
+            [this]() { saveEditorSettings(); },
+            registerGameComponents);
 
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
@@ -254,12 +258,15 @@ namespace sage
         }
     }
 
-    EditorApplication::EditorApplication(std::string _skyboxImageKey)
+    EditorApplication::EditorApplication(
+        std::string _skyboxImageKey,
+        std::function<void(editor::InspectorRegistry&)> _registerGameComponents)
         : registry(std::make_unique<entt::registry>()),
           keyMapping(std::make_unique<KeyMapping>()),
           settings(std::make_unique<Settings>(&exitWindow)),
           audioManager(std::make_unique<AudioManager>()),
-          skyboxImageKey(std::move(_skyboxImageKey))
+          skyboxImageKey(std::move(_skyboxImageKey)),
+          registerGameComponents(std::move(_registerGameComponents))
     {
         serializer::DeserializeXMLFile<EditorSettings>(EDITOR_SETTINGS_PATH, editorSettings);
     }

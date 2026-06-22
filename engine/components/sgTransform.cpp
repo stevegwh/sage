@@ -203,6 +203,25 @@ namespace sage
         return m_children;
     }
 
+    void DestroyHierarchy(entt::registry& registry, const entt::entity root)
+    {
+        if (!registry.valid(root)) return;
+
+        if (const auto* transform = registry.try_get<sgTransform>(root))
+        {
+            // Copy: destroying a child fires TransformSystem's on_destroy hook, which
+            // mutates this live child list. Recurse children-first so nothing is left
+            // orphaned and the root's child list is already drained when it's destroyed.
+            const std::vector<entt::entity> children = transform->GetChildren();
+            for (const auto child : children)
+            {
+                DestroyHierarchy(registry, child);
+            }
+        }
+
+        if (registry.valid(root)) registry.destroy(root);
+    }
+
     sgTransform::sgTransform()
     {
         scale.local.value = {1, 1, 1};

@@ -179,4 +179,17 @@ namespace sage::editor_layout
             archive(targetId, archetype);
         }
     };
+
+    struct EntityGameComponentRecord
+    {
+        std::uint32_t targetId = 0;
+        std::string key;
+        std::string data;
+
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(targetId, key, data);
+        }
+    };
 } // namespace sage::editor_layout

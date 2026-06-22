@@ -207,4 +207,10 @@ namespace sage
 
         friend class TransformSystem;
     };
+
+    // Destroys `root` together with its entire transform subtree, children first.
+    // A plain registry.destroy only re-parents an entity's children to null (orphaning
+    // them); this tears the whole tree down. Safe on entt::null / invalid ids and on
+    // entities that have no sgTransform or no children.
+    void DestroyHierarchy(entt::registry& registry, entt::entity root);
 } // namespace sage

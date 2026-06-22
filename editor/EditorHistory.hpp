@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "EditorInspector.hpp"
+
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/ScriptComponent.hpp"
@@ -68,7 +70,7 @@ namespace sage::editor
         // and re-selection). Implemented by EditorScene.
         using OnApplied = std::function<void(const std::vector<entt::entity>& restored)>;
 
-        EditorHistory(EngineSystems* sys, OnApplied onApplied);
+        EditorHistory(EngineSystems* sys, const InspectorRegistry* components, OnApplied onApplied);
 
         // --- In-place edit transactions -----------------------------------------
         // Begin captures the before-state of the affected entities; Commit captures
@@ -164,6 +166,7 @@ namespace sage::editor
             int terrainResolution = 0;
             float terrainCellSize = 1.0f;
             std::vector<float> terrainHeights;
+            std::vector<InspectorRegistry::PersistentComponent> persistentComponents;
         };
 
         struct EntityDelta
@@ -179,6 +182,7 @@ namespace sage::editor
         };
 
         EngineSystems* sys;
+        const InspectorRegistry* components;
         OnApplied onApplied;
 
         std::vector<HistoryEntry> undoStack;

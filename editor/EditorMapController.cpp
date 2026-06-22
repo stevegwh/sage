@@ -74,11 +74,13 @@ namespace sage::editor
         EditorSettings* _editorSettings,
         std::function<void()> _onEditorSettingsChanged,
         EditorHistory* _history,
+        const InspectorRegistry* _components,
         Callbacks _callbacks)
         : sys(_sys),
           editorSettings(_editorSettings),
           onEditorSettingsChanged(std::move(_onEditorSettingsChanged)),
           history(_history),
+          components(_components),
           callbacks(std::move(_callbacks))
     {
         loadMapBrowser = std::make_unique<ImGui::FileBrowser>(LOAD_BROWSER_FLAGS);
@@ -199,7 +201,7 @@ namespace sage::editor
         }
 
         if (callbacks.prepareForLoad) callbacks.prepareForLoad();
-        if (!editor::LoadMap(sys->registry, pathString.c_str())) return;
+        if (!editor::LoadMap(sys->registry, pathString.c_str(), components)) return;
         currentMapPath = selectedPath;
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
@@ -240,7 +242,7 @@ namespace sage::editor
 
         currentMapPath = ensureMapExtension(path);
         const auto pathString = currentMapPath.string();
-        editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder);
+        editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder, components);
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
         markSaved(currentMapPath);

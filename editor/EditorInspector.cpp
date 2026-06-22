@@ -571,6 +571,62 @@ namespace sage::editor
         return {.allowed = true};
     }
 
+    std::vector<InspectorRegistry::ComponentOption> InspectorRegistry::AddableComponents() const
+    {
+        std::vector<ComponentOption> options;
+        for (const auto& entry : entries_)
+        {
+            if (entry.addable) options.push_back({entry.componentId, entry.displayName});
+        }
+        return options;
+    }
+
+    bool InspectorRegistry::Add(
+        entt::registry& registry, const EditorComponentId componentId, const entt::entity entity) const
+    {
+        const auto* entry = findEntry(componentId);
+        if (entry == nullptr || !entry->addable || entry->has(registry, entity)) return false;
+        entry->add(registry, entity);
+        return true;
+    }
+
+    bool InspectorRegistry::Remove(
+        entt::registry& registry, const EditorComponentId componentId, const entt::entity entity) const
+    {
+        const auto* entry = findEntry(componentId);
+        if (entry == nullptr || !entry->removable || !entry->has(registry, entity)) return false;
+        entry->remove(registry, entity);
+        return true;
+    }
+
+    std::vector<InspectorRegistry::PersistentComponent> InspectorRegistry::CapturePersistent(
+        const entt::registry& registry, const entt::entity entity) const
+    {
+        std::vector<PersistentComponent> components;
+        for (const auto& entry : entries_)
+        {
+            if (entry.persistenceKey.empty() || !entry.has(registry, entity)) continue;
+            components.push_back({entry.persistenceKey, entry.serialize(registry, entity)});
+        }
+        return components;
+    }
+
+    void InspectorRegistry::RestorePersistent(
+        entt::registry& registry,
+        const entt::entity entity,
+        const std::vector<PersistentComponent>& components) const
+    {
+        for (const auto& entry : entries_)
+        {
+            if (entry.persistenceKey.empty()) continue;
+            const auto component = std::ranges::find(components, entry.persistenceKey, &PersistentComponent::key);
+            if (component != components.end())
+                entry.deserialize(registry, entity, component->data);
+            else if (entry.has(registry, entity))
+                entry.remove(registry, entity);
+        }
+    }
+
     ComponentRemovalState InspectorRegistry::CanRemove(
         entt::registry& registry,
         const EditorComponentId componentId,
@@ -718,16 +774,16 @@ namespace sage::editor
         registry.Register<PersistentEntityId>("Persistent Entity Id");
         registry.Register<AssetReference>("Asset Reference", true);
         registry.Register<MetaData>("Meta Data");
-        registry.Register<Renderable>("Renderable", true);
-        registry.Register<Collideable>("Collideable", true);
-        registry.Register<NavigationSurface>("Navigation Surface", true);
-        registry.Register<NavigationObstacle>("Navigation Obstacle", true);
-        registry.Register<TriggerVolume>("Trigger Volume", true);
-        registry.Register<CursorTarget>("Cursor Target", true);
-        registry.Register<Light>("Light", true);
-        registry.Register<Animation>("Animation", true);
-        registry.Register<MoveableActor>("Moveable Actor", /*removable=*/true);
-        registry.Register<ScriptComponent>("Script", /*removable=*/true);
-        registry.Register<Archetype>("Archetype", /*removable=*/true);
+        registry.Register<Renderable>("Renderable", true, true);
+        registry.Register<Collideable>("Collideable", true, true);
+        registry.Register<NavigationSurface>("Navigation Surface", true, true);
+        registry.Register<NavigationObstacle>("Navigation Obstacle", true, true);
+        registry.Register<TriggerVolume>("Trigger Volume", true, true);
+        registry.Register<CursorTarget>("Cursor Target", true, true);
+        registry.Register<Light>("Light", true, true);
+        registry.Register<Animation>("Animation", true, true);
+        registry.Register<MoveableActor>("Moveable Actor", true, true);
+        registry.Register<ScriptComponent>("Script", true, true);
+        registry.Register<Archetype>("Archetype", true, true);
     }
 } // namespace sage::editor

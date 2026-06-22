@@ -29,6 +29,7 @@ namespace sage
     namespace editor
     {
         class EditorHistory;
+        class InspectorRegistry;
 
         class EditorMapController
         {
@@ -53,6 +54,7 @@ namespace sage
                 EditorSettings* editorSettings,
                 std::function<void()> onEditorSettingsChanged,
                 EditorHistory* history,
+                const InspectorRegistry* components,
                 Callbacks callbacks);
             ~EditorMapController();
 
@@ -83,6 +85,7 @@ namespace sage
             EditorSettings* editorSettings{};
             std::function<void()> onEditorSettingsChanged;
             EditorHistory* history{};
+            const InspectorRegistry* components{};
             Callbacks callbacks;
             std::filesystem::path currentMapPath;
             float saveFeedbackRemaining = 0.0f;

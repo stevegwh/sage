@@ -76,8 +76,9 @@ namespace sage::editor
 
     } // namespace
 
-    EditorHistory::EditorHistory(EngineSystems* _sys, OnApplied _onApplied)
-        : sys(_sys), onApplied(std::move(_onApplied))
+    EditorHistory::EditorHistory(
+        EngineSystems* _sys, const InspectorRegistry* _components, OnApplied _onApplied)
+        : sys(_sys), components(_components), onApplied(std::move(_onApplied))
     {
     }
 
@@ -157,6 +158,7 @@ namespace sage::editor
         {
             return false;
         }
+        if (a.persistentComponents != b.persistentComponents) return false;
         return true;
     }
 
@@ -317,6 +319,7 @@ namespace sage::editor
             s.hasMetaData = true;
             s.metaData = reg.get<MetaData>(entity);
         }
+        if (components != nullptr) s.persistentComponents = components->CapturePersistent(reg, entity);
         return s;
     }
 
@@ -726,6 +729,9 @@ namespace sage::editor
             reg.emplace_or_replace<MetaData>(entity);
         else if (reg.all_of<MetaData>(entity))
             reg.remove<MetaData>(entity);
+
+        if (components != nullptr)
+            components->RestorePersistent(reg, entity, target.persistentComponents);
 
         setNavigationOccupied(entity, true);
     }

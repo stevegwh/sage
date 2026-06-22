@@ -8,6 +8,7 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/UberShaderComponent.hpp"
 #include "engine/Light.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Serializer.hpp"
@@ -494,5 +495,85 @@ namespace sage
             return lhs.displayName < rhs.displayName;
         });
         return entries;
+    }
+
+    FlatpackInstance InstantiateFlatpack(
+        entt::registry& destination,
+        const char* path,
+        const Vector3 position,
+        const std::optional<Vector3> eulerRotation,
+        const bool applyLitShader)
+    {
+        auto instance = LoadFlatpack(destination, path, position);
+        if (!instance) return instance;
+
+        // Orient the whole subtree first: SetWorldRot propagates to children
+        // synchronously, so the collider refit below sees final world transforms.
+        if (eulerRotation.has_value())
+        {
+            destination.get<sgTransform>(instance.root).rotation.world = *eulerRotation;
+        }
+
+        for (const auto entity : instance.entities)
+        {
+            // LoadFlatpack restores Renderables without a shader; attach the lit
+            // uber-shader so the instance lights like the rest of the scene.
+            if (applyLitShader)
+            {
+                auto* renderable = destination.try_get<Renderable>(entity);
+                if (renderable && renderable->GetModel() && !destination.any_of<UberShaderComponent>(entity))
+                {
+                    auto& uber =
+                        destination.emplace<UberShaderComponent>(entity, renderable->GetModel()->GetMaterialCount());
+                    uber.SetFlagAll(UberShaderComponent::Flags::Lit);
+                    if (destination.any_of<Animation>(entity))
+                    {
+                        uber.SetFlagAll(UberShaderComponent::Flags::Skinned);
+                    }
+                }
+            }
+
+            // Saved collider boxes are in the flatpack-root frame; refit each to its
+            // world transform so picking and collision line up with the placed instance.
+            auto* collideable = destination.try_get<Collideable>(entity);
+            if (collideable && destination.any_of<sgTransform>(entity))
+            {
+                // Mesh colliders derive their broad-phase box from the render model, so
+                // re-derive the local box rather than trusting the saved one (matches the
+                // editor's RefreshCollisionBoundsRecursive). Box colliders keep their
+                // possibly hand-authored bounds.
+                if (collideable->shape == ColliderShape::RenderMesh)
+                {
+                    if (const auto* renderable = destination.try_get<Renderable>(entity);
+                        renderable && renderable->GetModel())
+                    {
+                        collideable->localBoundingBox = renderable->GetModel()->CalcLocalBoundingBox();
+                    }
+                }
+                const auto& transform = destination.get<sgTransform>(entity);
+                collideable->worldBoundingBox =
+                    TransformBoundingBoxByCorners(collideable->localBoundingBox, transform.GetMatrix());
+            }
+        }
+
+        return instance;
+    }
+
+    FlatpackInstance InstantiateFlatpackByName(
+        entt::registry& destination,
+        const std::string& name,
+        const Vector3 position,
+        const std::optional<Vector3> eulerRotation,
+        const std::filesystem::path directory)
+    {
+        for (const auto& entry : ListFlatpacks(directory))
+        {
+            if (entry.displayName == name)
+            {
+                return InstantiateFlatpack(destination, entry.path.string().c_str(), position, eulerRotation);
+            }
+        }
+        std::cerr << "InstantiateFlatpackByName: no flatpack named '" << name << "' in " << directory << '\n';
+        return {};
     }
 } // namespace sage

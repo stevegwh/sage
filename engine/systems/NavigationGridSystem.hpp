@@ -78,11 +78,14 @@ namespace sage
         //---------------------------------------------------------
         // Always writes the computed grid index to out, even when returning false for an
         // out-of-range point. Callers may use that index to clamp partially overlapping bounds.
-        bool WorldToGridSpace(Vector3 worldPos, GridSquare& out) const;
+        bool WorldToGridSpace(const Vector3& worldPos, GridSquare& out) const;
         //---------------------------------------------------------
         // As above, out receives the computed index regardless of the return value.
         bool WorldToGridSpace(
-            Vector3 worldPos, GridSquare& out, const GridSquare& _minRange, const GridSquare& _maxRange) const;
+            const Vector3& worldPos,
+            GridSquare& out,
+            const GridSquare& _minRange,
+            const GridSquare& _maxRange) const;
         //---------------------------------------------------------
         [[nodiscard]] GridSquare FindNextBestLocation(entt::entity entity, GridSquare target) const;
         //---------------------------------------------------------
@@ -160,6 +163,10 @@ namespace sage
         [[nodiscard]] entt::entity CheckSingleSquareOccupant(Vector3 worldPos) const;
         //---------------------------------------------------------
         [[nodiscard]] entt::entity CheckSingleSquareOccupant(GridSquare position) const;
+        //---------------------------------------------------------
+        [[nodiscard]] entt::entity GetSurfaceAt(Vector3 worldPos) const;
+        //---------------------------------------------------------
+        [[nodiscard]] entt::entity GetSurfaceAt(GridSquare position) const;
         //---------------------------------------------------------
         [[nodiscard]] entt::entity CheckSquareAreaOccupant(Vector3 worldPos, const BoundingBox& bb) const;
         //---------------------------------------------------------

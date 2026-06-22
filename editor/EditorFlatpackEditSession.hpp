@@ -25,6 +25,7 @@ namespace sage
     namespace editor
     {
         class EditorHistory;
+        class InspectorRegistry;
 
         class EditorFlatpackEditSession
         {
@@ -52,7 +53,11 @@ namespace sage
                 std::function<void()> catalogChanged;
             };
 
-            EditorFlatpackEditSession(EngineSystems* sys, EditorHistory* history, Callbacks callbacks);
+            EditorFlatpackEditSession(
+                EngineSystems* sys,
+                EditorHistory* history,
+                const InspectorRegistry* components,
+                Callbacks callbacks);
 
             void Update(); // ticks down the transient save-feedback message
 
@@ -81,6 +86,7 @@ namespace sage
 
             EngineSystems* sys{};
             EditorHistory* history{};
+            const InspectorRegistry* components{};
             Callbacks callbacks;
 
             std::filesystem::path flatpackPath;

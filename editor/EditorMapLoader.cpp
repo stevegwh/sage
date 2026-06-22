@@ -1,6 +1,7 @@
 #include "EditorMapLoader.hpp"
 
 #include "EditorComponents.hpp"
+#include "EditorInspector.hpp"
 #include "engine/Archetypes.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
@@ -101,7 +102,7 @@ namespace sage::editor
                 std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0);
     }
 
-    bool LoadMap(entt::registry* destination, const char* path)
+    bool LoadMap(entt::registry* destination, const char* path, const InspectorRegistry* components)
     {
         assert(destination != nullptr);
         if (!IsEditorLayoutMap(path))
@@ -251,8 +252,8 @@ namespace sage::editor
                     // load (EditorScene::refreshAfterMapLoad).
                 }
 
-                // Trailing (final) section: maps saved before archetypes existed end
-                // here, so a missing/incompatible stream degrades to "no archetypes".
+                // Trailing optional sections. Older maps may end after terrain or
+                // archetypes, so missing data degrades to no archetypes/game components.
                 try
                 {
                     std::vector<EntityArchetypeRecord> archetypes;
@@ -262,6 +263,21 @@ namespace sage::editor
                         const entt::entity target = resolveTarget(record.targetId);
                         if (target == entt::null) continue;
                         destination->emplace_or_replace<Archetype>(target, record.archetype);
+                    }
+
+                    std::vector<EntityGameComponentRecord> gameComponents;
+                    input(gameComponents);
+                    if (components != nullptr)
+                    {
+                        std::unordered_map<entt::entity, std::vector<InspectorRegistry::PersistentComponent>> byEntity;
+                        for (auto& record : gameComponents)
+                        {
+                            const entt::entity target = resolveTarget(record.targetId);
+                            if (target == entt::null) continue;
+                            byEntity[target].push_back({std::move(record.key), std::move(record.data)});
+                        }
+                        for (const auto& [entity, states] : byEntity)
+                            components->RestorePersistent(*destination, entity, states);
                     }
                 }
                 catch (const std::exception&)
@@ -282,12 +298,16 @@ namespace sage::editor
         return true;
     }
 
-    void SaveMap(entt::registry& source, const char* path)
+    void SaveMap(entt::registry& source, const char* path, const InspectorRegistry* components)
     {
-        SaveMap(source, path, {});
+        SaveMap(source, path, {}, components);
     }
 
-    void SaveMap(entt::registry& source, const char* path, const std::vector<entt::entity>& hierarchyOrder)
+    void SaveMap(
+        entt::registry& source,
+        const char* path,
+        const std::vector<entt::entity>& hierarchyOrder,
+        const InspectorRegistry* components)
     {
         std::cout << "START: Saving layout map data to file (editor)." << std::endl;
 
@@ -394,6 +414,22 @@ namespace sage::editor
                             entt::entt_traits<entt::entity>::to_entity(entity), *archetype});
                 }
                 output(archetypes);
+
+                std::vector<EntityGameComponentRecord> gameComponents;
+                if (components != nullptr)
+                {
+                    for (const auto entity : emittedEntities)
+                    {
+                        for (auto component : components->CapturePersistent(source, entity))
+                        {
+                            gameComponents.push_back(
+                                {entt::entt_traits<entt::entity>::to_entity(entity),
+                                 std::move(component.key),
+                                 std::move(component.data)});
+                        }
+                    }
+                }
+                output(gameComponents);
             });
 
         std::cout << "FINISH: Saving layout map data to file (editor)." << std::endl;

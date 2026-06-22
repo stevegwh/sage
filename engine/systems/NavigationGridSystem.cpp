@@ -234,9 +234,7 @@ namespace sage
     bool NavigationGridSystem::CheckBoundingBoxAreaUnoccupied(Vector3 worldPos, const BoundingBox& bb) const
     {
         const Vector3 center = {
-            (bb.min.x + bb.max.x) * 0.5f,
-            (bb.min.y + bb.max.y) * 0.5f,
-            (bb.min.z + bb.max.z) * 0.5f};
+            (bb.min.x + bb.max.x) * 0.5f, (bb.min.y + bb.max.y) * 0.5f, (bb.min.z + bb.max.z) * 0.5f};
         const Vector3 offset = Vector3Subtract(worldPos, center);
         const BoundingBox translated = {Vector3Add(bb.min, offset), Vector3Add(bb.max, offset)};
 
@@ -293,6 +291,25 @@ namespace sage
     entt::entity NavigationGridSystem::CheckSingleSquareOccupant(GridSquare position) const
     {
         return gridSquares[position.row][position.col].occupant;
+    }
+
+    entt::entity NavigationGridSystem::GetSurfaceAt(const Vector3 worldPos) const
+    {
+        GridSquare position{};
+        if (!WorldToGridSpace(worldPos, position))
+        {
+            return entt::null;
+        }
+        return GetSurfaceAt(position);
+    }
+
+    entt::entity NavigationGridSystem::GetSurfaceAt(const GridSquare position) const
+    {
+        if (!CheckWithinGridBounds(position))
+        {
+            return entt::null;
+        }
+        return gridSquares[position.row][position.col].heightMap.GetSurface();
     }
 
     entt::entity NavigationGridSystem::CheckSquareAreaOccupant(Vector3 worldPos, const BoundingBox& bb) const
@@ -446,7 +463,9 @@ namespace sage
                 const int terrainRow = static_cast<int>(std::lround(localZ / terrain.cellSize));
                 const int terrainCol = static_cast<int>(std::lround(localX / terrain.cellSize));
                 gridSquares[row][col].heightMap.Set(
-                    origin.y + terrain.SampleHeight(localX, localZ), terrain.GetNormal(terrainRow, terrainCol));
+                    origin.y + terrain.SampleHeight(localX, localZ),
+                    terrain.GetNormal(terrainRow, terrainCol),
+                    entity);
             }
         }
 
@@ -495,11 +514,13 @@ namespace sage
                     float relativePosition = relativeX * stairDirection.x + relativeZ * stairDirection.z;
                     float interpolatedHeight = area.min.y + (area.max.y - area.min.y) * relativePosition;
                     gridSquares[row][col].heightMap.Set(
-                        interpolatedHeight, Vector3Normalize(Vector3{-stairDirection.x, 1, -stairDirection.z}));
+                        interpolatedHeight,
+                        Vector3Normalize(Vector3{-stairDirection.x, 1, -stairDirection.z}),
+                        entity);
                 }
                 else if (surface.heightSource == NavigationHeightSource::FlatTop)
                 {
-                    gridSquares[row][col].heightMap.Set(area.max.y, {0, 1, 0});
+                    gridSquares[row][col].heightMap.Set(area.max.y, {0, 1, 0}, entity);
                 }
                 else if (surface.heightSource == NavigationHeightSource::RenderMesh)
                 {
@@ -517,7 +538,8 @@ namespace sage
                         if (renderable.GetModel() != nullptr && registry->any_of<sgTransform>(entity))
                         {
                             const auto& transform = registry->get<sgTransform>(entity);
-                            getFirstCollision = renderable.GetModel()->GetRayMeshCollision(ray, 0, transform.GetMatrix());
+                            getFirstCollision =
+                                renderable.GetModel()->GetRayMeshCollision(ray, 0, transform.GetMatrix());
                         }
                     }
                     else if (registry->any_of<DynamicRenderable>(entity))
@@ -543,7 +565,8 @@ namespace sage
 
                     if (getFirstCollision.hit)
                     {
-                        gridSquares[row][col].heightMap.Set(getFirstCollision.point.y, getFirstCollision.normal);
+                        gridSquares[row][col].heightMap.Set(
+                            getFirstCollision.point.y, getFirstCollision.normal, entity);
                     }
                 }
             }
@@ -615,10 +638,7 @@ namespace sage
         // Treat max edges as exclusive so a box ending exactly on a grid line
         // does not occupy the cell on the other side of that line.
         const Vector3 minPoint{minX, 0.0f, minZ};
-        const Vector3 maxPoint{
-            std::nextafter(maxX, minX),
-            0.0f,
-            std::nextafter(maxZ, minZ)};
+        const Vector3 maxPoint{std::nextafter(maxX, minX), 0.0f, std::nextafter(maxZ, minZ)};
 
         GridSquare minIndex{};
         GridSquare maxIndex{};
@@ -714,7 +734,7 @@ namespace sage
         return true;
     }
 
-    bool NavigationGridSystem::WorldToGridSpace(Vector3 worldPos, GridSquare& out) const
+    bool NavigationGridSystem::WorldToGridSpace(const Vector3& worldPos, GridSquare& out) const
     {
         return WorldToGridSpace(
             worldPos,
@@ -724,7 +744,7 @@ namespace sage
     }
 
     bool NavigationGridSystem::WorldToGridSpace(
-        Vector3 worldPos, GridSquare& out, const GridSquare& minRange, const GridSquare& maxRange) const
+        const Vector3& worldPos, GridSquare& out, const GridSquare& minRange, const GridSquare& maxRange) const
     {
         int x = std::floor(worldPos.x / spacing) + (slices / 2);
         int y = std::floor(worldPos.z / spacing) + (slices / 2);
@@ -785,9 +805,8 @@ namespace sage
                 if (!square.occupied) continue;
 
                 const float sampledHeight = square.heightMap.GetHeight();
-                const float height =
-                    (sampledHeight != -1.0f ? sampledHeight : square.worldPosCentre.y) + surfaceOffset +
-                    blockedSurfaceOffset;
+                const float height = (sampledHeight != -1.0f ? sampledHeight : square.worldPosCentre.y) +
+                                     surfaceOffset + blockedSurfaceOffset;
                 const float insetX = square.debugBox.x * cellInsetRatio;
                 const float insetZ = square.debugBox.z * cellInsetRatio;
                 const float minX = square.worldPosMin.x + insetX;
@@ -902,8 +921,7 @@ namespace sage
 
         const Vector3 origin = gridSquares[square.row][square.col].worldPosCentre;
         const BoundingBox footprint = {
-            Vector3Add(origin, footprintOffsets.min),
-            Vector3Add(origin, footprintOffsets.max)};
+            Vector3Add(origin, footprintOffsets.min), Vector3Add(origin, footprintOffsets.max)};
 
         GridSquare minRange{};
         GridSquare maxRange{};
@@ -1093,17 +1111,16 @@ namespace sage
                     gridSquares[next.row][next.col].occupied)
                     continue;
 
-                const double newCost = costs[current.row][current.col] +
-                                       gridSquares[next.row][next.col].pathfindingCost;
+                const double newCost =
+                    costs[current.row][current.col] + gridSquares[next.row][next.col].pathfindingCost;
                 if (visited[next.row][next.col] && (!useAStar || newCost >= costs[next.row][next.col])) continue;
 
                 visited[next.row][next.col] = true;
                 costs[next.row][next.col] = newCost;
                 cameFrom[next.row][next.col] = current;
-                const double estimate =
-                    heuristicType == AStarHeuristic::FAVOUR_RIGHT
-                        ? heuristic_favourRight(next, finish, pathDirection)
-                        : heuristic(next, finish);
+                const double estimate = heuristicType == AStarHeuristic::FAVOUR_RIGHT
+                                            ? heuristic_favourRight(next, finish, pathDirection)
+                                            : heuristic(next, finish);
                 frontier.push({useAStar ? newCost + estimate : 0.0, sequence++, next});
             }
         }
@@ -1182,11 +1199,6 @@ namespace sage
             if (!surface.active || surface.heightSource == NavigationHeightSource::TerrainHeightField) continue;
             calculateTerrainHeightAndNormals(entity);
         }
-        // Height-field terrains sample exactly (no raycasts). Pass order is
-        // irrelevant: TerrainTile::Set keeps the highest height per square, so
-        // wherever terrain overlaps other walkable geometry the taller surface
-        // wins — which also means a terrain valley dug below an overlapping
-        // floor mesh will not register in the grid.
         for (const auto& entity : registry->view<Terrain, sgTransform, NavigationSurface>())
         {
             const auto& surface = registry->get<NavigationSurface>(entity);

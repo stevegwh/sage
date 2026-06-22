@@ -47,15 +47,17 @@ namespace sage
     {
         float height = -1;
         Vector3 normal = Vector3{0, 1, 0};
+        entt::entity surface = entt::null;
         bool isSet = false;
 
       public:
-        void Set(const float _height, const Vector3& _normal)
+        void Set(const float _height, const Vector3& _normal, const entt::entity _surface)
         {
             if (!isSet || height < _height)
             {
                 height = _height;
                 normal = _normal;
+                surface = _surface;
                 isSet = true;
             }
         }
@@ -66,6 +68,10 @@ namespace sage
         [[nodiscard]] float GetHeight() const
         {
             return height;
+        }
+        [[nodiscard]] entt::entity GetSurface() const
+        {
+            return surface;
         }
     };
     struct NavigationGridSquare
@@ -91,7 +97,7 @@ namespace sage
               debugBox({fabsf(worldPosMax.x - worldPosMin.x), 0.1f, fabsf(worldPosMax.z - worldPosMin.z)})
         {
         }
- // Used for vector resize
+        // Used for vector resize
         NavigationGridSquare() = default;
     };
 } // namespace sage
