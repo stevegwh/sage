@@ -11,9 +11,9 @@ tooling, rendering, scripting, serialization, and editor systems used by Hero He
   avoidance, and smooth actor turning.
 - Collision and trigger system with raycasts, box/mesh queries, collision layers, and an editable collision matrix.
 - Rendering stack for dynamic models, skinned animation, emissive materials, skyboxes, custom shaders, and particles.
-- Lua scripting layer for entity behaviours, gameplay events, and project-specific game APIs.
+- Lua scripting for entity behaviours, gameplay events, and project-specific game APIs.
 - Custom UI framework for in-game windows, tables, tooltips, drag-and-drop, and themed HUD overlays.
-- Undo/redo history for editor workflows, including hierarchy edits, component changes, transforms, terrain sculpting,
+- Editor undo/redo history, including hierarchy edits, component changes, transforms, terrain sculpting,
   and multi-selection edits.
 - Packed asset and serialization pipeline for loading game resources, saving editor maps, and reusing groups of entities
   as flatpacks.
