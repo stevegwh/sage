@@ -5,22 +5,18 @@ tooling, rendering, scripting, serialization, and editor systems used by Hero He
 
 ## Core Features
 
-- ECS runtime with hierarchical transforms and engine-owned systems for rendering, physics, navigation, scripting, UI,
-  and audio.
-- 3D rendering with dynamic models, skinned animation, emissive materials, skyboxes, custom shaders, particles, and an
-  uber shader.
-- Packed asset pipeline and resource manager for models, materials, textures, shaders, audio, fonts, and animations.
-- Cereal-based serialization for engine data, raylib types, packed resources, editor maps, and prefab-style flatpacks.
-- Collision and trigger system with raycasts, box/mesh queries, layers, and an editable collision matrix.
-- Navigation and actor movement with terrain sampling, occupancy, A*, BFS, footprint-aware movement, path events, and
-  smooth turning.
-- Lua scripting with per-entity lifecycles, isolated environments, hot reload, event subscriptions, and game API
-  extension points.
-- Custom game UI framework with windows, tables, tooltips, drag-and-drop, themes, scrollbars, and overlay rendering.
-- Full editor with scene hierarchy, inspector, asset browser, placement tools, transform gizmos, terrain sculpting,
-  collision/light editing, play-in-editor, and flatpack editing.
-- Incremental editor undo/redo for touched entity subtrees, with multi-selection, mixed-value editing, copy/paste,
-  reparenting, snapping, and dirty-state prompts.
+- Integrated editor for building maps, placing entities, editing components, and testing changes in play mode.
+- Terrain tools for sculpting heightfields, authoring navigation surfaces, and aligning gameplay objects to the world.
+- Navigation and movement systems designed for point-and-click controls, including multi-tile footprints, obstacle
+  avoidance, and smooth actor turning.
+- Collision and trigger system with raycasts, box/mesh queries, collision layers, and an editable collision matrix.
+- Rendering stack for dynamic models, skinned animation, emissive materials, skyboxes, custom shaders, and particles.
+- Lua scripting layer for entity behaviours, gameplay events, and project-specific game APIs.
+- Custom UI framework for in-game windows, tables, tooltips, drag-and-drop, and themed HUD overlays.
+- Undo/redo history for editor workflows, including hierarchy edits, component changes, transforms, terrain sculpting,
+  and multi-selection edits.
+- Packed asset and serialization pipeline for loading game resources, saving editor maps, and reusing groups of entities
+  as flatpacks.
 
 ## Dependencies
 
