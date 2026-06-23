@@ -5,37 +5,22 @@ tooling, rendering, scripting, serialization, and editor systems used by Hero He
 
 ## Core Features
 
-- EnTT-based ECS runtime with engine-owned systems for transforms, rendering, collision, navigation, animation,
-  scripting, UI, audio, and cleanup.
-- Hierarchical transforms with parent-child relationships and dirty propagation.
-- 3D rendering pipeline with renderable components, dynamic renderables, skyboxes, custom shaders, skinned models,
-  emissive materials, and an uber shader system.
-- Resource manager for models, materials, textures, images, shaders, fonts, sounds, music, and model animations.
-- Serialized asset/resource packs for fast runtime loading.
-- Cereal-backed binary, JSON, and XML serialization, including raylib math/graphics types.
-- Editor-authored map format with hierarchy, transforms, renderables, collision, lighting, terrain, scripts,
-  archetypes, and project-specific component payloads.
-- Flatpack prefab system for saving, editing, cataloging, and instantiating reusable entity hierarchies.
-- Collision system with box/mesh queries, raycasts, collision layers, editable collision matrix, and trigger events.
-- Navigation grid with terrain height sampling, occupancy tracking, A* pathfinding, BFS pathfinding, and footprint-aware
-  movement.
-- Actor movement system with path following, destination events, cancellation, recalculation, and turn-speed controlled
-  rotation.
-- Lua scripting through sol2, with per-entity scripts, lifecycle callbacks, isolated script environments, hot reload,
-  and explicit event subscriptions.
-- Animation system with model animation playback, Lua animation events, and skinned renderable support.
-- 3D billboard particle system with configurable emitters, bursts, blend modes, acceleration, lifetime, color
-  transitions, and draw ordering.
-- Spatial audio components and runtime audio resource management.
-- Custom game UI framework with windows, docked windows, tables, cells, tooltips, drag-and-drop, themes, scrollbars, and
-  overlay drawing.
-- Full editor application with scene viewport, hierarchy, inspector, asset drawer, placement tools, transform gizmos,
-  terrain sculpting, collision matrix editing, light settings, and play-in-editor mode.
-- Undo/redo editor history based on touched entity subtrees rather than full-scene snapshots.
-- Multi-selection editor workflows, mixed-value inspector editing, copy/paste, reparenting, snapping, and dirty-state
-  save prompts.
-- Project extension points for custom collision layers, scene tags, cursor types, Lua APIs, archetypes, and persistent
-  game-owned components.
+- ECS runtime with hierarchical transforms and engine-owned systems for rendering, physics, navigation, scripting, UI,
+  and audio.
+- 3D rendering with dynamic models, skinned animation, emissive materials, skyboxes, custom shaders, particles, and an
+  uber shader.
+- Packed asset pipeline and resource manager for models, materials, textures, shaders, audio, fonts, and animations.
+- Cereal-based serialization for engine data, raylib types, packed resources, editor maps, and prefab-style flatpacks.
+- Collision and trigger system with raycasts, box/mesh queries, layers, and an editable collision matrix.
+- Navigation and actor movement with terrain sampling, occupancy, A*, BFS, footprint-aware movement, path events, and
+  smooth turning.
+- Lua scripting with per-entity lifecycles, isolated environments, hot reload, event subscriptions, and game API
+  extension points.
+- Custom game UI framework with windows, tables, tooltips, drag-and-drop, themes, scrollbars, and overlay rendering.
+- Full editor with scene hierarchy, inspector, asset browser, placement tools, transform gizmos, terrain sculpting,
+  collision/light editing, play-in-editor, and flatpack editing.
+- Incremental editor undo/redo for touched entity subtrees, with multi-selection, mixed-value editing, copy/paste,
+  reparenting, snapping, and dirty-state prompts.
 
 ## Dependencies
 
