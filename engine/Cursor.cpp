@@ -82,7 +82,7 @@ namespace sage
         if (!enabled) return;
         leftClickTimer += GetFrameTime();
 
-        if (leftClickTimer < 0.25) return;
+        if (leftClickTimer < 0.1) return;
         leftClickTimer = 0;
 
         const auto& hitInfo = getMouseHitInfo();
@@ -91,6 +91,7 @@ namespace sage
             const auto& navHitInfo = getNavigationHitInfo();
             onNavigationClick.Publish(navHitInfo.collidedEntityId, navHitInfo.collisionLayer);
         }
+        onLeftClick.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
     }
 
     void Cursor::onMouseRightDown() const
@@ -153,8 +154,8 @@ namespace sage
         const auto* navigationSurface = registry->try_get<NavigationSurface>(hitInfo.collidedEntityId);
         const auto* cursorTarget = registry->try_get<CursorTarget>(hitInfo.collidedEntityId);
         const bool navigationHit = navigationSurface != nullptr && navigationSurface->active;
-        const bool invalidNavigation =
-            navigationHit && navigationValidityProvider && !navigationValidityProvider(getFirstNaviCollision().point);
+        const bool invalidNavigation = navigationHit && navigationValidityProvider &&
+                                       !navigationValidityProvider(getFirstNaviCollision().point);
         const bool deniedTarget = cursorTarget != nullptr && cursorTarget->deniesNavigation;
         if (OutOfRange() || invalidNavigation || deniedTarget)
         {
