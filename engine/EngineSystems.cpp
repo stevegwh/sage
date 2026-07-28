@@ -5,11 +5,14 @@
 #include "EngineSystems.hpp"
 
 #include "Archetypes.hpp"
+#include "Flatpack.hpp"
 #include "Serializer.hpp"
 
 #include "Camera.hpp"
 #include "components/Animation.hpp"
 #include "components/Collideable.hpp"
+#include "components/CollisionIntent.hpp"
+#include "components/MoveableActor.hpp"
 #include "components/sgTransform.hpp"
 #include "Cursor.hpp"
 #include "FullscreenTextOverlayManager.hpp"
@@ -29,7 +32,11 @@
 #include "ui/GameUIEngine.hpp"
 #include "UserInput.hpp"
 
+#include "sol/sol.hpp"
+
 #include <cassert>
+#include <cstdint>
+#include <optional>
 
 namespace sage
 {
@@ -67,8 +74,55 @@ namespace sage
         Animation::define_lua_bindings(*scriptSystem);
 
         collisionSystem->RegisterLuaBindings(*scriptSystem);
+        navigationGridSystem->RegisterLuaBindings(*scriptSystem);
         actorMovementSystem->RegisterLuaBindings(*scriptSystem);
         animationSystem->RegisterLuaBindings(*scriptSystem);
+
+        scriptSystem->RegisterApiExtension(
+            "sage", [this](sol::table& api, entt::entity, entt::registry& destination) {
+                const auto spawnFlatpack =
+                    [this, &destination](
+                        const std::string& name,
+                        const Vector3 position,
+                        const std::optional<Vector3> rotation,
+                        sol::this_state state) -> sol::object {
+                    auto instance =
+                        InstantiateFlatpackByName(destination, name, position, rotation);
+                    if (!instance) return sol::lua_nil;
+
+                    for (const auto entity : instance.entities)
+                    {
+                        const auto* obstacle = destination.try_get<NavigationObstacle>(entity);
+                        const auto* collideable = destination.try_get<Collideable>(entity);
+                        if (obstacle && obstacle->active && collideable &&
+                            !destination.any_of<MoveableActor>(entity))
+                        {
+                            navigationGridSystem->MarkSquareAreaOccupied(
+                                collideable->worldBoundingBox, true, entity);
+                        }
+                    }
+
+                    return sol::make_object(
+                        state, static_cast<std::uint32_t>(instance.root));
+                };
+
+                api.set_function(
+                    "SpawnFlatpack",
+                    sol::overload(
+                        [spawnFlatpack](
+                            const std::string& name,
+                            const Vector3 position,
+                            sol::this_state state) {
+                            return spawnFlatpack(name, position, std::nullopt, state);
+                        },
+                        [spawnFlatpack](
+                            const std::string& name,
+                            const Vector3 position,
+                            const Vector3 rotation,
+                            sol::this_state state) {
+                            return spawnFlatpack(name, position, rotation, state);
+                        }));
+            });
     }
 
     EngineSystems::~EngineSystems()

@@ -490,6 +490,11 @@ namespace sage
                     return true;
                 });
 
+                api.set_function("HasRoute", [owner, &registry] {
+                    const auto* moveable = registry.try_get<MoveableActor>(owner);
+                    return moveable != nullptr && moveable->IsMoving();
+                });
+
                 api.set_function(
                     "TryPathfindToLocation",
                     sol::overload(

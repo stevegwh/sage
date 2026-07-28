@@ -1,9 +1,13 @@
 #include "EditorEntityOperations.hpp"
 
 #include "EditorComponents.hpp"
+#include "engine/Archetypes.hpp"
+#include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
+#include "engine/components/MoveableActor.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
@@ -19,6 +23,7 @@
 #include "cereal/archives/binary.hpp"
 
 #include <format>
+#include <iostream>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
@@ -56,7 +61,8 @@ namespace sage::editor
         }
     } // namespace
 
-    EditorEntityOperations::EditorEntityOperations(EngineSystems* _sys) : sys(_sys)
+    EditorEntityOperations::EditorEntityOperations(EngineSystems* _sys, const InspectorRegistry* _components)
+        : sys(_sys), components(_components)
     {
     }
 
@@ -284,27 +290,68 @@ namespace sage::editor
             if (sys->registry->any_of<Renderable>(entity))
             {
                 record.hasRenderable = true;
+                const auto& renderable = sys->registry->get<Renderable>(entity);
                 std::ostringstream stream(std::ios::binary);
                 {
                     cereal::BinaryOutputArchive archive(stream);
-                    archive(sys->registry->get<Renderable>(entity));
+                    archive(renderable);
                 }
                 record.renderableBlob = stream.str();
+                record.renderableActive = renderable.active;
+                record.renderableSerializable = renderable.serializable;
+                record.renderableHint = renderable.hint;
             }
             if (sys->registry->any_of<Light>(entity))
             {
                 record.hasLight = true;
                 record.light = sys->registry->get<Light>(entity);
             }
-            if (sys->registry->any_of<CustomShaderComponent>(entity))
+            if (sys->registry->any_of<AssetReference>(entity))
             {
-                record.hasCustomShader = true;
-                record.customShader = sys->registry->get<CustomShaderComponent>(entity);
+                record.hasAssetReference = true;
+                record.assetKey = sys->registry->get<AssetReference>(entity).assetKey;
             }
             if (sys->registry->any_of<MetaData>(entity))
             {
                 record.hasMetaData = true;
                 record.metaData = sys->registry->get<MetaData>(entity);
+            }
+            if (sys->registry->any_of<ScriptComponent>(entity))
+            {
+                record.hasScript = true;
+                record.script = sys->registry->get<ScriptComponent>(entity);
+            }
+            if (sys->registry->any_of<Animation>(entity))
+            {
+                record.hasAnimation = true;
+                record.animationModelKey = sys->registry->get<Animation>(entity).modelKey;
+            }
+            if (sys->registry->any_of<MoveableActor>(entity))
+            {
+                const auto& moveable = sys->registry->get<MoveableActor>(entity);
+                record.hasMoveableActor = true;
+                record.moveableActorSpeed = moveable.movementSpeed;
+                record.moveableActorTurnSpeed = moveable.turnSpeed;
+                record.moveableActorPathfindingBounds = moveable.pathfindingBounds;
+                record.moveableActorMoveClip = moveable.moveClip;
+                record.moveableActorIdleClip = moveable.idleClip;
+            }
+            if (sys->registry->any_of<Terrain>(entity))
+            {
+                const auto& terrain = sys->registry->get<Terrain>(entity);
+                record.hasTerrain = true;
+                record.terrainResolution = terrain.resolution;
+                record.terrainCellSize = terrain.cellSize;
+                record.terrainHeights = terrain.heights;
+            }
+            if (sys->registry->any_of<Archetype>(entity))
+            {
+                record.hasArchetype = true;
+                record.archetype = sys->registry->get<Archetype>(entity);
+            }
+            if (components != nullptr)
+            {
+                record.persistentComponents = components->CapturePersistent(*sys->registry, entity);
             }
         }
     }
@@ -398,15 +445,18 @@ namespace sage::editor
                     cereal::BinaryInputArchive archive(stream);
                     archive(renderable);
                 }
+                renderable.active = record.renderableActive;
+                renderable.serializable = record.renderableSerializable;
+                renderable.hint = record.renderableHint;
                 sys->registry->emplace<Renderable>(entity, std::move(renderable));
             }
             if (record.hasLight)
             {
                 sys->registry->emplace<Light>(entity, record.light);
             }
-            if (record.hasCustomShader)
+            if (record.hasAssetReference)
             {
-                sys->registry->emplace<CustomShaderComponent>(entity, record.customShader);
+                sys->registry->emplace<AssetReference>(entity, AssetReference{.assetKey = record.assetKey});
             }
             if (record.hasMetaData)
             {
@@ -415,6 +465,55 @@ namespace sage::editor
             else
             {
                 sys->registry->emplace<MetaData>(entity);
+            }
+            if (record.hasScript)
+            {
+                sys->registry->emplace<ScriptComponent>(entity, record.script);
+            }
+            if (record.hasAnimation)
+            {
+                if (ResourceManager::GetInstance().HasModelAnimation(record.animationModelKey))
+                {
+                    // Animated meshes need an entity-local model because animation
+                    // writes bone matrices into the model every frame.
+                    if (auto* renderable = sys->registry->try_get<Renderable>(entity);
+                        renderable != nullptr && renderable->GetModel() != nullptr &&
+                        renderable->GetMutable() == nullptr)
+                    {
+                        (void)renderable->EnsureMutable();
+                    }
+                    sys->registry->emplace<Animation>(entity, record.animationModelKey);
+                }
+                else
+                {
+                    std::cerr << "Editor clipboard: no packed animation data for '" << record.animationModelKey
+                              << "', skipping Animation component.\n";
+                }
+            }
+            if (record.hasMoveableActor)
+            {
+                auto& moveable = sys->registry->emplace<MoveableActor>(entity);
+                moveable.movementSpeed = record.moveableActorSpeed;
+                moveable.turnSpeed = record.moveableActorTurnSpeed;
+                moveable.pathfindingBounds = record.moveableActorPathfindingBounds;
+                moveable.moveClip = record.moveableActorMoveClip;
+                moveable.idleClip = record.moveableActorIdleClip;
+            }
+            if (record.hasTerrain)
+            {
+                auto& terrain = sys->registry->emplace<Terrain>(entity);
+                terrain.resolution = record.terrainResolution;
+                terrain.cellSize = record.terrainCellSize;
+                terrain.heights = record.terrainHeights;
+                AttachTerrainRenderable(*sys->registry, entity, *sys->lightSubSystem);
+            }
+            if (record.hasArchetype)
+            {
+                SetArchetype(*sys->registry, entity, record.archetype);
+            }
+            if (components != nullptr)
+            {
+                components->RestorePersistent(*sys->registry, entity, record.persistentComponents);
             }
         }
 

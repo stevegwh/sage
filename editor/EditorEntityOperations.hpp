@@ -1,8 +1,11 @@
 #pragma once
 
+#include "EditorInspector.hpp"
+
+#include "engine/Archetypes.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
-#include "engine/components/CustomShaderComponent.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -24,6 +27,7 @@ namespace sage::editor
     class EditorEntityOperations
     {
         EngineSystems* sys;
+        const InspectorRegistry* components;
 
         // A single entity captured into the clipboard. parentLocalId points into
         // the records vector of the owning ClipboardSubtree (-1 for the subtree
@@ -50,12 +54,37 @@ namespace sage::editor
             CursorTarget cursorTarget{};
             bool hasRenderable = false;
             std::string renderableBlob;
+            bool renderableActive = true;
+            bool renderableSerializable = true;
+            Color renderableHint = WHITE;
             bool hasLight = false;
             Light light{};
-            bool hasCustomShader = false;
-            CustomShaderComponent customShader{};
+            bool hasAssetReference = false;
+            std::string assetKey;
             bool hasMetaData = false;
             MetaData metaData{};
+            bool hasScript = false;
+            ScriptComponent script{};
+            // Animation owns live subscriptions and cannot be copied. Its model key
+            // is the authored state used to reconstruct a fresh component on paste.
+            bool hasAnimation = false;
+            std::string animationModelKey;
+            // MoveableActor also owns live events and runtime path state. Only the
+            // authored inspector fields are copied.
+            bool hasMoveableActor = false;
+            float moveableActorSpeed = 0.0f;
+            float moveableActorTurnSpeed = 240.0f;
+            int moveableActorPathfindingBounds = 0;
+            std::string moveableActorMoveClip;
+            std::string moveableActorIdleClip;
+            // Terrain's DynamicRenderable is derived and rebuilt on paste.
+            bool hasTerrain = false;
+            int terrainResolution = 0;
+            float terrainCellSize = 1.0f;
+            std::vector<float> terrainHeights;
+            bool hasArchetype = false;
+            Archetype archetype{};
+            std::vector<InspectorRegistry::PersistentComponent> persistentComponents;
         };
 
         // One copied subtree. records are in depth-first order with the root at
@@ -74,7 +103,7 @@ namespace sage::editor
         [[nodiscard]] entt::entity instantiateSubtree(const ClipboardSubtree& subtree) const;
 
       public:
-        explicit EditorEntityOperations(EngineSystems* sys);
+        EditorEntityOperations(EngineSystems* sys, const InspectorRegistry* components);
 
         void DeleteEntityAndChildren(entt::entity entity) const;
 

@@ -155,11 +155,29 @@ function sage.HasTag(e, tag) end
 ---@return string[]
 function sage.GetTags(e) end
 
+---Spawn an editor-authored flatpack at a world-space grid location.
+---`name` is the flatpack file stem under `resources/flatpacks`.
+---@param name string
+---@param position Vec3
+---@param rotation? Vec3 # Optional Euler rotation in degrees.
+---@return entity? # The spawned flatpack root, or nil when no matching flatpack exists.
+function sage.SpawnFlatpack(name, position, rotation) end
+
+---Get the topmost active navigation-surface entity at a world-space position.
+---@param position Vec3
+---@return entity? # nil if the position is outside the grid or has no navigation surface.
+function sage.GetNavigationSurfaceAt(position) end
+
 ---Move the owning entity directly toward a destination (no pathfinding).
 ---Requires a Transform.
 ---@param destination Vec3
 ---@return boolean # false if the entity has no Transform.
 function sage.MoveToLocation(destination) end
+
+---Whether the owning entity currently has a movement route.
+---Returns false when it has no MoveableActor or its route is empty.
+---@return boolean
+function sage.HasRoute() end
 
 ---Pathfind the owning entity to a destination.
 ---Requires Transform + MoveableActor + Collideable.

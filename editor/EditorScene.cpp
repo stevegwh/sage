@@ -2409,7 +2409,7 @@ namespace sage
             *assetCatalog, [this]() { return isPlaceState(); }, [this]() { refreshOverlay(); });
         selection = std::make_unique<editor::EditorSelection>(sys);
         pickingService = std::make_unique<editor::EditorPickingService>(sys);
-        entityOperations = std::make_unique<editor::EditorEntityOperations>(sys);
+        entityOperations = std::make_unique<editor::EditorEntityOperations>(sys, &inspectorRegistry);
         hierarchyTree = std::make_unique<editor::EditorHierarchyTree>(sys);
         placementController = std::make_unique<editor::EditorPlacementController>(sys, *assetCatalog);
 

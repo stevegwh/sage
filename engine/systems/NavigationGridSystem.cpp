@@ -8,12 +8,15 @@
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 #include "components/Terrain.hpp"
+#include "ScriptSystem.hpp"
 #include <Serializer.hpp>
 
 #include "rlgl.h"
+#include "sol/sol.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <queue>
@@ -1225,6 +1228,20 @@ namespace sage
     const NavigationGridSquare* NavigationGridSystem::GetGridSquare(int row, int col) const
     {
         return &gridSquares[row][col];
+    }
+
+    void NavigationGridSystem::RegisterLuaBindings(ScriptSystem& scripts)
+    {
+        scripts.RegisterApiExtension(
+            "sage", [this](sol::table& api, entt::entity, entt::registry&) {
+                api.set_function(
+                    "GetNavigationSurfaceAt",
+                    [this](const Vector3& worldPosition, sol::this_state state) -> sol::object {
+                        const entt::entity surface = GetSurfaceAt(worldPosition);
+                        if (surface == entt::null || !registry->valid(surface)) return sol::lua_nil;
+                        return sol::make_object(state, static_cast<std::uint32_t>(surface));
+                    });
+            });
     }
 
     NavigationGridSystem::NavigationGridSystem(entt::registry* _registry, CollisionSystem* _collisionSystem)

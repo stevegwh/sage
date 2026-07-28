@@ -9,6 +9,7 @@
 namespace sage
 {
     class CollisionSystem;
+    class ScriptSystem;
     struct GridSquare;
 
     enum class AStarHeuristic
@@ -184,6 +185,8 @@ namespace sage
         // occupied cells. Intended for editor/debug tooling rather than normal
         // game rendering.
         void DrawDebugGrid() const;
+        //---------------------------------------------------------
+        void RegisterLuaBindings(ScriptSystem& scripts);
         //---------------------------------------------------------
         explicit NavigationGridSystem(entt::registry* _registry, CollisionSystem* _collisionSystem);
     };
