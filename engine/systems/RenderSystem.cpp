@@ -122,10 +122,12 @@ namespace sage
         auto renderEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
             if (!renderable.active) return;
 
+            auto* model = renderable.GetModel();
+            if (model == nullptr) return;
+
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
-            renderable.GetModel()->Draw(
-                transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
+            model->Draw(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
         };
 
         auto renderDynamicEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
@@ -151,6 +153,7 @@ namespace sage
             for (const auto entity : view)
             {
                 auto& renderable = view.template get<Renderable>(entity);
+                if (!renderable.active || renderable.GetModel() == nullptr) continue;
                 view.template get<CustomShaderComponent>(entity).Update(renderable);
                 renderEntity(renderable, view.template get<sgTransform>(entity), entity);
             }
@@ -168,11 +171,14 @@ namespace sage
             auto& renderable = uberView.get<Renderable>(entity);
             if (!renderable.active) continue;
 
+            auto* model = renderable.GetModel();
+            if (model == nullptr) continue;
+
             const auto& transform = uberView.get<sgTransform>(entity);
             auto& uber = uberView.get<UberShaderComponent>(entity);
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
-            renderable.GetModel()->DrawUber(
+            model->DrawUber(
                 &uber, transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
         }
 

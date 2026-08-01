@@ -193,8 +193,7 @@ namespace sage
     void detail::RegisterFlatpackComponentCodec(FlatpackComponentCodec codec)
     {
         auto& codecs = FlatpackComponentCodecs();
-        const auto existing =
-            std::ranges::find(codecs, codec.key, &FlatpackComponentCodec::key);
+        const auto existing = std::ranges::find(codecs, codec.key, &FlatpackComponentCodec::key);
         if (existing != codecs.end())
         {
             *existing = std::move(codec);
@@ -567,7 +566,15 @@ namespace sage
                 std::cerr << "Flatpack: no component codec registered for '" << record.key << "'.\n";
                 continue;
             }
-            codec->deserialize(destination, created[record.localId], record.data);
+            try
+            {
+                codec->deserialize(destination, created[record.localId], record.data);
+            }
+            catch (const std::exception& error)
+            {
+                std::cerr << "Flatpack: could not deserialize component '" << record.key << "': " << error.what()
+                          << "\n";
+            }
         }
 
         return FlatpackInstance{created.front(), std::move(created)};

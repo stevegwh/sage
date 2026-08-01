@@ -118,6 +118,54 @@ function Animation:SetBlendDuration(seconds) end
 ---@return number
 function Animation:GetBlendDuration() end
 
+---An entity's mood. Cannot be constructed from Lua; obtain one via
+---`sage.GetMood(e)`.
+---@enum EmoteType
+EmoteType = {
+    Neutral = 0,
+    Happy = 1,
+    Sad = 2,
+    Angry = 3,
+    Bored = 4,
+}
+
+---@enum MoodEnum
+MoodEnum = {
+    Happiness = 0,
+    Anger = 1,
+    Stress = 2,
+    Love = 3,
+    Boredom = 4,
+}
+
+---@class MoodValue
+---@field value integer
+---@field emoteWhenHigh EmoteType
+---@field emoteWhenLow EmoteType
+
+---@class Mood
+---@field Get fun(self: Mood, mood: MoodEnum): MoodValue?
+
+---An entity's needs. Cannot be constructed from Lua; obtain one via
+---`sage.GetNeeds(e)`.
+---@enum NeedEnum
+NeedEnum = {
+    Hunger = 0,
+    Energy = 1,
+    Bladder = 2,
+    Social = 3,
+    Fun = 4,
+}
+
+---@class Need
+---@field value integer
+
+---@class Needs
+---@field Get fun(self: Needs, need: NeedEnum): Need?
+
+---@class NeedsFulfiller
+---@field needsFulfilled table<integer, [NeedEnum, integer]>
+
 --==============================================================================
 -- Namespaced engine API
 --==============================================================================
@@ -205,6 +253,21 @@ function sage.GetCollideable(e) end
 ---@param e entity
 ---@return Animation? # nil if the entity has no Animation.
 function sage.GetAnimation(e) end
+
+---Get an entity's Mood.
+---@param e entity
+---@return Mood? # nil if the entity has no Mood.
+function sage.GetMood(e) end
+
+---Get an entity's Needs.
+---@param e entity
+---@return Needs? # nil if the entity has no Needs.
+function sage.GetNeeds(e) end
+
+---Get an entity's NeedsFulfiller.
+---@param e entity
+---@return NeedsFulfiller? # nil if the entity has no NeedsFulfiller.
+function sage.GetNeedsFulfiller(e) end
 
 --==============================================================================
 -- Events
