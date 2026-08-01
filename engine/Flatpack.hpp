@@ -1,15 +1,64 @@
 #pragma once
 
+#include "cereal/archives/binary.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
 
 #include <filesystem>
+#include <functional>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace sage
 {
+    namespace detail
+    {
+        struct FlatpackComponentCodec
+        {
+            std::string key;
+            std::function<bool(const entt::registry&, entt::entity)> has;
+            std::function<std::string(const entt::registry&, entt::entity)> serialize;
+            std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
+        };
+
+        void RegisterFlatpackComponentCodec(FlatpackComponentCodec codec);
+    } // namespace detail
+
+    // Registers a game-owned component for opaque flatpack persistence without
+    // introducing an engine-to-game dependency. Re-registering the same key
+    // replaces its codec, so game/editor startup can safely call this repeatedly.
+    template <class T>
+    void RegisterFlatpackComponent(std::string key)
+    {
+        static_assert(std::is_default_constructible_v<T>);
+
+        detail::RegisterFlatpackComponentCodec(
+            {.key = std::move(key),
+             .has =
+                 [](const entt::registry& registry, const entt::entity entity) {
+                     return registry.valid(entity) && registry.template any_of<T>(entity);
+                 },
+             .serialize =
+                 [](const entt::registry& registry, const entt::entity entity) {
+                     std::ostringstream stream(std::ios::binary);
+                     cereal::BinaryOutputArchive archive(stream);
+                     archive(registry.template get<T>(entity));
+                     return stream.str();
+                 },
+             .deserialize =
+                 [](entt::registry& registry, const entt::entity entity, const std::string& data) {
+                     std::istringstream stream(data, std::ios::binary);
+                     cereal::BinaryInputArchive archive(stream);
+                     T component{};
+                     archive(component);
+                     registry.template emplace_or_replace<T>(entity, std::move(component));
+                 }});
+    }
+
     struct FlatpackCatalogEntry
     {
         std::string displayName;

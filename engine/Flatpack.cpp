@@ -30,10 +30,17 @@ namespace sage
 {
     namespace
     {
-        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '4'};
+        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '5'};
+        constexpr char kVersionFourFlatpackMagic[4] = {'L', 'Q', 'F', '4'};
         constexpr char kVersionThreeFlatpackMagic[4] = {'L', 'Q', 'F', '3'};
         constexpr char kVersionTwoFlatpackMagic[4] = {'L', 'Q', 'F', '2'};
         constexpr char kLegacyFlatpackMagic[4] = {'L', 'Q', 'F', 'P'};
+
+        std::vector<detail::FlatpackComponentCodec>& FlatpackComponentCodecs()
+        {
+            static std::vector<detail::FlatpackComponentCodec> codecs;
+            return codecs;
+        }
 
         // A serialized entity from the source registry. parentLocalId points into
         // this same vector (-1 for the root). Transform values are captured as
@@ -153,6 +160,19 @@ namespace sage
             }
         };
 
+        struct FlatpackCustomComponentRecord
+        {
+            std::uint32_t localId = 0;
+            std::string key;
+            std::string data;
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(localId, key, data);
+            }
+        };
+
         struct LegacyFlatpackMoveableActorRecord
         {
             std::uint32_t localId = 0;
@@ -170,6 +190,19 @@ namespace sage
 
     } // namespace
 
+    void detail::RegisterFlatpackComponentCodec(FlatpackComponentCodec codec)
+    {
+        auto& codecs = FlatpackComponentCodecs();
+        const auto existing =
+            std::ranges::find(codecs, codec.key, &FlatpackComponentCodec::key);
+        if (existing != codecs.end())
+        {
+            *existing = std::move(codec);
+            return;
+        }
+        codecs.push_back(std::move(codec));
+    }
+
     bool IsFlatpackFile(const char* path)
     {
         std::ifstream storage(path, std::ios::binary);
@@ -179,6 +212,7 @@ namespace sage
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
                (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, kVersionFourFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0);
@@ -216,6 +250,7 @@ namespace sage
         std::vector<FlatpackMoveableActorRecord> moveables;
         std::vector<FlatpackArchetypeRecord> archetypes;
         std::vector<FlatpackCustomShaderRecord> customShaders;
+        std::vector<FlatpackCustomComponentRecord> customComponents;
         records.reserve(subtreeOrder.size());
         names.reserve(subtreeOrder.size());
         for (const auto entity : subtreeOrder)
@@ -232,6 +267,12 @@ namespace sage
             if (const auto* shader = source.try_get<CustomShaderComponent>(entity))
             {
                 customShaders.push_back(FlatpackCustomShaderRecord{localId, *shader});
+            }
+            for (const auto& codec : FlatpackComponentCodecs())
+            {
+                if (!codec.has(source, entity)) continue;
+                customComponents.push_back(
+                    FlatpackCustomComponentRecord{localId, codec.key, codec.serialize(source, entity)});
             }
 
             if (const auto* script = source.try_get<ScriptComponent>(entity);
@@ -318,6 +359,7 @@ namespace sage
             output(moveables);
             output(archetypes);
             output(customShaders);
+            output(customComponents);
         });
 
         return true;
@@ -338,12 +380,14 @@ namespace sage
         std::vector<FlatpackMoveableActorRecord> moveables;
         std::vector<FlatpackArchetypeRecord> archetypes;
         std::vector<FlatpackCustomShaderRecord> customShaders;
+        std::vector<FlatpackCustomComponentRecord> customComponents;
         std::ifstream header(path, std::ios::binary);
         char fileMagic[4]{};
         header.read(fileMagic, sizeof(fileMagic));
         const bool legacyFormat = std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0;
         const bool versionTwoFormat = std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0;
         const bool versionThreeFormat = std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0;
+        const bool versionFourFormat = std::memcmp(fileMagic, kVersionFourFlatpackMagic, sizeof(fileMagic)) == 0;
         const auto readArchive = [&](const auto& magic) {
             sage::serializer::ReadCompressedBinary(
                 path, magic, [&](cereal::BinaryInputArchive& input, std::istream&) {
@@ -377,6 +421,10 @@ namespace sage
                     {
                         input(customShaders);
                     }
+                    if (!legacyFormat && !versionTwoFormat && !versionThreeFormat && !versionFourFormat)
+                    {
+                        input(customComponents);
+                    }
                 });
         };
         if (legacyFormat)
@@ -385,6 +433,8 @@ namespace sage
             readArchive(kVersionTwoFlatpackMagic);
         else if (versionThreeFormat)
             readArchive(kVersionThreeFlatpackMagic);
+        else if (versionFourFormat)
+            readArchive(kVersionFourFlatpackMagic);
         else
             readArchive(kFlatpackMagic);
         if (records.empty()) return {};
@@ -505,6 +555,19 @@ namespace sage
             if (record.localId >= created.size()) continue;
             destination.emplace_or_replace<CustomShaderComponent>(
                 created[record.localId], std::move(record.shader));
+        }
+
+        for (const auto& record : customComponents)
+        {
+            if (record.localId >= created.size()) continue;
+            const auto codec =
+                std::ranges::find(FlatpackComponentCodecs(), record.key, &detail::FlatpackComponentCodec::key);
+            if (codec == FlatpackComponentCodecs().end())
+            {
+                std::cerr << "Flatpack: no component codec registered for '" << record.key << "'.\n";
+                continue;
+            }
+            codec->deserialize(destination, created[record.localId], record.data);
         }
 
         return FlatpackInstance{created.front(), std::move(created)};
