@@ -763,7 +763,10 @@ Image GenImageFontAtlas(const GlyphInfo *glyphs, Rectangle **glyphRecs, int glyp
         totalWidth += glyphs[i].image.width + 2*padding;
     }
 
-//#define SUPPORT_FONT_ATLAS_SIZE_CONSERVATIVE
+// Prefer an atlas size that is guaranteed to fit the basic row packer. The
+// area-based estimate can be too small for wide/italic glyphs at larger font
+// sizes, leaving glyphs unpacked (and their images invalid).
+#define SUPPORT_FONT_ATLAS_SIZE_CONSERVATIVE
 #if defined(SUPPORT_FONT_ATLAS_SIZE_CONSERVATIVE)
     int rowCount = 0;
     int imageSize = 64;  // Define minimum starting value to avoid unnecessary calculation steps for very small images
@@ -823,7 +826,7 @@ Image GenImageFontAtlas(const GlyphInfo *glyphs, Rectangle **glyphRecs, int glyp
 
                 if (offsetY > (atlas.height - fontSize - padding))
                 {
-                    for (int j = i + 1; j < glyphCount; j++)
+                    for (int j = i; j < glyphCount; j++)
                     {
                         TRACELOG(LOG_WARNING, "FONT: Failed to package character (%i)", j);
                         // Make sure remaining recs contain valid data
