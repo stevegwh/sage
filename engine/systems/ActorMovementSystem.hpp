@@ -68,8 +68,15 @@ namespace sage
         [[nodiscard]] bool ReachedDestination(entt::entity entity) const;
         void PruneMoveCommands(const entt::entity& entity) const;
         [[nodiscard]] bool TryPathfindToLocation(
-            const entt::entity& entity, const Vector3& destination, bool astar = false) const;
-        void PathfindToLocation(const entt::entity& entity, const Vector3& destination, bool astar = false) const;
+            const entt::entity& entity,
+            const Vector3& destination,
+            bool astar = false,
+            bool findNextBestIfInvalid = true) const;
+        void PathfindToLocation(
+            const entt::entity& entity,
+            const Vector3& destination,
+            bool astar = false,
+            bool findNextBestIfInvalid = true) const;
         void MoveToLocation(const entt::entity& entity, Vector3 location) const;
         void CancelMovement(const entt::entity& entity) const;
         void Update();

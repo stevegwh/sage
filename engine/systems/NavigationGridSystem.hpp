@@ -57,6 +57,7 @@ namespace sage
             GridSquare minRange,
             GridSquare maxRange,
             bool useAStar,
+            bool findNextBestIfInvalid,
             AStarHeuristic heuristicType);
         //---------------------------------------------------------
       public:
@@ -88,15 +89,6 @@ namespace sage
             const GridSquare& _minRange,
             const GridSquare& _maxRange) const;
         //---------------------------------------------------------
-        [[nodiscard]] GridSquare FindNextBestLocation(entt::entity entity, GridSquare target) const;
-        //---------------------------------------------------------
-        [[nodiscard]] GridSquare FindNextBestLocation(
-            GridSquare currentPos,
-            GridSquare target,
-            GridSquare minRange,
-            GridSquare maxRange,
-            const BoundingBox& footprintOffsets) const;
-        //---------------------------------------------------------
         [[nodiscard]] NavigationGridSquare* CastRay(
             int currentRow,
             int currentCol,
@@ -108,7 +100,8 @@ namespace sage
             const entt::entity& entity,
             const Vector3& startPos,
             const Vector3& finishPos,
-            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT);
+            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT,
+            bool findNextBestIfInvalid = true);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> AStarPathfind(
             const entt::entity& entity,
@@ -116,17 +109,22 @@ namespace sage
             const Vector3& finishPos,
             const GridSquare& minRange,
             const GridSquare& maxRange,
-            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT);
+            AStarHeuristic heuristicType = AStarHeuristic::DEFAULT,
+            bool findNextBestIfInvalid = true);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> BFSPathfind(
-            const entt::entity& entity, const Vector3& startPos, const Vector3& finishPos);
+            const entt::entity& entity,
+            const Vector3& startPos,
+            const Vector3& finishPos,
+            bool findNextBestIfInvalid = true);
         //---------------------------------------------------------
         [[nodiscard]] std::vector<Vector3> BFSPathfind(
             const entt::entity& entity,
             const Vector3& startPos,
             const Vector3& finishPos,
             const GridSquare& minRange,
-            const GridSquare& maxRange);
+            const GridSquare& maxRange,
+            bool findNextBestIfInvalid = true);
         //---------------------------------------------------------
         const std::vector<std::vector<NavigationGridSquare>>& GetGridSquares();
         //---------------------------------------------------------
