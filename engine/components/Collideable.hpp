@@ -16,8 +16,6 @@
 
 namespace sage
 {
-    class ScriptSystem;
-
     enum class ColliderShape
     {
         Box,
@@ -68,7 +66,12 @@ namespace sage
             // i.field("World Bounds", worldBoundingBox, false);
         }
 
-        static void define_lua_bindings(ScriptSystem& scripts);
+        template <class Lua>
+        static void define_lua_api(Lua& lua)
+        {
+            lua.property("active", &Collideable::active);
+            lua.property("debugDraw", &Collideable::debugDraw);
+        }
     };
 
     // Transient ECS tag: when present, CollisionSystem ignores Collideable::isStatic

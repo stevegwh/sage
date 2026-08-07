@@ -1,6 +1,6 @@
 #include "Archetypes.hpp"
 
-#include "systems/ScriptSystem.hpp"
+#include "systems/LuaBinding.hpp"
 #include "entt/entity/registry.hpp"
 #include "sol/sol.hpp"
 
@@ -8,15 +8,9 @@
 
 namespace sage
 {
-    void Archetype::define_lua_bindings(ScriptSystem& scripts)
+    void RegisterArchetypeLuaApi(ScriptSystem& scripts)
     {
-        scripts.GetLuaState().new_usertype<Archetype>(
-            "Archetype",
-            sol::no_constructor,
-            "id",
-            sol::readonly(&Archetype::id),
-            "Is",
-            [](const Archetype& archetype, const std::string& name) { return archetype == MakeArchetype(name); });
+        scripts.RegisterComponent<Archetype>("Archetype", "GetArchetype");
         scripts.RegisterApiExtension("sage", [](sol::table& api, entt::entity, entt::registry& registry) {
             api.set_function(
                 "FindFirstWithArchetype",
@@ -25,10 +19,6 @@ namespace sage
                     if (!found) return sol::lua_nil;
                     return sol::make_object(state, static_cast<std::uint32_t>(*found));
                 });
-            api.set_function("GetArchetype", [&registry](const std::uint32_t id) {
-                const auto entity = static_cast<entt::entity>(id);
-                return registry.valid(entity) ? registry.try_get<Archetype>(entity) : nullptr;
-            });
         });
     }
 

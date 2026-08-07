@@ -3,6 +3,7 @@
 //
 
 #include "EngineSystems.hpp"
+#include "systems/LuaBinding.hpp"
 
 #include "Archetypes.hpp"
 #include "Flatpack.hpp"
@@ -68,10 +69,10 @@ namespace sage
 
     void EngineSystems::RegisterAllLuaBindings()
     {
-        Archetype::define_lua_bindings(*scriptSystem);
-        sgTransform::define_lua_bindings(*scriptSystem);
-        Collideable::define_lua_bindings(*scriptSystem);
-        Animation::define_lua_bindings(*scriptSystem);
+        RegisterArchetypeLuaApi(*scriptSystem);
+        scriptSystem->RegisterComponent<sgTransform>("Transform", "GetTransform");
+        scriptSystem->RegisterComponent<Collideable>("Collideable", "GetCollideable");
+        scriptSystem->RegisterComponent<Animation>("Animation", "GetAnimation");
 
         collisionSystem->RegisterLuaBindings(*scriptSystem);
         navigationGridSystem->RegisterLuaBindings(*scriptSystem);

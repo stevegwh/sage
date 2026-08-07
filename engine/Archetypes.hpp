@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -49,7 +50,14 @@ namespace sage
             i.archetypeDropdown("Kind", *this);
         }
 
-        static void define_lua_bindings(ScriptSystem& scripts);
+        template <class Lua>
+        static void define_lua_api(Lua& lua)
+        {
+            lua.readonly("id", &Archetype::id);
+            lua.method("Is", [](const Archetype& archetype, const std::string& value) {
+                return archetype.id == entt::hashed_string::value(value.data(), value.size());
+            });
+        }
     };
 
     [[nodiscard]] constexpr Archetype MakeArchetype(const std::string_view name)
@@ -58,6 +66,8 @@ namespace sage
     }
 
     struct ArchetypeIndex;
+
+    void RegisterArchetypeLuaApi(ScriptSystem& scripts);
 
     void EnableArchetypeIndex(entt::registry& registry);
     void RebuildArchetypeIndex(entt::registry& registry);

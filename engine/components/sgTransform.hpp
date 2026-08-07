@@ -185,7 +185,29 @@ namespace sage
             i.field("Scale", scale.local);
         }
 
-        static void define_lua_bindings(ScriptSystem& scripts);
+        template <class Lua>
+        static void define_lua_api(Lua& lua)
+        {
+            lua.property("name", &sgTransform::name);
+            lua.method("GetPosition", [](const sgTransform& transform) { return transform.GetWorldPos(); });
+            lua.method("SetPosition", [](sgTransform& transform, const Vector3& value) {
+                transform.position.world = value;
+            });
+            lua.method("GetLocalPosition", [](const sgTransform& transform) { return transform.GetLocalPos(); });
+            lua.method("SetLocalPosition", [](sgTransform& transform, const Vector3& value) {
+                transform.position.local = value;
+            });
+            lua.method("GetRotation", [](const sgTransform& transform) { return transform.GetWorldRot(); });
+            lua.method("SetRotation", [](sgTransform& transform, const Vector3& value) {
+                transform.rotation.world = value;
+            });
+            lua.method("GetScale", [](const sgTransform& transform) { return transform.GetScale(); });
+            lua.method("SetScale", [](sgTransform& transform, const Vector3& value) {
+                transform.scale.world = value;
+            });
+            lua.method("Forward", [](const sgTransform& transform) { return transform.forward(); });
+            lua.nullable_entity_method("GetParent", &sgTransform::GetParent);
+        }
 
         [[nodiscard]] Matrix GetMatrixNoRot() const;
         [[nodiscard]] Matrix GetMatrix() const;

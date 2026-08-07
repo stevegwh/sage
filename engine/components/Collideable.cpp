@@ -4,31 +4,13 @@
 
 #include "Collideable.hpp"
 
-#include "systems/ScriptSystem.hpp"
 #include "raymath.h"
-#include "sol/sol.hpp"
 
 #include <algorithm>
 #include <array>
 
 namespace sage
 {
-    void Collideable::define_lua_bindings(ScriptSystem& scripts)
-    {
-        scripts.GetLuaState().new_usertype<Collideable>(
-            "Collideable",
-            sol::no_constructor,
-            "active",
-            &Collideable::active,
-            "debugDraw",
-            &Collideable::debugDraw);
-        scripts.RegisterApiExtension("sage", [](sol::table& api, entt::entity, entt::registry& registry) {
-            api.set_function("GetCollideable", [&registry](const std::uint32_t id) {
-                return registry.try_get<Collideable>(static_cast<entt::entity>(id));
-            });
-        });
-    }
-
     BoundingBox TransformAabbNoRotation(const BoundingBox& local, const Matrix& worldMat)
     {
         return {Vector3Transform(local.min, worldMat), Vector3Transform(local.max, worldMat)};

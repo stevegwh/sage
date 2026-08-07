@@ -13,6 +13,7 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <algorithm>
 #include <functional>
 #include <memory>
 #include <string>
@@ -119,7 +120,32 @@ namespace sage
             }
         }
 
-        static void define_lua_bindings(ScriptSystem& scripts);
+        template <class Lua>
+        static void define_lua_api(Lua& lua)
+        {
+            lua.overload(
+                "Play",
+                [](Animation& animation, const std::string& clip) {
+                    return animation.ChangeAnimationByName(clip);
+                },
+                [](Animation& animation, const std::string& clip, const int speed) {
+                    return animation.ChangeAnimationByName(clip, speed);
+                });
+            lua.overload(
+                "PlayOneShot",
+                [](Animation& animation, const std::string& clip) {
+                    return animation.PlayOneShotByName(clip, 1);
+                },
+                [](Animation& animation, const std::string& clip, const int speed) {
+                    return animation.PlayOneShotByName(clip, speed);
+                });
+            lua.method("ClipCount", [](const Animation& animation) { return animation.animsCount; });
+            lua.table_method("GetClipNames", [](const Animation& animation) { return animation.clipNames; });
+            lua.method("SetBlendDuration", [](Animation& animation, const float seconds) {
+                animation.blendDuration = std::max(0.0f, seconds);
+            });
+            lua.method("GetBlendDuration", [](const Animation& animation) { return animation.blendDuration; });
+        }
 
         Animation() = default;
         Animation(const Animation&) = delete;

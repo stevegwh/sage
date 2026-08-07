@@ -119,6 +119,22 @@ namespace sage
         [[nodiscard]] sol::state& GetLuaState();
         void RegisterApiExtension(std::string namespaceName, ApiExtension extension);
 
+        // Registers a no-constructor usertype from T::define_lua_api(binder) and
+        // installs its nullable component accessor into each script's sage table.
+        // Include systems/LuaBinding.hpp at the call site for the implementation.
+        template <class T>
+        void RegisterComponent(std::string typeName, std::string accessorName);
+
+        // Registers a non-component value type from the same declaration, without
+        // creating an ECS accessor.
+        template <class T>
+        void RegisterType(std::string typeName);
+
+        // Exposes every named enumerator as a read-only Lua table using its C++
+        // spelling, e.g. EmoteType::Happy becomes EmoteType.Happy.
+        template <class E>
+        void RegisterEnum(std::string typeName);
+
         template <typename Source>
         void RegisterEventLuaBinding(std::string eventName, EventSubscriber subscribe)
         {
