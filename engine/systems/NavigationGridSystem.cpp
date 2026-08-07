@@ -9,6 +9,7 @@
 #include "components/sgTransform.hpp"
 #include "components/Terrain.hpp"
 #include "ScriptSystem.hpp"
+#include "TerrainMesh.hpp"
 #include <Serializer.hpp>
 
 #include "rlgl.h"
@@ -431,20 +432,24 @@ namespace sage
         const auto& terrain = registry->get<Terrain>(entity);
         if (!terrain.IsValid()) return;
 
-        const auto origin = registry->get<sgTransform>(entity).GetWorldPos();
+        const auto& transform = registry->get<sgTransform>(entity);
+        const auto& area = registry->get<Collideable>(entity).worldBoundingBox;
         const float worldSize = terrain.WorldSize();
+        const Matrix terrainToWorld = GetTerrainWorldMatrix(transform);
+        const Matrix worldToTerrain = MatrixInvert(terrainToWorld);
+        const Matrix normalToWorld = MatrixTranspose(worldToTerrain);
 
         // WorldToGridSpace fills the indices even for off-grid points, so a
         // terrain that sticks out past the grid still stamps the squares the
         // grid does cover — the clamps below trim its footprint.
         GridSquare topLeftIndex{}, bottomRightIndex{};
-        const bool minInside = WorldToGridSpace(origin, topLeftIndex);
-        const bool maxInside =
-            WorldToGridSpace({origin.x + worldSize, origin.y, origin.z + worldSize}, bottomRightIndex);
+        const bool minInside = WorldToGridSpace(area.min, topLeftIndex);
+        const bool maxInside = WorldToGridSpace(area.max, bottomRightIndex);
         if (!minInside || !maxInside)
         {
-            std::cout << "WARNING: Terrain at (" << origin.x << ", " << origin.z << ") size " << worldSize
-                      << " extends beyond the navigation grid; heights outside the grid are unwalkable.\n";
+            std::cout << "WARNING: Terrain bounds (" << area.min.x << ", " << area.min.z << ") to (" << area.max.x
+                      << ", " << area.max.z
+                      << ") extend beyond the navigation grid; heights outside the grid are unwalkable.\n";
         }
 
         const int min_col = std::max(0, std::min(topLeftIndex.col, bottomRightIndex.col));
@@ -459,16 +464,22 @@ namespace sage
         {
             for (int col = min_col; col <= max_col; ++col)
             {
-                const float localX = gridSquares[row][col].worldPosMin.x - origin.x;
-                const float localZ = gridSquares[row][col].worldPosMin.z - origin.z;
+                const auto worldGridPoint = gridSquares[row][col].worldPosMin;
+                const auto localPoint = Vector3Transform(
+                    {worldGridPoint.x, transform.GetWorldPos().y, worldGridPoint.z}, worldToTerrain);
+                const float localX = localPoint.x;
+                const float localZ = localPoint.z;
                 if (localX < 0.0f || localX > worldSize || localZ < 0.0f || localZ > worldSize) continue;
 
-                const int terrainRow = static_cast<int>(std::lround(localZ / terrain.cellSize));
-                const int terrainCol = static_cast<int>(std::lround(localX / terrain.cellSize));
-                gridSquares[row][col].heightMap.Set(
-                    origin.y + terrain.SampleHeight(localX, localZ),
-                    terrain.GetNormal(terrainRow, terrainCol),
-                    entity);
+                const int terrainRow = std::clamp(
+                    static_cast<int>(std::lround(localZ / terrain.cellSize)), 0, terrain.resolution - 1);
+                const int terrainCol = std::clamp(
+                    static_cast<int>(std::lround(localX / terrain.cellSize)), 0, terrain.resolution - 1);
+                const float localHeight = terrain.SampleHeight(localX, localZ);
+                const auto worldSurface = Vector3Transform({localX, localHeight, localZ}, terrainToWorld);
+                const auto worldNormal =
+                    Vector3Normalize(Vector3Transform(terrain.GetNormal(terrainRow, terrainCol), normalToWorld));
+                gridSquares[row][col].heightMap.Set(worldSurface.y, worldNormal, entity);
             }
         }
 
