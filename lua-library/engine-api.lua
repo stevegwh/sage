@@ -129,22 +129,9 @@ EmoteType = {
     Bored = 4,
 }
 
----@enum MoodEnum
-MoodEnum = {
-    Happiness = 0,
-    Anger = 1,
-    Stress = 2,
-    Love = 3,
-    Boredom = 4,
-}
-
----@class MoodValue
----@field value integer
----@field emoteWhenHigh EmoteType
----@field emoteWhenLow EmoteType
-
 ---@class Mood
----@field Get fun(self: Mood, mood: MoodEnum): MoodValue?
+---@field valence integer # Pleasant (+100) to unpleasant (-100).
+---@field arousal integer # Activated (+100) to subdued (-100).
 
 --==============================================================================
 -- Namespaced engine API
