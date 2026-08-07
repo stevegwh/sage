@@ -9,6 +9,7 @@
 #include "components/sgTransform.hpp"
 #include "components/Terrain.hpp"
 #include "ScriptSystem.hpp"
+#include "TerrainMesh.hpp"
 #include <Serializer.hpp>
 
 #include "rlgl.h"
@@ -431,20 +432,24 @@ namespace sage
         const auto& terrain = registry->get<Terrain>(entity);
         if (!terrain.IsValid()) return;
 
-        const auto origin = registry->get<sgTransform>(entity).GetWorldPos();
+        const auto& transform = registry->get<sgTransform>(entity);
+        const auto& area = registry->get<Collideable>(entity).worldBoundingBox;
         const float worldSize = terrain.WorldSize();
+        const Matrix terrainToWorld = GetTerrainWorldMatrix(transform);
+        const Matrix worldToTerrain = MatrixInvert(terrainToWorld);
+        const Matrix normalToWorld = MatrixTranspose(worldToTerrain);
 
         // WorldToGridSpace fills the indices even for off-grid points, so a
         // terrain that sticks out past the grid still stamps the squares the
         // grid does cover — the clamps below trim its footprint.
         GridSquare topLeftIndex{}, bottomRightIndex{};
-        const bool minInside = WorldToGridSpace(origin, topLeftIndex);
-        const bool maxInside =
-            WorldToGridSpace({origin.x + worldSize, origin.y, origin.z + worldSize}, bottomRightIndex);
+        const bool minInside = WorldToGridSpace(area.min, topLeftIndex);
+        const bool maxInside = WorldToGridSpace(area.max, bottomRightIndex);
         if (!minInside || !maxInside)
         {
-            std::cout << "WARNING: Terrain at (" << origin.x << ", " << origin.z << ") size " << worldSize
-                      << " extends beyond the navigation grid; heights outside the grid are unwalkable.\n";
+            std::cout << "WARNING: Terrain bounds (" << area.min.x << ", " << area.min.z << ") to (" << area.max.x
+                      << ", " << area.max.z
+                      << ") extend beyond the navigation grid; heights outside the grid are unwalkable.\n";
         }
 
         const int min_col = std::max(0, std::min(topLeftIndex.col, bottomRightIndex.col));
@@ -459,16 +464,22 @@ namespace sage
         {
             for (int col = min_col; col <= max_col; ++col)
             {
-                const float localX = gridSquares[row][col].worldPosMin.x - origin.x;
-                const float localZ = gridSquares[row][col].worldPosMin.z - origin.z;
+                const auto worldGridPoint = gridSquares[row][col].worldPosMin;
+                const auto localPoint = Vector3Transform(
+                    {worldGridPoint.x, transform.GetWorldPos().y, worldGridPoint.z}, worldToTerrain);
+                const float localX = localPoint.x;
+                const float localZ = localPoint.z;
                 if (localX < 0.0f || localX > worldSize || localZ < 0.0f || localZ > worldSize) continue;
 
-                const int terrainRow = static_cast<int>(std::lround(localZ / terrain.cellSize));
-                const int terrainCol = static_cast<int>(std::lround(localX / terrain.cellSize));
-                gridSquares[row][col].heightMap.Set(
-                    origin.y + terrain.SampleHeight(localX, localZ),
-                    terrain.GetNormal(terrainRow, terrainCol),
-                    entity);
+                const int terrainRow = std::clamp(
+                    static_cast<int>(std::lround(localZ / terrain.cellSize)), 0, terrain.resolution - 1);
+                const int terrainCol = std::clamp(
+                    static_cast<int>(std::lround(localX / terrain.cellSize)), 0, terrain.resolution - 1);
+                const float localHeight = terrain.SampleHeight(localX, localZ);
+                const auto worldSurface = Vector3Transform({localX, localHeight, localZ}, terrainToWorld);
+                const auto worldNormal =
+                    Vector3Normalize(Vector3Transform(terrain.GetNormal(terrainRow, terrainCol), normalToWorld));
+                gridSquares[row][col].heightMap.Set(worldSurface.y, worldNormal, entity);
             }
         }
 
@@ -977,84 +988,6 @@ namespace sage
         return nullptr;
     }
 
-    GridSquare NavigationGridSystem::FindNextBestLocation(entt::entity entity, GridSquare target) const
-    {
-        BoundingBox footprintOffsets{};
-        if (!getFootprintOffsets(entity, footprintOffsets))
-        {
-            return {};
-        }
-        GridSquare minRange{}, maxRange{};
-        int bounds = 250;
-        if (!GetPathfindRange(entity, bounds, minRange, maxRange))
-        {
-            return {};
-        }
-        GridSquare currentPos{};
-        if (const auto& trans = registry->get<sgTransform>(entity);
-            !WorldToGridSpace(trans.GetWorldPos(), currentPos))
-        {
-            return {};
-        }
-
-        return FindNextBestLocation(currentPos, target, minRange, maxRange, footprintOffsets);
-    }
-
-    GridSquare NavigationGridSystem::FindNextBestLocation(
-        const GridSquare currentPos,
-        GridSquare target,
-        const GridSquare minRange,
-        const GridSquare maxRange,
-        const BoundingBox& footprintOffsets) const
-    {
-        struct Compare
-        {
-            bool operator()(const std::pair<int, GridSquare>& a, const std::pair<int, GridSquare>& b) const
-            {
-                return a.first > b.first;
-            }
-        };
-        std::vector<std::vector<bool>> visited(maxRange.row, std::vector<bool>(maxRange.col, false));
-        std::priority_queue<std::pair<int, GridSquare>, std::vector<std::pair<int, GridSquare>>, Compare> frontier;
-
-        frontier.emplace(0, currentPos);
-
-        GridSquare bestSquare{};
-        int bestScore = std::numeric_limits<int>::max();
-
-        while (!frontier.empty())
-        {
-            auto currentPair = frontier.top();
-            frontier.pop();
-            auto current = currentPair.second;
-
-            // Check if this is a valid and better square
-            if (checkFootprint(current, footprintOffsets))
-            {
-                int score = heuristic(current, target);
-                if (score < bestScore)
-                {
-                    bestScore = score;
-                    bestSquare = current;
-                    if (current == target) break; // Found the exact target
-                }
-            }
-
-            for (const auto& dir : directions)
-            {
-                GridSquare next = {current.row + dir.second, current.col + dir.first};
-
-                if (!CheckWithinBounds(next, minRange, maxRange) || visited[next.row][next.col]) continue;
-
-                visited[next.row][next.col] = true;
-                int priority = heuristic(next, target) + heuristic(currentPos, next); // f = g + h
-                frontier.emplace(priority, next);
-            }
-        }
-
-        return bestSquare;
-    }
-
     std::vector<Vector3> NavigationGridSystem::searchPath(
         const entt::entity entity,
         const Vector3 startPos,
@@ -1062,6 +995,7 @@ namespace sage
         const GridSquare minRange,
         const GridSquare maxRange,
         const bool useAStar,
+        const bool findNextBestIfInvalid,
         const AStarHeuristic heuristicType)
     {
         GridSquare start{};
@@ -1070,9 +1004,7 @@ namespace sage
         if (!WorldToGridSpace(startPos, start) || !WorldToGridSpace(finishPos, finish) ||
             !getFootprintOffsets(entity, footprintOffsets))
             return {};
-
-        if (!checkFootprint(finish, footprintOffsets))
-            finish = FindNextBestLocation(start, finish, minRange, maxRange, footprintOffsets);
+        if (!findNextBestIfInvalid && !checkFootprint(finish, footprintOffsets)) return {};
 
         struct FrontierNode
         {
@@ -1100,18 +1032,35 @@ namespace sage
         visited[start.row][start.col] = true;
         costs[start.row][start.col] = 0.0;
         const Vector3 pathDirection = Vector3Subtract(finishPos, startPos);
+        GridSquare closestReachable = start;
+        double closestDistance = heuristic(start, finish);
+        double closestPathCost = 0.0;
 
         while (!frontier.empty())
         {
             const GridSquare current = frontier.top().square;
             frontier.pop();
+
+            // Every popped cell is reachable from start, so the closest one is a
+            // safe fallback when the requested destination cannot be reached.
+            if (findNextBestIfInvalid)
+            {
+                const double distance = heuristic(current, finish);
+                const double pathCost = costs[current.row][current.col];
+                if (distance < closestDistance || (distance == closestDistance && pathCost < closestPathCost))
+                {
+                    closestReachable = current;
+                    closestDistance = distance;
+                    closestPathCost = pathCost;
+                }
+            }
+
             if (current == finish) return tracebackPath(cameFrom, start, finish);
 
             for (const auto& [dirRow, dirCol] : directions)
             {
                 const GridSquare next{current.row + dirRow, current.col + dirCol};
-                if (!CheckWithinBounds(next, minRange, maxRange) || !checkFootprint(next, footprintOffsets) ||
-                    gridSquares[next.row][next.col].occupied)
+                if (!CheckWithinBounds(next, minRange, maxRange) || !checkFootprint(next, footprintOffsets))
                     continue;
 
                 const double newCost =
@@ -1127,6 +1076,8 @@ namespace sage
                 frontier.push({useAStar ? newCost + estimate : 0.0, sequence++, next});
             }
         }
+
+        if (findNextBestIfInvalid) return tracebackPath(cameFrom, start, closestReachable);
         return {};
     }
 
@@ -1134,7 +1085,8 @@ namespace sage
         const entt::entity& entity,
         const Vector3& startPos,
         const Vector3& finishPos,
-        const AStarHeuristic heuristicType)
+        const AStarHeuristic heuristicType,
+        const bool findNextBestIfInvalid)
     {
         return AStarPathfind(
             entity,
@@ -1142,7 +1094,8 @@ namespace sage
             finishPos,
             {0, 0},
             {static_cast<int>(gridSquares.at(0).size()), static_cast<int>(gridSquares.size())},
-            heuristicType);
+            heuristicType,
+            findNextBestIfInvalid);
     }
 
     std::vector<Vector3> NavigationGridSystem::AStarPathfind(
@@ -1151,26 +1104,32 @@ namespace sage
         const Vector3& finishPos,
         const GridSquare& minRange,
         const GridSquare& maxRange,
-        AStarHeuristic heuristicType)
+        const AStarHeuristic heuristicType,
+        const bool findNextBestIfInvalid)
     {
-        return searchPath(entity, startPos, finishPos, minRange, maxRange, true, heuristicType);
+        return searchPath(
+            entity, startPos, finishPos, minRange, maxRange, true, findNextBestIfInvalid, heuristicType);
     }
 
     /**
      * Generates a sequence of nodes that should be the "optimal" route from point A to
      * point B. Checks entire grid.
-     * @return A vector of "nodes" to travel to in sequential order. Empty if path is
-     * invalid (OOB or no path available).
+     * @return A route to the destination, or to the closest reachable cell when
+     * findNextBestIfInvalid is true. Empty if no permitted route exists.
      */
     std::vector<Vector3> NavigationGridSystem::BFSPathfind(
-        const entt::entity& entity, const Vector3& startPos, const Vector3& finishPos)
+        const entt::entity& entity,
+        const Vector3& startPos,
+        const Vector3& finishPos,
+        const bool findNextBestIfInvalid)
     {
         return BFSPathfind(
             entity,
             startPos,
             finishPos,
             {0, 0},
-            {static_cast<int>(gridSquares.at(0).size()), static_cast<int>(gridSquares.size())});
+            {static_cast<int>(gridSquares.at(0).size()), static_cast<int>(gridSquares.size())},
+            findNextBestIfInvalid);
     }
 
     /**
@@ -1179,17 +1138,26 @@ namespace sage
      * minRange/maxRange if needed.
      * @minRange The minimum grid index in the pathfinding range.
      * @maxRange The maximum grid index in the pathfinding range.
-     * @return A vector of "nodes" to travel to in sequential order. Empty if path is
-     * invalid (OOB or no path available).
+     * @return A route to the destination, or to the closest reachable cell when
+     * findNextBestIfInvalid is true. Empty if no permitted route exists.
      */
     std::vector<Vector3> NavigationGridSystem::BFSPathfind(
         const entt::entity& entity,
         const Vector3& startPos,
         const Vector3& finishPos,
         const GridSquare& minRange,
-        const GridSquare& maxRange)
+        const GridSquare& maxRange,
+        const bool findNextBestIfInvalid)
     {
-        return searchPath(entity, startPos, finishPos, minRange, maxRange, false, AStarHeuristic::DEFAULT);
+        return searchPath(
+            entity,
+            startPos,
+            finishPos,
+            minRange,
+            maxRange,
+            false,
+            findNextBestIfInvalid,
+            AStarHeuristic::DEFAULT);
     }
 
     void NavigationGridSystem::InitGridHeightAndNormals()
@@ -1232,16 +1200,15 @@ namespace sage
 
     void NavigationGridSystem::RegisterLuaBindings(ScriptSystem& scripts)
     {
-        scripts.RegisterApiExtension(
-            "sage", [this](sol::table& api, entt::entity, entt::registry&) {
-                api.set_function(
-                    "GetNavigationSurfaceAt",
-                    [this](const Vector3& worldPosition, sol::this_state state) -> sol::object {
-                        const entt::entity surface = GetSurfaceAt(worldPosition);
-                        if (surface == entt::null || !registry->valid(surface)) return sol::lua_nil;
-                        return sol::make_object(state, static_cast<std::uint32_t>(surface));
-                    });
-            });
+        scripts.RegisterApiExtension("sage", [this](sol::table& api, entt::entity, entt::registry&) {
+            api.set_function(
+                "GetNavigationSurfaceAt",
+                [this](const Vector3& worldPosition, sol::this_state state) -> sol::object {
+                    const entt::entity surface = GetSurfaceAt(worldPosition);
+                    if (surface == entt::null || !registry->valid(surface)) return sol::lua_nil;
+                    return sol::make_object(state, static_cast<std::uint32_t>(surface));
+                });
+        });
     }
 
     NavigationGridSystem::NavigationGridSystem(entt::registry* _registry, CollisionSystem* _collisionSystem)

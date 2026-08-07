@@ -22,7 +22,8 @@
 
 namespace sage::editor_layout
 {
-    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '4'};
+    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '5'};
+    inline constexpr char PreviousMapMagic[4] = {'L', 'Q', 'E', '4'};
     inline constexpr char LegacyMapMagic[4] = {'L', 'Q', 'E', '3'};
     inline constexpr std::string_view MapBaseNameMarker = "_MAPBASE_";
 
@@ -153,7 +154,7 @@ namespace sage::editor_layout
         }
     };
 
-    struct TerrainRecord
+    struct LegacyTerrainRecord
     {
         Vector3 position{};
         std::int32_t resolution = 0;
@@ -165,6 +166,21 @@ namespace sage::editor_layout
         void serialize(Archive& archive)
         {
             archive(position, resolution, cellSize, collideable, heights);
+        }
+    };
+
+    struct TerrainRecord
+    {
+        sgTransform transform{};
+        std::int32_t resolution = 0;
+        float cellSize = 1.0f;
+        Collideable collideable{};
+        std::vector<float> heights;
+
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(transform, resolution, cellSize, collideable, heights);
         }
     };
 

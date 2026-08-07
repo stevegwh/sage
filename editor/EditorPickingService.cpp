@@ -7,6 +7,7 @@
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Settings.hpp"
+#include "engine/TerrainMesh.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/Renderable.hpp"
@@ -58,10 +59,7 @@ namespace sage::editor
                 if (!renderable.active || model == nullptr) continue;
 
                 const auto& transform = sys->registry->get<sgTransform>(entity);
-                const Vector3 yRotation = {0.0f, transform.GetWorldRot().y, 0.0f};
-                const Matrix entityMatrix =
-                    BuildRenderableEntityMatrix(transform.GetWorldPos(), yRotation, transform.GetScale());
-                const Matrix modelMatrix = MatrixMultiply(model->transform, entityMatrix);
+                const Matrix modelMatrix = MatrixMultiply(model->transform, GetTerrainWorldMatrix(transform));
                 RayCollision closestMeshHit{};
                 closestMeshHit.distance = std::numeric_limits<float>::max();
 

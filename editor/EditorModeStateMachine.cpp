@@ -27,6 +27,23 @@ namespace sage::editor
         constexpr float EDIT_TRANSLATION_STEP = 1.0f;
         constexpr float PLACEMENT_ROTATION_STEP = 15.0f;
         constexpr float PLACEMENT_SCALE_STEP = 0.1f;
+        constexpr float MIN_TERRAIN_SCALE = 0.0001f;
+
+        float terrainHorizontalScale(const sgTransform& transform)
+        {
+            const auto scale = transform.GetScale();
+            return std::max(MIN_TERRAIN_SCALE, (std::abs(scale.x) + std::abs(scale.z)) * 0.5f);
+        }
+
+        float terrainVerticalScale(const sgTransform& transform)
+        {
+            return std::max(MIN_TERRAIN_SCALE, std::abs(transform.GetScale().y));
+        }
+
+        Vector3 terrainLocalPoint(const sgTransform& transform, const Vector3 worldPoint)
+        {
+            return Vector3Transform(worldPoint, MatrixInvert(GetTerrainWorldMatrix(transform)));
+        }
 
         bool IsKeyPressedOrRepeated(const int key)
         {
@@ -713,8 +730,8 @@ namespace sage::editor
         if (const auto ray = machine.viewportMouseRay(); ray.has_value() && !machine.isMouseOverUiCell())
         {
             const auto& terrainData = registry.get<Terrain>(terrain);
-            const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
-            cursorHit = GetTerrainRayHit(terrainData, origin, *ray);
+            const auto& transform = registry.get<sgTransform>(terrain);
+            cursorHit = GetTerrainRayHit(terrainData, transform, *ray);
         }
 
         if (brushMode == TerrainBrushMode::Ramp)
@@ -731,8 +748,9 @@ namespace sage::editor
                 if (brushMode == TerrainBrushMode::Flatten)
                 {
                     const auto& terrainData = registry.get<Terrain>(terrain);
-                    const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
-                    flattenTarget = terrainData.SampleHeight(cursorHit->x - origin.x, cursorHit->z - origin.z);
+                    const auto& transform = registry.get<sgTransform>(terrain);
+                    const auto localHit = terrainLocalPoint(transform, *cursorHit);
+                    flattenTarget = terrainData.SampleHeight(localHit.x, localHit.z);
                 }
             }
             if (stroking && brushDown && cursorHit.has_value())
@@ -755,17 +773,23 @@ namespace sage::editor
     {
         auto& registry = machine.registry();
         auto& terrainData = registry.get<Terrain>(terrain);
-        const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+        const auto& transform = registry.get<sgTransform>(terrain);
 
         // Only RaiseLower is signed by Shift; the other brushes use Shift-free
         // positive rates (Flatten/Smooth toward a target, Noise/Erosion intensity).
         const bool lower = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         const float sign = (brushMode == TerrainBrushMode::RaiseLower && lower) ? -1.0f : 1.0f;
-        const float amount = sign * brushStrength * GetFrameTime();
-        const Vector2 localCenter = {cursorHit->x - origin.x, cursorHit->z - origin.z};
+        float amount = sign * brushStrength * GetFrameTime();
+        if (brushMode == TerrainBrushMode::RaiseLower || brushMode == TerrainBrushMode::Noise)
+        {
+            amount /= terrainVerticalScale(transform);
+        }
+        const auto localHit = terrainLocalPoint(transform, *cursorHit);
+        const Vector2 localCenter = {localHit.x, localHit.z};
+        const float localRadius = brushRadius / terrainHorizontalScale(transform);
 
         const auto region =
-            ApplyTerrainBrush(terrainData, localCenter, brushRadius, amount, brushMode, flattenTarget);
+            ApplyTerrainBrush(terrainData, localCenter, localRadius, amount, brushMode, flattenTarget);
         commitTerrainRegion(machine, region);
     }
 
@@ -774,8 +798,9 @@ namespace sage::editor
         if (!cursorHit.has_value() || !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
 
         auto& registry = machine.registry();
-        const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
-        const Vector2 local = {cursorHit->x - origin.x, cursorHit->z - origin.z};
+        const auto& transform = registry.get<sgTransform>(terrain);
+        const auto localHit = terrainLocalPoint(transform, *cursorHit);
+        const Vector2 local = {localHit.x, localHit.z};
 
         if (!rampStart.has_value())
         {
@@ -786,7 +811,8 @@ namespace sage::editor
         // Second click completes the ramp: a single, self-contained history entry.
         machine.history().Begin(EditAction::SculptTerrain, {terrain});
         auto& terrainData = registry.get<Terrain>(terrain);
-        const auto region = ApplyTerrainRamp(terrainData, *rampStart, local, brushRadius);
+        const float localRadius = brushRadius / terrainHorizontalScale(transform);
+        const auto region = ApplyTerrainRamp(terrainData, *rampStart, local, localRadius);
         commitTerrainRegion(machine, region);
         machine.history().Commit();
         rampStart.reset();
@@ -830,19 +856,23 @@ namespace sage::editor
         auto& registry = machine.registry();
         if (!registry.valid(terrain) || !registry.all_of<Terrain, sgTransform>(terrain)) return;
         const auto& terrainData = registry.get<Terrain>(terrain);
-        const auto origin = registry.get<sgTransform>(terrain).GetWorldPos();
+        const auto& transform = registry.get<sgTransform>(terrain);
+        const Matrix terrainToWorld = GetTerrainWorldMatrix(transform);
+        const auto localHit = terrainLocalPoint(transform, *cursorHit);
+        const float localRadius = brushRadius / terrainHorizontalScale(transform);
+        constexpr float ringLift = 0.15f;
+        const float localRingLift = ringLift / terrainVerticalScale(transform);
 
         // Height-conformed brush ring.
         constexpr int segments = 48;
-        constexpr float ringLift = 0.15f;
         Vector3 previous{};
         for (int i = 0; i <= segments; ++i)
         {
             const float angle = static_cast<float>(i) / segments * 2.0f * PI;
-            const float x = cursorHit->x + std::cos(angle) * brushRadius;
-            const float z = cursorHit->z + std::sin(angle) * brushRadius;
-            const Vector3 point = {
-                x, origin.y + terrainData.SampleHeight(x - origin.x, z - origin.z) + ringLift, z};
+            const float x = localHit.x + std::cos(angle) * localRadius;
+            const float z = localHit.z + std::sin(angle) * localRadius;
+            const Vector3 point =
+                Vector3Transform({x, terrainData.SampleHeight(x, z) + localRingLift, z}, terrainToWorld);
             if (i > 0) DrawLine3D(previous, point, GOLD);
             previous = point;
         }
@@ -852,19 +882,18 @@ namespace sage::editor
         // to the cursor, sampled in segments so it hugs the surface.
         if (brushMode == TerrainBrushMode::Ramp && rampStart.has_value())
         {
-            const Vector3 start = {
-                origin.x + rampStart->x,
-                origin.y + terrainData.SampleHeight(rampStart->x, rampStart->y) + ringLift,
-                origin.z + rampStart->y};
-            const Vector3 end = {cursorHit->x, cursorHit->y + ringLift, cursorHit->z};
+            const Vector3 start = Vector3Transform(
+                {rampStart->x, terrainData.SampleHeight(rampStart->x, rampStart->y) + localRingLift, rampStart->y},
+                terrainToWorld);
             constexpr int rampSegments = 32;
             Vector3 last = start;
             for (int i = 1; i <= rampSegments; ++i)
             {
                 const float f = static_cast<float>(i) / rampSegments;
-                const float x = Lerp(start.x, end.x, f);
-                const float z = Lerp(start.z, end.z, f);
-                const Vector3 point = {x, origin.y + terrainData.SampleHeight(x - origin.x, z - origin.z) + ringLift, z};
+                const float x = Lerp(rampStart->x, localHit.x, f);
+                const float z = Lerp(rampStart->y, localHit.z, f);
+                const Vector3 point =
+                    Vector3Transform({x, terrainData.SampleHeight(x, z) + localRingLift, z}, terrainToWorld);
                 DrawLine3D(last, point, SKYBLUE);
                 last = point;
             }

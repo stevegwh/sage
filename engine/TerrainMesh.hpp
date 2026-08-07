@@ -9,6 +9,7 @@ namespace sage
 {
     struct Terrain;
     class LightManager;
+    class sgTransform;
 
     // Inclusive vertex range of a height field, used to limit GPU re-uploads.
     struct TerrainRegion
@@ -29,6 +30,11 @@ namespace sage
     void UpdateTerrainModelRegion(Model& model, const Terrain& terrain, const TerrainRegion& region);
 
     [[nodiscard]] BoundingBox GetTerrainLocalBounds(const Terrain& terrain);
+
+    // Matches the transform used by DynamicRenderable terrain drawing (scale,
+    // Y rotation, then translation). Keep terrain picking, bounds and gameplay
+    // sampling on this same matrix.
+    [[nodiscard]] Matrix GetTerrainWorldMatrix(const sgTransform& transform);
 
     // Sculpt brush behaviours, Unreal-landscape style. Ramp is not a paint
     // brush (see ApplyTerrainRamp) but shares the enum for the mode selector.
@@ -63,10 +69,10 @@ namespace sage
     TerrainRegion ApplyTerrainRamp(
         Terrain& terrain, Vector2 localStart, Vector2 localEnd, float halfWidth);
 
-    // Intersects a world-space ray with the height field of a terrain whose
-    // entity sits at worldOrigin. Returns the world-space hit point.
+    // Intersects a world-space ray with the transformed height field. Returns
+    // the world-space hit point.
     [[nodiscard]] std::optional<Vector3> GetTerrainRayHit(
-        const Terrain& terrain, Vector3 worldOrigin, const Ray& ray);
+        const Terrain& terrain, const sgTransform& transform, const Ray& ray);
 
     // (Re)builds the entity's DynamicRenderable model and Collideable bounds
     // from its Terrain component and links the lighting shader. Shared by the

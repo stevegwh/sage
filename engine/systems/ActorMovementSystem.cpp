@@ -55,15 +55,21 @@ namespace sage
     }
 
     bool ActorMovementSystem::TryPathfindToLocation(
-        const entt::entity& entity, const Vector3& destination, bool astar) const
+        const entt::entity& entity,
+        const Vector3& destination,
+        const bool astar,
+        const bool findNextBestIfInvalid) const
     {
-        PathfindToLocation(entity, destination, astar);
+        PathfindToLocation(entity, destination, astar, findNextBestIfInvalid);
         auto& moveable = registry->get<MoveableActor>(entity);
         return moveable.IsMoving();
     }
 
     void ActorMovementSystem::PathfindToLocation(
-        const entt::entity& entity, const Vector3& destination, bool astar) const
+        const entt::entity& entity,
+        const Vector3& destination,
+        const bool astar,
+        const bool findNextBestIfInvalid) const
     {
         auto& moveable = registry->get<MoveableActor>(entity);
         const bool wasWalking = moveable.isWalking;
@@ -98,10 +104,28 @@ namespace sage
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
 
         const auto& actorTrans = registry->get<sgTransform>(entity);
-        const auto path = astar ? sys->navigationGridSystem->AStarPathfind(
-                                      entity, actorTrans.GetWorldPos(), destination, minRange, maxRange)
-                                : sys->navigationGridSystem->BFSPathfind(
-                                      entity, actorTrans.GetWorldPos(), destination, minRange, maxRange);
+        std::vector<Vector3> path;
+        if (astar)
+        {
+            path = sys->navigationGridSystem->AStarPathfind(
+                entity,
+                actorTrans.GetWorldPos(),
+                destination,
+                minRange,
+                maxRange,
+                AStarHeuristic::DEFAULT,
+                findNextBestIfInvalid);
+        }
+        else
+        {
+            path = sys->navigationGridSystem->BFSPathfind(
+                entity,
+                actorTrans.GetWorldPos(),
+                destination,
+                minRange,
+                maxRange,
+                findNextBestIfInvalid);
+        }
 
         if (moveable.IsMoving()) // Was previously moving
         {
@@ -505,6 +529,11 @@ namespace sage
                         [this, owner, &registry](const Vector3& destination, const bool astar) {
                             if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
                             return TryPathfindToLocation(owner, destination, astar);
+                        },
+                        [this, owner, &registry](
+                            const Vector3& destination, const bool astar, const bool findNextBestIfInvalid) {
+                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
+                            return TryPathfindToLocation(owner, destination, astar, findNextBestIfInvalid);
                         }));
             });
     }

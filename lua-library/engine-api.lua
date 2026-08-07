@@ -207,12 +207,16 @@ function sage.MoveToLocation(destination) end
 ---@return boolean
 function sage.HasRoute() end
 
----Pathfind the owning entity to a destination.
+---Pathfind the owning entity to a destination. By default, an occupied or
+---unreachable destination falls back to the closest reachable grid cell within
+---the actor's pathfinding range.
+---The destination's x/z coordinates select the grid cell; its y value is ignored.
 ---Requires Transform + MoveableActor + Collideable.
 ---@param destination Vec3
 ---@param astar? boolean # Use A* (otherwise the default search).
----@return boolean # false if the entity is missing required components.
-function sage.TryPathfindToLocation(destination, astar) end
+---@param findNextBestIfInvalid? boolean # Defaults to true; false requires the exact destination.
+---@return boolean # True when a route was created.
+function sage.TryPathfindToLocation(destination, astar, findNextBestIfInvalid) end
 
 ---Get an entity's Archetype.
 ---@param e entity

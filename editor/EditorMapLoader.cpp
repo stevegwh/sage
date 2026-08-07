@@ -99,6 +99,7 @@ namespace sage::editor
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
                (std::memcmp(fileMagic, MapMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, PreviousMapMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0);
     }
 
@@ -116,13 +117,16 @@ namespace sage::editor
         std::ifstream header(path, std::ios::binary);
         char fileMagic[4]{};
         header.read(fileMagic, sizeof(fileMagic));
+        const bool previousFormat = std::memcmp(fileMagic, PreviousMapMagic, sizeof(fileMagic)) == 0;
         const bool legacyFormat = std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0;
 
         std::unordered_map<std::uint32_t, entt::entity> idMap;
         std::vector<entt::entity> loadedEntities;
 
         sage::serializer::ReadCompressedBinary(
-            path, legacyFormat ? LegacyMapMagic : MapMagic, [&](cereal::BinaryInputArchive& input, std::istream&) {
+            path,
+            legacyFormat ? LegacyMapMagic : (previousFormat ? PreviousMapMagic : MapMagic),
+            [&](cereal::BinaryInputArchive& input, std::istream&) {
                 std::vector<Light> lights;
                 input(lights);
                 for (const auto& light : lights)
@@ -226,30 +230,47 @@ namespace sage::editor
                     loadMoveables(moveables);
                 }
 
-                std::vector<TerrainRecord> terrains;
-                input(terrains);
-                for (auto& record : terrains)
-                {
-                    Terrain terrain;
-                    terrain.resolution = record.resolution;
-                    terrain.cellSize = record.cellSize;
-                    terrain.heights = std::move(record.heights);
-                    if (!terrain.IsValid())
+                const auto loadTerrains = [&](auto& terrains) {
+                    for (auto& record : terrains)
                     {
-                        std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
-                        continue;
-                    }
+                        Terrain terrain;
+                        terrain.resolution = record.resolution;
+                        terrain.cellSize = record.cellSize;
+                        terrain.heights = std::move(record.heights);
+                        if (!terrain.IsValid())
+                        {
+                            std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
+                            continue;
+                        }
 
-                    const auto entity = destination->create();
-                    destination->emplace<EditorMapEntity>(entity);
-                    auto& transform = destination->emplace<sgTransform>(entity);
-                    transform.position.world = record.position;
-                    transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
-                    destination->emplace<Terrain>(entity, std::move(terrain));
-                    auto& collideable = destination->emplace<Collideable>(entity, record.collideable);
-                    collideable.isStatic = true;
-                    // The mesh, shader and collision bounds are derived after
-                    // load (EditorScene::refreshAfterMapLoad).
+                        const auto entity = destination->create();
+                        destination->emplace<EditorMapEntity>(entity);
+                        sgTransform transform;
+                        if constexpr (requires { record.transform; })
+                            transform = std::move(record.transform);
+                        else
+                            transform.position.world = record.position;
+                        if (transform.name.empty())
+                            transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
+                        destination->emplace<sgTransform>(entity, std::move(transform));
+                        destination->emplace<Terrain>(entity, std::move(terrain));
+                        auto& collideable = destination->emplace<Collideable>(entity, record.collideable);
+                        collideable.isStatic = true;
+                        // The mesh, shader and collision bounds are derived after
+                        // load (EditorScene::refreshAfterMapLoad).
+                    }
+                };
+                if (previousFormat || legacyFormat)
+                {
+                    std::vector<LegacyTerrainRecord> terrains;
+                    input(terrains);
+                    loadTerrains(terrains);
+                }
+                else
+                {
+                    std::vector<TerrainRecord> terrains;
+                    input(terrains);
+                    loadTerrains(terrains);
                 }
 
                 // Trailing optional sections. Older maps may end after terrain or
@@ -394,7 +415,7 @@ namespace sage::editor
                     if (const auto* existing = source.try_get<Collideable>(entity)) collideable = *existing;
                     terrains.push_back(
                         TerrainRecord{
-                            source.get<sgTransform>(entity).GetWorldPos(),
+                            source.get<sgTransform>(entity),
                             terrain.resolution,
                             terrain.cellSize,
                             collideable,

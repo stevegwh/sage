@@ -200,6 +200,16 @@ namespace sage
             {worldSize, *maxHeight + TERRAIN_BOUNDS_PADDING, worldSize}};
     }
 
+    Matrix GetTerrainWorldMatrix(const sgTransform& transform)
+    {
+        const auto position = transform.GetWorldPos();
+        const auto scale = transform.GetScale();
+        return MatrixMultiply(
+            MatrixMultiply(
+                MatrixScale(scale.x, scale.y, scale.z), MatrixRotateY(transform.GetWorldRot().y * DEG2RAD)),
+            MatrixTranslate(position.x, position.y, position.z));
+    }
+
     namespace
     {
         // Inclusive vertex range covered by a brush circle, clamped to the field.
@@ -368,11 +378,20 @@ namespace sage
         return region;
     }
 
-    std::optional<Vector3> GetTerrainRayHit(const Terrain& terrain, const Vector3 worldOrigin, const Ray& ray)
+    std::optional<Vector3> GetTerrainRayHit(const Terrain& terrain, const sgTransform& transform, const Ray& ray)
     {
         if (!terrain.IsValid()) return std::nullopt;
 
-        const Ray localRay = {Vector3Subtract(ray.position, worldOrigin), Vector3Normalize(ray.direction)};
+        const Matrix terrainToWorld = GetTerrainWorldMatrix(transform);
+        if (std::abs(MatrixDeterminant(terrainToWorld)) < 1e-6f) return std::nullopt;
+
+        const Matrix worldToTerrain = MatrixInvert(terrainToWorld);
+        const Vector3 localOrigin = Vector3Transform(ray.position, worldToTerrain);
+        const Vector3 localRayPoint = Vector3Transform(Vector3Add(ray.position, ray.direction), worldToTerrain);
+        const Vector3 localDirection = Vector3Subtract(localRayPoint, localOrigin);
+        if (Vector3LengthSqr(localDirection) < 1e-8f) return std::nullopt;
+
+        const Ray localRay = {localOrigin, Vector3Normalize(localDirection)};
         const auto bounds = GetTerrainLocalBounds(terrain);
         const auto entry = GetRayCollisionBox(localRay, bounds);
         if (!entry.hit) return std::nullopt;
@@ -407,7 +426,7 @@ namespace sage
                     }
                 }
                 const Vector3 hit = Vector3Scale(Vector3Add(high, low), 0.5f);
-                return Vector3Add(worldOrigin, Vector3{hit.x, terrain.SampleHeight(hit.x, hit.z), hit.z});
+                return Vector3Transform(Vector3{hit.x, terrain.SampleHeight(hit.x, hit.z), hit.z}, terrainToWorld);
             }
             previous = point;
             previousAbove = above;
@@ -450,10 +469,9 @@ namespace sage
         if (collideable == nullptr) return;
 
         const auto& terrain = registry.get<Terrain>(entity);
-        const auto origin = registry.get<sgTransform>(entity).GetWorldPos();
+        const auto& transform = registry.get<sgTransform>(entity);
         collideable->localBoundingBox = GetTerrainLocalBounds(terrain);
-        collideable->worldBoundingBox = {
-            Vector3Add(collideable->localBoundingBox.min, origin),
-            Vector3Add(collideable->localBoundingBox.max, origin)};
+        collideable->worldBoundingBox =
+            TransformBoundingBoxByCorners(collideable->localBoundingBox, GetTerrainWorldMatrix(transform));
     }
 } // namespace sage
