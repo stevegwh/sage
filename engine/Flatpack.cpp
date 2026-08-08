@@ -275,7 +275,7 @@ namespace sage
             }
 
             if (const auto* script = source.try_get<ScriptComponent>(entity);
-                script != nullptr && !script->scriptPath.empty())
+                script != nullptr && !script->className.empty())
             {
                 scripts.push_back(FlatpackScriptRecord{localId, *script});
             }

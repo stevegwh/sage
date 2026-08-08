@@ -58,6 +58,7 @@ target_link_libraries(editor
         PRIVATE
         sage_editor
 )
+add_dependencies(editor sage_managed_host)
 
 # Symbolic link for resources folder
 set(source "${CMAKE_SOURCE_DIR}/resources")

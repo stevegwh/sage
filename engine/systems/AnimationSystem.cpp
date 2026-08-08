@@ -6,8 +6,6 @@
 #include "components/Animation.hpp"
 #include "components/MoveableActor.hpp"
 #include "components/Renderable.hpp"
-#include "Event.hpp"
-#include "ScriptSystem.hpp"
 
 #include "raymath.h"
 
@@ -123,20 +121,4 @@ namespace sage
     {
     }
 
-    void AnimationSystem::RegisterLuaBindings(ScriptSystem& scripts)
-    {
-        const auto registerAnimationEvent = [this, &scripts](
-                                                const std::string& name, Event<entt::entity> Animation::* event) {
-            scripts.RegisterEventLuaBinding<Animation>(
-                name, [this, event](const entt::entity source, const LuaEventCallback& callback) {
-                    auto* animation = registry->try_get<Animation>(source);
-                    if (animation == nullptr) return Subscription{};
-                    return (animation->*event).Subscribe([callback](const entt::entity /*actor*/) { callback(); });
-                });
-        };
-
-        registerAnimationEvent("AnimationStarted", &Animation::onAnimationStart);
-        registerAnimationEvent("AnimationEnded", &Animation::onAnimationEnd);
-        registerAnimationEvent("AnimationUpdated", &Animation::onAnimationUpdated);
-    }
 } // namespace sage

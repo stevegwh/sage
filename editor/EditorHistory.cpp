@@ -132,7 +132,7 @@ namespace sage::editor
         if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
         if (a.hasScript != b.hasScript ||
             (a.hasScript &&
-             (a.script.scriptPath != b.script.scriptPath || a.script.enabled != b.script.enabled)))
+             (a.script.className != b.script.className || a.script.enabled != b.script.enabled)))
         {
             return false;
         }

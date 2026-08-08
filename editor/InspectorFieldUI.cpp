@@ -570,6 +570,7 @@ namespace sage::editor
             const bool scriptFile,
             const std::optional<ShaderFileSlot> shaderFile,
             bool& selectScriptFile,
+            bool& openScriptFile,
             std::optional<ShaderFileSlot>& selectShaderFile)
         {
             std::string value = field.data ? *field.data : std::string{};
@@ -625,16 +626,22 @@ namespace sage::editor
                 std::error_code ec;
                 const std::filesystem::path path =
                     value.empty() ? std::filesystem::path{} : std::filesystem::absolute(value, ec);
-                const bool canOpen = !ec && !path.empty() && std::filesystem::is_regular_file(path, ec);
+                const bool canOpen = scriptFile
+                                         ? !value.empty()
+                                         : !ec && !path.empty() && std::filesystem::is_regular_file(path, ec);
                 ImGui::BeginDisabled(!canOpen);
                 if (ImGui::Button(ICON_FA_ARROW_UP_RIGHT_FROM_SQUARE "##open_file", ImVec2{buttonWidth, 0.0f}))
                 {
-                    OpenURL(path.string().c_str());
+                    if (scriptFile)
+                        openScriptFile = true;
+                    else
+                        OpenURL(path.string().c_str());
                 }
                 ImGui::EndDisabled();
                 if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 {
-                    ImGui::SetTooltip("%s", canOpen ? "Open in default application" : "File does not exist");
+                    ImGui::SetTooltip(
+                        "%s", canOpen ? "Open in default application" : "File does not exist");
                 }
             }
             return changed;
@@ -781,7 +788,10 @@ namespace sage::editor
         }
 
         bool DrawInspectorFieldRow(
-            const InspectorField& field, bool& selectScriptFile, std::optional<ShaderFileSlot>& selectShaderFile)
+            const InspectorField& field,
+            bool& selectScriptFile,
+            bool& openScriptFile,
+            std::optional<ShaderFileSlot>& selectShaderFile)
         {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
@@ -801,6 +811,7 @@ namespace sage::editor
                             field.scriptFile,
                             field.shaderFile,
                             selectScriptFile,
+                            openScriptFile,
                             selectShaderFile);
                     else
                         changed = DrawInspectorFieldWidget(value, field.editable, field.mixed);
@@ -875,6 +886,7 @@ namespace sage::editor
             std::optional<std::string>& selectedModelKey,
             std::optional<InspectorComponentsResult::MaterialSelection>& selectedMaterial,
             bool& selectScriptFile,
+            bool& openScriptFile,
             std::optional<ShaderFileSlot>& selectShaderFile)
         {
             ImGui::PushID(component.displayName.c_str());
@@ -968,7 +980,8 @@ namespace sage::editor
                     }
                     for (const auto& field : component.fields)
                     {
-                        changed |= DrawInspectorFieldRow(field, selectScriptFile, selectShaderFile);
+                        changed |= DrawInspectorFieldRow(
+                            field, selectScriptFile, openScriptFile, selectShaderFile);
                     }
                     ImGui::EndTable();
                 }
@@ -987,6 +1000,7 @@ namespace sage::editor
         std::optional<InspectorComponentsResult::ComponentMoveRequest> moveComponent;
         bool editModelDefaults = false;
         bool selectScriptFile = false;
+        bool openScriptFile = false;
         std::optional<ShaderFileSlot> selectShaderFile;
         std::optional<std::string> selectedModelKey;
         std::optional<InspectorComponentsResult::MaterialSelection> selectedMaterial;
@@ -1000,6 +1014,7 @@ namespace sage::editor
                 selectedModelKey,
                 selectedMaterial,
                 selectScriptFile,
+                openScriptFile,
                 selectShaderFile);
         }
         return {
@@ -1010,6 +1025,7 @@ namespace sage::editor
             .moveComponent = std::move(moveComponent),
             .editModelDefaults = editModelDefaults,
             .selectScriptFile = selectScriptFile,
+            .openScriptFile = openScriptFile,
             .selectShaderFile = selectShaderFile,
             .selectedModelKey = std::move(selectedModelKey),
             .selectedMaterial = std::move(selectedMaterial)};

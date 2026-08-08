@@ -8,8 +8,6 @@
 
 namespace sage
 {
-    class ScriptSystem;
-
     class AnimationSystem
     {
         entt::registry* registry;
@@ -17,7 +15,6 @@ namespace sage
       public:
         void Update() const;
         void Draw();
-        void RegisterLuaBindings(ScriptSystem& scripts);
         explicit AnimationSystem(entt::registry* _registry);
     };
 } // namespace sage

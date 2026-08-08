@@ -23,7 +23,6 @@
 
 namespace sage
 {
-    class ScriptSystem;
     struct Renderable;
 
     struct AnimationParams
@@ -95,6 +94,10 @@ namespace sage
         void PlayOneShot(AnimationId animationId, int _animSpeed);
         void PlayOneShot(int index, int _animSpeed);
         bool PlayOneShotByName(std::string_view clipName, int _animSpeed);
+        bool PlayOneShotByName(std::string_view clipName)
+        {
+            return PlayOneShotByName(clipName, 1);
+        }
         void RestoreAfterOneShot();
 
         template <class Archive>
@@ -120,31 +123,32 @@ namespace sage
             }
         }
 
-        template <class Lua>
-        static void define_lua_api(Lua& lua)
+        template <class Api>
+        static void define_script_api(Api& api)
         {
-            lua.overload(
+            api.method(
                 "Play",
-                [](Animation& animation, const std::string& clip) {
-                    return animation.ChangeAnimationByName(clip);
-                },
-                [](Animation& animation, const std::string& clip, const int speed) {
-                    return animation.ChangeAnimationByName(clip, speed);
-                });
-            lua.overload(
+                static_cast<bool (Animation::*)(std::string_view)>(&Animation::ChangeAnimationByName),
+                {"clip"});
+            api.method(
+                "Play",
+                static_cast<bool (Animation::*)(std::string_view, int)>(&Animation::ChangeAnimationByName),
+                {"clip", "speed"});
+            api.method(
                 "PlayOneShot",
-                [](Animation& animation, const std::string& clip) {
-                    return animation.PlayOneShotByName(clip, 1);
-                },
-                [](Animation& animation, const std::string& clip, const int speed) {
-                    return animation.PlayOneShotByName(clip, speed);
+                static_cast<bool (Animation::*)(std::string_view)>(&Animation::PlayOneShotByName),
+                {"clip"});
+            api.method(
+                "PlayOneShot",
+                static_cast<bool (Animation::*)(std::string_view, int)>(&Animation::PlayOneShotByName),
+                {"clip", "speed"});
+            api.readonly("ClipCount", &Animation::animsCount);
+            api.property(
+                "BlendDuration",
+                [](const Animation& animation) { return animation.blendDuration; },
+                [](Animation& animation, const float seconds) {
+                    animation.blendDuration = std::max(0.0f, seconds);
                 });
-            lua.method("ClipCount", [](const Animation& animation) { return animation.animsCount; });
-            lua.table_method("GetClipNames", [](const Animation& animation) { return animation.clipNames; });
-            lua.method("SetBlendDuration", [](Animation& animation, const float seconds) {
-                animation.blendDuration = std::max(0.0f, seconds);
-            });
-            lua.method("GetBlendDuration", [](const Animation& animation) { return animation.blendDuration; });
         }
 
         Animation() = default;

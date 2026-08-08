@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "systems/CSharpScriptSystem.hpp"
+
 #include "entt/entt.hpp"
 
 #include <memory>
@@ -34,7 +36,6 @@ namespace sage
     class UberShaderSystem;
     class FullscreenTextOverlayManager;
     class SpatialAudioSystem;
-    class ScriptSystem;
 
     class EngineSystems
     {
@@ -60,13 +61,15 @@ namespace sage
         std::unique_ptr<UberShaderSystem> uberShaderSystem;
         std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayManager;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;
-        std::unique_ptr<ScriptSystem> scriptSystem;
+        std::unique_ptr<CSharpScriptSystem> csharpScriptSystem;
 
         EngineSystems(
-            entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager);
+            entt::registry* _registry,
+            KeyMapping* _keyMapping,
+            Settings* _settings,
+            AudioManager* _audioManager,
+            ManagedScriptingConfig scripting = {});
         ~EngineSystems();
-
-        void RegisterAllLuaBindings();
 
         [[nodiscard]] GameUIEngine& UI();
         [[nodiscard]] const GameUIEngine& UI() const;

@@ -17,3 +17,6 @@ resources/*
 CLAUDE.md
 AGENTS.md
 .cache
+managed/**/bin/
+managed/**/obj/
+managed/**/Generated/*.g.cs

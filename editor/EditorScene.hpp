@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorAssetCatalog.hpp"
+#include "CSharpScriptEditorConfig.hpp"
 #include "EditorEntityOperations.hpp"
 #include "EditorFlatpackEditSession.hpp"
 #include "EditorGui.hpp"
@@ -69,8 +70,7 @@ namespace sage
         // Non-null only while play-in-editor is running. Owns its own registry,
         // so Play/Stop never touches the authored scene (see startPlay/stopPlay).
         mutable std::unique_ptr<IGameRuntime> gameRuntime;
-        // Picks the lua file for "Add Component > Script" (save-style: typing a
-        // new filename creates a template script).
+        editor::CSharpScriptEditorConfig csharpScripts;
         std::unique_ptr<ImGui::FileBrowser> scriptBrowser;
         std::unique_ptr<ImGui::FileBrowser> shaderBrowser;
         mutable std::optional<editor::ShaderFileSlot> pendingShaderFileSlot;
@@ -127,9 +127,13 @@ namespace sage
         void handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const;
         void drawScriptBrowser() const;
         void drawShaderBrowser() const;
-        void attachScriptToSelection(const std::filesystem::path& scriptFile) const;
+        void openScriptBrowser() const;
+        void attachScriptToSelection(const std::filesystem::path& sourceFile) const;
+        void openSelectedScript() const;
+        [[nodiscard]] std::optional<std::string> managedClassForSource(
+            const std::filesystem::path& sourceFile) const;
+        [[nodiscard]] std::filesystem::path sourceForManagedClass(const std::string& className) const;
         void setShaderFileOnSelection(editor::ShaderFileSlot slot, const std::filesystem::path& shaderFile) const;
-        void removeScriptFromSelection() const;
         void addAnimationToSelection() const;
         void removeAnimationFromSelection() const;
         void changeSelectedModels(const std::string& modelKey) const;
@@ -196,7 +200,8 @@ namespace sage
             editor::EditorDockLayout* dockLayout,
             EditorSettings* editorSettings,
             std::function<void()> onEditorSettingsChanged,
-            std::function<void(editor::InspectorRegistry&)> registerGameComponents = {});
+            std::function<void(editor::InspectorRegistry&)> registerGameComponents = {},
+            editor::CSharpScriptEditorConfig csharpScripts = {});
         ~EditorScene();
     };
 } // namespace sage

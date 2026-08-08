@@ -66,11 +66,11 @@ namespace sage
             // i.field("World Bounds", worldBoundingBox, false);
         }
 
-        template <class Lua>
-        static void define_lua_api(Lua& lua)
+        template <class Api>
+        static void define_script_api(Api& api)
         {
-            lua.property("active", &Collideable::active);
-            lua.property("debugDraw", &Collideable::debugDraw);
+            api.property("Active", &Collideable::active);
+            api.property("DebugDraw", &Collideable::debugDraw);
         }
     };
 

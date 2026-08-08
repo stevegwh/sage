@@ -40,6 +40,7 @@ namespace sage::editor
         // Renderable header context action requested this frame.
         bool editModelDefaults = false;
         bool selectScriptFile = false;
+        bool openScriptFile = false;
         std::optional<ShaderFileSlot> selectShaderFile;
         // Deferred model replacement requested by Renderable's model picker.
         std::optional<std::string> selectedModelKey;

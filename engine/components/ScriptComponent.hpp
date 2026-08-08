@@ -11,28 +11,26 @@
 
 namespace sage
 {
-    // Attaches a Lua script to an entity. ScriptSystem loads the file into its own
-    // environment and drives Unity-style lifecycle callbacks defined as globals in
-    // the script: Awake(), OnEnable(), Start(), Update(dt), OnDisable().
-    //
-    // Runtime state (the Lua environment, cached function refs) lives inside
-    // ScriptSystem, keyed by entity — this component is just the authored data.
+    // Authored reference to a managed Sage.Script type. Runtime instances live in
+    // CSharpScriptSystem and are recreated for every Play session.
     struct ScriptComponent
     {
-        // Path relative to the working directory, e.g. "resources/scripts/door.lua".
-        std::string scriptPath;
+        // Fully-qualified type name, e.g. "HeroHerder.Scripts.Wizard".
+        // This remains the first serialized string so existing maps can be migrated
+        // without changing their binary record shape.
+        std::string className;
         bool enabled = true;
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(scriptPath, enabled);
+            archive(className, enabled);
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.scriptFile("Script Path", scriptPath);
+            i.scriptFile("Class", className);
             i.field("Enabled", enabled);
         }
     };

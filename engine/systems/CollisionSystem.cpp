@@ -6,7 +6,6 @@
 #include "components/CollisionIntent.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
-#include "ScriptSystem.hpp"
 #include <Serializer.hpp>
 
 #include <algorithm>
@@ -278,21 +277,4 @@ namespace sage
         matrix.Load();
     }
 
-    void CollisionSystem::RegisterLuaBindings(ScriptSystem& scripts)
-    {
-        const auto registerTriggerEvent = [&scripts](const std::string& name, auto& event) {
-            auto* sourceEvent = &event;
-            scripts.RegisterEventLuaBinding<Collideable>(
-                name, [sourceEvent](const entt::entity source, const LuaEventCallback& callback) {
-                    return sourceEvent->Subscribe(
-                        [source, callback](const entt::entity trigger, const entt::entity other) {
-                            if (trigger == source) callback(static_cast<std::uint32_t>(other));
-                        });
-                });
-        };
-
-        registerTriggerEvent("TriggerEnter", onTriggerEnter);
-        registerTriggerEvent("TriggerStay", onTriggerStay);
-        registerTriggerEvent("TriggerExit", onTriggerExit);
-    }
 } // namespace sage

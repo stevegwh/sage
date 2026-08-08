@@ -27,7 +27,6 @@ namespace sage
     struct sgTransform;
     struct GridSquare;
     struct NavigationGridSquare;
-    class ScriptSystem;
 
     class ActorMovementSystem
     {
@@ -81,8 +80,6 @@ namespace sage
         void CancelMovement(const entt::entity& entity) const;
         void Update();
         void DrawDebug() const;
-        void RegisterLuaBindings(ScriptSystem& scripts);
-
         ActorMovementSystem(entt::registry* _registry, EngineSystems* _sys);
     };
 

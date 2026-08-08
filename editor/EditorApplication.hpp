@@ -2,6 +2,7 @@
 
 #include "EditorDockLayout.hpp"
 #include "EditorSettings.hpp"
+#include "CSharpScriptEditorConfig.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -44,6 +45,7 @@ namespace sage
         bool viewportFullscreen = false;
         std::string skyboxImageKey;
         std::function<void(editor::InspectorRegistry&)> registerGameComponents;
+        editor::CSharpScriptEditorConfig csharpScripts;
 
         void init();
         void draw();
@@ -57,7 +59,8 @@ namespace sage
         void Update();
         explicit EditorApplication(
             std::string _skyboxImageKey = {},
-            std::function<void(editor::InspectorRegistry&)> _registerGameComponents = {});
+            std::function<void(editor::InspectorRegistry&)> _registerGameComponents = {},
+            editor::CSharpScriptEditorConfig _csharpScripts = {});
         ~EditorApplication();
 
         EditorApplication(const EditorApplication&) = delete;

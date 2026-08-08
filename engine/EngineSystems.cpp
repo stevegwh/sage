@@ -3,18 +3,8 @@
 //
 
 #include "EngineSystems.hpp"
-#include "systems/LuaBinding.hpp"
-
-#include "Archetypes.hpp"
-#include "Flatpack.hpp"
-#include "Serializer.hpp"
 
 #include "Camera.hpp"
-#include "components/Animation.hpp"
-#include "components/Collideable.hpp"
-#include "components/CollisionIntent.hpp"
-#include "components/MoveableActor.hpp"
-#include "components/sgTransform.hpp"
 #include "Cursor.hpp"
 #include "FullscreenTextOverlayManager.hpp"
 #include "LightManager.hpp"
@@ -26,23 +16,24 @@
 #include "systems/ControllableActorSystem.hpp"
 #include "systems/NavigationGridSystem.hpp"
 #include "systems/RenderSystem.hpp"
-#include "systems/ScriptSystem.hpp"
+#include "systems/CSharpScriptSystem.hpp"
 #include "systems/SpatialAudioSystem.hpp"
 #include "systems/TransformSystem.hpp"
 #include "systems/UberShaderSystem.hpp"
 #include "ui/GameUIEngine.hpp"
 #include "UserInput.hpp"
 
-#include "sol/sol.hpp"
-
 #include <cassert>
-#include <cstdint>
-#include <optional>
+#include <utility>
 
 namespace sage
 {
     EngineSystems::EngineSystems(
-        entt::registry* _registry, KeyMapping* _keyMapping, Settings* _settings, AudioManager* _audioManager)
+        entt::registry* _registry,
+        KeyMapping* _keyMapping,
+        Settings* _settings,
+        AudioManager* _audioManager,
+        ManagedScriptingConfig scripting)
         : registry(_registry),
           settings(_settings),
           audioManager(_audioManager),
@@ -60,70 +51,10 @@ namespace sage
           animationSystem(std::make_unique<AnimationSystem>(_registry)),
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayManager(std::make_unique<FullscreenTextOverlayManager>(this)),
-          spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
-          scriptSystem(std::make_unique<ScriptSystem>(_registry))
+          spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this))
     {
         uiEngine = std::make_unique<GameUIEngine>(_registry, this);
-        RegisterAllLuaBindings();
-    }
-
-    void EngineSystems::RegisterAllLuaBindings()
-    {
-        RegisterArchetypeLuaApi(*scriptSystem);
-        scriptSystem->RegisterComponent<sgTransform>("Transform", "GetTransform");
-        scriptSystem->RegisterComponent<Collideable>("Collideable", "GetCollideable");
-        scriptSystem->RegisterComponent<Animation>("Animation", "GetAnimation");
-
-        collisionSystem->RegisterLuaBindings(*scriptSystem);
-        navigationGridSystem->RegisterLuaBindings(*scriptSystem);
-        actorMovementSystem->RegisterLuaBindings(*scriptSystem);
-        animationSystem->RegisterLuaBindings(*scriptSystem);
-
-        scriptSystem->RegisterApiExtension(
-            "sage", [this](sol::table& api, entt::entity, entt::registry& destination) {
-                const auto spawnFlatpack =
-                    [this, &destination](
-                        const std::string& name,
-                        const Vector3 position,
-                        const std::optional<Vector3> rotation,
-                        sol::this_state state) -> sol::object {
-                    auto instance =
-                        InstantiateFlatpackByName(destination, name, position, rotation);
-                    if (!instance) return sol::lua_nil;
-
-                    for (const auto entity : instance.entities)
-                    {
-                        const auto* obstacle = destination.try_get<NavigationObstacle>(entity);
-                        const auto* collideable = destination.try_get<Collideable>(entity);
-                        if (obstacle && obstacle->active && collideable &&
-                            !destination.any_of<MoveableActor>(entity))
-                        {
-                            navigationGridSystem->MarkSquareAreaOccupied(
-                                collideable->worldBoundingBox, true, entity);
-                        }
-                    }
-
-                    return sol::make_object(
-                        state, static_cast<std::uint32_t>(instance.root));
-                };
-
-                api.set_function(
-                    "SpawnFlatpack",
-                    sol::overload(
-                        [spawnFlatpack](
-                            const std::string& name,
-                            const Vector3 position,
-                            sol::this_state state) {
-                            return spawnFlatpack(name, position, std::nullopt, state);
-                        },
-                        [spawnFlatpack](
-                            const std::string& name,
-                            const Vector3 position,
-                            const Vector3 rotation,
-                            sol::this_state state) {
-                            return spawnFlatpack(name, position, rotation, state);
-                        }));
-            });
+        csharpScriptSystem = std::make_unique<CSharpScriptSystem>(_registry, this, std::move(scripting));
     }
 
     EngineSystems::~EngineSystems()

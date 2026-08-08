@@ -9,9 +9,7 @@
 #include "NavigationGridSystem.hpp"
 #include "Serializer.hpp"
 #include "slib.hpp"
-#include "ScriptSystem.hpp"
 #include "TransformSystem.hpp"
-#include "sol/sol.hpp"
 
 #include <format>
 #include <ranges>
@@ -478,63 +476,4 @@ namespace sage
     {
     }
 
-    void ActorMovementSystem::RegisterLuaBindings(ScriptSystem& scripts)
-    {
-        const auto registerMovementEvent = [this, &scripts](
-                                               const std::string& name,
-                                               Event<entt::entity> MoveableActor::* event) {
-            scripts.RegisterEventLuaBinding<MoveableActor>(
-                name, [this, event](const entt::entity source, const LuaEventCallback& callback) {
-                    auto* moveable = registry->try_get<MoveableActor>(source);
-                    if (moveable == nullptr) return Subscription{};
-                    return (moveable->*event).Subscribe([callback](const entt::entity /*actor*/) { callback(); });
-                });
-        };
-
-        registerMovementEvent("MovementStarted", &MoveableActor::onStartMovement);
-        registerMovementEvent("DestinationReached", &MoveableActor::onDestinationReached);
-        registerMovementEvent("MovementCancelled", &MoveableActor::onMovementCancel);
-        registerMovementEvent("PathChanged", &MoveableActor::onPathChanged);
-
-        scripts.RegisterEventLuaBinding<MoveableActor>(
-            "DestinationUnreachable", [this](const entt::entity source, const LuaEventCallback& callback) {
-                auto* moveable = registry->try_get<MoveableActor>(source);
-                if (moveable == nullptr) return Subscription{};
-                return moveable->onDestinationUnreachable.Subscribe(
-                    [callback](const entt::entity /*actor*/, const Vector3 destination) {
-                        callback(destination);
-                    });
-            });
-
-        scripts.RegisterApiExtension(
-            "sage", [this](sol::table& api, const entt::entity owner, entt::registry& registry) {
-                api.set_function("MoveToLocation", [this, owner, &registry](const Vector3& destination) {
-                    if (!registry.all_of<sgTransform>(owner)) return false;
-                    MoveToLocation(owner, destination);
-                    return true;
-                });
-
-                api.set_function("HasRoute", [owner, &registry] {
-                    const auto* moveable = registry.try_get<MoveableActor>(owner);
-                    return moveable != nullptr && moveable->IsMoving();
-                });
-
-                api.set_function(
-                    "TryPathfindToLocation",
-                    sol::overload(
-                        [this, owner, &registry](const Vector3& destination) {
-                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
-                            return TryPathfindToLocation(owner, destination);
-                        },
-                        [this, owner, &registry](const Vector3& destination, const bool astar) {
-                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
-                            return TryPathfindToLocation(owner, destination, astar);
-                        },
-                        [this, owner, &registry](
-                            const Vector3& destination, const bool astar, const bool findNextBestIfInvalid) {
-                            if (!registry.all_of<sgTransform, MoveableActor, Collideable>(owner)) return false;
-                            return TryPathfindToLocation(owner, destination, astar, findNextBestIfInvalid);
-                        }));
-            });
-    }
 } // namespace sage

@@ -807,7 +807,7 @@ namespace sage::editor
         registry.Register<Light>("Light", true, true);
         registry.Register<Animation>("Animation", true, true);
         registry.Register<MoveableActor>("Moveable Actor", true, true);
-        registry.Register<ScriptComponent>("Script", true, true);
+        registry.Register<ScriptComponent>("C# Script", true, true);
         registry.Register<Archetype>("Archetype", true, true);
     }
 } // namespace sage::editor

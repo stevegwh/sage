@@ -86,7 +86,8 @@ namespace sage
             &dockLayout,
             &editorSettings,
             [this]() { saveEditorSettings(); },
-            registerGameComponents);
+            registerGameComponents,
+            csharpScripts);
 
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture =
@@ -260,13 +261,15 @@ namespace sage
 
     EditorApplication::EditorApplication(
         std::string _skyboxImageKey,
-        std::function<void(editor::InspectorRegistry&)> _registerGameComponents)
+        std::function<void(editor::InspectorRegistry&)> _registerGameComponents,
+        editor::CSharpScriptEditorConfig _csharpScripts)
         : registry(std::make_unique<entt::registry>()),
           keyMapping(std::make_unique<KeyMapping>()),
           settings(std::make_unique<Settings>(&exitWindow)),
           audioManager(std::make_unique<AudioManager>()),
           skyboxImageKey(std::move(_skyboxImageKey)),
-          registerGameComponents(std::move(_registerGameComponents))
+          registerGameComponents(std::move(_registerGameComponents)),
+          csharpScripts(std::move(_csharpScripts))
     {
         serializer::DeserializeXMLFile<EditorSettings>(EDITOR_SETTINGS_PATH, editorSettings);
     }

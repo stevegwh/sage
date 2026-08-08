@@ -11,8 +11,6 @@
 
 namespace sage
 {
-    class ScriptSystem;
-
     /*
         An archetype defines a 'noun', as opposed to a verb (component) or adjective (tag).
     */
@@ -50,14 +48,6 @@ namespace sage
             i.archetypeDropdown("Kind", *this);
         }
 
-        template <class Lua>
-        static void define_lua_api(Lua& lua)
-        {
-            lua.readonly("id", &Archetype::id);
-            lua.method("Is", [](const Archetype& archetype, const std::string& value) {
-                return archetype.id == entt::hashed_string::value(value.data(), value.size());
-            });
-        }
     };
 
     [[nodiscard]] constexpr Archetype MakeArchetype(const std::string_view name)
@@ -66,8 +56,6 @@ namespace sage
     }
 
     struct ArchetypeIndex;
-
-    void RegisterArchetypeLuaApi(ScriptSystem& scripts);
 
     void EnableArchetypeIndex(entt::registry& registry);
     void RebuildArchetypeIndex(entt::registry& registry);

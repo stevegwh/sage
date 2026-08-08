@@ -373,7 +373,7 @@ namespace sage::editor
                 {
                     if (!source.all_of<ScriptComponent>(entity)) continue;
                     const auto& script = source.get<ScriptComponent>(entity);
-                    if (script.scriptPath.empty()) continue;
+                    if (script.className.empty()) continue;
                     scripts.push_back(
                         EntityScriptRecord{entt::entt_traits<entt::entity>::to_entity(entity), script});
                 }

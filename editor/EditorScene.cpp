@@ -48,7 +48,6 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
-#include <fstream>
 #include <iostream>
 #include <optional>
 #include <system_error>
@@ -64,7 +63,6 @@ namespace sage
         constexpr float EDITOR_FOCUS_CAMERA_DISTANCE = 38.0f;
         constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
-        constexpr const char* SCRIPTS_DIRECTORY = "resources/scripts";
         constexpr const char* SHADERS_DIRECTORY = "resources/shaders";
         // Temp map the editor snapshots the authored scene into when entering
         // play mode; the game runtime loads it, and Stop deletes it.
@@ -736,13 +734,9 @@ namespace sage
             history->Commit();
         }
 
-        if (result.selectScriptFile && scriptBrowser)
-        {
-            std::error_code ec;
-            std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);
-            scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
-            scriptBrowser->Open();
-        }
+        if (result.selectScriptFile) openScriptBrowser();
+        if (result.openScriptFile) openSelectedScript();
+
         if (result.selectShaderFile.has_value() && shaderBrowser)
         {
             pendingShaderFileSlot = result.selectShaderFile;
@@ -834,12 +828,22 @@ namespace sage
             if (const auto requested = result.addComponent)
             {
                 const auto requestedComponent = *requested;
-                if (requestedComponent == editor::ComponentIdOf<ScriptComponent>() && scriptBrowser)
+                if (requestedComponent == editor::ComponentIdOf<ScriptComponent>())
                 {
-                    std::error_code ec;
-                    std::filesystem::create_directories(SCRIPTS_DIRECTORY, ec);
-                    scriptBrowser->SetDirectory(SCRIPTS_DIRECTORY);
-                    scriptBrowser->Open();
+                    if (!scriptBrowser)
+                    {
+                        addRegisteredComponent.template operator()<ScriptComponent>();
+                    }
+                    else
+                    {
+                        const auto selected = selection->Selected();
+                        const auto availability = inspectorRegistry.CanAdd(
+                            *sys->registry, editor::ComponentIdOf<ScriptComponent>(), selected);
+                        if (availability.allowed)
+                            openScriptBrowser();
+                        else if (!availability.blockedReason.empty())
+                            std::cout << "EditorScene: cannot add component: " << availability.blockedReason << '\n';
+                    }
                 }
                 else if (requestedComponent == editor::ComponentIdOf<Animation>())
                     addAnimationToSelection();
@@ -915,11 +919,6 @@ namespace sage
                     return;
                 }
 
-                if (componentId == editor::ComponentIdOf<ScriptComponent>())
-                {
-                    removeScriptFromSelection();
-                    return;
-                }
                 if (componentId == editor::ComponentIdOf<Animation>())
                 {
                     removeAnimationFromSelection();
@@ -1042,11 +1041,9 @@ namespace sage
     {
         if (!scriptBrowser) return;
         scriptBrowser->Display();
-        if (scriptBrowser->HasSelected())
-        {
-            attachScriptToSelection(scriptBrowser->GetSelected());
-            scriptBrowser->ClearSelected();
-        }
+        if (!scriptBrowser->HasSelected()) return;
+        attachScriptToSelection(scriptBrowser->GetSelected());
+        scriptBrowser->ClearSelected();
     }
 
     void EditorScene::drawShaderBrowser() const
@@ -1058,6 +1055,95 @@ namespace sage
             setShaderFileOnSelection(*pendingShaderFileSlot, shaderBrowser->GetSelected());
             shaderBrowser->ClearSelected();
             pendingShaderFileSlot.reset();
+        }
+    }
+
+    void EditorScene::openScriptBrowser() const
+    {
+        if (!scriptBrowser) return;
+        scriptBrowser->SetDirectory(csharpScripts.sourceDirectory);
+        scriptBrowser->Open();
+    }
+
+    std::optional<std::string> EditorScene::managedClassForSource(
+        const std::filesystem::path& sourceFile) const
+    {
+        if (!csharpScripts.IsConfigured() || sourceFile.extension() != ".cs") return std::nullopt;
+
+        std::error_code ec;
+        const auto root = std::filesystem::weakly_canonical(csharpScripts.sourceDirectory, ec);
+        if (ec) return std::nullopt;
+        const auto source = std::filesystem::weakly_canonical(sourceFile, ec);
+        if (ec) return std::nullopt;
+        auto relative = std::filesystem::relative(source, root, ec);
+        if (ec || relative.empty() || *relative.begin() == "..") return std::nullopt;
+
+        relative.replace_extension();
+        std::string className = csharpScripts.rootNamespace;
+        for (const auto& segment : relative)
+        {
+            className += ".";
+            className += segment.string();
+        }
+        return className;
+    }
+
+    std::filesystem::path EditorScene::sourceForManagedClass(const std::string& className) const
+    {
+        if (!csharpScripts.IsConfigured()) return {};
+        const std::string prefix = csharpScripts.rootNamespace + ".";
+        if (!className.starts_with(prefix)) return {};
+
+        std::string relative = className.substr(prefix.size());
+        std::ranges::replace(relative, '.', std::filesystem::path::preferred_separator);
+        auto path = csharpScripts.sourceDirectory / relative;
+        path += ".cs";
+        return path;
+    }
+
+    void EditorScene::attachScriptToSelection(const std::filesystem::path& sourceFile) const
+    {
+        const auto className = managedClassForSource(sourceFile);
+        const auto selected = selection->Selected();
+        if (!className || selected.empty())
+        {
+            std::cout << "EditorScene: could not derive a managed class from '" << sourceFile.string() << "'.\n";
+            return;
+        }
+
+        const bool adding = std::ranges::any_of(selected, [this](const entt::entity entity) {
+            return sys->registry->valid(entity) && !sys->registry->any_of<ScriptComponent>(entity);
+        });
+        history->Begin(adding ? editor::EditAction::AddScript : editor::EditAction::EditField, selected);
+        for (const auto entity : selected)
+        {
+            if (!sys->registry->valid(entity)) continue;
+            if (auto* script = sys->registry->try_get<ScriptComponent>(entity))
+                script->className = *className;
+            else
+                sys->registry->emplace<ScriptComponent>(entity, *className, true);
+        }
+        history->Commit();
+        refreshSceneWindows();
+    }
+
+    void EditorScene::openSelectedScript() const
+    {
+        for (const auto entity : selection->Selected())
+        {
+            if (!sys->registry->valid(entity)) continue;
+            const auto* script = sys->registry->try_get<ScriptComponent>(entity);
+            if (script == nullptr) continue;
+
+            const auto source = sourceForManagedClass(script->className);
+            std::error_code ec;
+            if (!source.empty() && std::filesystem::is_regular_file(source, ec))
+            {
+                OpenURL(source.string().c_str());
+                return;
+            }
+            std::cout << "EditorScene: no C# source file found for '" << script->className << "'.\n";
+            return;
         }
     }
 
@@ -1077,67 +1163,6 @@ namespace sage
                 shader->vertexShaderPath = path;
             else
                 shader->fragmentShaderPath = path;
-        }
-        history->Commit();
-        refreshSceneWindows();
-    }
-
-    void EditorScene::attachScriptToSelection(const std::filesystem::path& scriptFile) const
-    {
-        const auto selected = selection->Selected();
-        if (selected.empty()) return;
-
-        auto file = scriptFile;
-        if (file.extension() != ".lua") file += ".lua";
-
-        // Typed as a new filename in the dialog: write a template script there.
-        if (!std::filesystem::exists(file))
-        {
-            std::ofstream out{file};
-            out << "-- Lifecycle callbacks are optional globals; delete the ones you don't need.\n"
-                   "-- API: entity, sage.GetTransform([entity]), sage.GetCollideable([entity]),\n"
-                   "--      sage.GetAnimation([entity]), sage.Vec3(x,y,z), sage.Log(msg)\n"
-                   "\n"
-                   "function Awake()\n"
-                   "end\n"
-                   "\n"
-                   "function Start()\n"
-                   "end\n"
-                   "\n"
-                   "function Update(dt)\n"
-                   "end\n";
-        }
-
-        // ScriptSystem resolves paths against the working directory, so store the
-        // path relative to it (forward slashes); keep the absolute path only if
-        // the file lives outside the project tree.
-        const auto path = projectRelativePath(file);
-
-        history->Begin(editor::EditAction::AddScript, selected);
-        for (const auto entity : selected)
-        {
-            if (sys->registry->any_of<ScriptComponent>(entity))
-            {
-                sys->registry->get<ScriptComponent>(entity).scriptPath = path;
-            }
-            else
-            {
-                sys->registry->emplace<ScriptComponent>(entity, path);
-            }
-        }
-        history->Commit();
-        refreshSceneWindows();
-    }
-
-    void EditorScene::removeScriptFromSelection() const
-    {
-        const auto selected = selection->Selected();
-        if (selected.empty()) return;
-
-        history->Begin(editor::EditAction::RemoveScript, selected);
-        for (const auto entity : selected)
-        {
-            sys->registry->remove<ScriptComponent>(entity);
         }
         history->Commit();
         refreshSceneWindows();
@@ -2397,8 +2422,9 @@ namespace sage
         editor::EditorDockLayout* dockLayout,
         EditorSettings* _editorSettings,
         std::function<void()> _onEditorSettingsChanged,
-        std::function<void(editor::InspectorRegistry&)> registerGameComponents)
-        : sys(_sys)
+        std::function<void(editor::InspectorRegistry&)> registerGameComponents,
+        editor::CSharpScriptEditorConfig _csharpScripts)
+        : sys(_sys), csharpScripts(std::move(_csharpScripts))
     {
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
         if (registerGameComponents) registerGameComponents(inspectorRegistry);
@@ -2452,11 +2478,13 @@ namespace sage
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
 
-        scriptBrowser = std::make_unique<ImGui::FileBrowser>(
-            ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError |
-            ImGuiFileBrowserFlags_EnterNewFilename);
-        scriptBrowser->SetTitle("Select script");
-        scriptBrowser->SetTypeFilters({".lua"});
+        if (csharpScripts.IsConfigured())
+        {
+            scriptBrowser = std::make_unique<ImGui::FileBrowser>(
+                ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError);
+            scriptBrowser->SetTitle("Select C# script");
+            scriptBrowser->SetTypeFilters({".cs"});
+        }
 
         shaderBrowser = std::make_unique<ImGui::FileBrowser>(
             ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError);

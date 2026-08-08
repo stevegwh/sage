@@ -147,6 +147,7 @@ namespace sage
                 std::optional<std::string> selectedModelKey;
                 std::optional<MaterialSelection> selectedMaterial;
                 bool selectScriptFile = false;
+                bool openScriptFile = false;
                 std::optional<ShaderFileSlot> selectShaderFile;
                 // Component type whose "Remove Component" was clicked.
                 std::optional<EditorComponentId> removeComponent;

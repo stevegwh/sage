@@ -123,6 +123,7 @@ namespace sage::editor
                           .materialKey = std::move(inspectorResult.selectedMaterial->materialKey)}}
                     : std::nullopt,
             .selectScriptFile = inspectorResult.selectScriptFile,
+            .openScriptFile = inspectorResult.openScriptFile,
             .selectShaderFile = inspectorResult.selectShaderFile,
             .removeComponent = std::move(inspectorResult.removeComponent)};
     }
