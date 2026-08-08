@@ -97,6 +97,17 @@ namespace sage
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         rlImGuiSetup(true);
+
+#if !defined(__APPLE__)
+        // Keep Raylib's window and framebuffer coordinates identical. Its Linux
+        // borderless-window implementation uses monitor pixel dimensions, which
+        // makes the editor viewport overflow when FLAG_WINDOW_HIGHDPI is active.
+        // Scale ImGui itself instead so desktop DPI affects the editor UI only.
+        const Vector2 dpiScale = GetWindowScaleDPI();
+        const float editorUiScale = std::max(dpiScale.x, dpiScale.y);
+        ImGui::GetIO().FontGlobalScale = editorUiScale;
+        ImGui::GetStyle().ScaleAllSizes(editorUiScale);
+#endif
     }
 
     void EditorApplication::draw()

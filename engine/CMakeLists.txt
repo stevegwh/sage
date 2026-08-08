@@ -43,6 +43,24 @@ elseif (UNIX)
     else ()
         set(SAGE_DOTNET_RID linux-x64)
     endif ()
+
+    # Distribution-provided SDKs can use a distro-specific host-pack RID
+    # (for example, Fedora installs fedora.44-x64 rather than linux-x64).
+    # Ask the native dotnet installation which RID its packs use. Keep the
+    # portable RID above when cross-compiling, since dotnet reports the host.
+    if (NOT CMAKE_CROSSCOMPILING)
+        execute_process(
+                COMMAND "${CMAKE_COMMAND}" -E env DOTNET_CLI_UI_LANGUAGE=en
+                        "${SAGE_DOTNET_EXECUTABLE}" --info
+                OUTPUT_VARIABLE SAGE_DOTNET_INFO
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                RESULT_VARIABLE SAGE_DOTNET_INFO_RESULT)
+        if (SAGE_DOTNET_INFO_RESULT EQUAL 0
+                AND SAGE_DOTNET_INFO MATCHES "RID:[ \t]+([^\r\n]+)")
+            string(STRIP "${CMAKE_MATCH_1}" SAGE_DOTNET_INSTALLED_RID)
+            set(SAGE_DOTNET_RID "${SAGE_DOTNET_INSTALLED_RID}")
+        endif ()
+    endif ()
 else ()
     message(FATAL_ERROR "Sage C# scripting does not know the .NET runtime identifier for this platform.")
 endif ()

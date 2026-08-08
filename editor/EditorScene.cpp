@@ -46,6 +46,7 @@
 #include "rlImGui.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cctype>
 #include <format>
 #include <iostream>
@@ -54,6 +55,11 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#if defined(__linux__)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace sage
 {
@@ -88,6 +94,50 @@ namespace sage
             const auto relative = std::filesystem::relative(file, std::filesystem::current_path(), error);
             const bool outsideProject = error || relative.empty() || relative.native().starts_with("..");
             return outsideProject ? file.generic_string() : relative.generic_string();
+        }
+
+        void openFileWithDefaultApplication(const std::filesystem::path& file)
+        {
+#if defined(__linux__)
+            // Raylib's OpenURL() runs xdg-open synchronously through system().
+            // Launch VS Code independently when available and retain xdg-open as
+            // the fallback for other desktop associations. Prepare the path
+            // before forking; the child must not allocate from a multithreaded
+            // GUI process before exec.
+            const std::string path = file.string();
+            const pid_t child = fork();
+            if (child == 0)
+            {
+                const pid_t launcher = fork();
+                if (launcher == 0)
+                {
+                    setsid();
+                    execlp(
+                        "code", "code", "--reuse-window", path.c_str(), static_cast<char*>(nullptr));
+                    execlp("xdg-open", "xdg-open", path.c_str(), static_cast<char*>(nullptr));
+                    _exit(127);
+                }
+                _exit(launcher < 0 ? 127 : 0);
+            }
+
+            if (child < 0)
+            {
+                std::cerr << "EditorScene: could not start the default application for '"
+                          << file.string() << "'.\n";
+                return;
+            }
+
+            int status = 0;
+            while (waitpid(child, &status, 0) < 0 && errno == EINTR)
+            {
+            }
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+            {
+                std::cerr << "EditorScene: could not start xdg-open for '" << file.string() << "'.\n";
+            }
+#else
+            OpenURL(file.string().c_str());
+#endif
         }
 
     } // namespace
@@ -1139,7 +1189,7 @@ namespace sage
             std::error_code ec;
             if (!source.empty() && std::filesystem::is_regular_file(source, ec))
             {
-                OpenURL(source.string().c_str());
+                openFileWithDefaultApplication(source);
                 return;
             }
             std::cout << "EditorScene: no C# source file found for '" << script->className << "'.\n";
