@@ -4,5 +4,5 @@ namespace sage
 {
     class ScriptApiRegistry;
 
-    void RegisterEngineScriptApi(ScriptApiRegistry& registry);
+    void RegisterEngineScriptApi(ScriptApiRegistry& api);
 } // namespace sage

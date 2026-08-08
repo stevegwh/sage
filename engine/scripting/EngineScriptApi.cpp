@@ -7,10 +7,10 @@
 
 namespace sage
 {
-    void RegisterEngineScriptApi(ScriptApiRegistry& registry)
+    void RegisterEngineScriptApi(ScriptApiRegistry& api)
     {
-        registry.RegisterComponent<sgTransform>("Sage", "Transform");
-        registry.RegisterComponent<Collideable>("Sage", "Collideable");
-        registry.RegisterComponent<Animation>("Sage", "Animation");
+        api.RegisterComponent<sgTransform>("Sage", "Transform");
+        api.RegisterComponent<Collideable>("Sage", "Collideable");
+        api.RegisterComponent<Animation>("Sage", "Animation");
     }
 } // namespace sage

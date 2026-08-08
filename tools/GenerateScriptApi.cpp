@@ -12,9 +12,9 @@ int main(const int argc, const char* const* argv)
         std::cerr << "usage: sage_script_api_codegen <output.cs>\n";
         return EXIT_FAILURE;
     }
-    sage::ScriptApiRegistry registry;
-    sage::RegisterEngineScriptApi(registry);
-    if (registry.WriteCSharp(std::filesystem::path{argv[1]})) return EXIT_SUCCESS;
+    sage::ScriptApiRegistry api;
+    sage::RegisterEngineScriptApi(api);
+    if (api.WriteCSharp(std::filesystem::path{argv[1]})) return EXIT_SUCCESS;
     std::cerr << "Could not write the generated Sage C# component API.\n";
     return EXIT_FAILURE;
 }

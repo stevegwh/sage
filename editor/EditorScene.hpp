@@ -128,6 +128,7 @@ namespace sage
         void drawScriptBrowser() const;
         void drawShaderBrowser() const;
         void openScriptBrowser() const;
+        [[nodiscard]] bool createScriptSource(const std::filesystem::path& sourceFile) const;
         void attachScriptToSelection(const std::filesystem::path& sourceFile) const;
         void openSelectedScript() const;
         [[nodiscard]] std::optional<std::string> managedClassForSource(

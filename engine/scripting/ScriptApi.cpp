@@ -44,6 +44,11 @@ namespace sage
             return "result." + NativeTypeName(type);
         }
 
+        std::string DefaultExpression(const ScriptValueType type)
+        {
+            return type == ScriptValueType::Entity ? "global::Sage.Entity.None" : "default";
+        }
+
         std::string ArgumentExpression(
             const ScriptValueType type, const std::string& managedType, const std::string& name)
         {
@@ -124,7 +129,44 @@ namespace sage
             if (method.returnType == ScriptValueType::None)
                 output << ";\n";
             else
-                output << ") return default;\n            return "
+                output << ") return " << DefaultExpression(method.returnType) << ";\n            return "
+                       << ResultExpression(method.returnType, method.managedReturnType) << ";\n";
+            output << "        }\n\n";
+        }
+
+        void WriteSystemMethod(
+            std::ostringstream& output,
+            const ScriptApiRegistry::Method& method,
+            const ScriptApiRegistry::Id systemId)
+        {
+            output << "        private const ulong " << method.name << "_" << method.id << "Id = " << method.id
+                   << "UL;\n";
+            output << "        public static "
+                   << (method.returnType == ScriptValueType::None ? "bool" : method.managedReturnType) << " "
+                   << method.name << "(";
+            for (std::size_t index = 0; index < method.parameters.size(); ++index)
+            {
+                if (index != 0) output << ", ";
+                output << method.parameters[index].managedType << " " << method.parameters[index].name;
+            }
+            output << ")\n        {\n            ";
+            if (method.returnType == ScriptValueType::None)
+                output << "return ";
+            else
+                output << "if (!";
+            output << "global::Sage.NativeComponentApi.TryInvoke(global::Sage.Entity.None.Id, " << systemId
+                   << "UL, " << method.name << "_" << method.id << "Id, [";
+            for (std::size_t index = 0; index < method.parameters.size(); ++index)
+            {
+                if (index != 0) output << ", ";
+                const auto& parameter = method.parameters[index];
+                output << ArgumentExpression(parameter.type, parameter.managedType, parameter.name);
+            }
+            output << "], out var result)";
+            if (method.returnType == ScriptValueType::None)
+                output << ";\n";
+            else
+                output << ") return " << DefaultExpression(method.returnType) << ";\n            return "
                        << ResultExpression(method.returnType, method.managedReturnType) << ";\n";
             output << "        }\n\n";
         }
@@ -155,6 +197,13 @@ namespace sage
         const auto found = std::ranges::find_if(
             components, [componentId](const Component& value) { return value.id == componentId; });
         return found != components.end() ? &*found : nullptr;
+    }
+
+    const ScriptApiRegistry::System* ScriptApiRegistry::findSystem(const Id systemId) const
+    {
+        const auto found =
+            std::ranges::find_if(systems, [systemId](const System& value) { return value.id == systemId; });
+        return found != systems.end() ? &*found : nullptr;
     }
 
     bool ScriptApiRegistry::HasComponent(
@@ -202,10 +251,17 @@ namespace sage
         ScriptValue& result) const
     {
         const auto* component = findComponent(componentId);
-        if (component == nullptr) return false;
+        if (component != nullptr)
+        {
+            const auto method = std::ranges::find_if(
+                component->methods, [methodId](const Method& candidate) { return candidate.id == methodId; });
+            return method != component->methods.end() && method->invoke(registry, entity, arguments, result);
+        }
+        const auto* system = findSystem(componentId);
+        if (system == nullptr) return false;
         const auto method = std::ranges::find_if(
-            component->methods, [methodId](const Method& candidate) { return candidate.id == methodId; });
-        return method != component->methods.end() && method->invoke(registry, entity, arguments, result);
+            system->methods, [methodId](const Method& candidate) { return candidate.id == methodId; });
+        return method != system->methods.end() && method->invoke(registry, entity, arguments, result);
     }
 
     bool ScriptApiRegistry::WriteCSharp(const std::filesystem::path& destination) const
@@ -255,6 +311,19 @@ namespace sage
                       "            return component.Exists;\n"
                       "        }\n"
                       "    }\n"
+                      "}\n\n";
+        }
+
+
+        for (const auto& system : systems)
+        {
+            output << "namespace " << system.managedNamespace
+                   << "\n{\n"
+                      "    public static class "
+                   << system.managedName << "\n    {\n";
+            for (const auto& method : system.methods)
+                WriteSystemMethod(output, method, system.id);
+            output << "    }\n"
                       "}\n\n";
         }
 

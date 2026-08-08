@@ -50,6 +50,8 @@ namespace sage
     class ScriptApiRegistry;
     template <class T>
     class ScriptApiBinder;
+    template <class T>
+    class ScriptSystemApiBinder;
 
     namespace detail
     {
@@ -217,6 +219,14 @@ namespace sage
             std::vector<Method> methods;
         };
 
+        struct System
+        {
+            Id id = 0;
+            std::string managedNamespace;
+            std::string managedName;
+            std::vector<Method> methods;
+        };
+
         struct Enum
         {
             std::string managedNamespace;
@@ -226,11 +236,13 @@ namespace sage
 
       private:
         std::vector<Component> components;
+        std::vector<System> systems;
         std::vector<Enum> enums;
         std::unordered_map<std::type_index, std::string> managedEnumNames;
 
         [[nodiscard]] Component* findComponent(Id componentId);
         [[nodiscard]] const Component* findComponent(Id componentId) const;
+        [[nodiscard]] const System* findSystem(Id systemId) const;
 
         template <class T>
         [[nodiscard]] std::string managedTypeName() const
@@ -256,6 +268,8 @@ namespace sage
 
         template <class T>
         friend class ScriptApiBinder;
+        template <class T>
+        friend class ScriptSystemApiBinder;
 
       public:
         [[nodiscard]] static Id MakeId(std::string_view name);
@@ -279,6 +293,9 @@ namespace sage
 
         template <class T>
         void RegisterComponent(std::string managedNamespace, std::string managedName);
+
+        template <class T>
+        void RegisterSystem(std::string managedNamespace, std::string managedName);
 
         [[nodiscard]] bool HasComponent(const entt::registry& registry, entt::entity entity, Id componentId) const;
         [[nodiscard]] bool GetProperty(
@@ -304,9 +321,99 @@ namespace sage
     };
 
     template <class T>
+    class ScriptSystemApiBinder
+    {
+        ScriptApiRegistry& api;
+        ScriptApiRegistry::System& system;
+
+      public:
+        ScriptSystemApiBinder(ScriptApiRegistry& owner, ScriptApiRegistry::System& definition)
+            : api(owner), system(definition)
+        {
+        }
+
+        template <class Result, class... Args>
+        void method(
+            std::string name,
+            Result (*method)(entt::registry&, Args...),
+            const std::initializer_list<std::string_view> parameterNames = {})
+        {
+            using Return = detail::Plain<Result>;
+            using Arguments = std::tuple<detail::Plain<Args>...>;
+            static_assert(std::is_void_v<Return> || detail::IsScriptValue<Return>);
+            static_assert((detail::IsScriptValue<Args> && ...));
+
+            std::vector<std::string> names;
+            names.reserve(parameterNames.size());
+            for (const auto parameterName : parameterNames)
+                names.emplace_back(parameterName);
+
+            std::vector<ScriptApiRegistry::Parameter> parameters;
+            parameters.reserve(sizeof...(Args));
+            [&]<std::size_t... Index>(std::index_sequence<Index...>) {
+                (parameters.push_back(
+                     {.name = Index < names.size() ? names[Index] : "arg" + std::to_string(Index),
+                      .type = detail::ScriptValueTypeOf<std::tuple_element_t<Index, Arguments>>(),
+                      .managedType = api.template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
+                 ...);
+            }(std::index_sequence_for<Args...>{});
+
+            std::string signature = system.managedNamespace + "." + system.managedName + "." + name + "(";
+            for (std::size_t index = 0; index < parameters.size(); ++index)
+            {
+                if (index != 0) signature += ",";
+                signature += parameters[index].managedType;
+            }
+            signature += ")";
+
+            constexpr auto returnType = [] {
+                if constexpr (std::is_void_v<Return>)
+                    return ScriptValueType::None;
+                else
+                    return detail::ScriptValueTypeOf<Return>();
+            }();
+            const std::string managedReturnType = [&] {
+                if constexpr (std::is_void_v<Return>)
+                    return std::string{"void"};
+                else
+                    return api.template managedTypeName<Return>();
+            }();
+
+            system.methods.push_back(
+                {.id = ScriptApiRegistry::MakeId(signature),
+                 .name = std::move(name),
+                 .returnType = returnType,
+                 .managedReturnType = managedReturnType,
+                 .parameters = std::move(parameters),
+                 .invoke = [method](
+                               entt::registry& source,
+                               entt::entity,
+                               const std::span<const ScriptValue> input,
+                               ScriptValue& output) {
+                     if (input.size() != sizeof...(Args)) return false;
+                     Arguments arguments{};
+                     if (!detail::DecodeArguments(input, arguments, std::index_sequence_for<Args...>{}))
+                         return false;
+                     if constexpr (std::is_void_v<Return>)
+                     {
+                         std::apply([&](auto&... argument) { method(source, argument...); }, arguments);
+                         output.type = ScriptValueType::None;
+                         return true;
+                     }
+                     else
+                     {
+                         decltype(auto) result =
+                             std::apply([&](auto&... argument) { return method(source, argument...); }, arguments);
+                         return detail::EncodeScriptValue(output, result);
+                     }
+                 }});
+        }
+    };
+
+    template <class T>
     class ScriptApiBinder
     {
-        ScriptApiRegistry& registry;
+        ScriptApiRegistry& api;
         ScriptApiRegistry::Component& component;
 
         template <class Value, class Getter, class Setter>
@@ -318,7 +425,7 @@ namespace sage
                 {.id = ScriptApiRegistry::MakeId(qualifiedName),
                  .name = std::move(name),
                  .type = detail::ScriptValueTypeOf<Value>(),
-                 .managedType = registry.template managedTypeName<Value>(),
+                 .managedType = api.template managedTypeName<Value>(),
                  .writable = writable,
                  .get =
                      [getter = std::move(getter)](
@@ -361,7 +468,7 @@ namespace sage
             (parameters.push_back(
                  {.name = Index < names.size() ? names[Index] : "arg" + std::to_string(Index),
                   .type = detail::ScriptValueTypeOf<std::tuple_element_t<Index, Arguments>>(),
-                  .managedType = registry.template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
+                  .managedType = api.template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
              ...);
 
             std::string signature = component.managedNamespace + "." + component.managedName + "." + name + "(";
@@ -382,7 +489,7 @@ namespace sage
                 if constexpr (std::is_void_v<Return>)
                     return std::string{"void"};
                 else
-                    return registry.template managedTypeName<Return>();
+                    return api.template managedTypeName<Return>();
             }();
 
             component.methods.push_back(
@@ -419,7 +526,7 @@ namespace sage
 
       public:
         ScriptApiBinder(ScriptApiRegistry& owner, ScriptApiRegistry::Component& definition)
-            : registry(owner), component(definition)
+            : api(owner), component(definition)
         {
         }
 
@@ -490,6 +597,18 @@ namespace sage
                  return source.valid(entity) && source.template all_of<T>(entity);
              }});
         ScriptApiBinder<T> binder{*this, components.back()};
+        T::define_script_api(binder);
+    }
+
+    template <class T>
+    void ScriptApiRegistry::RegisterSystem(std::string managedNamespace, std::string managedName)
+    {
+        const std::string qualifiedName = managedNamespace + "." + managedName;
+        systems.push_back(
+            {.id = MakeId(qualifiedName),
+             .managedNamespace = std::move(managedNamespace),
+             .managedName = std::move(managedName)});
+        ScriptSystemApiBinder<T> binder{*this, systems.back()};
         T::define_script_api(binder);
     }
 } // namespace sage

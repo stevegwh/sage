@@ -49,6 +49,7 @@
 #include <cerrno>
 #include <cctype>
 #include <format>
+#include <fstream>
 #include <iostream>
 #include <optional>
 #include <system_error>
@@ -78,6 +79,25 @@ namespace sage
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
         constexpr float DEFAULT_MAP_BASE_HALF_HEIGHT = 0.02f;
         constexpr float DEFAULT_LIGHT_HEIGHT_OFFSET = 6.0f;
+
+        std::string ToPascalCase(const std::string& value)
+        {
+            std::string result;
+            result.reserve(value.size());
+            bool capitalizeNext = true;
+            for (const unsigned char character : value)
+            {
+                if (!std::isalnum(character))
+                {
+                    capitalizeNext = true;
+                    continue;
+                }
+                result += capitalizeNext ? static_cast<char>(std::toupper(character))
+                                         : static_cast<char>(character);
+                capitalizeNext = false;
+            }
+            return result;
+        }
         constexpr float DEFAULT_COMPONENT_LIGHT_BRIGHTNESS = 3.0f;
         constexpr Color DEFAULT_COMPONENT_LIGHT_COLOR = {255, 244, 214, 255};
         constexpr Color SPAWN_POINT_MARKER_COLOR = {80, 180, 255, 255};
@@ -1092,7 +1112,15 @@ namespace sage
         if (!scriptBrowser) return;
         scriptBrowser->Display();
         if (!scriptBrowser->HasSelected()) return;
-        attachScriptToSelection(scriptBrowser->GetSelected());
+        auto sourceFile = scriptBrowser->GetSelected();
+        if (sourceFile.extension().empty()) sourceFile += ".cs";
+        std::error_code ec;
+        if (!std::filesystem::exists(sourceFile, ec) && !ec)
+        {
+            const auto typeName = ToPascalCase(sourceFile.stem().string());
+            sourceFile.replace_filename(typeName + ".cs");
+        }
+        if (createScriptSource(sourceFile)) attachScriptToSelection(sourceFile);
         scriptBrowser->ClearSelected();
     }
 
@@ -1149,6 +1177,60 @@ namespace sage
         auto path = csharpScripts.sourceDirectory / relative;
         path += ".cs";
         return path;
+    }
+
+    bool EditorScene::createScriptSource(const std::filesystem::path& sourceFile) const
+    {
+        std::error_code ec;
+        if (std::filesystem::exists(sourceFile, ec))
+            return !ec && std::filesystem::is_regular_file(sourceFile, ec);
+        if (ec || sourceFile.extension() != ".cs") return false;
+
+        const auto className = managedClassForSource(sourceFile);
+        if (!className) return false;
+
+        const std::string typeName = sourceFile.stem().string();
+        const auto isIdentifierStart = [](const unsigned char value) {
+            return std::isalpha(value) || value == '_';
+        };
+        const auto isIdentifierPart = [](const unsigned char value) {
+            return std::isalnum(value) || value == '_';
+        };
+        if (typeName.empty() || !isIdentifierStart(typeName.front()) ||
+            !std::ranges::all_of(typeName.substr(1), isIdentifierPart))
+        {
+            std::cout << "EditorScene: C# script name must be a valid identifier: '"
+                      << typeName << "'.\n";
+            return false;
+        }
+
+        const auto separator = className->rfind('.');
+        if (separator == std::string::npos) return false;
+        const std::string scriptNamespace = className->substr(0, separator);
+
+        std::ofstream output(sourceFile, std::ios::out | std::ios::trunc);
+        if (!output)
+        {
+            std::cout << "EditorScene: could not create C# script '" << sourceFile.string() << "'.\n";
+            return false;
+        }
+        output << "using Sage;\n\n"
+               << "namespace " << scriptNamespace << ";\n\n"
+               << "public sealed class " << typeName << " : Script\n"
+               << "{\n"
+               << "    protected override void Start()\n"
+               << "    {\n"
+               << "    }\n\n"
+               << "    protected override void Update(float deltaTime)\n"
+               << "    {\n"
+               << "    }\n"
+               << "}\n";
+        if (output) return true;
+
+        output.close();
+        std::filesystem::remove(sourceFile, ec);
+        std::cout << "EditorScene: could not write C# script '" << sourceFile.string() << "'.\n";
+        return false;
     }
 
     void EditorScene::attachScriptToSelection(const std::filesystem::path& sourceFile) const
@@ -2531,8 +2613,9 @@ namespace sage
         if (csharpScripts.IsConfigured())
         {
             scriptBrowser = std::make_unique<ImGui::FileBrowser>(
-                ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError);
-            scriptBrowser->SetTitle("Select C# script");
+                ImGuiFileBrowserFlags_CloseOnEsc | ImGuiFileBrowserFlags_SkipItemsCausingError |
+                ImGuiFileBrowserFlags_EnterNewFilename);
+            scriptBrowser->SetTitle("Select or create C# script");
             scriptBrowser->SetTypeFilters({".cs"});
         }
 
