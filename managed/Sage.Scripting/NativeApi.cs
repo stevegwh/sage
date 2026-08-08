@@ -10,19 +10,11 @@ internal enum LogLevel
     Error
 }
 
-public enum ScriptEvent
+internal enum TriggerEvent
 {
-    TriggerEnter,
-    TriggerStay,
-    TriggerExit,
-    MovementStarted,
-    DestinationReached,
-    DestinationUnreachable,
-    MovementCancelled,
-    PathChanged,
-    AnimationStarted,
-    AnimationEnded,
-    AnimationUpdated
+    Enter,
+    Stay,
+    Exit
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -38,7 +30,8 @@ public unsafe struct NativeApiTable
     public delegate* unmanaged[Cdecl]<nint, uint, byte> HasRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, byte> TryPathfind;
     public delegate* unmanaged[Cdecl]<nint, byte*, float, float, float, float, float, float, byte, uint*, byte> SpawnFlatpack;
-    public delegate* unmanaged[Cdecl]<nint, uint, uint, int, byte> SubscribeEvent;
+    public delegate* unmanaged[Cdecl]<nint, uint, uint, ulong, ulong, ulong, byte> SubscribeComponentEvent;
+    public delegate* unmanaged[Cdecl]<nint, uint, ulong, void> UnSubscribeEvent;
     public delegate* unmanaged[Cdecl]<nint, uint, ulong, byte> HasComponent;
     public delegate* unmanaged[Cdecl]<nint, uint, ulong, ulong, NativeScriptValue*, byte> GetComponentProperty;
     public delegate* unmanaged[Cdecl]<nint, uint, ulong, ulong, NativeScriptValue*, byte> SetComponentProperty;
@@ -53,7 +46,7 @@ public static class NativeExtension
 
 internal static unsafe class NativeApi
 {
-    internal const uint CurrentVersion = 3;
+    internal const uint CurrentVersion = 4;
 
     private static NativeApiTable api;
 
@@ -117,8 +110,15 @@ internal static unsafe class NativeApi
         }
     }
 
-    internal static bool SubscribeEvent(uint listener, Entity source, ScriptEvent eventType) =>
-        api.SubscribeEvent != null && api.SubscribeEvent(api.Context, listener, source.Id, (int)eventType) != 0;
+    internal static bool SubscribeComponentEvent(
+        uint listener, uint source, ulong componentId, ulong eventId, ulong subscriptionId) =>
+        api.SubscribeComponentEvent != null &&
+        api.SubscribeComponentEvent(api.Context, listener, source, componentId, eventId, subscriptionId) != 0;
+
+    internal static void UnSubscribeEvent(uint listener, ulong subscriptionId)
+    {
+        if (api.UnSubscribeEvent != null) api.UnSubscribeEvent(api.Context, listener, subscriptionId);
+    }
 
     internal static bool HasComponent(uint entity, ulong componentId) =>
         api.HasComponent != null && api.HasComponent(api.Context, entity, componentId) != 0;

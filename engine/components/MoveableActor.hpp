@@ -73,6 +73,16 @@ namespace sage
             return path.back();
         }
 
+        template <class Api>
+        static void define_script_api(Api& api)
+        {
+            api.event("OnMovementStarted", &MoveableActor::onStartMovement);
+            api.event("OnDestinationReached", &MoveableActor::onDestinationReached);
+            api.event("OnDestinationUnreachable", &MoveableActor::onDestinationUnreachable);
+            api.event("OnPathChanged", &MoveableActor::onPathChanged);
+            api.event("OnMovementCancelled", &MoveableActor::onMovementCancel);
+        }
+
         std::vector<GridSquare> debugRay;
     };
 } // namespace sage

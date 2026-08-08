@@ -126,6 +126,9 @@ namespace sage
         template <class Api>
         static void define_script_api(Api& api)
         {
+            api.event("OnAnimationStarted", &Animation::onAnimationStart);
+            api.event("OnAnimationEnded", &Animation::onAnimationEnd);
+            api.event("OnAnimationUpdated", &Animation::onAnimationUpdated);
             api.method(
                 "Play",
                 static_cast<bool (Animation::*)(std::string_view)>(&Animation::ChangeAnimationByName),

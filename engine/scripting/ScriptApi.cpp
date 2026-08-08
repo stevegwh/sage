@@ -134,6 +134,41 @@ namespace sage
             output << "        }\n\n";
         }
 
+        std::string EventValueExpression(
+            const ScriptValueType type, const std::string& managedType, const std::string& value)
+        {
+            if (IsEnumType(managedType, type)) return "(" + managedType + ")" + value + ".Int32";
+            if (type == ScriptValueType::String) return value + ".String ?? string.Empty";
+            return value + "." + NativeTypeName(type);
+        }
+
+        void WriteEvent(std::ostringstream& output, const ScriptApiRegistry::EventDefinition& event)
+        {
+            output << "        private const ulong " << event.name << "EventId = " << event.id << "UL;\n";
+            output << "        public global::Sage.Event";
+            if (!event.parameters.empty())
+            {
+                output << "<";
+                for (std::size_t index = 0; index < event.parameters.size(); ++index)
+                {
+                    if (index != 0) output << ", ";
+                    output << event.parameters[index].managedType;
+                }
+                output << ">";
+            }
+            output << " " << event.name
+                   << " => global::Sage.NativeComponentApi.CreateEvent(Entity.Id, ComponentId, " << event.name
+                   << "EventId";
+            for (std::size_t index = 0; index < event.parameters.size(); ++index)
+            {
+                const auto& parameter = event.parameters[index];
+                const auto value = "value" + std::to_string(index);
+                output << ", static " << value << " => "
+                       << EventValueExpression(parameter.type, parameter.managedType, value);
+            }
+            output << ");\n\n";
+        }
+
         void WriteSystemMethod(
             std::ostringstream& output,
             const ScriptApiRegistry::Method& method,
@@ -264,6 +299,34 @@ namespace sage
         return method != system->methods.end() && method->invoke(registry, entity, arguments, result);
     }
 
+    bool ScriptApiRegistry::SubscribeEvent(
+        entt::registry& registry,
+        const entt::entity entity,
+        const Id componentId,
+        const Id eventId,
+        EventCallback callback,
+        Subscription& subscription) const
+    {
+        const auto* component = findComponent(componentId);
+        if (component == nullptr) return false;
+        const auto event = std::ranges::find_if(
+            component->events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
+        return event != component->events.end() &&
+               event->subscribe(registry, entity, std::move(callback), subscription);
+    }
+
+    std::vector<std::unique_ptr<ScriptApiRegistry::ComponentObserver>> ScriptApiRegistry::
+        ObserveComponentDestruction(entt::registry& registry, ComponentDestroyed callback) const
+    {
+        std::vector<std::unique_ptr<ComponentObserver>> result;
+        for (const auto& component : components)
+        {
+            if (!component.events.empty())
+                result.push_back(component.observeDestroyed(registry, component.id, callback));
+        }
+        return result;
+    }
+
     bool ScriptApiRegistry::WriteCSharp(const std::filesystem::path& destination) const
     {
         std::ostringstream output;
@@ -285,11 +348,15 @@ namespace sage
             output << "namespace " << component.managedNamespace
                    << "\n{\n"
                       "    public readonly struct "
+                   << component.managedName << "(global::Sage.Entity entity) : global::Sage.IComponent<"
                    << component.managedName
-                   << "(global::Sage.Entity entity)\n    {\n"
+                   << ">\n    {\n"
                       "        private const ulong ComponentId = "
                    << component.id
                    << "UL;\n"
+                      "        static "
+                   << component.managedName << " global::Sage.IComponent<" << component.managedName
+                   << ">.Create(global::Sage.Entity entity) => new(entity);\n"
                       "        public global::Sage.Entity Entity { get; } = entity;\n"
                       "        public bool Exists => global::Sage.NativeComponentApi.HasComponent(Entity.Id, "
                       "ComponentId);\n\n";
@@ -297,23 +364,11 @@ namespace sage
                 WriteProperty(output, property);
             for (const auto& method : component.methods)
                 WriteMethod(output, method);
-            output << "    }\n\n"
-                      "    public static class "
-                   << component.managedName
-                   << "EntityExtensions\n    {\n"
-                      "        public static bool TryGet"
-                   << component.managedName << "(this global::Sage.Entity entity, out " << component.managedName
-                   << " component)\n"
-                      "        {\n"
-                      "            component = new "
-                   << component.managedName
-                   << "(entity);\n"
-                      "            return component.Exists;\n"
-                      "        }\n"
-                      "    }\n"
+            for (const auto& event : component.events)
+                WriteEvent(output, event);
+            output << "    }\n"
                       "}\n\n";
         }
-
 
         for (const auto& system : systems)
         {

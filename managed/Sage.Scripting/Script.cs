@@ -5,8 +5,7 @@ public abstract class Script
 {
     public Entity Entity { get; internal set; }
 
-    protected bool ListenTo(Entity source, ScriptEvent eventType) =>
-        NativeApi.SubscribeEvent(Entity.Id, source, eventType);
+    protected T? GetComponent<T>() where T : struct, IComponent<T> => Entity.GetComponent<T>();
 
     protected virtual void Awake() { }
     protected virtual void OnEnable() { }
@@ -17,15 +16,6 @@ public abstract class Script
     protected virtual void OnTriggerEnter(Entity other) { }
     protected virtual void OnTriggerStay(Entity other) { }
     protected virtual void OnTriggerExit(Entity other) { }
-    protected virtual void OnMovementStarted() { }
-    protected virtual void OnDestinationReached() { }
-    protected virtual void OnDestinationUnreachable(Vector3 destination) { }
-    protected virtual void OnMovementCancelled() { }
-    protected virtual void OnPathChanged() { }
-    protected virtual void OnAnimationStarted() { }
-    protected virtual void OnAnimationEnded() { }
-    protected virtual void OnAnimationUpdated() { }
-
     internal void InvokeAwake() => Awake();
     internal void InvokeOnEnable() => OnEnable();
     internal void InvokeStart() => Start();
@@ -33,21 +23,10 @@ public abstract class Script
     internal void InvokeOnDisable() => OnDisable();
     internal void InvokeOnDestroy() => OnDestroy();
 
-    internal void InvokeEvent(ScriptEvent eventType, Entity other, Vector3 value)
+    internal void InvokeTrigger(TriggerEvent eventType, Entity other)
     {
-        switch (eventType)
-        {
-            case ScriptEvent.TriggerEnter: OnTriggerEnter(other); break;
-            case ScriptEvent.TriggerStay: OnTriggerStay(other); break;
-            case ScriptEvent.TriggerExit: OnTriggerExit(other); break;
-            case ScriptEvent.MovementStarted: OnMovementStarted(); break;
-            case ScriptEvent.DestinationReached: OnDestinationReached(); break;
-            case ScriptEvent.DestinationUnreachable: OnDestinationUnreachable(value); break;
-            case ScriptEvent.MovementCancelled: OnMovementCancelled(); break;
-            case ScriptEvent.PathChanged: OnPathChanged(); break;
-            case ScriptEvent.AnimationStarted: OnAnimationStarted(); break;
-            case ScriptEvent.AnimationEnded: OnAnimationEnded(); break;
-            case ScriptEvent.AnimationUpdated: OnAnimationUpdated(); break;
-        }
+        if (eventType == TriggerEvent.Enter) OnTriggerEnter(other);
+        if (eventType == TriggerEvent.Stay) OnTriggerStay(other);
+        if (eventType == TriggerEvent.Exit) OnTriggerExit(other);
     }
 }

@@ -1,7 +1,6 @@
 #include "CSharpScriptSystem.hpp"
 
 #include "engine/Archetypes.hpp"
-#include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/MoveableActor.hpp"
@@ -50,19 +49,11 @@ namespace sage
 {
     namespace
     {
-        enum class ScriptEvent : int
+        enum class TriggerEvent : int
         {
-            TriggerEnter,
-            TriggerStay,
-            TriggerExit,
-            MovementStarted,
-            DestinationReached,
-            DestinationUnreachable,
-            MovementCancelled,
-            PathChanged,
-            AnimationStarted,
-            AnimationEnded,
-            AnimationUpdated
+            Enter,
+            Stay,
+            Exit
         };
 
         using HostString = std::basic_string<char_t>;
@@ -75,7 +66,9 @@ namespace sage
             void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t);
         using SpawnFlatpackFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, const char*, float, float, float, float, float, float, std::uint8_t, std::uint32_t*);
-        using SubscribeEventFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t, std::uint32_t, int);
+        using SubscribeComponentEventFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
+            void*, std::uint32_t, std::uint32_t, ScriptApiRegistry::Id, ScriptApiRegistry::Id, std::uint64_t);
+        using UnSubscribeEventFunction = void(SAGE_MANAGED_CALL*)(void*, std::uint32_t, std::uint64_t);
         using HasComponentFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t, ScriptApiRegistry::Id);
         using GetComponentPropertyFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, std::uint32_t, ScriptApiRegistry::Id, ScriptApiRegistry::Id, ScriptValue*);
@@ -92,7 +85,7 @@ namespace sage
 
         struct NativeApiTable
         {
-            std::uint32_t version = 3;
+            std::uint32_t version = 4;
             std::uint32_t size = 0;
             void* context = nullptr;
             LogFunction log = nullptr;
@@ -102,7 +95,8 @@ namespace sage
             HasRouteFunction hasRoute = nullptr;
             TryPathfindFunction tryPathfind = nullptr;
             SpawnFlatpackFunction spawnFlatpack = nullptr;
-            SubscribeEventFunction subscribeEvent = nullptr;
+            SubscribeComponentEventFunction subscribeComponentEvent = nullptr;
+            UnSubscribeEventFunction unSubscribeEvent = nullptr;
             HasComponentFunction hasComponent = nullptr;
             GetComponentPropertyFunction getComponentProperty = nullptr;
             SetComponentPropertyFunction setComponentProperty = nullptr;
@@ -119,8 +113,9 @@ namespace sage
         using StartSessionFunction = int(SAGE_MANAGED_CALL*)(const StartSessionArgs*);
         using CreateScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, const char*);
         using UpdateScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, float, std::uint8_t);
+        using DispatchTriggerFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, int, std::uint32_t);
         using DispatchEventFunction =
-            int(SAGE_MANAGED_CALL*)(std::uint32_t, int, std::uint32_t, float, float, float);
+            int(SAGE_MANAGED_CALL*)(std::uint32_t, std::uint64_t, const ScriptValue*, std::uint32_t);
         using DestroyScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t);
         using StopSessionFunction = int(SAGE_MANAGED_CALL*)();
 
@@ -165,6 +160,7 @@ namespace sage
             StartSessionFunction startSession = nullptr;
             CreateScriptFunction createScript = nullptr;
             UpdateScriptFunction updateScript = nullptr;
+            DispatchTriggerFunction dispatchTrigger = nullptr;
             DispatchEventFunction dispatchEvent = nullptr;
             DestroyScriptFunction destroyScript = nullptr;
             StopSessionFunction stopSession = nullptr;
@@ -235,6 +231,7 @@ namespace sage
                 if (!loadEntryPoint(SAGE_HOST_TEXT("StartSession"), reinterpret_cast<void**>(&startSession)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("CreateScript"), reinterpret_cast<void**>(&createScript)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("UpdateScript"), reinterpret_cast<void**>(&updateScript)) ||
+                    !loadEntryPoint(SAGE_HOST_TEXT("DispatchTrigger"), reinterpret_cast<void**>(&dispatchTrigger)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("DispatchEvent"), reinterpret_cast<void**>(&dispatchEvent)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("DestroyScript"), reinterpret_cast<void**>(&destroyScript)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("StopSession"), reinterpret_cast<void**>(&stopSession)))
@@ -257,14 +254,19 @@ namespace sage
             {
                 return ready ? updateScript(entity, dt, enabled ? 1 : 0) : -1;
             }
+            [[nodiscard]] int DispatchTrigger(
+                const std::uint32_t listener,
+                const TriggerEvent type,
+                const std::uint32_t other) const
+            {
+                return ready ? dispatchTrigger(listener, static_cast<int>(type), other) : -1;
+            }
             [[nodiscard]] int DispatchEvent(
                 const std::uint32_t listener,
-                const ScriptEvent type,
-                const std::uint32_t other,
-                const Vector3 value) const
+                const std::uint64_t subscriptionId,
+                const std::span<const ScriptValue> values) const
             {
-                return ready ? dispatchEvent(listener, static_cast<int>(type), other, value.x, value.y, value.z)
-                             : -1;
+                return ready ? dispatchEvent(listener, subscriptionId, values.data(), values.size()) : -1;
             }
             void DestroyScript(const std::uint32_t entity) const
             {
@@ -285,11 +287,19 @@ namespace sage
 
     struct CSharpScriptSystem::Impl
     {
+        struct ComponentEventSubscription
+        {
+            entt::entity source = entt::null;
+            ScriptApiRegistry::Id componentId = 0;
+            Subscription subscription;
+        };
+
         struct Instance
         {
             std::string className;
             bool failed = false;
-            std::unordered_map<std::uint64_t, Subscription> subscriptions;
+            std::vector<Subscription> triggerSubscriptions;
+            std::unordered_map<std::uint64_t, ComponentEventSubscription> eventSubscriptions;
         };
 
         entt::registry* registry;
@@ -297,12 +307,8 @@ namespace sage
         ManagedScriptingConfig config;
         ScriptApiRegistry scriptApi;
         std::unordered_map<entt::entity, Instance> instances;
+        std::vector<std::unique_ptr<ScriptApiRegistry::ComponentObserver>> componentObservers;
         bool available = false;
-
-        static std::uint64_t SubscriptionKey(const entt::entity source, const ScriptEvent type)
-        {
-            return (static_cast<std::uint64_t>(entt::to_integral(source)) << 8) | static_cast<std::uint64_t>(type);
-        }
 
         static void SAGE_MANAGED_CALL Log(void*, const int level, const char* message)
         {
@@ -401,96 +407,87 @@ namespace sage
             return 1;
         }
 
-        void dispatch(
+        void dispatchTrigger(
             const entt::entity listener,
-            const ScriptEvent type,
-            const entt::entity other = entt::null,
-            const Vector3 value = {})
+            const TriggerEvent type,
+            const entt::entity other)
         {
             const auto found = instances.find(listener);
             if (found == instances.end() || found->second.failed) return;
-            if (GetManagedHost().DispatchEvent(
-                    entt::to_integral(listener), type, entt::to_integral(other), value) != 0)
+            if (GetManagedHost().DispatchTrigger(
+                    entt::to_integral(listener), type, entt::to_integral(other)) != 0)
                 found->second.failed = true;
         }
 
-        bool subscribe(const entt::entity listener, const entt::entity source, const ScriptEvent type)
+        void subscribeToTriggers(const entt::entity listener)
         {
             auto instance = instances.find(listener);
-            if (systems == nullptr || instance == instances.end() || !registry->valid(source)) return false;
-            const auto key = SubscriptionKey(source, type);
-            if (instance->second.subscriptions.contains(key)) return true;
-
-            Subscription subscription;
-            switch (type)
-            {
-            case ScriptEvent::TriggerEnter:
-                subscription = systems->collisionSystem->onTriggerEnter.Subscribe(
-                    [this, listener, source](const entt::entity trigger, const entt::entity other) {
-                        if (trigger == source) dispatch(listener, ScriptEvent::TriggerEnter, other);
-                    });
-                break;
-            case ScriptEvent::TriggerStay:
-                subscription = systems->collisionSystem->onTriggerStay.Subscribe(
-                    [this, listener, source](const entt::entity trigger, const entt::entity other) {
-                        if (trigger == source) dispatch(listener, ScriptEvent::TriggerStay, other);
-                    });
-                break;
-            case ScriptEvent::TriggerExit:
-                subscription = systems->collisionSystem->onTriggerExit.Subscribe(
-                    [this, listener, source](const entt::entity trigger, const entt::entity other) {
-                        if (trigger == source) dispatch(listener, ScriptEvent::TriggerExit, other);
-                    });
-                break;
-            case ScriptEvent::MovementStarted:
-            case ScriptEvent::DestinationReached:
-            case ScriptEvent::DestinationUnreachable:
-            case ScriptEvent::MovementCancelled:
-            case ScriptEvent::PathChanged: {
-                auto* moveable = registry->try_get<MoveableActor>(source);
-                if (moveable == nullptr) return false;
-                if (type == ScriptEvent::DestinationUnreachable)
-                    subscription = moveable->onDestinationUnreachable.Subscribe(
-                        [this, listener](entt::entity, const Vector3 destination) {
-                            dispatch(listener, ScriptEvent::DestinationUnreachable, entt::null, destination);
-                        });
-                else
-                {
-                    Event<entt::entity>* event = nullptr;
-                    if (type == ScriptEvent::MovementStarted) event = &moveable->onStartMovement;
-                    if (type == ScriptEvent::DestinationReached) event = &moveable->onDestinationReached;
-                    if (type == ScriptEvent::MovementCancelled) event = &moveable->onMovementCancel;
-                    if (type == ScriptEvent::PathChanged) event = &moveable->onPathChanged;
-                    subscription =
-                        event->Subscribe([this, listener, type](entt::entity) { dispatch(listener, type); });
-                }
-                break;
-            }
-            case ScriptEvent::AnimationStarted:
-            case ScriptEvent::AnimationEnded:
-            case ScriptEvent::AnimationUpdated: {
-                auto* animation = registry->try_get<Animation>(source);
-                if (animation == nullptr) return false;
-                Event<entt::entity>* event =
-                    type == ScriptEvent::AnimationStarted
-                        ? &animation->onAnimationStart
-                        : (type == ScriptEvent::AnimationEnded ? &animation->onAnimationEnd
-                                                               : &animation->onAnimationUpdated);
-                subscription =
-                    event->Subscribe([this, listener, type](entt::entity) { dispatch(listener, type); });
-                break;
-            }
-            }
-            instance->second.subscriptions.emplace(key, subscription);
-            return true;
+            if (instance == instances.end() || systems == nullptr || systems->collisionSystem == nullptr) return;
+            instance->second.triggerSubscriptions.push_back(
+                systems->collisionSystem->onTriggerEnter.Subscribe(
+                    [this, listener](const entt::entity trigger, const entt::entity other) {
+                        if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Enter, other);
+                    }));
+            instance->second.triggerSubscriptions.push_back(
+                systems->collisionSystem->onTriggerStay.Subscribe(
+                    [this, listener](const entt::entity trigger, const entt::entity other) {
+                        if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Stay, other);
+                    }));
+            instance->second.triggerSubscriptions.push_back(
+                systems->collisionSystem->onTriggerExit.Subscribe(
+                    [this, listener](const entt::entity trigger, const entt::entity other) {
+                        if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Exit, other);
+                    }));
         }
 
         static std::uint8_t SAGE_MANAGED_CALL
-        SubscribeEvent(void* context, const std::uint32_t listener, const std::uint32_t source, const int type)
+        SubscribeComponentEvent(
+            void* context,
+            const std::uint32_t listenerValue,
+            const std::uint32_t sourceValue,
+            const ScriptApiRegistry::Id componentId,
+            const ScriptApiRegistry::Id eventId,
+            const std::uint64_t subscriptionId)
         {
             auto& self = *static_cast<Impl*>(context);
-            if (type < 0 || type > static_cast<int>(ScriptEvent::AnimationUpdated)) return 0;
-            return self.subscribe(ToEntity(listener), ToEntity(source), static_cast<ScriptEvent>(type)) ? 1 : 0;
+            const auto listener = ToEntity(listenerValue);
+            const auto source = ToEntity(sourceValue);
+            auto instance = self.instances.find(listener);
+            if (instance == self.instances.end() || instance->second.eventSubscriptions.contains(subscriptionId))
+                return 0;
+
+            Subscription subscription;
+            const bool subscribed = self.scriptApi.SubscribeEvent(
+                *self.registry,
+                source,
+                componentId,
+                eventId,
+                [&self, listener, subscriptionId](const std::span<const ScriptValue> values) {
+                    auto found = self.instances.find(listener);
+                    if (found == self.instances.end() || found->second.failed) return;
+                    if (GetManagedHost().DispatchEvent(
+                            entt::to_integral(listener), subscriptionId, values) != 0)
+                        found->second.failed = true;
+                },
+                subscription);
+            if (!subscribed) return 0;
+            instance->second.eventSubscriptions.emplace(
+                subscriptionId,
+                ComponentEventSubscription{
+                    .source = source, .componentId = componentId, .subscription = subscription});
+            return 1;
+        }
+
+        static void SAGE_MANAGED_CALL
+        UnSubscribeEvent(void* context, const std::uint32_t listenerValue, const std::uint64_t subscriptionId)
+        {
+            auto& self = *static_cast<Impl*>(context);
+            const auto instance = self.instances.find(ToEntity(listenerValue));
+            if (instance == self.instances.end()) return;
+            const auto subscription = instance->second.eventSubscriptions.find(subscriptionId);
+            if (subscription == instance->second.eventSubscriptions.end()) return;
+            subscription->second.subscription.UnSubscribe();
+            instance->second.eventSubscriptions.erase(subscription);
         }
 
         static std::uint8_t SAGE_MANAGED_CALL
@@ -556,11 +553,16 @@ namespace sage
         {
             RegisterEngineScriptApi(scriptApi);
             if (config.registerScriptApi) config.registerScriptApi(scriptApi);
+            componentObservers = scriptApi.ObserveComponentDestruction(
+                *registry,
+                [this](const ScriptApiRegistry::Id componentId, const entt::entity entity) {
+                    removeSubscriptionsFromComponent(entity, componentId);
+                });
             if (config.gameplayAssemblyPath.empty()) return;
             auto& host = GetManagedHost();
             if (!host.Initialize()) return;
             const NativeApiTable api{
-                .version = 3,
+                .version = 4,
                 .size = sizeof(NativeApiTable),
                 .context = this,
                 .log = &Log,
@@ -570,7 +572,8 @@ namespace sage
                 .hasRoute = &HasRoute,
                 .tryPathfind = &TryPathfind,
                 .spawnFlatpack = &SpawnFlatpack,
-                .subscribeEvent = &SubscribeEvent,
+                .subscribeComponentEvent = &SubscribeComponentEvent,
+                .unSubscribeEvent = &UnSubscribeEvent,
                 .hasComponent = &HasComponent,
                 .getComponentProperty = &GetComponentProperty,
                 .setComponentProperty = &SetComponentProperty,
@@ -589,8 +592,10 @@ namespace sage
             const auto instance = instances.find(entity);
             if (instance == instances.end()) return;
             GetManagedHost().DestroyScript(entt::to_integral(entity));
-            for (auto& [key, subscription] : instance->second.subscriptions)
+            for (auto& subscription : instance->second.triggerSubscriptions)
                 subscription.UnSubscribe();
+            for (auto& [id, subscription] : instance->second.eventSubscriptions)
+                subscription.subscription.UnSubscribe();
             instances.erase(instance);
         }
 
@@ -599,27 +604,28 @@ namespace sage
             if (!available) return;
             GetManagedHost().Stop();
             for (auto& [entity, instance] : instances)
-                for (auto& [key, subscription] : instance.subscriptions)
+            {
+                for (auto& subscription : instance.triggerSubscriptions)
                     subscription.UnSubscribe();
+                for (auto& [id, subscription] : instance.eventSubscriptions)
+                    subscription.subscription.UnSubscribe();
+            }
             instances.clear();
             available = false;
         }
 
-        void removeSubscriptionsFromSource(
-            const entt::entity source, const ScriptEvent firstType, const ScriptEvent lastType)
+        void removeSubscriptionsFromComponent(
+            const entt::entity source, const ScriptApiRegistry::Id componentId)
         {
             for (auto& [listener, instance] : instances)
             {
-                for (auto subscription = instance.subscriptions.begin();
-                     subscription != instance.subscriptions.end();)
+                for (auto subscription = instance.eventSubscriptions.begin();
+                     subscription != instance.eventSubscriptions.end();)
                 {
-                    const auto sourceValue = subscription->first >> 8;
-                    const auto typeValue = static_cast<int>(subscription->first & 0xff);
-                    if (sourceValue == entt::to_integral(source) && typeValue >= static_cast<int>(firstType) &&
-                        typeValue <= static_cast<int>(lastType))
+                    if (subscription->second.source == source && subscription->second.componentId == componentId)
                     {
-                        subscription->second.UnSubscribe();
-                        subscription = instance.subscriptions.erase(subscription);
+                        subscription->second.subscription.UnSubscribe();
+                        subscription = instance.eventSubscriptions.erase(subscription);
                     }
                     else
                         ++subscription;
@@ -652,15 +658,7 @@ namespace sage
                 const int result =
                     GetManagedHost().CreateScript(entt::to_integral(entity), script.className.c_str());
                 instance->second.failed = result != 0;
-                if (!instance->second.failed)
-                {
-                    for (int type = static_cast<int>(ScriptEvent::TriggerEnter);
-                         type <= static_cast<int>(ScriptEvent::AnimationUpdated);
-                         ++type)
-                    {
-                        impl->subscribe(entity, entity, static_cast<ScriptEvent>(type));
-                    }
-                }
+                if (!instance->second.failed) impl->subscribeToTriggers(entity);
             }
             if (instance->second.failed) continue;
             if (GetManagedHost().UpdateScript(entt::to_integral(entity), deltaTime, script.enabled) != 0)
@@ -676,28 +674,15 @@ namespace sage
     {
         impl->destroyInstance(entity);
     }
-    void CSharpScriptSystem::onMoveableDestroyed(entt::registry&, const entt::entity entity)
-    {
-        impl->removeSubscriptionsFromSource(entity, ScriptEvent::MovementStarted, ScriptEvent::PathChanged);
-    }
-    void CSharpScriptSystem::onAnimationDestroyed(entt::registry&, const entt::entity entity)
-    {
-        impl->removeSubscriptionsFromSource(entity, ScriptEvent::AnimationStarted, ScriptEvent::AnimationUpdated);
-    }
-
     CSharpScriptSystem::CSharpScriptSystem(
         entt::registry* source, EngineSystems* systems, ManagedScriptingConfig config)
         : impl(std::make_unique<Impl>(source, systems, std::move(config))), registry(source)
     {
         registry->on_destroy<ScriptComponent>().connect<&CSharpScriptSystem::onScriptDestroyed>(this);
-        registry->on_destroy<MoveableActor>().connect<&CSharpScriptSystem::onMoveableDestroyed>(this);
-        registry->on_destroy<Animation>().connect<&CSharpScriptSystem::onAnimationDestroyed>(this);
     }
 
     CSharpScriptSystem::~CSharpScriptSystem()
     {
-        registry->on_destroy<Animation>().disconnect<&CSharpScriptSystem::onAnimationDestroyed>(this);
-        registry->on_destroy<MoveableActor>().disconnect<&CSharpScriptSystem::onMoveableDestroyed>(this);
         registry->on_destroy<ScriptComponent>().disconnect<&CSharpScriptSystem::onScriptDestroyed>(this);
     }
 } // namespace sage

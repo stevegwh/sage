@@ -48,3 +48,13 @@ Properties and methods currently support booleans, signed and unsigned integers,
 floats, strings, `Vector3`, entity handles, and registered enums. Computed properties
 can provide getter/setter lambdas when direct member access would bypass a system
 invariant, as the transform bindings do.
+
+Generated wrappers are retrieved through the generic component API. Scripts can
+query their own entity directly, or use the same method on another entity handle:
+
+```csharp
+if (GetComponent<Collideable>() is { } collideable)
+    collideable.Active = false;
+
+var movement = other.GetComponent<MoveableActor>();
+```

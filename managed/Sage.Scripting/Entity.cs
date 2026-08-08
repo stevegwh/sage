@@ -7,49 +7,55 @@ public readonly struct Entity(uint id) : IEquatable<Entity>
 
     public uint Id { get; } = id;
     public bool Exists => NativeApi.EntityExists(Id);
-    public string Name => this.TryGetTransform(out var transform) ? transform.Name : string.Empty;
+    public string Name => GetComponent<Transform>() is { } transform ? transform.Name : string.Empty;
     public bool HasRoute => NativeApi.HasRoute(Id);
+
+    public T? GetComponent<T>() where T : struct, IComponent<T>
+    {
+        var component = T.Create(this);
+        return component.Exists ? component : null;
+    }
 
     public bool TryGetPosition(out Vector3 position)
     {
         position = default;
-        return this.TryGetTransform(out var transform) && transform.TryGetPosition(out position);
+        return GetComponent<Transform>() is { } transform && transform.TryGetPosition(out position);
     }
 
     public bool SetPosition(Vector3 position) =>
-        this.TryGetTransform(out var transform) && transform.SetPosition(position);
+        GetComponent<Transform>() is { } transform && transform.SetPosition(position);
 
     public bool TryGetRotation(out Vector3 rotation)
     {
         rotation = default;
-        return this.TryGetTransform(out var transform) && transform.TryGetRotation(out rotation);
+        return GetComponent<Transform>() is { } transform && transform.TryGetRotation(out rotation);
     }
 
     public bool SetRotation(Vector3 rotation) =>
-        this.TryGetTransform(out var transform) && transform.SetRotation(rotation);
+        GetComponent<Transform>() is { } transform && transform.SetRotation(rotation);
 
     public bool TryGetScale(out Vector3 scale)
     {
         scale = default;
-        return this.TryGetTransform(out var transform) && transform.TryGetScale(out scale);
+        return GetComponent<Transform>() is { } transform && transform.TryGetScale(out scale);
     }
 
     public bool SetScale(Vector3 scale) =>
-        this.TryGetTransform(out var transform) && transform.SetScale(scale);
+        GetComponent<Transform>() is { } transform && transform.SetScale(scale);
 
     public bool TryGetForward(out Vector3 forward)
     {
         forward = default;
-        return this.TryGetTransform(out var transform) && transform.TryGetForward(out forward);
+        return GetComponent<Transform>() is { } transform && transform.TryGetForward(out forward);
     }
 
     public bool TryPathfindTo(Vector3 destination, bool aStar = false, bool findClosestReachable = true) =>
         NativeApi.TryPathfind(Id, destination, aStar, findClosestReachable);
 
     public bool PlayAnimation(string clip, int speed = 1) =>
-        this.TryGetAnimation(out var animation) && animation.Play(clip, speed);
+        GetComponent<Animation>() is { } animation && animation.Play(clip, speed);
     public bool PlayOneShot(string clip, int speed = 1) =>
-        this.TryGetAnimation(out var animation) && animation.PlayOneShot(clip, speed);
+        GetComponent<Animation>() is { } animation && animation.PlayOneShot(clip, speed);
 
     public bool Equals(Entity other) => Id == other.Id;
     public override bool Equals(object? value) => value is Entity entity && Equals(entity);

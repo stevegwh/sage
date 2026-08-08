@@ -1,14 +1,18 @@
 #pragma once
 
+#include "engine/Event.hpp"
+
 #include "entt/entt.hpp"
 #include "raylib.h"
 
 #include <algorithm>
+#include <array>
 #include <concepts>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
@@ -121,6 +125,28 @@ namespace sage
         }
 
         template <class T>
+        bool EncodeEventValue(ScriptValue& destination, std::string& textStorage, const T& source)
+        {
+            using Value = Plain<T>;
+            if constexpr (
+                std::same_as<Value, std::string> || std::same_as<Value, std::string_view> ||
+                std::same_as<Value, const char*>)
+            {
+                const std::string_view text = [&]() -> std::string_view {
+                    if constexpr (std::same_as<Value, const char*>) return source != nullptr ? source : "";
+                    return source;
+                }();
+                textStorage = text;
+                destination.type = ScriptValueType::String;
+                destination.text = textStorage.data();
+                destination.textCapacity = static_cast<std::uint32_t>(textStorage.size() + 1);
+                return true;
+            }
+            else
+                return EncodeScriptValue(destination, source);
+        }
+
+        template <class T>
         bool DecodeScriptValue(const ScriptValue& source, T& destination)
         {
             using Value = Plain<T>;
@@ -180,6 +206,14 @@ namespace sage
     {
       public:
         using Id = std::uint64_t;
+        using EventCallback = std::function<void(std::span<const ScriptValue>)>;
+        using ComponentDestroyed = std::function<void(Id, entt::entity)>;
+
+        class ComponentObserver
+        {
+          public:
+            virtual ~ComponentObserver() = default;
+        };
 
         struct Parameter
         {
@@ -209,14 +243,25 @@ namespace sage
             std::function<bool(entt::registry&, entt::entity, std::span<const ScriptValue>, ScriptValue&)> invoke;
         };
 
+        struct EventDefinition
+        {
+            Id id = 0;
+            std::string name;
+            std::vector<Parameter> parameters;
+            std::function<bool(entt::registry&, entt::entity, EventCallback, Subscription&)> subscribe;
+        };
+
         struct Component
         {
             Id id = 0;
             std::string managedNamespace;
             std::string managedName;
             std::function<bool(const entt::registry&, entt::entity)> has;
+            std::function<std::unique_ptr<ComponentObserver>(entt::registry&, Id, ComponentDestroyed)>
+                observeDestroyed;
             std::vector<Property> properties;
             std::vector<Method> methods;
+            std::vector<EventDefinition> events;
         };
 
         struct System
@@ -239,6 +284,9 @@ namespace sage
         std::vector<System> systems;
         std::vector<Enum> enums;
         std::unordered_map<std::type_index, std::string> managedEnumNames;
+
+        template <class T>
+        class ComponentObserverFor;
 
         [[nodiscard]] Component* findComponent(Id componentId);
         [[nodiscard]] const Component* findComponent(Id componentId) const;
@@ -317,7 +365,41 @@ namespace sage
             Id methodId,
             std::span<const ScriptValue> arguments,
             ScriptValue& result) const;
+        [[nodiscard]] bool SubscribeEvent(
+            entt::registry& registry,
+            entt::entity entity,
+            Id componentId,
+            Id eventId,
+            EventCallback callback,
+            Subscription& subscription) const;
+        [[nodiscard]] std::vector<std::unique_ptr<ComponentObserver>> ObserveComponentDestruction(
+            entt::registry& registry, ComponentDestroyed callback) const;
         [[nodiscard]] bool WriteCSharp(const std::filesystem::path& destination) const;
+    };
+
+    template <class T>
+    class ScriptApiRegistry::ComponentObserverFor final : public ComponentObserver
+    {
+        entt::registry* registry;
+        Id componentId;
+        ComponentDestroyed callback;
+
+        void onDestroyed(entt::registry&, const entt::entity entity)
+        {
+            callback(componentId, entity);
+        }
+
+      public:
+        ComponentObserverFor(entt::registry& source, const Id id, ComponentDestroyed onDestroyed)
+            : registry(&source), componentId(id), callback(std::move(onDestroyed))
+        {
+            registry->on_destroy<T>().template connect<&ComponentObserverFor::onDestroyed>(*this);
+        }
+
+        ~ComponentObserverFor() override
+        {
+            registry->on_destroy<T>().disconnect(this);
+        }
     };
 
     template <class T>
@@ -583,6 +665,52 @@ namespace sage
             static_assert(std::same_as<Owner, T>);
             addMethod(std::move(name), method, parameterNames, std::index_sequence_for<Args...>{});
         }
+
+        template <class... Args>
+        void event(std::string name, Event<Args...> T::* member)
+        {
+            static_assert(sizeof...(Args) <= 2, "Managed component events currently support up to two values");
+            static_assert((detail::IsScriptValue<Args> && ...));
+
+            std::vector<ScriptApiRegistry::Parameter> parameters;
+            parameters.reserve(sizeof...(Args));
+            [&]<std::size_t... Index>(std::index_sequence<Index...>) {
+                (parameters.push_back(
+                     {.name = "arg" + std::to_string(Index),
+                      .type = detail::ScriptValueTypeOf<Args>(),
+                      .managedType = api.template managedTypeName<Args>()}),
+                 ...);
+            }(std::index_sequence_for<Args...>{});
+
+            const auto qualifiedName = component.managedNamespace + "." + component.managedName + "." + name;
+            component.events.push_back(
+                {.id = ScriptApiRegistry::MakeId(qualifiedName),
+                 .name = std::move(name),
+                 .parameters = std::move(parameters),
+                 .subscribe = [member](
+                                  entt::registry& source,
+                                  const entt::entity entity,
+                                  ScriptApiRegistry::EventCallback callback,
+                                  Subscription& subscription) {
+                     auto* value = source.template try_get<T>(entity);
+                     if (value == nullptr) return false;
+                     subscription = (value->*member).Subscribe(
+                         [callback = std::move(callback)](Args... args) {
+                             std::array<ScriptValue, sizeof...(Args)> values{};
+                             std::array<std::string, sizeof...(Args)> textStorage{};
+                             std::size_t index = 0;
+                             const auto encode = [&](const auto& argument) {
+                                 const bool result = detail::EncodeEventValue(
+                                     values[index], textStorage[index], argument);
+                                 ++index;
+                                 return result;
+                             };
+                             if ((encode(args) && ...))
+                                 callback(std::span<const ScriptValue>{values.data(), values.size()});
+                         });
+                     return subscription.IsActive();
+                 }});
+        }
     };
 
     template <class T>
@@ -595,6 +723,9 @@ namespace sage
              .managedName = std::move(managedName),
              .has = [](const entt::registry& source, const entt::entity entity) {
                  return source.valid(entity) && source.template all_of<T>(entity);
+             },
+             .observeDestroyed = [](entt::registry& source, const Id id, ComponentDestroyed callback) {
+                 return std::make_unique<ComponentObserverFor<T>>(source, id, std::move(callback));
              }});
         ScriptApiBinder<T> binder{*this, components.back()};
         T::define_script_api(binder);

@@ -149,12 +149,24 @@ public static unsafe class ScriptRuntime
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
-    public static int DispatchEvent(uint listener, int eventType, uint other, float x, float y, float z)
+    public static int DispatchTrigger(uint listener, int eventType, uint other)
     {
-        if (!Instances.TryGetValue(listener, out var instance) || instance.Failed || !instance.Enabled) return -1;
-        if (eventType < 0 || eventType > (int)ScriptEvent.AnimationUpdated) return -2;
-        Invoke(instance, () => instance.Script.InvokeEvent((ScriptEvent)eventType, new Entity(other), new Vector3(x, y, z)),
-            ((ScriptEvent)eventType).ToString());
+        if (!Instances.TryGetValue(listener, out var instance) || instance.Failed) return -1;
+        if (!instance.Enabled) return 0;
+        if (eventType < 0 || eventType > (int)TriggerEvent.Exit) return -2;
+        Invoke(instance, () => instance.Script.InvokeTrigger((TriggerEvent)eventType, new Entity(other)),
+            $"Trigger{(TriggerEvent)eventType}");
+        return instance.Failed ? -3 : 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int DispatchEvent(
+        uint listener, ulong subscriptionId, NativeScriptValue* values, uint valueCount)
+    {
+        if (!Instances.TryGetValue(listener, out var instance) || instance.Failed) return -1;
+        if (!instance.Enabled) return 0;
+        if (!ManagedEventRuntime.IsOwnedBy(subscriptionId, listener)) return -2;
+        Invoke(instance, () => ManagedEventRuntime.Publish(subscriptionId, values, valueCount), "Event");
         return instance.Failed ? -3 : 0;
     }
 
@@ -170,6 +182,7 @@ public static unsafe class ScriptRuntime
         gameplayAssembly = null;
         loadContext = null;
         if (context != null) context.Unload();
+        ManagedEventRuntime.Clear();
         ClearNativeApis();
         return 0;
     }
@@ -177,7 +190,7 @@ public static unsafe class ScriptRuntime
     private static void Invoke(ScriptInstance instance, Action callback, string method)
     {
         if (instance.Failed) return;
-        try { callback(); }
+        try { ManagedEventRuntime.InvokeFor(instance.Script.Entity.Id, callback); }
         catch (Exception error)
         {
             Log.Error($"C# {instance.Script.GetType().FullName}.{method} failed: {error}");
@@ -190,11 +203,12 @@ public static unsafe class ScriptRuntime
         if (!Instances.Remove(entity, out var instance)) return;
         if (instance.Enabled) TryCleanup(instance, instance.Script.InvokeOnDisable, "OnDisable");
         TryCleanup(instance, instance.Script.InvokeOnDestroy, "OnDestroy");
+        ManagedEventRuntime.RemoveOwner(entity);
     }
 
     private static void TryCleanup(ScriptInstance instance, Action callback, string method)
     {
-        try { callback(); }
+        try { ManagedEventRuntime.InvokeFor(instance.Script.Entity.Id, callback); }
         catch (Exception error) { Log.Error($"C# {instance.Script.GetType().FullName}.{method} cleanup failed: {error}"); }
     }
 

@@ -26,8 +26,6 @@ namespace sage
         entt::registry* registry;
 
         void onScriptDestroyed(entt::registry& source, entt::entity entity);
-        void onMoveableDestroyed(entt::registry& source, entt::entity entity);
-        void onAnimationDestroyed(entt::registry& source, entt::entity entity);
 
       public:
         void Update(float deltaTime);

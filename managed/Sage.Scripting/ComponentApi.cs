@@ -92,6 +92,21 @@ public static unsafe class NativeComponentApi
     public static bool HasComponent(uint entity, ulong componentId) =>
         NativeApi.HasComponent(entity, componentId);
 
+    public static Event CreateEvent(uint entity, ulong componentId, ulong eventId) =>
+        new(entity, componentId, eventId);
+
+    public static Event<T> CreateEvent<T>(
+        uint entity, ulong componentId, ulong eventId, Func<ScriptResult, T> read) =>
+        new(entity, componentId, eventId, read);
+
+    public static Event<T1, T2> CreateEvent<T1, T2>(
+        uint entity,
+        ulong componentId,
+        ulong eventId,
+        Func<ScriptResult, T1> readFirst,
+        Func<ScriptResult, T2> readSecond) =>
+        new(entity, componentId, eventId, readFirst, readSecond);
+
     public static bool TryGetBoolean(uint entity, ulong componentId, ulong propertyId, out bool value)
     {
         var native = new NativeScriptValue { Type = ScriptValueType.Boolean };
