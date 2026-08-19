@@ -5,16 +5,27 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace sage
 {
     struct EngineSystems;
     class ScriptApiRegistry;
 
+    enum class CSharpLogLevel : int
+    {
+        Info,
+        Warning,
+        Error
+    };
+
+    using CSharpLogSink = std::function<void(CSharpLogLevel, std::string_view)>;
+
     struct ManagedScriptingConfig
     {
         std::string gameplayAssemblyPath;
         void* gameApi = nullptr;
+        CSharpLogSink logSink;
         std::function<void(std::string&)> migrateScriptClass;
         std::function<void(ScriptApiRegistry&)> registerScriptApi;
     };

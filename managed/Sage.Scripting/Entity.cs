@@ -76,6 +76,15 @@ public readonly struct Vector3(float x, float y, float z)
     public float Y { get; } = y;
     public float Z { get; } = z;
 
+    /// <summary>Gets the vector's magnitude.</summary>
+    public float Length => NativeApi.Vector3Length(this);
+    /// <summary>Gets a unit-length copy, or the zero vector when this vector has zero length.</summary>
+    public Vector3 Normalized => NativeApi.Vector3Normalized(this);
+
+    public static float Dot(Vector3 lhs, Vector3 rhs) => NativeApi.Vector3Dot(lhs, rhs);
+    /// <summary>Returns the unsigned angle between two vectors in degrees.</summary>
+    public static float Angle(Vector3 from, Vector3 to) => NativeApi.Vector3Angle(from, to);
+
     public static Vector3 operator +(Vector3 left, Vector3 right) =>
         new(left.X + right.X, left.Y + right.Y, left.Z + right.Z);
     public static Vector3 operator -(Vector3 left, Vector3 right) =>

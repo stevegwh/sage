@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include "systems/CSharpScriptSystem.hpp"
+
 #include "raylib.h"
 
 #include <functional>
@@ -32,6 +34,9 @@ namespace sage
         // Working-dir-relative path to the map the editor snapshotted for this
         // play session.
         std::string mapPath;
+        // Optional editor-owned destination for Sage.Log calls made by hosted C#
+        // scripts during this play session.
+        CSharpLogSink csharpLogSink;
     };
 
     // A live, tickable game world. Created fresh on Play and destroyed on Stop,

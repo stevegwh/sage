@@ -2,6 +2,7 @@
 
 #include "EditorDockLayout.hpp"
 #include "EditorInspector.hpp"
+#include "engine/systems/CSharpScriptSystem.hpp"
 
 #include "imgui.h"
 #include "raylib.h"
@@ -189,6 +190,12 @@ namespace sage
             std::optional<std::size_t> deletingFlatpackIndex;
             std::vector<entt::entity> selectedSceneEntities;
             std::vector<entt::entity> selectedSceneRoots;
+            struct ConsoleEntry
+            {
+                CSharpLogLevel level = CSharpLogLevel::Info;
+                std::string message;
+            };
+            std::vector<ConsoleEntry> consoleEntries;
             // A plain click on one member of a multi-selection is applied on
             // release so beginning a drag does not collapse the selection first.
             std::optional<entt::entity> pendingHierarchyClick;
@@ -212,6 +219,8 @@ namespace sage
             bool assetRenamePopupOpenRequested = false;
             bool flatpackRenamePopupOpenRequested = false;
             bool flatpackDeletePopupOpenRequested = false;
+            bool consoleAutoScroll = true;
+            bool consoleScrollToBottom = false;
             SceneTabState sceneTabs;
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
@@ -244,6 +253,9 @@ namespace sage
             void DrawHierarchyWindow();
             InspectorEditResult DrawInspectorWindow();
             void DrawAssetDrawerWindow();
+            void DrawConsoleWindow();
+            void AddConsoleEntry(CSharpLogLevel level, std::string_view message);
+            void ClearConsole();
             void DrawDeleteConfirmationModal();
             void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;
             void SetSaveStatus(const std::string& status, bool hasUnsavedChanges) const;

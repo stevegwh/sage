@@ -26,6 +26,8 @@ namespace sage
                 return "Vector3";
             case ScriptValueType::Entity:
                 return "Entity";
+            case ScriptValueType::EntityArray:
+                return "Entities";
             case ScriptValueType::None:
                 return {};
             }
@@ -46,6 +48,7 @@ namespace sage
 
         std::string DefaultExpression(const ScriptValueType type)
         {
+            if (type == ScriptValueType::EntityArray) return "[]";
             return type == ScriptValueType::Entity ? "global::Sage.Entity.None" : "default";
         }
 

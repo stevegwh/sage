@@ -568,7 +568,10 @@ namespace sage
         handleInspectorEdit(inspectorEdit);
 
         gui->DrawHierarchyWindow();
-        gui->DrawAssetDrawerWindow();
+        if (gameRuntime)
+            gui->DrawConsoleWindow();
+        else
+            gui->DrawAssetDrawerWindow();
         const auto sceneTabAction = gui->DrawSceneTabBar();
         if (sceneTabAction.mapSelected || sceneTabAction.flatpackCloseRequested)
         {
@@ -2509,6 +2512,10 @@ namespace sage
         context.windowSize = sys->settings->GetScreenSize();
         context.viewportScreenRect = gameViewportScreenRect();
         context.mapPath = kPlaySessionMapPath;
+        gui->ClearConsole();
+        context.csharpLogSink = [this](const CSharpLogLevel level, const std::string_view message) {
+            gui->AddConsoleEntry(level, message);
+        };
         gameRuntime = CreateGameRuntime(context);
         if (!gameRuntime)
         {

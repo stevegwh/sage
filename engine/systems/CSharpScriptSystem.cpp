@@ -15,6 +15,7 @@
 #include "engine/systems/NavigationGridSystem.hpp"
 
 #include "raylib.h"
+#include "raymath.h"
 
 #include "coreclr_delegates.h"
 #include "hostfxr.h"
@@ -67,6 +68,10 @@ namespace sage
             void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t);
         using SpawnFlatpackFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, const char*, float, float, float, float, float, float, std::uint8_t, std::uint32_t*);
+        using Vector3DotFunction = float(SAGE_MANAGED_CALL*)(float, float, float, float, float, float);
+        using Vector3LengthFunction = float(SAGE_MANAGED_CALL*)(float, float, float);
+        using Vector3NormalizeFunction = void(SAGE_MANAGED_CALL*)(float, float, float, float*, float*, float*);
+        using Vector3AngleFunction = float(SAGE_MANAGED_CALL*)(float, float, float, float, float, float);
         using SubscribeComponentEventFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, std::uint32_t, std::uint32_t, ScriptApiRegistry::Id, ScriptApiRegistry::Id, std::uint64_t);
         using UnSubscribeEventFunction = void(SAGE_MANAGED_CALL*)(void*, std::uint32_t, std::uint64_t);
@@ -86,7 +91,7 @@ namespace sage
 
         struct NativeApiTable
         {
-            std::uint32_t version = 5;
+            std::uint32_t version = 7;
             std::uint32_t size = 0;
             void* context = nullptr;
             LogFunction log = nullptr;
@@ -97,6 +102,10 @@ namespace sage
             ClearRouteFunction clearRoute = nullptr;
             TryPathfindFunction tryPathfind = nullptr;
             SpawnFlatpackFunction spawnFlatpack = nullptr;
+            Vector3DotFunction vector3Dot = nullptr;
+            Vector3LengthFunction vector3Length = nullptr;
+            Vector3NormalizeFunction vector3Normalize = nullptr;
+            Vector3AngleFunction vector3Angle = nullptr;
             SubscribeComponentEventFunction subscribeComponentEvent = nullptr;
             UnSubscribeEventFunction unSubscribeEvent = nullptr;
             HasComponentFunction hasComponent = nullptr;
@@ -319,10 +328,18 @@ namespace sage
         std::vector<std::unique_ptr<ScriptApiRegistry::ComponentObserver>> componentObservers;
         bool available = false;
 
-        static void SAGE_MANAGED_CALL Log(void*, const int level, const char* message)
+        static void SAGE_MANAGED_CALL Log(void* context, const int level, const char* message)
         {
-            const int raylibLevel = level == 2 ? LOG_ERROR : (level == 1 ? LOG_WARNING : LOG_INFO);
-            TraceLog(raylibLevel, "C#: %s", message != nullptr ? message : "");
+            auto& self = *static_cast<Impl*>(context);
+            const auto logLevel =
+                level == 2 ? CSharpLogLevel::Error : (level == 1 ? CSharpLogLevel::Warning : CSharpLogLevel::Info);
+            const std::string_view text = message != nullptr ? message : "";
+            if (self.config.logSink) self.config.logSink(logLevel, text);
+
+            const int raylibLevel = logLevel == CSharpLogLevel::Error
+                                        ? LOG_ERROR
+                                        : (logLevel == CSharpLogLevel::Warning ? LOG_WARNING : LOG_INFO);
+            TraceLog(raylibLevel, "C#: %s", text.data());
         }
 
         [[nodiscard]] static entt::entity ToEntity(const std::uint32_t value)
@@ -423,6 +440,48 @@ namespace sage
             }
             *destination = entt::to_integral(instance.root);
             return 1;
+        }
+
+        static float SAGE_MANAGED_CALL Vector3Dot(
+            const float lhsX,
+            const float lhsY,
+            const float lhsZ,
+            const float rhsX,
+            const float rhsY,
+            const float rhsZ)
+        {
+            return ::Vector3DotProduct({lhsX, lhsY, lhsZ}, {rhsX, rhsY, rhsZ});
+        }
+
+        static float SAGE_MANAGED_CALL Vector3Length(const float x, const float y, const float z)
+        {
+            return ::Vector3Length({x, y, z});
+        }
+
+        static void SAGE_MANAGED_CALL Vector3Normalize(
+            const float x,
+            const float y,
+            const float z,
+            float* normalizedX,
+            float* normalizedY,
+            float* normalizedZ)
+        {
+            if (normalizedX == nullptr || normalizedY == nullptr || normalizedZ == nullptr) return;
+            const Vector3 normalized = ::Vector3Normalize({x, y, z});
+            *normalizedX = normalized.x;
+            *normalizedY = normalized.y;
+            *normalizedZ = normalized.z;
+        }
+
+        static float SAGE_MANAGED_CALL Vector3Angle(
+            const float fromX,
+            const float fromY,
+            const float fromZ,
+            const float toX,
+            const float toY,
+            const float toZ)
+        {
+            return ::Vector3Angle({fromX, fromY, fromZ}, {toX, toY, toZ}) * RAD2DEG;
         }
 
         void dispatchTrigger(
@@ -580,7 +639,6 @@ namespace sage
             auto& host = GetManagedHost();
             if (!host.Initialize()) return;
             const NativeApiTable api{
-                .version = 5,
                 .size = sizeof(NativeApiTable),
                 .context = this,
                 .log = &Log,
@@ -591,6 +649,10 @@ namespace sage
                 .clearRoute = &ClearRoute,
                 .tryPathfind = &TryPathfind,
                 .spawnFlatpack = &SpawnFlatpack,
+                .vector3Dot = &Vector3Dot,
+                .vector3Length = &Vector3Length,
+                .vector3Normalize = &Vector3Normalize,
+                .vector3Angle = &Vector3Angle,
                 .subscribeComponentEvent = &SubscribeComponentEvent,
                 .unSubscribeEvent = &UnSubscribeEvent,
                 .hasComponent = &HasComponent,

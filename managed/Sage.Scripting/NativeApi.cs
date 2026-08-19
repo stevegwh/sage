@@ -31,6 +31,10 @@ public unsafe struct NativeApiTable
     public delegate* unmanaged[Cdecl]<nint, uint, void> ClearRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, byte> TryPathfind;
     public delegate* unmanaged[Cdecl]<nint, byte*, float, float, float, float, float, float, byte, uint*, byte> SpawnFlatpack;
+    public delegate* unmanaged[Cdecl]<float, float, float, float, float, float, float> Vector3Dot;
+    public delegate* unmanaged[Cdecl]<float, float, float, float> Vector3Length;
+    public delegate* unmanaged[Cdecl]<float, float, float, float*, float*, float*, void> Vector3Normalize;
+    public delegate* unmanaged[Cdecl]<float, float, float, float, float, float, float> Vector3Angle;
     public delegate* unmanaged[Cdecl]<nint, uint, uint, ulong, ulong, ulong, byte> SubscribeComponentEvent;
     public delegate* unmanaged[Cdecl]<nint, uint, ulong, void> UnSubscribeEvent;
     public delegate* unmanaged[Cdecl]<nint, uint, ulong, byte> HasComponent;
@@ -47,7 +51,7 @@ public static class NativeExtension
 
 internal static unsafe class NativeApi
 {
-    internal const uint CurrentVersion = 5;
+    internal const uint CurrentVersion = 7;
 
     private static NativeApiTable api;
 
@@ -115,6 +119,29 @@ internal static unsafe class NativeApi
                 : Entity.None;
         }
     }
+
+    internal static float Vector3Dot(Vector3 lhs, Vector3 rhs) =>
+        api.Vector3Dot != null
+            ? api.Vector3Dot(lhs.X, lhs.Y, lhs.Z, rhs.X, rhs.Y, rhs.Z)
+            : 0.0f;
+
+    internal static float Vector3Length(Vector3 value) =>
+        api.Vector3Length != null ? api.Vector3Length(value.X, value.Y, value.Z) : 0.0f;
+
+    internal static Vector3 Vector3Normalized(Vector3 value)
+    {
+        if (api.Vector3Normalize == null) return default;
+        float x;
+        float y;
+        float z;
+        api.Vector3Normalize(value.X, value.Y, value.Z, &x, &y, &z);
+        return new Vector3(x, y, z);
+    }
+
+    internal static float Vector3Angle(Vector3 from, Vector3 to) =>
+        api.Vector3Angle != null
+            ? api.Vector3Angle(from.X, from.Y, from.Z, to.X, to.Y, to.Z)
+            : 0.0f;
 
     internal static bool SubscribeComponentEvent(
         uint listener, uint source, ulong componentId, ulong eventId, ulong subscriptionId) =>

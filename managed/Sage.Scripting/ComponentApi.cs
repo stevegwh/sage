@@ -11,7 +11,8 @@ public enum ScriptValueType : uint
     Float,
     String,
     Vector3,
-    Entity
+    Entity,
+    EntityArray
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -25,6 +26,9 @@ public unsafe struct NativeScriptValue
     public float Z;
     public byte* Text;
     public uint TextCapacity;
+    public uint* Entities;
+    public uint EntityCapacity;
+    public uint EntityCount;
 }
 
 /// <summary>One typed argument passed to a C++ component API method.</summary>
@@ -69,6 +73,7 @@ public readonly struct ScriptResult
     public string? String { get; }
     public Vector3 Vector3 { get; }
     public Entity Entity { get; }
+    public Entity[] Entities { get; }
 
     internal unsafe ScriptResult(NativeScriptValue value)
     {
@@ -81,6 +86,9 @@ public readonly struct ScriptResult
             : null;
         Vector3 = new Vector3(value.X, value.Y, value.Z);
         Entity = new Entity((uint)value.Integer);
+        Entities = value.EntityCount == 0 ? [] : new Entity[value.EntityCount];
+        for (var index = 0; index < Entities.Length; ++index)
+            Entities[index] = new Entity(value.Entities[index]);
     }
 }
 
@@ -88,6 +96,7 @@ public readonly struct ScriptResult
 public static unsafe class NativeComponentApi
 {
     private const uint TextBufferSize = 4096;
+    private const uint EntityBufferSize = 64;
 
     public static bool HasComponent(uint entity, ulong componentId) =>
         NativeApi.HasComponent(entity, componentId);
@@ -217,16 +226,45 @@ public static unsafe class NativeComponentApi
         var nativeArguments = new NativeScriptValue[arguments.Length];
         var allocatedText = new nint[arguments.Length];
         var resultText = stackalloc byte[(int)TextBufferSize];
+        var resultEntities = stackalloc uint[(int)EntityBufferSize];
         try
         {
             for (var index = 0; index < arguments.Length; ++index)
                 nativeArguments[index] = ToNative(arguments[index], out allocatedText[index]);
-            var nativeResult = new NativeScriptValue { Text = resultText, TextCapacity = TextBufferSize };
+            var nativeResult = new NativeScriptValue
+            {
+                Text = resultText,
+                TextCapacity = TextBufferSize,
+                Entities = resultEntities,
+                EntityCapacity = EntityBufferSize
+            };
             fixed (NativeScriptValue* values = nativeArguments)
             {
                 if (!NativeApi.InvokeComponentMethod(
                         entity, componentId, methodId, values, (uint)nativeArguments.Length, &nativeResult))
                 {
+                    if (nativeResult.Type == ScriptValueType.EntityArray &&
+                        nativeResult.EntityCount > nativeResult.EntityCapacity &&
+                        nativeResult.EntityCount <= int.MaxValue)
+                    {
+                        var expandedEntities = new uint[(int)nativeResult.EntityCount];
+                        fixed (uint* entities = expandedEntities)
+                        {
+                            nativeResult.Entities = entities;
+                            nativeResult.EntityCapacity = (uint)expandedEntities.Length;
+                            if (NativeApi.InvokeComponentMethod(
+                                    entity,
+                                    componentId,
+                                    methodId,
+                                    values,
+                                    (uint)nativeArguments.Length,
+                                    &nativeResult))
+                            {
+                                result = new ScriptResult(nativeResult);
+                                return true;
+                            }
+                        }
+                    }
                     result = default;
                     return false;
                 }

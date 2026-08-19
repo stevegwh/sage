@@ -34,7 +34,8 @@ namespace sage
         Float,
         String,
         Vector3,
-        Entity
+        Entity,
+        EntityArray
     };
 
     // Stable, language-neutral payload used at the native/managed boundary.
@@ -49,6 +50,9 @@ namespace sage
         float z = 0.0f;
         char* text = nullptr;
         std::uint32_t textCapacity = 0;
+        std::uint32_t* entities = nullptr;
+        std::uint32_t entityCapacity = 0;
+        std::uint32_t entityCount = 0;
     };
 
     class ScriptApiRegistry;
@@ -70,12 +74,16 @@ namespace sage
             std::same_as<Plain<T>, Vector3> || std::same_as<Plain<T>, entt::entity> || std::is_enum_v<Plain<T>>;
 
         template <class T>
+        constexpr bool IsScriptReturnValue = IsScriptValue<T> || std::same_as<Plain<T>, std::vector<entt::entity>>;
+
+        template <class T>
         constexpr ScriptValueType ScriptValueTypeOf()
         {
             using Value = Plain<T>;
-            static_assert(IsScriptValue<Value>, "This C++ type is not supported by the script API");
+            static_assert(IsScriptReturnValue<Value>, "This C++ type is not supported by the script API");
             if constexpr (std::same_as<Value, bool>) return ScriptValueType::Boolean;
             if constexpr (std::same_as<Value, entt::entity>) return ScriptValueType::Entity;
+            if constexpr (std::same_as<Value, std::vector<entt::entity>>) return ScriptValueType::EntityArray;
             if constexpr (std::same_as<Value, int> || std::is_enum_v<Value>) return ScriptValueType::Int32;
             if constexpr (std::same_as<Value, unsigned int>) return ScriptValueType::UInt32;
             if constexpr (std::same_as<Value, float>) return ScriptValueType::Float;
@@ -91,7 +99,7 @@ namespace sage
         bool EncodeScriptValue(ScriptValue& destination, const T& source)
         {
             using Value = Plain<T>;
-            static_assert(IsScriptValue<Value>, "This C++ type is not supported by the script API");
+            static_assert(IsScriptReturnValue<Value>, "This C++ type is not supported by the script API");
             destination.type = ScriptValueTypeOf<Value>();
             if constexpr (std::same_as<Value, bool>)
                 destination.integer = source ? 1 : 0;
@@ -109,6 +117,15 @@ namespace sage
             }
             else if constexpr (std::same_as<Value, entt::entity>)
                 destination.integer = entt::to_integral(source);
+            else if constexpr (std::same_as<Value, std::vector<entt::entity>>)
+            {
+                destination.entityCount = static_cast<std::uint32_t>(source.size());
+                if (destination.entityCount > destination.entityCapacity ||
+                    (destination.entityCount != 0 && destination.entities == nullptr))
+                    return false;
+                for (std::uint32_t index = 0; index < destination.entityCount; ++index)
+                    destination.entities[index] = entt::to_integral(source[index]);
+            }
             else if constexpr (std::is_enum_v<Value>)
                 destination.integer = static_cast<std::uint64_t>(static_cast<std::int64_t>(source));
             else
@@ -306,6 +323,7 @@ namespace sage
                 return "string";
             if constexpr (std::same_as<Value, Vector3>) return "global::Sage.Vector3";
             if constexpr (std::same_as<Value, entt::entity>) return "global::Sage.Entity";
+            if constexpr (std::same_as<Value, std::vector<entt::entity>>) return "global::Sage.Entity[]";
             if constexpr (std::is_enum_v<Value>)
             {
                 const auto found = managedEnumNames.find(std::type_index{typeid(Value)});
@@ -422,7 +440,7 @@ namespace sage
         {
             using Return = detail::Plain<Result>;
             using Arguments = std::tuple<detail::Plain<Args>...>;
-            static_assert(std::is_void_v<Return> || detail::IsScriptValue<Return>);
+            static_assert(std::is_void_v<Return> || detail::IsScriptReturnValue<Return>);
             static_assert((detail::IsScriptValue<Args> && ...));
 
             std::vector<std::string> names;
@@ -537,7 +555,7 @@ namespace sage
             using Traits = detail::MemberFunction<Method>;
             using Arguments = typename Traits::Arguments;
             using Return = detail::Plain<typename Traits::Return>;
-            static_assert(std::is_void_v<Return> || detail::IsScriptValue<Return>);
+            static_assert(std::is_void_v<Return> || detail::IsScriptReturnValue<Return>);
             static_assert((detail::IsScriptValue<std::tuple_element_t<Index, Arguments>> && ...));
 
             std::vector<std::string> names;
