@@ -9,12 +9,15 @@ public readonly struct Entity(uint id) : IEquatable<Entity>
     public bool Exists => NativeApi.EntityExists(Id);
     public string Name => GetComponent<Transform>() is { } transform ? transform.Name : string.Empty;
     public bool HasRoute => NativeApi.HasRoute(Id);
+    public void ClearRoute() => NativeApi.ClearRoute(Id);
 
     public T? GetComponent<T>() where T : struct, IComponent<T>
     {
         var component = T.Create(this);
         return component.Exists ? component : null;
     }
+
+    public T? GetScript<T>() where T : Script => ScriptRuntime.GetScript<T>(Id);
 
     public bool TryGetPosition(out Vector3 position)
     {

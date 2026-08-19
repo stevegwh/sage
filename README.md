@@ -58,3 +58,14 @@ if (GetComponent<Collideable>() is { } collideable)
 
 var movement = other.GetComponent<MoveableActor>();
 ```
+
+Attached C# scripts are retrieved separately because they are managed reference
+types rather than generated component wrappers:
+
+```csharp
+if (other.GetScript<DoorController>() is { } door)
+    door.Open();
+```
+
+`GetScript<T>()` returns the live script instance for that entity and Play session,
+or `null` when the entity does not have a script of that type.

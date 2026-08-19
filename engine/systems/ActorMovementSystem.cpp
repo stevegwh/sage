@@ -28,9 +28,7 @@ namespace sage
 
     void ActorMovementSystem::CancelMovement(const entt::entity& entity) const
     {
-        PruneMoveCommands(entity);
-        auto& moveable = registry->get<MoveableActor>(entity);
-        moveable.onMovementCancel.Publish(entity);
+        registry->get<MoveableActor>(entity).ClearRoute(entity);
     }
 
     // TODO: If an object has a collideable, this is completely pointless, as it will inevitably use pathfinding if

@@ -67,6 +67,18 @@ namespace sage
             return isWalking;
         }
 
+        void ClearRoute(const entt::entity entity)
+        {
+            if (!IsMoving())
+            {
+                isWalking = false;
+                return;
+            }
+            path.clear();
+            isWalking = false;
+            onMovementCancel.Publish(entity);
+        }
+
         [[nodiscard]] Vector3 GetDestination() const
         {
             assert(IsMoving()); // Check this independently before calling this function.

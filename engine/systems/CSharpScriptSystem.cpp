@@ -62,6 +62,7 @@ namespace sage
         using FindArchetypeFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, const char*, std::uint32_t*);
         using GetSurfaceFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, float, float, float, std::uint32_t*);
         using HasRouteFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t);
+        using ClearRouteFunction = void(SAGE_MANAGED_CALL*)(void*, std::uint32_t);
         using TryPathfindFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t);
         using SpawnFlatpackFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
@@ -85,7 +86,7 @@ namespace sage
 
         struct NativeApiTable
         {
-            std::uint32_t version = 4;
+            std::uint32_t version = 5;
             std::uint32_t size = 0;
             void* context = nullptr;
             LogFunction log = nullptr;
@@ -93,6 +94,7 @@ namespace sage
             FindArchetypeFunction findFirstWithArchetype = nullptr;
             GetSurfaceFunction getNavigationSurfaceAt = nullptr;
             HasRouteFunction hasRoute = nullptr;
+            ClearRouteFunction clearRoute = nullptr;
             TryPathfindFunction tryPathfind = nullptr;
             SpawnFlatpackFunction spawnFlatpack = nullptr;
             SubscribeComponentEventFunction subscribeComponentEvent = nullptr;
@@ -112,6 +114,7 @@ namespace sage
 
         using StartSessionFunction = int(SAGE_MANAGED_CALL*)(const StartSessionArgs*);
         using CreateScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, const char*);
+        using AwakeScriptsFunction = void(SAGE_MANAGED_CALL*)();
         using UpdateScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, float, std::uint8_t);
         using DispatchTriggerFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, int, std::uint32_t);
         using DispatchEventFunction =
@@ -159,6 +162,7 @@ namespace sage
             load_assembly_and_get_function_pointer_fn loadAssembly = nullptr;
             StartSessionFunction startSession = nullptr;
             CreateScriptFunction createScript = nullptr;
+            AwakeScriptsFunction awakeScripts = nullptr;
             UpdateScriptFunction updateScript = nullptr;
             DispatchTriggerFunction dispatchTrigger = nullptr;
             DispatchEventFunction dispatchEvent = nullptr;
@@ -230,6 +234,7 @@ namespace sage
                 loadAssembly = reinterpret_cast<load_assembly_and_get_function_pointer_fn>(loadAssemblyAddress);
                 if (!loadEntryPoint(SAGE_HOST_TEXT("StartSession"), reinterpret_cast<void**>(&startSession)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("CreateScript"), reinterpret_cast<void**>(&createScript)) ||
+                    !loadEntryPoint(SAGE_HOST_TEXT("AwakeScripts"), reinterpret_cast<void**>(&awakeScripts)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("UpdateScript"), reinterpret_cast<void**>(&updateScript)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("DispatchTrigger"), reinterpret_cast<void**>(&dispatchTrigger)) ||
                     !loadEntryPoint(SAGE_HOST_TEXT("DispatchEvent"), reinterpret_cast<void**>(&dispatchEvent)) ||
@@ -249,6 +254,10 @@ namespace sage
             [[nodiscard]] int CreateScript(const std::uint32_t entity, const char* type) const
             {
                 return ready ? createScript(entity, type) : -1;
+            }
+            void AwakeScripts() const
+            {
+                if (ready) awakeScripts();
             }
             [[nodiscard]] int UpdateScript(const std::uint32_t entity, const float dt, const bool enabled) const
             {
@@ -355,6 +364,15 @@ namespace sage
             if (self.systems == nullptr) return 0;
             const auto* moveable = self.registry->try_get<MoveableActor>(ToEntity(value));
             return moveable != nullptr && moveable->IsMoving() ? 1 : 0;
+        }
+
+        static void SAGE_MANAGED_CALL ClearRoute(void* context, const std::uint32_t value)
+        {
+            auto& self = *static_cast<Impl*>(context);
+            const auto entity = ToEntity(value);
+            if (!self.registry->valid(entity)) return;
+            auto* moveable = self.registry->try_get<MoveableActor>(entity);
+            if (moveable != nullptr) moveable->ClearRoute(entity);
         }
 
         static std::uint8_t SAGE_MANAGED_CALL TryPathfind(
@@ -562,7 +580,7 @@ namespace sage
             auto& host = GetManagedHost();
             if (!host.Initialize()) return;
             const NativeApiTable api{
-                .version = 4,
+                .version = 5,
                 .size = sizeof(NativeApiTable),
                 .context = this,
                 .log = &Log,
@@ -570,6 +588,7 @@ namespace sage
                 .findFirstWithArchetype = &FindFirstWithArchetype,
                 .getNavigationSurfaceAt = &GetNavigationSurfaceAt,
                 .hasRoute = &HasRoute,
+                .clearRoute = &ClearRoute,
                 .tryPathfind = &TryPathfind,
                 .spawnFlatpack = &SpawnFlatpack,
                 .subscribeComponentEvent = &SubscribeComponentEvent,
@@ -637,6 +656,7 @@ namespace sage
     void CSharpScriptSystem::Update(const float deltaTime)
     {
         if (!impl->available) return;
+        bool createdScripts = false;
         for (const auto view = registry->view<ScriptComponent>(); const auto entity : view)
         {
             auto& script = view.get<ScriptComponent>(entity);
@@ -658,9 +678,20 @@ namespace sage
                 const int result =
                     GetManagedHost().CreateScript(entt::to_integral(entity), script.className.c_str());
                 instance->second.failed = result != 0;
-                if (!instance->second.failed) impl->subscribeToTriggers(entity);
+                if (!instance->second.failed)
+                {
+                    impl->subscribeToTriggers(entity);
+                    createdScripts = true;
+                }
             }
-            if (instance->second.failed) continue;
+        }
+        if (createdScripts) GetManagedHost().AwakeScripts();
+
+        for (const auto view = registry->view<ScriptComponent>(); const auto entity : view)
+        {
+            const auto& script = view.get<ScriptComponent>(entity);
+            const auto instance = impl->instances.find(entity);
+            if (instance == impl->instances.end() || instance->second.failed) continue;
             if (GetManagedHost().UpdateScript(entt::to_integral(entity), deltaTime, script.enabled) != 0)
                 instance->second.failed = true;
         }

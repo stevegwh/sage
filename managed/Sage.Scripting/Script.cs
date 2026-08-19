@@ -6,6 +6,7 @@ public abstract class Script
     public Entity Entity { get; internal set; }
 
     protected T? GetComponent<T>() where T : struct, IComponent<T> => Entity.GetComponent<T>();
+    protected T? GetScript<T>() where T : Script => Entity.GetScript<T>();
 
     protected virtual void Awake() { }
     protected virtual void OnEnable() { }

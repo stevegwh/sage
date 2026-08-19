@@ -42,6 +42,7 @@ public static unsafe class ScriptRuntime
     private sealed class ScriptInstance(Script script)
     {
         internal Script Script { get; } = script;
+        internal bool Awakened { get; set; }
         internal bool Enabled { get; set; }
         internal bool Started { get; set; }
         internal bool Failed { get; set; }
@@ -117,8 +118,7 @@ public static unsafe class ScriptRuntime
             script.Entity = new Entity(entity);
             var instance = new ScriptInstance(script);
             Instances.Add(entity, instance);
-            Invoke(instance, script.InvokeAwake, "Awake");
-            return instance.Failed ? -6 : 0;
+            return 0;
         }
         catch (Exception error)
         {
@@ -128,9 +128,25 @@ public static unsafe class ScriptRuntime
     }
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static void AwakeScripts()
+    {
+        foreach (var pair in Instances.ToArray())
+        {
+            var instance = pair.Value;
+            if (instance.Awakened ||
+                !Instances.TryGetValue(pair.Key, out var current) ||
+                !ReferenceEquals(instance, current))
+                continue;
+            instance.Awakened = true;
+            Invoke(instance, instance.Script.InvokeAwake, "Awake");
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int UpdateScript(uint entity, float deltaTime, byte enabled)
     {
         if (!Instances.TryGetValue(entity, out var instance) || instance.Failed) return -1;
+        if (!instance.Awakened) return -4;
         var shouldBeEnabled = enabled != 0;
         if (instance.Enabled != shouldBeEnabled)
         {
@@ -147,6 +163,9 @@ public static unsafe class ScriptRuntime
         if (!instance.Failed) Invoke(instance, () => instance.Script.InvokeUpdate(deltaTime), "Update");
         return instance.Failed ? -3 : 0;
     }
+
+    internal static T? GetScript<T>(uint entity) where T : Script =>
+        Instances.TryGetValue(entity, out var instance) ? instance.Script as T : null;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int DispatchTrigger(uint listener, int eventType, uint other)

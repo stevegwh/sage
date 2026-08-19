@@ -28,6 +28,7 @@ public unsafe struct NativeApiTable
     public delegate* unmanaged[Cdecl]<nint, byte*, uint*, byte> FindFirstWithArchetype;
     public delegate* unmanaged[Cdecl]<nint, float, float, float, uint*, byte> GetNavigationSurfaceAt;
     public delegate* unmanaged[Cdecl]<nint, uint, byte> HasRoute;
+    public delegate* unmanaged[Cdecl]<nint, uint, void> ClearRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, byte> TryPathfind;
     public delegate* unmanaged[Cdecl]<nint, byte*, float, float, float, float, float, float, byte, uint*, byte> SpawnFlatpack;
     public delegate* unmanaged[Cdecl]<nint, uint, uint, ulong, ulong, ulong, byte> SubscribeComponentEvent;
@@ -46,7 +47,7 @@ public static class NativeExtension
 
 internal static unsafe class NativeApi
 {
-    internal const uint CurrentVersion = 4;
+    internal const uint CurrentVersion = 5;
 
     private static NativeApiTable api;
 
@@ -90,6 +91,11 @@ internal static unsafe class NativeApi
 
     internal static bool HasRoute(uint entity) =>
         api.HasRoute != null && api.HasRoute(api.Context, entity) != 0;
+
+    internal static void ClearRoute(uint entity)
+    {
+        if (api.ClearRoute != null) api.ClearRoute(api.Context, entity);
+    }
 
     internal static bool TryPathfind(uint entity, Vector3 destination, bool aStar, bool findClosestReachable) =>
         api.TryPathfind != null &&
