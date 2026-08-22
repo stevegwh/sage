@@ -195,7 +195,16 @@ namespace sage::editor
             result.value = std::visit(
                 [&fields, &result, &supported]<typename T0>(const T0& firstValue) -> FieldValue {
                     using T = std::decay_t<T0>;
-                    if constexpr (std::is_same_v<T, NoteField>)
+                    if constexpr (std::is_same_v<T, BoundedCollectionField> || std::is_same_v<T, DividerField>)
+                    {
+                        if (fields.size() != 1)
+                        {
+                            supported = false;
+                            return firstValue;
+                        }
+                        return firstValue;
+                    }
+                    else if constexpr (std::is_same_v<T, NoteField>)
                     {
                         for (const auto& field : fields)
                         {

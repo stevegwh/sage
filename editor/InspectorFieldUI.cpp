@@ -248,6 +248,10 @@ namespace sage::editor
                     using T = std::decay_t<T0>;
                     if constexpr (std::is_same_v<T, NoteField>)
                         return field.text;
+                    else if constexpr (std::is_same_v<T, BoundedCollectionField>)
+                        return std::to_string(field.count) + " / " + std::to_string(field.maximum);
+                    else if constexpr (std::is_same_v<T, DividerField>)
+                        return std::string{};
                     else if constexpr (std::is_same_v<T, EnumField>)
                         return FormatEnumValue(field);
                     else
@@ -752,6 +756,40 @@ namespace sage::editor
             return false;
         }
 
+        bool DrawInspectorFieldWidget(const BoundedCollectionField& field, const bool editable, const bool)
+        {
+            bool changed = false;
+            ImGui::Text("%zu / %zu", field.count, field.maximum);
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!editable || field.count >= field.maximum);
+            if (ImGui::SmallButton("+"))
+            {
+                if (field.add) field.add();
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!editable || field.count == 0);
+            if (ImGui::SmallButton("-"))
+            {
+                if (field.remove) field.remove();
+                changed = true;
+            }
+            ImGui::EndDisabled();
+            if (changed)
+            {
+                g_fieldEditBegan = true;
+                g_fieldEditCommitted = true;
+            }
+            return changed;
+        }
+
+        bool DrawInspectorFieldWidget(const DividerField&, const bool, const bool)
+        {
+            ImGui::Separator();
+            return false;
+        }
+
         bool DrawInspectorFieldWidget(const EnumField& field, const bool editable, const bool mixed)
         {
             const auto currentIndex = field.getIndex ? field.getIndex() : 0;
@@ -793,6 +831,15 @@ namespace sage::editor
             bool& openScriptFile,
             std::optional<ShaderFileSlot>& selectShaderFile)
         {
+            if (std::holds_alternative<DividerField>(field.value))
+            {
+                ImGui::TableNextRow(ImGuiTableRowFlags_None, ImGui::GetStyle().ItemSpacing.y * 2.0f);
+                ImGui::TableSetColumnIndex(0);
+                ImGui::Separator();
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Separator();
+                return false;
+            }
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();

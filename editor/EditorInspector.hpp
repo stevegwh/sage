@@ -80,6 +80,21 @@ namespace sage::editor
         std::string text;
     };
 
+    // Project components use this node to expose a fixed-capacity collection as
+    // a variable-length list. The project owns the capacity and mutations; the
+    // editor only renders and enforces those declared guard rails.
+    struct BoundedCollectionField
+    {
+        std::size_t count = 0;
+        std::size_t maximum = 0;
+        std::function<void()> add;
+        std::function<void()> remove;
+    };
+
+    struct DividerField
+    {
+    };
+
     // The variant alternative *is* the kind. Leaf overloads on ComponentInspector
     // construct one alternative each; the renderer dispatches via std::visit into
     // overloaded createFieldView/Update functions.
@@ -94,7 +109,9 @@ namespace sage::editor
         LeafField<Vector3>,
         LeafField<::Color>,
         EnumField,
-        NoteField>;
+        NoteField,
+        BoundedCollectionField,
+        DividerField>;
 
     struct InspectorField
     {
@@ -186,6 +203,24 @@ namespace sage::editor
         void note(const std::string& label, std::string text)
         {
             fields_.push_back({.label = qualified(label), .editable = false, .value = NoteField{std::move(text)}});
+        }
+
+        void boundedCollection(
+            std::string label,
+            const std::size_t count,
+            const std::size_t maximum,
+            std::function<void()> add,
+            std::function<void()> remove)
+        {
+            fields_.push_back(
+                {.label = qualified(label),
+                 .editable = editableScope_,
+                 .value = BoundedCollectionField{count, maximum, std::move(add), std::move(remove)}});
+        }
+
+        void divider(std::string id)
+        {
+            fields_.push_back({.label = qualified(std::move(id)), .editable = false, .value = DividerField{}});
         }
 
         // --- Leaf overloads ------------------------------------------------------------
