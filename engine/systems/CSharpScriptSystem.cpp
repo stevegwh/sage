@@ -66,6 +66,10 @@ namespace sage
         using ClearRouteFunction = void(SAGE_MANAGED_CALL*)(void*, std::uint32_t);
         using TryPathfindFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t);
+        using FindRouteFunction = std::uint32_t(SAGE_MANAGED_CALL*)(
+            void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t, float*, std::uint32_t);
+        using SetRouteFunction =
+            std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t, const float*, std::uint32_t);
         using SpawnFlatpackFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, const char*, float, float, float, float, float, float, std::uint8_t, std::uint32_t*);
         using Vector3DotFunction = float(SAGE_MANAGED_CALL*)(float, float, float, float, float, float);
@@ -91,7 +95,7 @@ namespace sage
 
         struct NativeApiTable
         {
-            std::uint32_t version = 7;
+            std::uint32_t version = 8;
             std::uint32_t size = 0;
             void* context = nullptr;
             LogFunction log = nullptr;
@@ -101,6 +105,8 @@ namespace sage
             HasRouteFunction hasRoute = nullptr;
             ClearRouteFunction clearRoute = nullptr;
             TryPathfindFunction tryPathfind = nullptr;
+            FindRouteFunction findRoute = nullptr;
+            SetRouteFunction setRoute = nullptr;
             SpawnFlatpackFunction spawnFlatpack = nullptr;
             Vector3DotFunction vector3Dot = nullptr;
             Vector3LengthFunction vector3Length = nullptr;
@@ -413,6 +419,53 @@ namespace sage
                        : 0;
         }
 
+        static std::uint32_t SAGE_MANAGED_CALL FindRoute(
+            void* context,
+            const std::uint32_t value,
+            const float x,
+            const float y,
+            const float z,
+            const std::uint8_t aStar,
+            const std::uint8_t findClosest,
+            float* points,
+            const std::uint32_t pointCapacity)
+        {
+            const auto& self = *static_cast<Impl*>(context);
+            if (self.systems == nullptr) return 0;
+            const auto entity = ToEntity(value);
+            if (!self.registry->valid(entity) ||
+                !self.registry->all_of<sgTransform, MoveableActor, Collideable>(entity))
+                return 0;
+
+            const auto route = self.systems->actorMovementSystem->FindRouteToLocation(
+                entity, Vector3{x, y, z}, aStar != 0, findClosest != 0);
+            const auto count = static_cast<std::uint32_t>(route.size());
+            if (points == nullptr || pointCapacity < count) return count;
+            for (std::uint32_t index = 0; index < count; ++index)
+            {
+                points[index * 3] = route[index].x;
+                points[index * 3 + 1] = route[index].y;
+                points[index * 3 + 2] = route[index].z;
+            }
+            return count;
+        }
+
+        static std::uint8_t SAGE_MANAGED_CALL
+        SetRoute(void* context, const std::uint32_t value, const float* points, const std::uint32_t pointCount)
+        {
+            const auto& self = *static_cast<Impl*>(context);
+            if (self.systems == nullptr || points == nullptr || pointCount == 0) return 0;
+            const auto entity = ToEntity(value);
+            if (!self.registry->valid(entity) || !self.registry->all_of<sgTransform, MoveableActor>(entity))
+                return 0;
+
+            std::vector<Vector3> route;
+            route.reserve(pointCount);
+            for (std::uint32_t index = 0; index < pointCount; ++index)
+                route.emplace_back(points[index * 3], points[index * 3 + 1], points[index * 3 + 2]);
+            return self.systems->actorMovementSystem->SetRoute(entity, route) ? 1 : 0;
+        }
+
         static std::uint8_t SAGE_MANAGED_CALL SpawnFlatpack(
             void* context,
             const char* name,
@@ -648,6 +701,8 @@ namespace sage
                 .hasRoute = &HasRoute,
                 .clearRoute = &ClearRoute,
                 .tryPathfind = &TryPathfind,
+                .findRoute = &FindRoute,
+                .setRoute = &SetRoute,
                 .spawnFlatpack = &SpawnFlatpack,
                 .vector3Dot = &Vector3Dot,
                 .vector3Length = &Vector3Length,

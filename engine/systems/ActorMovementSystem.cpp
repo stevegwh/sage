@@ -61,6 +61,76 @@ namespace sage
         return moveable.IsMoving();
     }
 
+    ActorMovementSystem::RouteSearchResult ActorMovementSystem::findRouteToLocation(
+        const entt::entity entity,
+        const Vector3& destination,
+        const bool astar,
+        const bool findNextBestIfInvalid) const
+    {
+        if (!sys->navigationGridSystem->CheckWithinGridBounds(destination))
+            return {.failure = PathfindFailureReason::DestinationOutOfGrid};
+
+        const auto& moveable = registry->get<MoveableActor>(entity);
+        GridSquare minRange{};
+        GridSquare maxRange{};
+        if (!sys->navigationGridSystem->GetPathfindRange(entity, moveable.pathfindingBounds, minRange, maxRange))
+            return {.failure = PathfindFailureReason::ActorOutOfGrid};
+        if (!sys->navigationGridSystem->CheckWithinBounds(destination, minRange, maxRange))
+            return {.failure = PathfindFailureReason::DestinationOutOfRange};
+
+        const auto& collideable = registry->get<Collideable>(entity);
+        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
+
+        const auto& actorTransform = registry->get<sgTransform>(entity);
+        auto route = astar ? sys->navigationGridSystem->AStarPathfind(
+                                 entity,
+                                 actorTransform.GetWorldPos(),
+                                 destination,
+                                 minRange,
+                                 maxRange,
+                                 AStarHeuristic::DEFAULT,
+                                 findNextBestIfInvalid)
+                           : sys->navigationGridSystem->BFSPathfind(
+                                 entity,
+                                 actorTransform.GetWorldPos(),
+                                 destination,
+                                 minRange,
+                                 maxRange,
+                                 findNextBestIfInvalid);
+
+        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
+        if (route.empty()) return {.failure = PathfindFailureReason::DestinationUnreachable};
+        return {.route = std::move(route)};
+    }
+
+    std::vector<Vector3> ActorMovementSystem::FindRouteToLocation(
+        const entt::entity entity,
+        const Vector3& destination,
+        const bool astar,
+        const bool findNextBestIfInvalid) const
+    {
+        return findRouteToLocation(entity, destination, astar, findNextBestIfInvalid).route;
+    }
+
+    bool ActorMovementSystem::SetRoute(const entt::entity entity, const std::span<const Vector3> route) const
+    {
+        if (route.empty()) return false;
+
+        auto& moveable = registry->get<MoveableActor>(entity);
+        const bool wasMoving = moveable.IsMoving();
+        const bool wasWalking = moveable.isWalking;
+        if (wasMoving)
+        {
+            PruneMoveCommands(entity);
+            moveable.onPathChanged.Publish(entity);
+        }
+        moveable.path.insert(moveable.path.end(), route.begin(), route.end());
+        updateActorDirection(registry->get<sgTransform>(entity), moveable);
+        moveable.isWalking = wasWalking;
+        moveable.onStartMovement.Publish(entity);
+        return true;
+    }
+
     void ActorMovementSystem::PathfindToLocation(
         const entt::entity& entity,
         const Vector3& destination,
@@ -69,88 +139,37 @@ namespace sage
     {
         auto& moveable = registry->get<MoveableActor>(entity);
         const bool wasWalking = moveable.isWalking;
-
-        if (!sys->navigationGridSystem->CheckWithinGridBounds(destination))
+        auto result = findRouteToLocation(entity, destination, astar, findNextBestIfInvalid);
+        if (result.failure)
         {
+            switch (*result.failure)
+            {
+            case PathfindFailureReason::DestinationOutOfGrid:
+                TraceLog(LOG_TRACE, "Actor %u: destination is outside the grid", static_cast<unsigned>(entity));
+                break;
+            case PathfindFailureReason::ActorOutOfGrid:
+                TraceLog(
+                    LOG_TRACE, "Actor %u: current position is outside the grid", static_cast<unsigned>(entity));
+                break;
+            case PathfindFailureReason::DestinationOutOfRange:
+                TraceLog(
+                    LOG_TRACE,
+                    "Actor %u: destination is outside pathfinding range",
+                    static_cast<unsigned>(entity));
+                break;
+            case PathfindFailureReason::DestinationUnreachable:
+                TraceLog(LOG_TRACE, "Actor %u: destination is unreachable", static_cast<unsigned>(entity));
+                break;
+            }
             moveable.onDestinationUnreachable.Publish(entity, destination);
-            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationOutOfGrid);
-            TraceLog(LOG_TRACE, "Actor %u: destination is outside the grid", static_cast<unsigned>(entity));
+            onPathfindFailed.Publish(entity, destination, *result.failure);
             return;
         }
 
-        GridSquare minRange{};
-        GridSquare maxRange{};
-        if (!sys->navigationGridSystem->GetPathfindRange(entity, moveable.pathfindingBounds, minRange, maxRange))
-        {
-            TraceLog(LOG_TRACE, "Actor %u: current position is outside the grid", static_cast<unsigned>(entity));
-            moveable.onDestinationUnreachable.Publish(entity, destination);
-            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::ActorOutOfGrid);
-            return;
-        }
-
-        if (!sys->navigationGridSystem->CheckWithinBounds(destination, minRange, maxRange))
-        {
-            TraceLog(LOG_TRACE, "Actor %u: destination is outside pathfinding range", static_cast<unsigned>(entity));
-            moveable.onDestinationUnreachable.Publish(entity, destination);
-            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationOutOfRange);
-            return;
-        }
-
-        const auto& collideable = registry->get<Collideable>(entity);
-        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
-
-        const auto& actorTrans = registry->get<sgTransform>(entity);
-        std::vector<Vector3> path;
-        if (astar)
-        {
-            path = sys->navigationGridSystem->AStarPathfind(
-                entity,
-                actorTrans.GetWorldPos(),
-                destination,
-                minRange,
-                maxRange,
-                AStarHeuristic::DEFAULT,
-                findNextBestIfInvalid);
-        }
-        else
-        {
-            path = sys->navigationGridSystem->BFSPathfind(
-                entity,
-                actorTrans.GetWorldPos(),
-                destination,
-                minRange,
-                maxRange,
-                findNextBestIfInvalid);
-        }
-
-        if (moveable.IsMoving()) // Was previously moving
-        {
-            PruneMoveCommands(entity);
-            moveable.onPathChanged.Publish(entity);
-        }
-
-        for (auto n : path)
-        {
-            moveable.path.emplace_back(n);
-        }
-
-        if (!path.empty())
-        {
-            auto& transform = registry->get<sgTransform>(entity);
-            updateActorDirection(transform, moveable);
-            // A reroute while already walking should steer into the new path;
-            // only an actor starting from rest must turn in place first.
-            moveable.isWalking = wasWalking;
-            moveable.onStartMovement.Publish(entity);
-        }
-        else
-        {
-            TraceLog(LOG_TRACE, "Actor %u: destination is unreachable", static_cast<unsigned>(entity));
-            moveable.onDestinationUnreachable.Publish(entity, destination);
-            onPathfindFailed.Publish(entity, destination, PathfindFailureReason::DestinationUnreachable);
-        }
-
-        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
+        (void)SetRoute(entity, result.route);
+        // A reroute while already walking should steer into the new path;
+        // only an actor starting from rest must turn in place first.
+        moveable.isWalking = wasWalking;
     }
 
     bool ActorMovementSystem::ReachedDestination(entt::entity entity) const

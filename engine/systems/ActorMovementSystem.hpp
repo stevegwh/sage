@@ -8,6 +8,8 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <optional>
+#include <span>
 #include <vector>
 
 namespace sage
@@ -30,11 +32,19 @@ namespace sage
 
     class ActorMovementSystem
     {
+        struct RouteSearchResult
+        {
+            std::vector<Vector3> route{};
+            std::optional<PathfindFailureReason> failure{};
+        };
+
         EngineSystems* sys;
         entt::registry* registry;
         std::vector<Ray> debugRays;
         std::vector<RayCollision> debugCollisions;
 
+        [[nodiscard]] RouteSearchResult findRouteToLocation(
+            entt::entity entity, const Vector3& destination, bool astar, bool findNextBestIfInvalid) const;
         void clearDebugData();
         void updateActor(
             entt::entity entity,
@@ -71,6 +81,12 @@ namespace sage
             const Vector3& destination,
             bool astar = false,
             bool findNextBestIfInvalid = true) const;
+        [[nodiscard]] std::vector<Vector3> FindRouteToLocation(
+            entt::entity entity,
+            const Vector3& destination,
+            bool astar = false,
+            bool findNextBestIfInvalid = true) const;
+        [[nodiscard]] bool SetRoute(entt::entity entity, std::span<const Vector3> route) const;
         void PathfindToLocation(
             const entt::entity& entity,
             const Vector3& destination,

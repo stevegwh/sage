@@ -30,6 +30,8 @@ public unsafe struct NativeApiTable
     public delegate* unmanaged[Cdecl]<nint, uint, byte> HasRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, void> ClearRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, byte> TryPathfind;
+    public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, float*, uint, uint> FindRoute;
+    public delegate* unmanaged[Cdecl]<nint, uint, float*, uint, byte> SetRoute;
     public delegate* unmanaged[Cdecl]<nint, byte*, float, float, float, float, float, float, byte, uint*, byte> SpawnFlatpack;
     public delegate* unmanaged[Cdecl]<float, float, float, float, float, float, float> Vector3Dot;
     public delegate* unmanaged[Cdecl]<float, float, float, float> Vector3Length;
@@ -51,7 +53,7 @@ public static class NativeExtension
 
 internal static unsafe class NativeApi
 {
-    internal const uint CurrentVersion = 7;
+    internal const uint CurrentVersion = 8;
 
     private static NativeApiTable api;
 
@@ -105,6 +107,62 @@ internal static unsafe class NativeApi
         api.TryPathfind != null &&
         api.TryPathfind(api.Context, entity, destination.X, destination.Y, destination.Z,
             aStar ? (byte)1 : (byte)0, findClosestReachable ? (byte)1 : (byte)0) != 0;
+
+    internal static Vector3[] FindRoute(
+        uint entity, Vector3 destination, bool aStar, bool findClosestReachable)
+    {
+        if (api.FindRoute == null) return [];
+        var pointCount = api.FindRoute(
+            api.Context,
+            entity,
+            destination.X,
+            destination.Y,
+            destination.Z,
+            aStar ? (byte)1 : (byte)0,
+            findClosestReachable ? (byte)1 : (byte)0,
+            null,
+            0);
+        if (pointCount == 0 || pointCount > int.MaxValue / 3) return [];
+
+        var coordinates = new float[pointCount * 3];
+        fixed (float* points = coordinates)
+        {
+            var returnedCount = api.FindRoute(
+                api.Context,
+                entity,
+                destination.X,
+                destination.Y,
+                destination.Z,
+                aStar ? (byte)1 : (byte)0,
+                findClosestReachable ? (byte)1 : (byte)0,
+                points,
+                pointCount);
+            if (returnedCount == 0 || returnedCount > pointCount) return [];
+            pointCount = returnedCount;
+        }
+
+        var route = new Vector3[pointCount];
+        for (var index = 0; index < route.Length; ++index)
+            route[index] = new Vector3(
+                coordinates[index * 3],
+                coordinates[index * 3 + 1],
+                coordinates[index * 3 + 2]);
+        return route;
+    }
+
+    internal static bool SetRoute(uint entity, ReadOnlySpan<Vector3> route)
+    {
+        if (api.SetRoute == null || route.IsEmpty || route.Length > int.MaxValue / 3) return false;
+        var coordinates = new float[route.Length * 3];
+        for (var index = 0; index < route.Length; ++index)
+        {
+            coordinates[index * 3] = route[index].X;
+            coordinates[index * 3 + 1] = route[index].Y;
+            coordinates[index * 3 + 2] = route[index].Z;
+        }
+        fixed (float* points = coordinates)
+            return api.SetRoute(api.Context, entity, points, (uint)route.Length) != 0;
+    }
 
     internal static Entity SpawnFlatpack(string name, Vector3 position, Vector3 rotation, bool hasRotation)
     {

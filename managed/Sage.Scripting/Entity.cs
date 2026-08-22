@@ -55,6 +55,11 @@ public readonly struct Entity(uint id) : IEquatable<Entity>
     public bool TryPathfindTo(Vector3 destination, bool aStar = false, bool findClosestReachable = true) =>
         NativeApi.TryPathfind(Id, destination, aStar, findClosestReachable);
 
+    public Vector3[] FindRouteTo(Vector3 destination, bool aStar = false, bool findClosestReachable = true) =>
+        NativeApi.FindRoute(Id, destination, aStar, findClosestReachable);
+
+    public bool SetRoute(ReadOnlySpan<Vector3> route) => NativeApi.SetRoute(Id, route);
+
     public bool PlayAnimation(string clip, int speed = 1) =>
         GetComponent<Animation>() is { } animation && animation.Play(clip, speed);
     public bool PlayOneShot(string clip, int speed = 1) =>
