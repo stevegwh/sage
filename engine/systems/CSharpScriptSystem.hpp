@@ -25,9 +25,11 @@ namespace sage
     {
         std::string gameplayAssemblyPath;
         void* gameApi = nullptr;
+        // Per-runtime output destination; this does not register script API types.
         CSharpLogSink logSink;
         std::function<void(std::string&)> migrateScriptClass;
-        std::function<void(ScriptApiRegistry&)> registerScriptApi;
+        // Populates the native types exposed to managed scripts.
+        std::function<void(ScriptApiRegistry&)> populateScriptApi;
     };
 
     class CSharpScriptSystem

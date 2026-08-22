@@ -2513,7 +2513,7 @@ namespace sage
         context.viewportScreenRect = gameViewportScreenRect();
         context.mapPath = kPlaySessionMapPath;
         gui->ClearConsole();
-        context.csharpLogSink = [this](const CSharpLogLevel level, const std::string_view message) {
+        context.managedLogSink = [this](const CSharpLogLevel level, const std::string_view message) {
             gui->AddConsoleEntry(level, message);
         };
         gameRuntime = CreateGameRuntime(context);

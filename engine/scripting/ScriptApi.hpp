@@ -3,6 +3,7 @@
 #include "engine/Event.hpp"
 
 #include "entt/entt.hpp"
+#include "magic_enum.hpp"
 #include "raylib.h"
 
 #include <algorithm>
@@ -301,6 +302,7 @@ namespace sage
         std::vector<System> systems;
         std::vector<Enum> enums;
         std::unordered_map<std::type_index, std::string> managedEnumNames;
+        std::string defaultManagedNamespace;
 
         template <class T>
         class ComponentObserverFor;
@@ -340,6 +342,32 @@ namespace sage
       public:
         [[nodiscard]] static Id MakeId(std::string_view name);
 
+        void SetDefaultManagedNamespace(std::string managedNamespace)
+        {
+            defaultManagedNamespace = std::move(managedNamespace);
+        }
+
+        template <class EnumType>
+        void RegisterEnum(std::string managedNamespace)
+        {
+            static_assert(std::is_enum_v<EnumType>);
+            Enum definition{
+                .managedNamespace = std::move(managedNamespace),
+                .managedName = std::string{magic_enum::enum_type_name<EnumType>()}};
+            for (const auto& [value, name] : magic_enum::enum_entries<EnumType>())
+                definition.values.emplace_back(name, static_cast<std::int64_t>(value));
+            managedEnumNames.insert_or_assign(
+                std::type_index{typeid(EnumType)},
+                "global::" + definition.managedNamespace + "." + definition.managedName);
+            enums.push_back(std::move(definition));
+        }
+
+        template <class EnumType>
+        void RegisterEnum()
+        {
+            RegisterEnum<EnumType>(defaultManagedNamespace);
+        }
+
         template <class EnumType>
         void RegisterEnum(
             std::string managedNamespace,
@@ -358,10 +386,10 @@ namespace sage
         }
 
         template <class T>
-        void RegisterComponent(std::string managedNamespace, std::string managedName);
+        void RegisterComponent(std::string managedName);
 
         template <class T>
-        void RegisterSystem(std::string managedNamespace, std::string managedName);
+        void RegisterSystem(std::string managedName);
 
         [[nodiscard]] bool HasComponent(const entt::registry& registry, entt::entity entity, Id componentId) const;
         [[nodiscard]] bool GetProperty(
@@ -732,8 +760,9 @@ namespace sage
     };
 
     template <class T>
-    void ScriptApiRegistry::RegisterComponent(std::string managedNamespace, std::string managedName)
+    void ScriptApiRegistry::RegisterComponent(std::string managedName)
     {
+        std::string managedNamespace = defaultManagedNamespace;
         const std::string qualifiedName = managedNamespace + "." + managedName;
         components.push_back(
             {.id = MakeId(qualifiedName),
@@ -750,8 +779,9 @@ namespace sage
     }
 
     template <class T>
-    void ScriptApiRegistry::RegisterSystem(std::string managedNamespace, std::string managedName)
+    void ScriptApiRegistry::RegisterSystem(std::string managedName)
     {
+        std::string managedNamespace = defaultManagedNamespace;
         const std::string qualifiedName = managedNamespace + "." + managedName;
         systems.push_back(
             {.id = MakeId(qualifiedName),

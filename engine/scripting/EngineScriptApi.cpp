@@ -10,9 +10,10 @@ namespace sage
 {
     void RegisterEngineScriptApi(ScriptApiRegistry& api)
     {
-        api.RegisterComponent<sgTransform>("Sage", "Transform");
-        api.RegisterComponent<Collideable>("Sage", "Collideable");
-        api.RegisterComponent<MoveableActor>("Sage", "MoveableActor");
-        api.RegisterComponent<Animation>("Sage", "Animation");
+        api.SetDefaultManagedNamespace("Sage");
+        api.RegisterComponent<sgTransform>("Transform");
+        api.RegisterComponent<Collideable>("Collideable");
+        api.RegisterComponent<MoveableActor>("MoveableActor");
+        api.RegisterComponent<Animation>("Animation");
     }
 } // namespace sage

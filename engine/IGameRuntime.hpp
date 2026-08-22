@@ -36,7 +36,7 @@ namespace sage
         std::string mapPath;
         // Optional editor-owned destination for Sage.Log calls made by hosted C#
         // scripts during this play session.
-        CSharpLogSink csharpLogSink;
+        CSharpLogSink managedLogSink;
     };
 
     // A live, tickable game world. Created fresh on Play and destroyed on Stop,

@@ -682,7 +682,7 @@ namespace sage
             : registry(source), systems(engineSystems), config(std::move(managedConfig))
         {
             RegisterEngineScriptApi(scriptApi);
-            if (config.registerScriptApi) config.registerScriptApi(scriptApi);
+            if (config.populateScriptApi) config.populateScriptApi(scriptApi);
             componentObservers = scriptApi.ObserveComponentDestruction(
                 *registry,
                 [this](const ScriptApiRegistry::Id componentId, const entt::entity entity) {
