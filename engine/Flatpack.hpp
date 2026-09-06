@@ -11,6 +11,8 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <unordered_map>
+#include <cstdint>
 #include <vector>
 
 namespace sage
@@ -21,8 +23,11 @@ namespace sage
         {
             std::string key;
             std::function<bool(const entt::registry&, entt::entity)> has;
-            std::function<std::string(const entt::registry&, entt::entity)> serialize;
             std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
+            std::function<std::string(const entt::registry&, entt::entity,
+                const std::unordered_map<std::uint32_t, entt::entity>&)> serialize;
+            std::function<void(entt::registry&, entt::entity,
+                const std::unordered_map<std::uint32_t, entt::entity>&)> resolveReferences;
         };
 
         void RegisterFlatpackComponentCodec(FlatpackComponentCodec codec);
@@ -42,13 +47,6 @@ namespace sage
                  [](const entt::registry& registry, const entt::entity entity) {
                      return registry.valid(entity) && registry.template any_of<T>(entity);
                  },
-             .serialize =
-                 [](const entt::registry& registry, const entt::entity entity) {
-                     std::ostringstream stream(std::ios::binary);
-                     cereal::BinaryOutputArchive archive(stream);
-                     archive(registry.template get<T>(entity));
-                     return stream.str();
-                 },
              .deserialize =
                  [](entt::registry& registry, const entt::entity entity, const std::string& data) {
                      std::istringstream stream(data, std::ios::binary);
@@ -56,8 +54,35 @@ namespace sage
                      T component{};
                      archive(component);
                      registry.template emplace_or_replace<T>(entity, std::move(component));
+                 },
+             .serialize =
+                 [](const entt::registry& registry, entt::entity entity,
+                    const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                     std::ostringstream stream(std::ios::binary);
+                     cereal::BinaryOutputArchive archive(stream);
+                     if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
+                     {
+                         auto component = registry.template get<T>(entity);
+                         component.ResolveEntityReferences(ids);
+                         archive(component);
+                     }
+                     else archive(registry.template get<T>(entity));
+                     return stream.str();
+                 },
+             .resolveReferences =
+                 [](entt::registry& registry, entt::entity entity,
+                    const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                     if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
+                         if (auto* component = registry.template try_get<T>(entity))
+                             component->ResolveEntityReferences(ids);
                  }});
     }
+
+    // Map loading uses the same registered codecs as flatpack loading.
+    bool RestoreRegisteredComponent(entt::registry& registry, entt::entity entity,
+        const std::string& key, const std::string& data);
+    void ResolveRegisteredComponentReferences(entt::registry& registry, entt::entity entity,
+        const std::unordered_map<std::uint32_t, entt::entity>& ids);
 
     struct FlatpackCatalogEntry
     {

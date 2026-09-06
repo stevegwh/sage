@@ -202,6 +202,22 @@ namespace sage
         codecs.push_back(std::move(codec));
     }
 
+    bool RestoreRegisteredComponent(entt::registry& registry, entt::entity entity,
+        const std::string& key, const std::string& data)
+    {
+        const auto& codecs = FlatpackComponentCodecs();
+        const auto codec = std::ranges::find(codecs, key, &detail::FlatpackComponentCodec::key);
+        if (codec == codecs.end()) return false;
+        codec->deserialize(registry, entity, data);
+        return true;
+    }
+
+    void ResolveRegisteredComponentReferences(entt::registry& registry, entt::entity entity,
+        const std::unordered_map<std::uint32_t, entt::entity>& ids)
+    {
+        for (const auto& codec : FlatpackComponentCodecs()) codec.resolveReferences(registry, entity, ids);
+    }
+
     bool IsFlatpackFile(const char* path)
     {
         std::ifstream storage(path, std::ios::binary);
@@ -239,6 +255,9 @@ namespace sage
             }
         };
         visit(visit, root);
+        std::unordered_map<std::uint32_t, entt::entity> referenceIds;
+        for (const auto& [entity, localId] : localIds)
+            referenceIds.emplace(entt::entt_traits<entt::entity>::to_entity(entity), static_cast<entt::entity>(localId));
 
         const Vector3 rootWorldOrigin = source.get<sgTransform>(root).GetWorldPos();
 
@@ -271,7 +290,7 @@ namespace sage
             {
                 if (!codec.has(source, entity)) continue;
                 customComponents.push_back(
-                    FlatpackCustomComponentRecord{localId, codec.key, codec.serialize(source, entity)});
+                    FlatpackCustomComponentRecord{localId, codec.key, codec.serialize(source, entity, referenceIds)});
             }
 
             if (const auto* script = source.try_get<ScriptComponent>(entity);
@@ -576,6 +595,11 @@ namespace sage
                           << "\n";
             }
         }
+
+        std::unordered_map<std::uint32_t, entt::entity> referenceIds;
+        for (std::uint32_t i = 0; i < created.size(); ++i) referenceIds.emplace(i, created[i]);
+        for (const auto entity : created)
+            ResolveRegisteredComponentReferences(destination, entity, referenceIds);
 
         return FlatpackInstance{created.front(), std::move(created)};
     }

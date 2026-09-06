@@ -16,6 +16,7 @@
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -492,6 +493,8 @@ namespace sage::editor
             std::function<void(entt::registry&, entt::entity)> remove;
             std::function<std::string(const entt::registry&, entt::entity)> serialize;
             std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
+            std::function<void(entt::registry&, entt::entity,
+                const std::unordered_map<std::uint32_t, entt::entity>&)> resolveReferences;
         };
 
         struct DescribedEntry
@@ -515,6 +518,11 @@ namespace sage::editor
             const Entry& target, const std::vector<DescribedEntry>& described, bool multiSelection) const;
 
       public:
+        template <class T>
+        static constexpr bool SupportsComponent = requires(T& component, ComponentInspector& inspector) {
+            component.define_editor_options(inspector);
+        };
+
         template <class T>
         void Register(std::string displayName, bool removable = false, bool addable = false)
         {
@@ -561,6 +569,11 @@ namespace sage::editor
                 archive(r.template get<T>(e));
                 return stream.str();
             };
+            entry.resolveReferences = [](entt::registry& r, entt::entity e,
+                const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
+                    if (auto* component = r.template try_get<T>(e)) component->ResolveEntityReferences(ids);
+            };
             entry.deserialize = [](entt::registry& r, const entt::entity e, const std::string& data) {
                 std::istringstream stream(data, std::ios::binary);
                 T component{};
@@ -569,6 +582,13 @@ namespace sage::editor
                 if (r.template any_of<T>(e)) r.template remove<T>(e);
                 r.template emplace<T>(e, std::move(component));
             };
+        }
+
+        void ResolvePersistentReferences(entt::registry& registry, entt::entity entity,
+            const std::unordered_map<std::uint32_t, entt::entity>& ids) const
+        {
+            for (const auto& entry : entries_)
+                if (entry.resolveReferences) entry.resolveReferences(registry, entity, ids);
         }
 
         [[nodiscard]] std::vector<ComponentOption> AddableComponents() const;

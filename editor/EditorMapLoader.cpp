@@ -312,6 +312,7 @@ namespace sage::editor
             if (destination->valid(entity) && destination->any_of<EditorMapEntity, sgTransform>(entity))
             {
                 destination->get<sgTransform>(entity).ResolveSerializedParent(idMap);
+                if (components) components->ResolvePersistentReferences(*destination, entity, idMap);
             }
         }
 
