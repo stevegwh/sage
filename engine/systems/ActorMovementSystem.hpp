@@ -44,18 +44,23 @@ namespace sage
         [[nodiscard]] RouteSearchResult findRouteToLocation(
             entt::entity entity, const Vector3& destination, bool astar, bool findNextBestIfInvalid) const;
         void updateActor(
-            entt::entity entity, MoveableActor& moveableActor, sgTransform& transform);
+            entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, float deltaTime, float speed);
         static bool hasReachedNextPoint(const sgTransform& transform, const MoveableActor& moveableActor);
         void handlePointReached(entt::entity entity, MoveableActor& moveableActor);
         void releaseStoppedFootprint(entt::entity entity) const;
         bool claimStoppingPosition(entt::entity entity, Vector3 position);
         bool rerouteToStoppingPosition(entt::entity entity, MoveableActor& actor, Vector3 destination) const;
         void setActorPosition(entt::entity entity, sgTransform& transform, Vector3 position) const;
-        void updateActorTransform(entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const;
+        void updateActorTransform(
+            entt::entity entity,
+            sgTransform& transform,
+            MoveableActor& moveableActor,
+            float deltaTime,
+            float speed) const;
         void centerTurnPivot(entt::entity entity, MoveableActor& moveableActor, sgTransform& transform) const;
         static void updateActorDirection(sgTransform& transform, const MoveableActor& moveableActor);
         [[nodiscard]] static bool updateActorRotation(
-            sgTransform& transform, const MoveableActor& moveableActor);
+            sgTransform& transform, const MoveableActor& moveableActor, float deltaTime);
 
       public:
         Event<entt::entity, Vector3, PathfindFailureReason> onPathfindFailed{};
@@ -80,7 +85,7 @@ namespace sage
             bool findNextBestIfInvalid = true) const;
         void MoveToLocation(const entt::entity& entity, Vector3 location) const;
         void CancelMovement(const entt::entity& entity) const;
-        void Update(float deltaTime = GetFrameTime());
+        void Update(float deltaTime = GetFrameTime(), float speed = 1.0f);
         void DrawDebug() const;
         ActorMovementSystem(entt::registry* _registry, NavigationGridSystem* navigationGrid);
     };

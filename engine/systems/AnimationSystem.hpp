@@ -13,7 +13,7 @@ namespace sage
         entt::registry* registry;
 
       public:
-        void Update() const;
+        void Update(float deltaTime, float speed = 1.0f) const;
         void Draw();
         explicit AnimationSystem(entt::registry* _registry);
     };

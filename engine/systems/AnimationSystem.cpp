@@ -10,13 +10,14 @@
 #include "raymath.h"
 
 #include <cstdint>
+#include <cmath>
 #include <iostream>
 #include <unordered_set>
 
 namespace sage
 {
 
-    void AnimationSystem::Update() const
+    void AnimationSystem::Update(const float deltaTime, const float speed) const
     {
         // Movement drives the base clip; ChangeAnimationByName is a no-op when the
         // clip is already active and leaves the animation untouched on unknown names.
@@ -64,13 +65,15 @@ namespace sage
                 animation.onAnimationStart.Publish(entity);
             }
 
-            bool finalFrame = animData.currentFrame + animData.speed >= anim.frameCount;
+            const auto frameAdvance = static_cast<unsigned int>(
+                std::max(0.0f, std::round(static_cast<float>(animData.speed) * speed)));
+            bool finalFrame = animData.currentFrame + frameAdvance >= static_cast<unsigned int>(anim.frameCount);
             animData.lastFrame = animData.currentFrame;
-            animData.currentFrame = (animData.currentFrame + animData.speed) % anim.frameCount;
+            animData.currentFrame = (animData.currentFrame + frameAdvance) % anim.frameCount;
 
             if (animation.blending)
             {
-                animation.blendTimer -= GetFrameTime();
+                animation.blendTimer -= deltaTime;
                 if (animation.blendTimer <= 0.0f)
                 {
                     animation.blending = false;
@@ -80,8 +83,10 @@ namespace sage
                     // The outgoing clip keeps playing while it fades out.
                     auto& from = animation.blendFrom;
                     const ModelAnimation& fromAnim = animation.animations[from.index];
+                    const auto fromFrameAdvance = static_cast<unsigned int>(
+                        std::max(0.0f, std::round(static_cast<float>(from.speed) * speed)));
                     from.lastFrame = from.currentFrame;
-                    from.currentFrame = (from.currentFrame + from.speed) % fromAnim.frameCount;
+                    from.currentFrame = (from.currentFrame + fromFrameAdvance) % fromAnim.frameCount;
                 }
             }
 

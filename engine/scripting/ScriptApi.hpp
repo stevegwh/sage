@@ -289,6 +289,7 @@ namespace sage
             std::string managedNamespace;
             std::string managedName;
             std::vector<Method> methods;
+            std::vector<EventDefinition> events;
         };
 
         struct Enum
@@ -537,6 +538,50 @@ namespace sage
                              std::apply([&](auto&... argument) { return method(source, argument...); }, arguments);
                          return detail::EncodeScriptValue(output, result);
                      }
+                 }});
+        }
+
+        template <class... Args>
+        void event(std::string name, Event<Args...>& (*getEvent)(entt::registry&))
+        {
+            static_assert(sizeof...(Args) <= 2, "Managed system events currently support up to two values");
+            static_assert((detail::IsScriptValue<Args> && ...));
+
+            std::vector<ScriptApiRegistry::Parameter> parameters;
+            parameters.reserve(sizeof...(Args));
+            [&]<std::size_t... Index>(std::index_sequence<Index...>) {
+                (parameters.push_back(
+                     {.name = "arg" + std::to_string(Index),
+                      .type = detail::ScriptValueTypeOf<Args>(),
+                      .managedType = api.template managedTypeName<Args>()}),
+                 ...);
+            }(std::index_sequence_for<Args...>{});
+
+            const auto qualifiedName = system.managedNamespace + "." + system.managedName + "." + name;
+            system.events.push_back(
+                {.id = ScriptApiRegistry::MakeId(qualifiedName),
+                 .name = std::move(name),
+                 .parameters = std::move(parameters),
+                 .subscribe = [getEvent](
+                                  entt::registry& source,
+                                  entt::entity,
+                                  ScriptApiRegistry::EventCallback callback,
+                                  Subscription& subscription) {
+                     subscription = getEvent(source).Subscribe(
+                         [callback = std::move(callback)](Args... args) {
+                             std::array<ScriptValue, sizeof...(Args)> values{};
+                             std::array<std::string, sizeof...(Args)> textStorage{};
+                             std::size_t index = 0;
+                             const auto encode = [&](const auto& argument) {
+                                 const bool result = detail::EncodeEventValue(
+                                     values[index], textStorage[index], argument);
+                                 ++index;
+                                 return result;
+                             };
+                             if ((encode(args) && ...))
+                                 callback(std::span<const ScriptValue>{values.data(), values.size()});
+                         });
+                     return subscription.IsActive();
                  }});
         }
     };

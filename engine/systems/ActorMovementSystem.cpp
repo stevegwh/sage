@@ -340,7 +340,8 @@ namespace sage
         }
     }
 
-    bool ActorMovementSystem::updateActorRotation(sgTransform& transform, const MoveableActor& moveableActor)
+    bool ActorMovementSystem::updateActorRotation(
+        sgTransform& transform, const MoveableActor& moveableActor, const float deltaTime)
     {
         const float target = atan2f(transform.direction.x, transform.direction.z) * RAD2DEG;
         const Vector3 currentRotation = transform.GetWorldRot();
@@ -356,7 +357,7 @@ namespace sage
                 return true;
             }
 
-            const float maxStep = moveableActor.turnSpeed * GetFrameTime();
+            const float maxStep = moveableActor.turnSpeed * deltaTime;
             angle = currentRotation.y + Clamp(delta, -maxStep, maxStep);
         }
         transform.rotation.world = {currentRotation.x, angle, currentRotation.z};
@@ -366,24 +367,37 @@ namespace sage
     }
 
     void ActorMovementSystem::updateActorTransform(
-        entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const
+        entt::entity entity,
+        sgTransform& transform,
+        MoveableActor& moveableActor,
+        const float deltaTime,
+        const float speed) const
     {
         updateActorDirection(transform, moveableActor);
-        const bool isFacingMovementDirection = updateActorRotation(transform, moveableActor);
+        const bool isFacingMovementDirection = updateActorRotation(transform, moveableActor, deltaTime);
         if (!moveableActor.isWalking && !isFacingMovementDirection) return;
         moveableActor.isWalking = true;
 
         GridSquare actorIndex{};
         navigationGrid->WorldToGridSpace(transform.GetWorldPos(), actorIndex);
         const auto* gridSquare = navigationGrid->GetGridSquare(actorIndex.row, actorIndex.col);
+        const Vector3 currentPosition = transform.GetWorldPos();
+        const Vector3 nextPoint = moveableActor.path.front();
+        const float distance = Vector2Distance(
+            {currentPosition.x, currentPosition.z}, {nextPoint.x, nextPoint.z});
+        const float step = std::min(moveableActor.movementSpeed * speed, distance);
         setActorPosition(entity, transform, {
-            transform.GetWorldPos().x + transform.direction.x * moveableActor.movementSpeed,
+            currentPosition.x + transform.direction.x * step,
             gridSquare->heightMap.GetHeight(),
-            transform.GetWorldPos().z + transform.direction.z * moveableActor.movementSpeed});
+            currentPosition.z + transform.direction.z * step});
     }
 
     void ActorMovementSystem::updateActor(
-        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform)
+        entt::entity entity,
+        MoveableActor& moveableActor,
+        sgTransform& transform,
+        const float deltaTime,
+        const float speed)
     {
         if (moveableActor.stopRetryTime > 0.0f) return;
         const bool hasCollider = registry->all_of<Collideable>(entity);
@@ -408,10 +422,10 @@ namespace sage
             return;
         }
 
-        updateActorTransform(entity, transform, moveableActor);
+        updateActorTransform(entity, transform, moveableActor, deltaTime, speed);
     }
 
-    void ActorMovementSystem::Update(const float deltaTime)
+    void ActorMovementSystem::Update(const float deltaTime, const float speed)
     {
         auto fullView = registry->view<MoveableActor, sgTransform, Collideable>();
         for (auto [entity, actor, transform, collider] : fullView.each())
@@ -449,7 +463,7 @@ namespace sage
 
         // All existing stopped actors are marked before any travelling actor can arrive.
         for (auto [entity, actor, transform, collider] : fullView.each())
-            updateActor(entity, actor, transform);
+            updateActor(entity, actor, transform, deltaTime, speed);
 
         // Entities without collision footprints retain unrestricted movement.
         auto partialView = registry->view<MoveableActor, sgTransform>(entt::exclude<Collideable>);
@@ -458,7 +472,7 @@ namespace sage
             centerTurnPivot(entity, actor, transform);
             actor.needsStopPosition = false;
             actor.stopRetryTime = 0.0f;
-            updateActor(entity, actor, transform);
+            updateActor(entity, actor, transform, deltaTime, speed);
         }
     }
 

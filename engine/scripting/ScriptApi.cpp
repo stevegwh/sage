@@ -208,6 +208,36 @@ namespace sage
                        << ResultExpression(method.returnType, method.managedReturnType) << ";\n";
             output << "        }\n\n";
         }
+
+        void WriteSystemEvent(
+            std::ostringstream& output,
+            const ScriptApiRegistry::EventDefinition& event,
+            const ScriptApiRegistry::Id systemId)
+        {
+            output << "        private const ulong " << event.name << "EventId = " << event.id << "UL;\n";
+            output << "        public static global::Sage.Event";
+            if (!event.parameters.empty())
+            {
+                output << "<";
+                for (std::size_t index = 0; index < event.parameters.size(); ++index)
+                {
+                    if (index != 0) output << ", ";
+                    output << event.parameters[index].managedType;
+                }
+                output << ">";
+            }
+            output << " " << event.name
+                   << " => global::Sage.NativeComponentApi.CreateEvent(global::Sage.Entity.None.Id, "
+                   << systemId << "UL, " << event.name << "EventId";
+            for (std::size_t index = 0; index < event.parameters.size(); ++index)
+            {
+                const auto& parameter = event.parameters[index];
+                const auto value = "value" + std::to_string(index);
+                output << ", static " << value << " => "
+                       << EventValueExpression(parameter.type, parameter.managedType, value);
+            }
+            output << ");\n\n";
+        }
     } // namespace
 
     ScriptApiRegistry::Id ScriptApiRegistry::MakeId(const std::string_view name)
@@ -325,11 +355,19 @@ namespace sage
         EventCallback callback,
         Subscription& subscription) const
     {
-        const auto* component = findComponent(componentId);
-        if (component == nullptr) return false;
+        if (const auto* component = findComponent(componentId))
+        {
+            const auto event = std::ranges::find_if(
+                component->events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
+            return event != component->events.end() &&
+                   event->subscribe(registry, entity, std::move(callback), subscription);
+        }
+
+        const auto* system = findSystem(componentId);
+        if (system == nullptr) return false;
         const auto event = std::ranges::find_if(
-            component->events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
-        return event != component->events.end() &&
+            system->events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
+        return event != system->events.end() &&
                event->subscribe(registry, entity, std::move(callback), subscription);
     }
 
@@ -396,6 +434,8 @@ namespace sage
                    << system.managedName << "\n    {\n";
             for (const auto& method : system.methods)
                 WriteSystemMethod(output, method, system.id);
+            for (const auto& event : system.events)
+                WriteSystemEvent(output, event, system.id);
             output << "    }\n"
                       "}\n\n";
         }
