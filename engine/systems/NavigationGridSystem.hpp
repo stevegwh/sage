@@ -32,7 +32,8 @@ namespace sage
         [[nodiscard]] std::vector<Vector3> tracebackPath(
             const std::vector<std::vector<GridSquare>>& came_from,
             const GridSquare& start,
-            const GridSquare& finish);
+            const GridSquare& finish,
+            GridSquare minRange);
         //---------------------------------------------------------
         bool getExtents(entt::entity entity, GridSquare& extents) const;
         //---------------------------------------------------------
@@ -42,7 +43,11 @@ namespace sage
         //---------------------------------------------------------
         [[nodiscard]] bool checkExtents(GridSquare square, GridSquare extents) const;
         //---------------------------------------------------------
-        [[nodiscard]] bool checkFootprint(GridSquare square, const BoundingBox& footprintOffsets) const;
+        [[nodiscard]] bool checkBounds(
+            const BoundingBox& bounds, entt::entity ignoreEntity, bool ignoreActors) const;
+        [[nodiscard]] bool checkFootprint(
+            GridSquare square, const BoundingBox& footprintOffsets,
+            entt::entity ignoreEntity = entt::null, bool ignoreActors = false) const;
         //---------------------------------------------------------
         bool getExtents(Vector3 worldPos, GridSquare& extents) const;
         //---------------------------------------------------------
@@ -156,7 +161,8 @@ namespace sage
         //---------------------------------------------------------
         [[nodiscard]] bool CheckBoundingBoxAreaUnoccupied(GridSquare square, const BoundingBox& bb) const;
         //---------------------------------------------------------
-        [[nodiscard]] bool CheckEntityAreaUnoccupied(entt::entity entity, Vector3 worldPos) const;
+        [[nodiscard]] bool CheckEntityAreaUnoccupied(
+            entt::entity entity, Vector3 worldPos, bool ignoreActors = false) const;
         //---------------------------------------------------------
         [[nodiscard]] entt::entity CheckSingleSquareOccupant(Vector3 worldPos) const;
         //---------------------------------------------------------

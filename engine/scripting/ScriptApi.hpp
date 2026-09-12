@@ -275,6 +275,7 @@ namespace sage
             std::string managedNamespace;
             std::string managedName;
             std::function<bool(const entt::registry&, entt::entity)> has;
+            std::function<const entt::sparse_set*(const entt::registry&)> storage;
             std::function<std::unique_ptr<ComponentObserver>(entt::registry&, Id, ComponentDestroyed)>
                 observeDestroyed;
             std::vector<Property> properties;
@@ -392,6 +393,8 @@ namespace sage
         void RegisterSystem(std::string managedName);
 
         [[nodiscard]] bool HasComponent(const entt::registry& registry, entt::entity entity, Id componentId) const;
+        [[nodiscard]] std::vector<entt::entity> FindEntitiesWithComponents(
+            const entt::registry& registry, std::span<const Id> componentIds) const;
         [[nodiscard]] bool GetProperty(
             entt::registry& registry,
             entt::entity entity,
@@ -770,6 +773,9 @@ namespace sage
              .managedName = std::move(managedName),
              .has = [](const entt::registry& source, const entt::entity entity) {
                  return source.valid(entity) && source.template all_of<T>(entity);
+             },
+             .storage = [](const entt::registry& source) -> const entt::sparse_set* {
+                 return source.template storage<T>();
              },
              .observeDestroyed = [](entt::registry& source, const Id id, ComponentDestroyed callback) {
                  return std::make_unique<ComponentObserverFor<T>>(source, id, std::move(callback));

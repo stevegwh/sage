@@ -26,11 +26,12 @@ public unsafe struct NativeApiTable
     public delegate* unmanaged[Cdecl]<nint, int, byte*, void> Log;
     public delegate* unmanaged[Cdecl]<nint, uint, byte> EntityExists;
     public delegate* unmanaged[Cdecl]<nint, byte*, uint*, byte> FindFirstWithArchetype;
+    public delegate* unmanaged[Cdecl]<nint, ulong*, uint, uint*, uint, uint> FindWithComponents;
     public delegate* unmanaged[Cdecl]<nint, float, float, float, uint*, byte> GetNavigationSurfaceAt;
     public delegate* unmanaged[Cdecl]<nint, uint, byte> HasRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, void> ClearRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, byte> TryPathfind;
-    public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, float*, uint, uint> FindRoute;
+    public delegate* unmanaged[Cdecl]<nint, uint, float, float, float, byte, byte, Vector3**, uint> FindRoute;
     public delegate* unmanaged[Cdecl]<nint, uint, float*, uint, byte> SetRoute;
     public delegate* unmanaged[Cdecl]<nint, byte*, float, float, float, float, float, float, byte, uint*, byte> SpawnFlatpack;
     public delegate* unmanaged[Cdecl]<float, float, float, float, float, float, float> Vector3Dot;
@@ -53,7 +54,7 @@ public static class NativeExtension
 
 internal static unsafe class NativeApi
 {
-    internal const uint CurrentVersion = 8;
+    internal const uint CurrentVersion = 10;
 
     private static NativeApiTable api;
 
@@ -86,6 +87,39 @@ internal static unsafe class NativeApi
         }
     }
 
+    internal static Entity FindFirstWithComponents(ReadOnlySpan<ulong> componentIds)
+    {
+        if (api.FindWithComponents == null || componentIds.IsEmpty) return Entity.None;
+        uint entity;
+        fixed (ulong* ids = componentIds)
+        {
+            return api.FindWithComponents(api.Context, ids, (uint)componentIds.Length, &entity, 1) != 0
+                ? new Entity(entity)
+                : Entity.None;
+        }
+    }
+
+    internal static Entity[] FindAllWithComponents(ReadOnlySpan<ulong> componentIds)
+    {
+        if (api.FindWithComponents == null || componentIds.IsEmpty) return [];
+        fixed (ulong* ids = componentIds)
+        {
+            var count = api.FindWithComponents(api.Context, ids, (uint)componentIds.Length, null, 0);
+            if (count == 0 || count > int.MaxValue) return [];
+            var entityIds = new uint[count];
+            fixed (uint* destination = entityIds)
+            {
+                var returnedCount = api.FindWithComponents(
+                    api.Context, ids, (uint)componentIds.Length, destination, count);
+                if (returnedCount == 0 || returnedCount > count) return [];
+                count = returnedCount;
+            }
+            var entities = new Entity[count];
+            for (var index = 0; index < entities.Length; ++index) entities[index] = new Entity(entityIds[index]);
+            return entities;
+        }
+    }
+
     internal static Entity GetNavigationSurfaceAt(Vector3 position)
     {
         if (api.GetNavigationSurfaceAt == null) return Entity.None;
@@ -112,6 +146,7 @@ internal static unsafe class NativeApi
         uint entity, Vector3 destination, bool aStar, bool findClosestReachable)
     {
         if (api.FindRoute == null) return [];
+        Vector3* points = null;
         var pointCount = api.FindRoute(
             api.Context,
             entity,
@@ -120,34 +155,12 @@ internal static unsafe class NativeApi
             destination.Z,
             aStar ? (byte)1 : (byte)0,
             findClosestReachable ? (byte)1 : (byte)0,
-            null,
-            0);
-        if (pointCount == 0 || pointCount > int.MaxValue / 3) return [];
+            &points);
+        if (points == null || pointCount == 0 || pointCount > int.MaxValue) return [];
 
-        var coordinates = new float[pointCount * 3];
-        fixed (float* points = coordinates)
-        {
-            var returnedCount = api.FindRoute(
-                api.Context,
-                entity,
-                destination.X,
-                destination.Y,
-                destination.Z,
-                aStar ? (byte)1 : (byte)0,
-                findClosestReachable ? (byte)1 : (byte)0,
-                points,
-                pointCount);
-            if (returnedCount == 0 || returnedCount > pointCount) return [];
-            pointCount = returnedCount;
-        }
-
-        var route = new Vector3[pointCount];
-        for (var index = 0; index < route.Length; ++index)
-            route[index] = new Vector3(
-                coordinates[index * 3],
-                coordinates[index * 3 + 1],
-                coordinates[index * 3 + 2]);
-        return route;
+        // Native storage lasts until the next route query. Copy immediately, before
+        // invoking any more native functions or returning to gameplay code.
+        return new ReadOnlySpan<Vector3>(points, (int)pointCount).ToArray();
     }
 
     internal static bool SetRoute(uint entity, ReadOnlySpan<Vector3> route)
@@ -238,6 +251,18 @@ internal static unsafe class NativeApi
 public static class World
 {
     public static Entity FindFirstWithArchetype(string name) => NativeApi.FindFirstWithArchetype(name);
+    public static Entity FindFirstWithComponent<T>() where T : struct, IComponent<T> =>
+        NativeApi.FindFirstWithComponents([T.ComponentId]);
+    public static Entity FindFirstWithComponent<TFirst, TSecond>()
+        where TFirst : struct, IComponent<TFirst>
+        where TSecond : struct, IComponent<TSecond> =>
+        NativeApi.FindFirstWithComponents([TFirst.ComponentId, TSecond.ComponentId]);
+    public static Entity[] FindAllWithComponent<T>() where T : struct, IComponent<T> =>
+        NativeApi.FindAllWithComponents([T.ComponentId]);
+    public static Entity[] FindAllWithComponent<TFirst, TSecond>()
+        where TFirst : struct, IComponent<TFirst>
+        where TSecond : struct, IComponent<TSecond> =>
+        NativeApi.FindAllWithComponents([TFirst.ComponentId, TSecond.ComponentId]);
     public static Entity GetNavigationSurfaceAt(Vector3 position) => NativeApi.GetNavigationSurfaceAt(position);
     public static Entity SpawnFlatpack(string name, Vector3 position) =>
         NativeApi.SpawnFlatpack(name, position, default, false);

@@ -251,6 +251,21 @@ namespace sage
         return component != nullptr && component->has(registry, entity);
     }
 
+    std::vector<entt::entity> ScriptApiRegistry::FindEntitiesWithComponents(
+        const entt::registry& registry, const std::span<const Id> componentIds) const
+    {
+        entt::const_runtime_view view;
+        if (componentIds.empty()) return {};
+        for (const auto componentId : componentIds)
+        {
+            const auto* component = findComponent(componentId);
+            const auto* storage = component != nullptr ? component->storage(registry) : nullptr;
+            if (storage == nullptr) return {};
+            view.iterate(*storage);
+        }
+        return {view.begin(), view.end()};
+    }
+
     bool ScriptApiRegistry::GetProperty(
         entt::registry& registry,
         const entt::entity entity,
@@ -354,7 +369,7 @@ namespace sage
                    << component.managedName << "(global::Sage.Entity entity) : global::Sage.IComponent<"
                    << component.managedName
                    << ">\n    {\n"
-                      "        private const ulong ComponentId = "
+                      "        public static ulong ComponentId => "
                    << component.id
                    << "UL;\n"
                       "        static "

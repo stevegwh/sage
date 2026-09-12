@@ -10,6 +10,7 @@
 
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 namespace sage
@@ -23,12 +24,9 @@ namespace sage
     };
 
     // Forward declarations
-    struct EngineSystems;
+    class NavigationGridSystem;
     struct MoveableActor;
-    class Collideable;
     struct sgTransform;
-    struct GridSquare;
-    struct NavigationGridSquare;
 
     class ActorMovementSystem
     {
@@ -38,42 +36,30 @@ namespace sage
             std::optional<PathfindFailureReason> failure{};
         };
 
-        EngineSystems* sys;
+        NavigationGridSystem* navigationGrid;
         entt::registry* registry;
-        std::vector<Ray> debugRays;
-        std::vector<RayCollision> debugCollisions;
+        // Remember the actual stamped bounds so removal/teleport can release the old cells.
+        mutable std::unordered_map<entt::entity, BoundingBox> stoppedFootprints;
 
         [[nodiscard]] RouteSearchResult findRouteToLocation(
             entt::entity entity, const Vector3& destination, bool astar, bool findNextBestIfInvalid) const;
-        void clearDebugData();
         void updateActor(
-            entt::entity entity,
-            MoveableActor& moveableActor,
-            sgTransform& transform,
-            Collideable* collideable = nullptr);
-        [[nodiscard]] bool isNextPointOccupied(entt::entity entity, const MoveableActor& moveableActor) const;
-        void recalculatePath(entt::entity entity, const MoveableActor& moveableActor) const;
-        bool hasReachedNextPoint(entt::entity entity, const MoveableActor& moveableActor) const;
+            entt::entity entity, MoveableActor& moveableActor, sgTransform& transform);
+        static bool hasReachedNextPoint(const sgTransform& transform, const MoveableActor& moveableActor);
         void handlePointReached(entt::entity entity, MoveableActor& moveableActor);
-        void setPositionToGridCenter(entt::entity, const MoveableActor& moveableActor) const;
-        static void handleDestinationReached(entt::entity entity, MoveableActor& moveableActor);
-        NavigationGridSquare* castCollisionRay(
-            const GridSquare& actorIndex,
-            const Vector3& direction,
-            float distance,
-            MoveableActor& moveableActor) const;
+        void releaseStoppedFootprint(entt::entity entity) const;
+        bool claimStoppingPosition(entt::entity entity, Vector3 position);
+        bool rerouteToStoppingPosition(entt::entity entity, MoveableActor& actor, Vector3 destination) const;
+        void setActorPosition(entt::entity entity, sgTransform& transform, Vector3 position) const;
         void updateActorTransform(entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const;
         void centerTurnPivot(entt::entity entity, MoveableActor& moveableActor, sgTransform& transform) const;
         static void updateActorDirection(sgTransform& transform, const MoveableActor& moveableActor);
         [[nodiscard]] static bool updateActorRotation(
             sgTransform& transform, const MoveableActor& moveableActor);
-        void updateActorWorldPosition(entt::entity entity) const;
 
       public:
         Event<entt::entity, Vector3, PathfindFailureReason> onPathfindFailed{};
 
-        [[nodiscard]] bool CheckCollisionWithOtherMoveable(
-            entt::entity entity, const sgTransform& transform, MoveableActor& moveableActor) const;
         [[nodiscard]] bool ReachedDestination(entt::entity entity) const;
         void PruneMoveCommands(const entt::entity& entity) const;
         [[nodiscard]] bool TryPathfindToLocation(
@@ -94,9 +80,9 @@ namespace sage
             bool findNextBestIfInvalid = true) const;
         void MoveToLocation(const entt::entity& entity, Vector3 location) const;
         void CancelMovement(const entt::entity& entity) const;
-        void Update();
+        void Update(float deltaTime = GetFrameTime());
         void DrawDebug() const;
-        ActorMovementSystem(entt::registry* _registry, EngineSystems* _sys);
+        ActorMovementSystem(entt::registry* _registry, NavigationGridSystem* navigationGrid);
     };
 
 } // namespace sage

@@ -134,3 +134,9 @@ target_include_directories(engine PRIVATE "${SAGE_DOTNET_NATIVE_HOST_DIR}")
 target_compile_definitions(engine PRIVATE
         SAGE_MANAGED_RUNTIME_CONFIG_PATH="${SAGE_MANAGED_OUTPUT}/Sage.Scripting.runtimeconfig.json"
         SAGE_MANAGED_HOST_ASSEMBLY_PATH="${SAGE_MANAGED_OUTPUT}/Sage.Scripting.dll")
+
+if (BUILD_TESTING)
+    add_executable(actor_movement_tests "${SAGE_ROOT_DIR}/tests/ActorMovementTests.cpp")
+    target_link_libraries(actor_movement_tests PRIVATE engine)
+    add_test(NAME actor_movement_tests COMMAND actor_movement_tests)
+endif ()

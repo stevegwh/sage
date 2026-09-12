@@ -1,29 +1,27 @@
 #include "ActorMovementSystem.hpp"
 
-#include "CollisionSystem.hpp"
+#include "components/Collideable.hpp"
 #include "components/MoveableActor.hpp"
 #include "components/NavigationGridSquare.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
-#include "EngineSystems.hpp"
 #include "NavigationGridSystem.hpp"
-#include "Serializer.hpp"
 #include "slib.hpp"
-#include "TransformSystem.hpp"
 
-#include <format>
-#include <ranges>
-#include <tuple>
+#include <algorithm>
 
 namespace sage
 {
 
     void ActorMovementSystem::PruneMoveCommands(const entt::entity& entity) const
     {
+        releaseStoppedFootprint(entity);
         auto& actor = registry->get<MoveableActor>(entity);
-        std::deque<Vector3> empty;
-        std::swap(actor.path, empty);
+        actor.path.clear();
         actor.isWalking = false;
+        actor.needsStopPosition = true;
+        actor.notifyOnArrival = false;
+        actor.stopRetryTime = 0.0f;
     }
 
     void ActorMovementSystem::CancelMovement(const entt::entity& entity) const
@@ -46,6 +44,8 @@ namespace sage
         auto& moveableActor = registry->get<MoveableActor>(entity);
         moveableActor.path.emplace_back(transform.GetWorldPos());
         moveableActor.path.emplace_back(location);
+        moveableActor.needsStopPosition = false;
+        moveableActor.notifyOnArrival = true;
         moveableActor.isWalking = wasWalking;
         moveableActor.onStartMovement.Publish(entity);
     }
@@ -67,22 +67,19 @@ namespace sage
         const bool astar,
         const bool findNextBestIfInvalid) const
     {
-        if (!sys->navigationGridSystem->CheckWithinGridBounds(destination))
+        if (!navigationGrid->CheckWithinGridBounds(destination))
             return {.failure = PathfindFailureReason::DestinationOutOfGrid};
 
         const auto& moveable = registry->get<MoveableActor>(entity);
         GridSquare minRange{};
         GridSquare maxRange{};
-        if (!sys->navigationGridSystem->GetPathfindRange(entity, moveable.pathfindingBounds, minRange, maxRange))
+        if (!navigationGrid->GetPathfindRange(entity, moveable.pathfindingBounds, minRange, maxRange))
             return {.failure = PathfindFailureReason::ActorOutOfGrid};
-        if (!sys->navigationGridSystem->CheckWithinBounds(destination, minRange, maxRange))
+        if (!navigationGrid->CheckWithinBounds(destination, minRange, maxRange))
             return {.failure = PathfindFailureReason::DestinationOutOfRange};
 
-        const auto& collideable = registry->get<Collideable>(entity);
-        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
-
         const auto& actorTransform = registry->get<sgTransform>(entity);
-        auto route = astar ? sys->navigationGridSystem->AStarPathfind(
+        auto route = astar ? navigationGrid->AStarPathfind(
                                  entity,
                                  actorTransform.GetWorldPos(),
                                  destination,
@@ -90,7 +87,7 @@ namespace sage
                                  maxRange,
                                  AStarHeuristic::DEFAULT,
                                  findNextBestIfInvalid)
-                           : sys->navigationGridSystem->BFSPathfind(
+                           : navigationGrid->BFSPathfind(
                                  entity,
                                  actorTransform.GetWorldPos(),
                                  destination,
@@ -98,7 +95,6 @@ namespace sage
                                  maxRange,
                                  findNextBestIfInvalid);
 
-        sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
         if (route.empty()) return {.failure = PathfindFailureReason::DestinationUnreachable};
         return {.route = std::move(route)};
     }
@@ -124,7 +120,11 @@ namespace sage
             PruneMoveCommands(entity);
             moveable.onPathChanged.Publish(entity);
         }
+        else releaseStoppedFootprint(entity);
         moveable.path.insert(moveable.path.end(), route.begin(), route.end());
+        moveable.needsStopPosition = false;
+        moveable.notifyOnArrival = true;
+        moveable.stopRetryTime = 0.0f;
         updateActorDirection(registry->get<sgTransform>(entity), moveable);
         moveable.isWalking = wasWalking;
         moveable.onStartMovement.Publish(entity);
@@ -175,7 +175,7 @@ namespace sage
     bool ActorMovementSystem::ReachedDestination(entt::entity entity) const
     {
         const auto& actor = registry->get<MoveableActor>(entity);
-        return actor.path.empty();
+        return actor.path.empty() && !actor.needsStopPosition;
     }
 
     void ActorMovementSystem::DrawDebug() const
@@ -190,40 +190,12 @@ namespace sage
                 DrawCube({p.x, p.y + 1, p.z}, 1, 1, 1, GREEN);
             }
         }
-
-        for (auto& ray : debugRays)
-        {
-            DrawLine3D(ray.position, Vector3Add(ray.position, Vector3Multiply(ray.direction, {5, 1, 5})), RED);
-        }
-
-        for (auto& col : debugCollisions)
-        {
-            DrawSphere(col.point, 1.5, GREEN);
-        }
     }
 
-    void ActorMovementSystem::clearDebugData()
+    bool ActorMovementSystem::hasReachedNextPoint(
+        const sgTransform& transform, const MoveableActor& moveableActor)
     {
-        debugRays.erase(debugRays.begin(), debugRays.end());
-        debugCollisions.erase(debugCollisions.begin(), debugCollisions.end());
-    }
-
-    bool ActorMovementSystem::isNextPointOccupied(
-        const entt::entity entity, const MoveableActor& moveableActor) const
-    {
-        return !sys->navigationGridSystem->CheckEntityAreaUnoccupied(entity, moveableActor.path.front());
-    }
-
-    void ActorMovementSystem::recalculatePath(
-        const entt::entity entity, const MoveableActor& moveableActor) const
-    {
-        PathfindToLocation(entity, moveableActor.GetDestination());
-    }
-
-    bool ActorMovementSystem::hasReachedNextPoint(entt::entity entity, const MoveableActor& moveableActor) const
-    {
-        const auto& transform = registry->get<sgTransform>(entity);
-        // I do not believe that height should matter for this (could be very wrong)
+        // Arrival tolerance is horizontal; grid height is applied when snapping to the waypoint.
         return Vector2Distance(
                    {moveableActor.path.front().x, moveableActor.path.front().z},
                    {transform.GetWorldPos().x, transform.GetWorldPos().z}) < 0.5f;
@@ -231,86 +203,71 @@ namespace sage
 
     void ActorMovementSystem::handlePointReached(entt::entity entity, MoveableActor& moveableActor)
     {
-        setPositionToGridCenter(entity, moveableActor);
-        moveableActor.path.pop_front();
+        GridSquare index{};
+        Vector3 position{};
+        if (!navigationGrid->WorldToGridSpace(moveableActor.path.front(), index) ||
+            !navigationGrid->GridToWorldSpace(index, position)) return;
 
-        if (moveableActor.path.empty())
+        if (moveableActor.path.size() == 1 && registry->all_of<Collideable>(entity) &&
+            !claimStoppingPosition(entity, position))
         {
-            handleDestinationReached(entity, moveableActor);
+            (void)rerouteToStoppingPosition(entity, moveableActor, moveableActor.path.back());
+            return;
         }
-    }
+        setActorPosition(entity, registry->get<sgTransform>(entity), position);
+        moveableActor.path.pop_front();
+        if (!moveableActor.path.empty()) return;
 
-    void ActorMovementSystem::setPositionToGridCenter(
-        entt::entity entity, const MoveableActor& moveableActor) const
-    {
-        // Set continuous pos to grid/discrete pos
-        GridSquare targetGridPos{};
-        sys->navigationGridSystem->WorldToGridSpace(moveableActor.path.front(), targetGridPos);
-        const auto square = sys->navigationGridSystem->GetGridSquare(targetGridPos.row, targetGridPos.col);
-        registry->get<sgTransform>(entity).position.world =
-            {square->worldPosCentre.x, square->heightMap.GetHeight(), square->worldPosCentre.z};
-    }
-
-    void ActorMovementSystem::handleDestinationReached(const entt::entity entity, MoveableActor& moveableActor)
-    {
         moveableActor.isWalking = false;
-        moveableActor.onDestinationReached.Publish(entity);
+        moveableActor.needsStopPosition = false;
+        if (moveableActor.notifyOnArrival) moveableActor.onDestinationReached.Publish(entity);
     }
 
-    bool ActorMovementSystem::CheckCollisionWithOtherMoveable(
-        const entt::entity entity, const sgTransform& transform, MoveableActor& moveableActor) const
+    void ActorMovementSystem::setActorPosition(
+        const entt::entity entity, sgTransform& transform, const Vector3 position) const
     {
-        constexpr float avoidanceDistance = 10;
-        GridSquare actorIndex{};
-        sys->navigationGridSystem->WorldToGridSpace(transform.GetWorldPos(), actorIndex);
+        transform.position.world = position;
+        if (auto* collider = registry->try_get<Collideable>(entity))
+            collider->worldBoundingBox = TransformAabbNoRotation(collider->localBoundingBox, transform.GetMatrixNoRot());
+    }
 
-        // navigationGridSystem->MarkSquaresDebug(moveableActor.debugRay, PURPLE, false);
+    void ActorMovementSystem::releaseStoppedFootprint(const entt::entity entity) const
+    {
+        const auto found = stoppedFootprints.find(entity);
+        if (found == stoppedFootprints.end()) return;
+        navigationGrid->MarkSquareAreaOccupied(found->second, false, entity);
+        stoppedFootprints.erase(found);
+    }
 
-        NavigationGridSquare* hitCell =
-            castCollisionRay(actorIndex, transform.direction, avoidanceDistance, moveableActor);
+    bool ActorMovementSystem::claimStoppingPosition(const entt::entity entity, const Vector3 position)
+    {
+        if (!navigationGrid->CheckEntityAreaUnoccupied(entity, position)) return false;
+        const auto& transform = registry->get<sgTransform>(entity);
+        const auto& collider = registry->get<Collideable>(entity);
+        const auto bounds = TransformAabbNoRotation(collider.localBoundingBox, transform.GetMatrixNoRot());
+        const auto offset = Vector3Subtract(position, transform.GetWorldPos());
+        const BoundingBox stoppedBounds{Vector3Add(bounds.min, offset), Vector3Add(bounds.max, offset)};
+        releaseStoppedFootprint(entity);
+        navigationGrid->MarkSquareAreaOccupied(stoppedBounds, true, entity);
+        stoppedFootprints[entity] = stoppedBounds;
+        return true;
+    }
 
-        // If we haven't hit anything, or the object is static, then we don't need to worry about it.
-        if (hitCell == nullptr || !registry->any_of<MoveableActor>(hitCell->occupant)) return false;
-
-        const auto& hitTransform = registry->get<sgTransform>(hitCell->occupant);
-
-        // Going same direction, ignore.
-        auto dot = Vector3DotProduct(transform.direction, hitTransform.direction);
-        if (dot >= 0)
+    bool ActorMovementSystem::rerouteToStoppingPosition(
+        const entt::entity entity, MoveableActor& actor, const Vector3 destination) const
+    {
+        auto result = findRouteToLocation(entity, destination, true, true);
+        actor.isWalking = false;
+        if (result.route.empty())
         {
+            // Keep the pending destination, and retry without publishing a false arrival.
+            actor.needsStopPosition = true;
+            actor.stopRetryTime = 0.25f;
             return false;
         }
-
-        if (registry->any_of<Collideable>(hitCell->occupant) &&
-            (!moveableActor.movementCollisionTarget.has_value() ||
-             hitCell->occupant != moveableActor.movementCollisionTarget.value()) &&
-            moveableActor.hitEntityId != entity)
-        {
-            if (!AlmostEquals(hitTransform.GetWorldPos(), moveableActor.hitLastPos))
-            {
-                moveableActor.hitEntityId = hitCell->occupant;
-                moveableActor.hitLastPos = hitTransform.GetWorldPos();
-
-                auto& hitCol = registry->get<Collideable>(hitCell->occupant);
-
-                if (Vector3Distance(hitTransform.GetWorldPos(), transform.GetWorldPos()) <
-                    Vector3Distance(moveableActor.path.back(), transform.GetWorldPos()))
-                {
-                    TraceLog(LOG_TRACE, "Actor %u: moving obstacle detected; rerouting", static_cast<unsigned>(entity));
-                    PathfindToLocation(entity, moveableActor.GetDestination());
-                    hitCol.debugDraw = true;
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    NavigationGridSquare* ActorMovementSystem::castCollisionRay(
-        const GridSquare& actorIndex, const Vector3& direction, float distance, MoveableActor& moveableActor) const
-    {
-        return sys->navigationGridSystem->CastRay(
-            actorIndex.row, actorIndex.col, {direction.x, direction.z}, distance, moveableActor.debugRay);
+        actor.path.assign(result.route.begin(), result.route.end());
+        actor.needsStopPosition = false;
+        return true;
     }
 
     void ActorMovementSystem::updateActorDirection(sgTransform& transform, const MoveableActor& moveableActor)
@@ -408,88 +365,105 @@ namespace sage
         return moveableActor.turnSpeed <= 0.0f;
     }
 
-    void ActorMovementSystem::updateActorWorldPosition(entt::entity entity) const
-    {
-        GridSquare actorIndex{};
-        auto& transform = registry->get<sgTransform>(entity);
-        sys->navigationGridSystem->WorldToGridSpace(transform.GetWorldPos(), actorIndex);
-        auto gridSquare = sys->navigationGridSystem->GetGridSquare(actorIndex.row, actorIndex.col);
-        auto& moveable = registry->get<MoveableActor>(entity);
-        Vector3 newPos = {
-            transform.GetWorldPos().x + transform.direction.x * moveable.movementSpeed,
-            gridSquare->heightMap.GetHeight(),
-            transform.GetWorldPos().z + transform.direction.z * moveable.movementSpeed};
-        transform.position.world = newPos;
-    }
-
     void ActorMovementSystem::updateActorTransform(
         entt::entity entity, sgTransform& transform, MoveableActor& moveableActor) const
     {
         updateActorDirection(transform, moveableActor);
         const bool isFacingMovementDirection = updateActorRotation(transform, moveableActor);
-        if (moveableActor.isWalking || isFacingMovementDirection)
-        {
-            moveableActor.isWalking = true;
-            updateActorWorldPosition(entity);
-        }
+        if (!moveableActor.isWalking && !isFacingMovementDirection) return;
+        moveableActor.isWalking = true;
+
+        GridSquare actorIndex{};
+        navigationGrid->WorldToGridSpace(transform.GetWorldPos(), actorIndex);
+        const auto* gridSquare = navigationGrid->GetGridSquare(actorIndex.row, actorIndex.col);
+        setActorPosition(entity, transform, {
+            transform.GetWorldPos().x + transform.direction.x * moveableActor.movementSpeed,
+            gridSquare->heightMap.GetHeight(),
+            transform.GetWorldPos().z + transform.direction.z * moveableActor.movementSpeed});
     }
 
     void ActorMovementSystem::updateActor(
-        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform, Collideable* collideable)
+        entt::entity entity, MoveableActor& moveableActor, sgTransform& transform)
     {
+        if (moveableActor.stopRetryTime > 0.0f) return;
+        const bool hasCollider = registry->all_of<Collideable>(entity);
         if (moveableActor.path.empty())
         {
+            if (!hasCollider || !moveableActor.needsStopPosition) return;
+            // Cancellation/spawning in occupied space: move clear without completing an old activity.
+            moveableActor.notifyOnArrival = false;
+            if (!rerouteToStoppingPosition(entity, moveableActor, transform.GetWorldPos())) return;
+        }
+
+        if (hasCollider && !navigationGrid->CheckEntityAreaUnoccupied(entity, moveableActor.path.front(), true))
+        {
+            (void)rerouteToStoppingPosition(entity, moveableActor, moveableActor.GetDestination());
             return;
         }
 
-        if (hasReachedNextPoint(entity, moveableActor))
+        if (hasReachedNextPoint(transform, moveableActor))
         {
             handlePointReached(entity, moveableActor);
-            if (moveableActor.path.empty()) return;
-        }
-
-        if (collideable != nullptr && isNextPointOccupied(entity, moveableActor))
-        {
-            TraceLog(LOG_TRACE, "Actor %u: next point occupied; rerouting", static_cast<unsigned>(entity));
-            recalculatePath(entity, moveableActor);
+            // Arrival callbacks can cancel, replace the route, or remove the actor.
             return;
         }
 
-        if (collideable == nullptr || !CheckCollisionWithOtherMoveable(entity, transform, moveableActor))
-        {
-            // TODO: Distance of the ray cast should be from the current pos to the next node
-            updateActorTransform(entity, transform, moveableActor);
-        }
+        updateActorTransform(entity, transform, moveableActor);
     }
 
-    void ActorMovementSystem::Update()
+    void ActorMovementSystem::Update(const float deltaTime)
     {
-        clearDebugData();
-
         auto fullView = registry->view<MoveableActor, sgTransform, Collideable>();
-        for (auto [entity, moveableActor, transform, collideable] : fullView.each())
+        for (auto [entity, actor, transform, collider] : fullView.each())
         {
-            centerTurnPivot(entity, moveableActor, transform);
-            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, false, entity);
-            updateActor(entity, moveableActor, transform, &collideable);
-            // updateActor mutated the transform; refresh the world bbox so the re-mark
-            // uses the post-move position (CollisionSystem::Update only runs once per frame).
-            collideable.worldBoundingBox =
-                TransformAabbNoRotation(collideable.localBoundingBox, transform.GetMatrixNoRot());
-            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
+            centerTurnPivot(entity, actor, transform);
+            collider.worldBoundingBox = TransformAabbNoRotation(collider.localBoundingBox, transform.GetMatrixNoRot());
+            actor.stopRetryTime = std::max(0.0f, actor.stopRetryTime - deltaTime);
         }
 
-        // Process entities without Collideable component (e.g., some abilities etc)
-        auto partialView = registry->view<MoveableActor, sgTransform>(entt::exclude<Collideable>);
-        for (auto [entity, moveableActor, transform] : partialView.each())
+        // Keep existing stopped actors' claims, so a cancellation or spawn cannot
+        // take their space. Release only removed, teleported, or moving owners.
+        for (auto it = stoppedFootprints.begin(); it != stoppedFootprints.end();)
         {
-            centerTurnPivot(entity, moveableActor, transform);
-            updateActor(entity, moveableActor, transform);
+            const auto entity = it->first;
+            const auto* actor = registry->try_get<MoveableActor>(entity);
+            const auto* collider = registry->try_get<Collideable>(entity);
+            if (!actor || !collider || !registry->all_of<sgTransform>(entity) || !actor->path.empty() ||
+                !Vector3Equals(it->second.min, collider->worldBoundingBox.min) ||
+                !Vector3Equals(it->second.max, collider->worldBoundingBox.max))
+            {
+                navigationGrid->MarkSquareAreaOccupied(it->second, false, entity);
+                it = stoppedFootprints.erase(it);
+            }
+            else ++it;
+        }
+
+        for (auto [entity, actor, transform, collider] : fullView.each())
+        {
+            if (actor.path.empty())
+            {
+                actor.needsStopPosition = !claimStoppingPosition(entity, transform.GetWorldPos());
+                if (actor.needsStopPosition) releaseStoppedFootprint(entity);
+            }
+        }
+
+        // All existing stopped actors are marked before any travelling actor can arrive.
+        for (auto [entity, actor, transform, collider] : fullView.each())
+            updateActor(entity, actor, transform);
+
+        // Entities without collision footprints retain unrestricted movement.
+        auto partialView = registry->view<MoveableActor, sgTransform>(entt::exclude<Collideable>);
+        for (auto [entity, actor, transform] : partialView.each())
+        {
+            centerTurnPivot(entity, actor, transform);
+            actor.needsStopPosition = false;
+            actor.stopRetryTime = 0.0f;
+            updateActor(entity, actor, transform);
         }
     }
 
-    ActorMovementSystem::ActorMovementSystem(entt::registry* _registry, EngineSystems* _sys)
-        : registry(_registry), sys(_sys)
+    ActorMovementSystem::ActorMovementSystem(entt::registry* _registry, NavigationGridSystem* _navigationGrid)
+        : navigationGrid(_navigationGrid), registry(_registry)
     {
     }
 

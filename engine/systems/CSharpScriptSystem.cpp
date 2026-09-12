@@ -61,13 +61,15 @@ namespace sage
         using LogFunction = void(SAGE_MANAGED_CALL*)(void*, int, const char*);
         using EntityExistsFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t);
         using FindArchetypeFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, const char*, std::uint32_t*);
+        using FindWithComponentsFunction = std::uint32_t(SAGE_MANAGED_CALL*)(
+            void*, const ScriptApiRegistry::Id*, std::uint32_t, std::uint32_t*, std::uint32_t);
         using GetSurfaceFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, float, float, float, std::uint32_t*);
         using HasRouteFunction = std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t);
         using ClearRouteFunction = void(SAGE_MANAGED_CALL*)(void*, std::uint32_t);
         using TryPathfindFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
             void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t);
         using FindRouteFunction = std::uint32_t(SAGE_MANAGED_CALL*)(
-            void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t, float*, std::uint32_t);
+            void*, std::uint32_t, float, float, float, std::uint8_t, std::uint8_t, const Vector3**);
         using SetRouteFunction =
             std::uint8_t(SAGE_MANAGED_CALL*)(void*, std::uint32_t, const float*, std::uint32_t);
         using SpawnFlatpackFunction = std::uint8_t(SAGE_MANAGED_CALL*)(
@@ -95,12 +97,13 @@ namespace sage
 
         struct NativeApiTable
         {
-            std::uint32_t version = 8;
+            std::uint32_t version = 10;
             std::uint32_t size = 0;
             void* context = nullptr;
             LogFunction log = nullptr;
             EntityExistsFunction entityExists = nullptr;
             FindArchetypeFunction findFirstWithArchetype = nullptr;
+            FindWithComponentsFunction findWithComponents = nullptr;
             GetSurfaceFunction getNavigationSurfaceAt = nullptr;
             HasRouteFunction hasRoute = nullptr;
             ClearRouteFunction clearRoute = nullptr;
@@ -332,6 +335,8 @@ namespace sage
         ScriptApiRegistry scriptApi;
         std::unordered_map<entt::entity, Instance> instances;
         std::vector<std::unique_ptr<ScriptApiRegistry::ComponentObserver>> componentObservers;
+        // Borrowed by the synchronous managed caller, which copies it before any next query.
+        std::vector<Vector3> routeQueryResult;
         bool available = false;
 
         static void SAGE_MANAGED_CALL Log(void* context, const int level, const char* message)
@@ -368,6 +373,25 @@ namespace sage
             if (!found) return 0;
             *destination = entt::to_integral(*found);
             return 1;
+        }
+
+        static std::uint32_t SAGE_MANAGED_CALL FindWithComponents(
+            void* context,
+            const ScriptApiRegistry::Id* componentIds,
+            const std::uint32_t componentCount,
+            std::uint32_t* destination,
+            const std::uint32_t capacity)
+        {
+            const auto& self = *static_cast<Impl*>(context);
+            if (componentIds == nullptr || componentCount == 0) return 0;
+            const auto found = self.scriptApi.FindEntitiesWithComponents(
+                *self.registry, std::span{componentIds, componentCount});
+            const auto count = static_cast<std::uint32_t>(found.size());
+            if (destination != nullptr)
+                std::ranges::transform(
+                    found.begin(), found.begin() + std::min(capacity, count), destination,
+                    [](const entt::entity entity) { return entt::to_integral(entity); });
+            return count;
         }
 
         static std::uint8_t SAGE_MANAGED_CALL GetNavigationSurfaceAt(
@@ -427,27 +451,22 @@ namespace sage
             const float z,
             const std::uint8_t aStar,
             const std::uint8_t findClosest,
-            float* points,
-            const std::uint32_t pointCapacity)
+            const Vector3** points)
         {
-            const auto& self = *static_cast<Impl*>(context);
+            if (points == nullptr) return 0;
+            *points = nullptr;
+            auto& self = *static_cast<Impl*>(context);
+            self.routeQueryResult.clear();
             if (self.systems == nullptr) return 0;
             const auto entity = ToEntity(value);
             if (!self.registry->valid(entity) ||
                 !self.registry->all_of<sgTransform, MoveableActor, Collideable>(entity))
                 return 0;
 
-            const auto route = self.systems->actorMovementSystem->FindRouteToLocation(
+            self.routeQueryResult = self.systems->actorMovementSystem->FindRouteToLocation(
                 entity, Vector3{x, y, z}, aStar != 0, findClosest != 0);
-            const auto count = static_cast<std::uint32_t>(route.size());
-            if (points == nullptr || pointCapacity < count) return count;
-            for (std::uint32_t index = 0; index < count; ++index)
-            {
-                points[index * 3] = route[index].x;
-                points[index * 3 + 1] = route[index].y;
-                points[index * 3 + 2] = route[index].z;
-            }
-            return count;
+            *points = self.routeQueryResult.data();
+            return static_cast<std::uint32_t>(self.routeQueryResult.size());
         }
 
         static std::uint8_t SAGE_MANAGED_CALL
@@ -697,6 +716,7 @@ namespace sage
                 .log = &Log,
                 .entityExists = &EntityExists,
                 .findFirstWithArchetype = &FindFirstWithArchetype,
+                .findWithComponents = &FindWithComponents,
                 .getNavigationSurfaceAt = &GetNavigationSurfaceAt,
                 .hasRoute = &HasRoute,
                 .clearRoute = &ClearRoute,

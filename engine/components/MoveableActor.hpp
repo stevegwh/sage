@@ -4,16 +4,12 @@
 
 #pragma once
 
-#include "NavigationGridSquare.hpp"
-
 #include "engine/Event.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
 
 #include <deque>
-#include <optional>
 #include <string>
-#include <vector>
 
 namespace sage
 {
@@ -45,11 +41,11 @@ namespace sage
             i.clipDropdown("Idle Clip", idleClip);
         }
 
-        entt::entity hitEntityId = entt::null;
-        Vector3 hitLastPos{};
-        // Keeps collision rerouting from fighting deliberate movement toward another moveable entity.
-        std::optional<entt::entity> movementCollisionTarget;
         std::deque<Vector3> path{};
+        // A cancelled route may still need a short move to an unoccupied stopping place.
+        bool needsStopPosition = false;
+        bool notifyOnArrival = true;
+        float stopRetryTime = 0.0f;
 
         Event<entt::entity> onStartMovement{};
         Event<entt::entity> onDestinationReached{};
@@ -69,14 +65,13 @@ namespace sage
 
         void ClearRoute(const entt::entity entity)
         {
-            if (!IsMoving())
-            {
-                isWalking = false;
-                return;
-            }
+            const bool wasMoving = IsMoving();
             path.clear();
             isWalking = false;
-            onMovementCancel.Publish(entity);
+            notifyOnArrival = false;
+            needsStopPosition = true;
+            stopRetryTime = 0.0f;
+            if (wasMoving) onMovementCancel.Publish(entity);
         }
 
         [[nodiscard]] Vector3 GetDestination() const
@@ -94,7 +89,5 @@ namespace sage
             api.event("OnPathChanged", &MoveableActor::onPathChanged);
             api.event("OnMovementCancelled", &MoveableActor::onMovementCancel);
         }
-
-        std::vector<GridSquare> debugRay;
     };
 } // namespace sage

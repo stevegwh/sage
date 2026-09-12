@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <queue>
 
 namespace sage
@@ -272,12 +273,13 @@ namespace sage
         return checkExtents(square, extents);
     }
 
-    bool NavigationGridSystem::CheckEntityAreaUnoccupied(const entt::entity entity, const Vector3 worldPos) const
+    bool NavigationGridSystem::CheckEntityAreaUnoccupied(
+        const entt::entity entity, const Vector3 worldPos, const bool ignoreActors) const
     {
-        GridSquare square{};
         BoundingBox footprintOffsets{};
-        return WorldToGridSpace(worldPos, square) && getFootprintOffsets(entity, footprintOffsets) &&
-               checkFootprint(square, footprintOffsets);
+        return getFootprintOffsets(entity, footprintOffsets) &&
+               checkBounds({Vector3Add(worldPos, footprintOffsets.min),
+                            Vector3Add(worldPos, footprintOffsets.max)}, entity, ignoreActors);
     }
 
     entt::entity NavigationGridSystem::CheckSingleSquareOccupant(Vector3 worldPos) const
@@ -684,9 +686,8 @@ namespace sage
         const auto& collideable = registry->get<Collideable>(entity);
         const auto& transform = registry->get<sgTransform>(entity);
         const Vector3 origin = transform.GetWorldPos();
-        offsets = {
-            Vector3Subtract(collideable.worldBoundingBox.min, origin),
-            Vector3Subtract(collideable.worldBoundingBox.max, origin)};
+        const auto bounds = TransformAabbNoRotation(collideable.localBoundingBox, transform.GetMatrixNoRot());
+        offsets = {Vector3Subtract(bounds.min, origin), Vector3Subtract(bounds.max, origin)};
         return true;
     }
 
@@ -837,7 +838,8 @@ namespace sage
     }
 
     std::vector<Vector3> NavigationGridSystem::tracebackPath(
-        const std::vector<std::vector<GridSquare>>& came_from, const GridSquare& start, const GridSquare& finish)
+        const std::vector<std::vector<GridSquare>>& came_from, const GridSquare& start, const GridSquare& finish,
+        const GridSquare minRange)
     {
         auto combineWorldPosTerrainHeight = [this](auto gridPos) {
             Vector3 worldPos = gridSquares[gridPos.row][gridPos.col].worldPosCentre;
@@ -853,7 +855,7 @@ namespace sage
         while (current.row != start.row || current.col != start.col)
         {
             previous = current;
-            current = came_from[current.row][current.col];
+            current = came_from[current.row - minRange.row][current.col - minRange.col];
             for (const auto& dir : directions)
             {
                 int row = previous.row + dir.first;
@@ -927,13 +929,25 @@ namespace sage
         return true;
     }
 
-    bool NavigationGridSystem::checkFootprint(const GridSquare square, const BoundingBox& footprintOffsets) const
+    bool NavigationGridSystem::checkFootprint(
+        const GridSquare square, const BoundingBox& footprintOffsets,
+        const entt::entity ignoreEntity, const bool ignoreActors) const
     {
         if (!CheckWithinGridBounds(square)) return false;
 
         const Vector3 origin = gridSquares[square.row][square.col].worldPosCentre;
         const BoundingBox footprint = {
             Vector3Add(origin, footprintOffsets.min), Vector3Add(origin, footprintOffsets.max)};
+        return checkBounds(footprint, ignoreEntity, ignoreActors);
+    }
+
+    bool NavigationGridSystem::checkBounds(
+        const BoundingBox& footprint, const entt::entity ignoreEntity, const bool ignoreActors) const
+    {
+        // Unlike occupancy stamping, a valid footprint must fit entirely inside the grid.
+        if (!CheckWithinGridBounds(footprint.min) ||
+            !CheckWithinGridBounds(Vector3{std::nextafter(footprint.max.x, footprint.min.x), 0.0f,
+                                          std::nextafter(footprint.max.z, footprint.min.z)})) return false;
 
         GridSquare minRange{};
         GridSquare maxRange{};
@@ -946,10 +960,14 @@ namespace sage
         {
             for (int col = minRange.col; col <= maxRange.col; ++col)
             {
-                if (gridSquares[row][col].occupied)
+                const auto& cell = gridSquares[row][col];
+                if (!cell.occupied) continue;
+                if (cell.occupant != entt::null)
                 {
-                    return false;
+                    if (cell.occupant == ignoreEntity || !registry->valid(cell.occupant)) continue;
+                    if (ignoreActors && registry->any_of<MoveableActor>(cell.occupant)) continue;
                 }
+                return false;
             }
         }
 
@@ -1002,7 +1020,9 @@ namespace sage
         if (!WorldToGridSpace(startPos, start) || !WorldToGridSpace(finishPos, finish) ||
             !getFootprintOffsets(entity, footprintOffsets))
             return {};
-        if (!findNextBestIfInvalid && !checkFootprint(finish, footprintOffsets)) return {};
+        if (minRange.row < 0 || minRange.col < 0 || maxRange.row > slices || maxRange.col > slices ||
+            !CheckWithinBounds(start, minRange, maxRange)) return {};
+        if (!findNextBestIfInvalid && !checkFootprint(finish, footprintOffsets, entity)) return {};
 
         struct FrontierNode
         {
@@ -1019,32 +1039,37 @@ namespace sage
             }
         };
 
-        std::vector<std::vector<bool>> visited(maxRange.row, std::vector<bool>(maxRange.col, false));
-        std::vector<std::vector<GridSquare>> cameFrom(
-            maxRange.row, std::vector<GridSquare>(maxRange.col, {-1, -1}));
+        // Scratch storage is relative to the search window, not the map origin.
+        const int rows = maxRange.row - minRange.row;
+        const int cols = maxRange.col - minRange.col;
+        std::vector<std::vector<bool>> visited(rows, std::vector<bool>(cols, false));
+        std::vector<std::vector<GridSquare>> cameFrom(rows, std::vector<GridSquare>(cols, {-1, -1}));
         std::vector<std::vector<double>> costs(
-            maxRange.row, std::vector<double>(maxRange.col, std::numeric_limits<double>::infinity()));
+            rows, std::vector<double>(cols, std::numeric_limits<double>::infinity()));
         std::priority_queue<FrontierNode, std::vector<FrontierNode>, Compare> frontier;
         std::uint64_t sequence = 0;
         frontier.push({0.0, sequence++, start});
-        visited[start.row][start.col] = true;
-        costs[start.row][start.col] = 0.0;
+        const GridSquare startIndex = start - minRange;
+        visited[startIndex.row][startIndex.col] = true;
+        costs[startIndex.row][startIndex.col] = 0.0;
         const Vector3 pathDirection = Vector3Subtract(finishPos, startPos);
-        GridSquare closestReachable = start;
-        double closestDistance = heuristic(start, finish);
-        double closestPathCost = 0.0;
+        std::optional<GridSquare> closestReachable;
+        double closestDistance = std::numeric_limits<double>::infinity();
+        double closestPathCost = std::numeric_limits<double>::infinity();
 
         while (!frontier.empty())
         {
             const GridSquare current = frontier.top().square;
+            const GridSquare currentIndex = current - minRange;
             frontier.pop();
 
-            // Every popped cell is reachable from start, so the closest one is a
-            // safe fallback when the requested destination cannot be reached.
-            if (findNextBestIfInvalid)
+            // NPCs can be crossed, but only unoccupied footprints are stopping places.
+            // In particular, an occupied start must not become a successful fallback.
+            const bool canStop = checkFootprint(current, footprintOffsets, entity);
+            if (findNextBestIfInvalid && canStop)
             {
                 const double distance = heuristic(current, finish);
-                const double pathCost = costs[current.row][current.col];
+                const double pathCost = costs[currentIndex.row][currentIndex.col];
                 if (distance < closestDistance || (distance == closestDistance && pathCost < closestPathCost))
                 {
                     closestReachable = current;
@@ -1053,21 +1078,25 @@ namespace sage
                 }
             }
 
-            if (current == finish) return tracebackPath(cameFrom, start, finish);
+            if (current == finish && canStop) return tracebackPath(cameFrom, start, finish, minRange);
 
             for (const auto& [dirRow, dirCol] : directions)
             {
                 const GridSquare next{current.row + dirRow, current.col + dirCol};
-                if (!CheckWithinBounds(next, minRange, maxRange) || !checkFootprint(next, footprintOffsets))
-                    continue;
+                if (!CheckWithinBounds(next, minRange, maxRange)) continue;
+                const GridSquare nextIndex = next - minRange;
 
                 const double newCost =
-                    costs[current.row][current.col] + gridSquares[next.row][next.col].pathfindingCost;
-                if (visited[next.row][next.col] && (!useAStar || newCost >= costs[next.row][next.col])) continue;
+                    costs[currentIndex.row][currentIndex.col] + gridSquares[next.row][next.col].pathfindingCost;
+                if (visited[nextIndex.row][nextIndex.col] &&
+                    (!useAStar || newCost >= costs[nextIndex.row][nextIndex.col])) continue;
 
-                visited[next.row][next.col] = true;
-                costs[next.row][next.col] = newCost;
-                cameFrom[next.row][next.col] = current;
+                // Most neighbours already have an equal or cheaper route. Avoid checking
+                // their collision footprint again unless this edge can improve the route.
+                if (!checkFootprint(next, footprintOffsets, entity, true)) continue;
+                visited[nextIndex.row][nextIndex.col] = true;
+                costs[nextIndex.row][nextIndex.col] = newCost;
+                cameFrom[nextIndex.row][nextIndex.col] = current;
                 const double estimate = heuristicType == AStarHeuristic::FAVOUR_RIGHT
                                             ? heuristic_favourRight(next, finish, pathDirection)
                                             : heuristic(next, finish);
@@ -1075,7 +1104,8 @@ namespace sage
             }
         }
 
-        if (findNextBestIfInvalid) return tracebackPath(cameFrom, start, closestReachable);
+        if (findNextBestIfInvalid && closestReachable)
+            return tracebackPath(cameFrom, start, *closestReachable, minRange);
         return {};
     }
 
