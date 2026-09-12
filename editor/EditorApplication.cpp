@@ -167,8 +167,6 @@ namespace sage
     {
         if (!settings->toggleFullScreenRequested) return;
 
-        const auto prev = settings->GetViewPort();
-
 #ifdef __APPLE__
         if (!IsWindowFullscreen())
         {
@@ -204,15 +202,13 @@ namespace sage
 #endif
 
         settings->toggleFullScreenRequested = false;
-        refreshViewportLayout(prev);
+        refreshViewportLayout();
     }
 
-    void EditorApplication::refreshViewportLayout(const Vector2 previousViewport)
+    void EditorApplication::refreshViewportLayout()
     {
         settings->SetScreenSize(GetScreenWidth(), GetScreenHeight());
         ConfigureEditorSceneViewport(*settings, dockLayout, viewportFullscreen);
-        const auto appViewport = settings->GetViewPort();
-        systems->userInput->onWindowUpdate.Publish(previousViewport, appViewport);
 
         UnloadRenderTexture(renderTexture);
         const auto renderViewport = settings->GetRenderViewPort();
@@ -229,7 +225,7 @@ namespace sage
         if (!(IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT)) || !IsKeyPressed(KEY_F)) return;
         viewportFullscreen = !viewportFullscreen;
         scene->SetViewportFullscreen(viewportFullscreen);
-        refreshViewportLayout(settings->GetViewPort());
+        refreshViewportLayout();
     }
 
     void EditorApplication::saveEditorSettings() const
@@ -245,7 +241,7 @@ namespace sage
             return;
         }
 
-        refreshViewportLayout(settings->GetViewPort());
+        refreshViewportLayout();
     }
 
     void EditorApplication::Update()
@@ -264,7 +260,7 @@ namespace sage
             draw();
             if (scene->ConsumeDockLayoutChanged())
             {
-                refreshViewportLayout(settings->GetViewPort());
+                refreshViewportLayout();
             }
             handleScreenUpdate();
         }

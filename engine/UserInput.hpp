@@ -21,8 +21,6 @@ namespace sage
         void toggleFullScreen() const;
 
       public:
-        Event<Vector2, Vector2> onWindowUpdate{}; // Old, New
-
         Event<> keyAPressed{};
         Event<> keyAUp{};
         Event<> keyBPressed{};

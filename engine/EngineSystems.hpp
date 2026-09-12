@@ -73,6 +73,5 @@ namespace sage
 
         [[nodiscard]] GameUIEngine& UI();
         [[nodiscard]] const GameUIEngine& UI() const;
-        void ReplaceUiEngine(std::unique_ptr<GameUIEngine> replacement);
     };
 } // namespace sage

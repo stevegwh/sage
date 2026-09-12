@@ -53,14 +53,13 @@ namespace sage
           fullscreenTextOverlayManager(std::make_unique<FullscreenTextOverlayManager>(this)),
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this))
     {
-        uiEngine = std::make_unique<GameUIEngine>(_registry, this);
+        uiEngine = std::make_unique<GameUIEngine>(_settings, cursor.get());
         csharpScriptSystem = std::make_unique<CSharpScriptSystem>(_registry, this, std::move(scripting));
     }
 
     EngineSystems::~EngineSystems()
     {
-        // Windows unsubscribe from UserInput events during teardown, so destroy
-        // the UI before UserInput's events are destroyed by member cleanup.
+        // The UI refers to settings and the cursor without owning them.
         uiEngine.reset();
     }
 
@@ -76,9 +75,4 @@ namespace sage
         return *uiEngine;
     }
 
-    void EngineSystems::ReplaceUiEngine(std::unique_ptr<GameUIEngine> replacement)
-    {
-        assert(replacement);
-        uiEngine = std::move(replacement);
-    }
 } // namespace sage

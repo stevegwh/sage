@@ -1,285 +1,136 @@
-//
-// GameUIEngine implementation. See GameUIEngine.hpp.
-//
-
 #include "GameUIEngine.hpp"
 
 #include "../Cursor.hpp"
-#include "../EngineSystems.hpp"
 #include "../Settings.hpp"
-#include "../slib.hpp"
-#include "../UserInput.hpp"
 
-#include "raylib.h"
+#include "raymath.h"
 
 #include <algorithm>
+#include <cmath>
 #include <ranges>
+#include <utility>
 
 namespace sage
 {
-    void GameUIEngine::pruneWindows()
+    GameUIEngine::GameUIEngine(Settings* settings, Cursor* cursor) : settings(settings), cursor(cursor)
     {
-        if (tooltipWindow && tooltipWindow->IsMarkedForRemoval())
+    }
+
+    UITheme& GameUIEngine::Theme()
+    {
+        return theme;
+    }
+
+    Window& GameUIEngine::AddWindow(const Rectangle designBounds)
+    {
+        auto window = std::make_unique<Window>(designBounds, theme.window);
+        Window& result = *window;
+        windows.push_back(std::move(window));
+        return result;
+    }
+
+    GameUIEngine::Hit GameUIEngine::hitTest(const Vector2 point) const
+    {
+        for (auto window = windows.rbegin(); window != windows.rend(); ++window)
         {
-            tooltipWindow.reset();
+            if ((*window)->hidden || !CheckCollisionPointRec(point, (*window)->bounds)) continue;
+            return {window->get(), (*window)->HitTest(point)};
         }
-
-        windows.erase(
-            std::ranges::remove_if(windows, [](const auto& window) { return window->IsMarkedForRemoval(); })
-                .begin(),
-            windows.end());
+        return {};
     }
 
-    void GameUIEngine::CreateErrorMessage(const std::string& msg)
+    void GameUIEngine::bringToFront(Window* window)
     {
-        errorMessage.emplace(settings, msg);
+        const auto found = std::ranges::find_if(
+            windows, [window](const std::unique_ptr<Window>& candidate) { return candidate.get() == window; });
+        if (found == windows.end() || std::next(found) == windows.end()) return;
+        auto ownedWindow = std::move(*found);
+        windows.erase(found);
+        windows.push_back(std::move(ownedWindow));
     }
 
-    bool GameUIEngine::ObjectBeingDragged() const
+    void GameUIEngine::Update()
     {
-        return draggedObject.has_value();
-    }
-
-    Window* GameUIEngine::GetWindowCollision(const Window* toCheck) const
-    {
-        for (auto& window : windows)
-        {
-            if (window.get() == toCheck || window->IsHidden()) continue;
-            if (CheckCollisionRecs(window->rec, toCheck->rec))
-            {
-                return window.get();
-            }
-        }
-        return nullptr;
-    }
-
-    CellElement* GameUIEngine::GetCellUnderCursor() const
-    {
-        const auto mousePos = ViewportMousePosition();
-        // Capturing windows (for example an open dropdown extending outside its window)
-        // get first refusal. If none captures, fall back to ordinary unobscured window hits.
-        for (auto windowIt = windows.rbegin(); windowIt != windows.rend(); ++windowIt)
-        {
-            auto& window = *windowIt;
-            if (window->IsHidden()) continue;
-
-            if (!window->CapturesCursor(mousePos)) continue;
-
-            for (const auto& child : window->children)
-            {
-                if (child->CapturesCursor(mousePos))
-                {
-                    if (auto childElement = child->GetCellUnderCursor(mousePos))
-                    {
-                        return childElement;
-                    }
-                }
-            }
-        }
-
-        for (auto windowIt = windows.rbegin(); windowIt != windows.rend(); ++windowIt)
-        {
-            auto& window = *windowIt;
-            if (window->IsHidden()) continue;
-            if (!PointInsideRect(window->rec, mousePos)) continue;
-            if (!mouseInNonObscuredWindowRegion(window.get(), mousePos)) continue;
-
-            for (const auto& child : window->children)
-            {
-                if (auto childElement = child->GetCellUnderCursor(mousePos))
-                {
-                    return childElement;
-                }
-            }
-            return nullptr;
-        }
-        return nullptr;
-    }
-
-    bool GameUIEngine::IsMouseOverWindow() const
-    {
-        const auto mousePos = ViewportMousePosition();
         for (const auto& window : windows)
         {
-            if (!window || window->IsHidden()) continue;
-            if (PointInsideRect(window->rec, mousePos) && mouseInNonObscuredWindowRegion(window.get(), mousePos))
+            if (!window->hidden) window->Layout(*settings);
+        }
+
+        if (hovered.window && hovered.window->hidden) hovered = {};
+        if (pressed.window && pressed.window->hidden)
+        {
+            pressed = {};
+            draggingWindow = false;
+        }
+
+        const Vector2 mouse = settings->ScreenToViewportPosition(GetMousePosition());
+        Hit hit = hitTest(mouse);
+        hovered = hit;
+
+        cursor->Enable();
+        cursor->EnableContextSwitching();
+        if (hovered.window)
+        {
+            cursor->Disable();
+            cursor->DisableContextSwitching();
+        }
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            pressed = hit;
+            pressPosition = mouse;
+            draggingWindow = false;
+            if (pressed.window)
             {
-                return true;
-            }
-            if (window->CapturesCursor(mousePos))
-            {
-                return true;
+                const Rectangle designBounds = pressed.window->designBounds;
+                pressedWindowPosition = {designBounds.x, designBounds.y};
+                bringToFront(pressed.window);
             }
         }
 
-        return tooltipWindow && !tooltipWindow->hidden && PointInsideRect(tooltipWindow->rec, mousePos);
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && pressed.cell && pressed.cell->dragsWindow)
+        {
+            const Vector2 delta = Vector2Subtract(mouse, pressPosition);
+            if (std::abs(delta.x) > 1 || std::abs(delta.y) > 1) draggingWindow = true;
+
+            const Vector2 viewport = settings->GetViewPort();
+            pressed.window->MoveTo({
+                pressedWindowPosition.x + delta.x * Settings::TARGET_SCREEN_WIDTH / std::max(1.0f, viewport.x),
+                pressedWindowPosition.y + delta.y * Settings::TARGET_SCREEN_HEIGHT / std::max(1.0f, viewport.y)});
+            pressed.window->Layout(*settings);
+
+            hit = hitTest(mouse);
+            hovered = hit;
+        }
+
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+        {
+            std::function<void()> click;
+            if (!draggingWindow && pressed.window == hit.window && pressed.cell == hit.cell && pressed.cell)
+                click = pressed.cell->click;
+
+            pressed = {};
+            draggingWindow = false;
+
+            if (click) click();
+        }
     }
 
-    Vector2 GameUIEngine::ViewportMousePosition() const
+    void GameUIEngine::Draw2D() const
     {
-        return settings->ScreenToViewportPosition(GetMousePosition());
-    }
-
-    void GameUIEngine::BringClickedWindowToFront(Window* clicked)
-    {
-        const auto it = std::ranges::find_if(
-            windows, [clicked](const std::unique_ptr<Window>& ptr) { return ptr.get() == clicked; });
-        std::rotate(it, it + 1, windows.end());
+        for (const auto& window : windows)
+        {
+            if (!window->hidden)
+                window->Draw(hovered.cell, pressed.cell, settings->GetCurrentScaleFactor());
+        }
     }
 
     void GameUIEngine::DrawDebug2D() const
     {
         for (const auto& window : windows)
         {
-            if (window->IsHidden()) continue;
-            window->DrawDebug2D();
+            if (!window->hidden) window->DrawDebug();
         }
     }
 
-    void GameUIEngine::Draw2D() const
-    {
-        overlayDrawQueue.clear();
-
-        for (const auto& window : windows)
-        {
-            if (window->IsHidden()) continue;
-            window->Draw2D();
-        }
-
-        for (const auto& drawOverlay : overlayDrawQueue)
-        {
-            if (drawOverlay) drawOverlay();
-        }
-        overlayDrawQueue.clear();
-
-        if (tooltipWindow && !tooltipWindow->hidden)
-        {
-            tooltipWindow->Draw2D();
-        }
-
-        if (draggedObject.has_value())
-        {
-            drawUIState(*draggedObject.value());
-        }
-
-        if (errorMessage.has_value())
-        {
-            errorMessage->Draw2D();
-        }
-    }
-
-    void GameUIEngine::QueueOverlayDraw(std::function<void()> draw) const
-    {
-        overlayDrawQueue.push_back(std::move(draw));
-    }
-
-    /**
-     *
-     * @return Whether the window region is not obscured by another window
-     */
-    bool GameUIEngine::mouseInNonObscuredWindowRegion(Window* window, Vector2 mousePos) const
-    {
-        if (auto collision = GetWindowCollision(window))
-        {
-            // check if window is lower
-            auto windowIt = std::ranges::find_if(
-                windows, [window](const std::unique_ptr<Window>& ptr) { return ptr.get() == window; });
-
-            const auto colIt = std::ranges::find_if(
-                windows, [collision](const std::unique_ptr<Window>& ptr) { return ptr.get() == collision; });
-
-            const auto windowDist = std::distance(windows.begin(), windowIt);
-
-            if (auto colDist = std::distance(windows.begin(), colIt); windowDist < colDist)
-            {
-                auto rec = GetCollisionRec(window->rec, collision->rec);
-                if (PointInsideRect(rec, mousePos))
-                {
-                    // this part of the window is being obscured by another
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    void GameUIEngine::processWindows()
-    {
-        const auto mousePos = currentInput.mousePos;
-
-        for (auto& window : windows)
-        {
-            if (!window) continue;
-
-            if (window->IsMarkedForRemoval() || window->IsHidden())
-            {
-                if (window->mouseHover)
-                {
-                    window->mouseHover = false;
-                    window->OnHoverStop();
-                }
-                continue;
-            }
-
-            const bool insideWindow = PointInsideRect(window->rec, mousePos);
-            const bool capturesCursor = window->CapturesCursor(mousePos);
-            if ((!insideWindow && !capturesCursor) ||
-                (insideWindow && !mouseInNonObscuredWindowRegion(window.get(), mousePos)))
-            {
-                if (window->mouseHover)
-                {
-                    window->mouseHover = false;
-                    window->OnHoverStop();
-                }
-                continue;
-            }
-
-            if (insideWindow && (IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))
-            {
-                BringClickedWindowToFront(window.get());
-            }
-
-            cursor->Disable();
-            cursor->DisableContextSwitching();
-
-            if (!window->mouseHover)
-            {
-                window->mouseHover = true;
-                window->OnHoverStart();
-            }
-            window->Update();
-        }
-    }
-
-    void GameUIEngine::Update()
-    {
-        // Snapshot raylib input once per frame so the state machine doesn't pull
-        // from globals; everyone reads via Input() for the rest of the pass.
-        currentInput = InputSnapshot::Capture(*settings);
-
-        if (draggedObject.has_value())
-        {
-            updateUIState(*draggedObject.value(), *this, currentInput);
-        }
-        else
-        {
-            cursor->Enable();
-            cursor->EnableContextSwitching();
-            processWindows();
-            pruneWindows();
-        }
-
-        if (errorMessage.has_value() && errorMessage->Finished())
-        {
-            errorMessage.reset();
-        }
-    }
-
-    GameUIEngine::GameUIEngine(entt::registry* _registry, const EngineSystems* _sys)
-        : registry(_registry),
-          userInput(_sys->userInput.get()),
-          cursor(_sys->cursor.get()),
-          settings(_sys->settings)
-    {
-    }
 } // namespace sage

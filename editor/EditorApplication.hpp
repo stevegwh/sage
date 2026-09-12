@@ -52,7 +52,7 @@ namespace sage
         void handleScreenUpdate();
         void handleWindowResize();
         void handleViewportFullscreenToggle();
-        void refreshViewportLayout(Vector2 previousViewport);
+        void refreshViewportLayout();
         void saveEditorSettings() const;
 
       public:
