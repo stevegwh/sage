@@ -464,5 +464,12 @@ namespace sage::editor
                 UnloadRenderTexture(thumbnail);
             }
         }
+        for (auto& thumbnail : flatpackThumbnails)
+        {
+            if (thumbnail.id != 0)
+            {
+                UnloadRenderTexture(thumbnail);
+            }
+        }
     }
 } // namespace sage::editor

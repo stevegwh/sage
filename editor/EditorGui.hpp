@@ -170,6 +170,7 @@ namespace sage
             std::vector<RenderTexture2D> assetThumbnails;
             std::vector<SceneObjectEntry> hierarchyEntries;
             std::vector<FlatpackEntry> flatpackEntries;
+            std::vector<RenderTexture2D> flatpackThumbnails;
             std::function<void(std::size_t)> onAssetSelectedCb;
             std::function<AssetRenameResult(std::size_t, const std::string&)> onAssetRenameCb;
             std::function<void(std::filesystem::path)> onFlatpackSelectedCb;
@@ -230,6 +231,7 @@ namespace sage
             bool dockLayoutChanged = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
+            RenderTexture2D createFlatpackThumbnail(const FlatpackEntry& flatpack) const;
             [[nodiscard]] std::optional<EditorComponentId> drawAddComponentControls();
             void syncInspectorComponentOrder();
             void applyInspectorComponentOrder();

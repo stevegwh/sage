@@ -2,6 +2,7 @@
 
 #include "EditorGuiInternal.hpp"
 #include "engine/components/UberShaderComponent.hpp"
+#include "engine/FlatpackThumbnail.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
 
@@ -29,7 +30,7 @@ namespace sage::editor
         constexpr int THUMBNAIL_SIZE = 128;
         constexpr float ASSET_TILE_WIDTH = 152.0f;
         constexpr float ASSET_TILE_HEIGHT = 188.0f;
-        constexpr float FLATPACK_TILE_HEIGHT = 116.0f;
+        constexpr float FLATPACK_TILE_HEIGHT = ASSET_TILE_HEIGHT;
         constexpr float ASSET_DEFAULTS_PANEL_WIDTH = 260.0f;
         constexpr int PREVIEW_LIGHT_DIRECTIONAL = 0;
         constexpr int PREVIEW_LIGHT_POINT = 1;
@@ -301,7 +302,18 @@ namespace sage::editor
 
     void EditorGui::SetFlatpacks(std::vector<FlatpackEntry> entries)
     {
+        for (auto& thumbnail : flatpackThumbnails)
+        {
+            if (thumbnail.id != 0) UnloadRenderTexture(thumbnail);
+        }
+        flatpackThumbnails.clear();
+
         flatpackEntries = std::move(entries);
+        flatpackThumbnails.reserve(flatpackEntries.size());
+        for (const auto& flatpack : flatpackEntries)
+        {
+            flatpackThumbnails.push_back(createFlatpackThumbnail(flatpack));
+        }
     }
 
     RenderTexture2D EditorGui::createAssetThumbnail(const AssetEntry& asset) const
@@ -333,6 +345,11 @@ namespace sage::editor
         EndTextureMode();
 
         return thumbnail;
+    }
+
+    RenderTexture2D EditorGui::createFlatpackThumbnail(const FlatpackEntry& flatpack) const
+    {
+        return CreateFlatpackThumbnail(flatpack.path, THUMBNAIL_SIZE);
     }
 
     void EditorGui::openAssetRenamePopup(const std::size_t index)
@@ -807,7 +824,16 @@ namespace sage::editor
                 const auto& flatpack = flatpackEntries[i];
                 ImGui::PushID(static_cast<int>(i));
                 ImGui::BeginGroup();
-                const bool clicked = ImGui::Button("Flatpack", ImVec2{ASSET_TILE_WIDTH, 56.0f});
+                Texture2D* texture = i < flatpackThumbnails.size() && flatpackThumbnails[i].id != 0
+                                         ? &flatpackThumbnails[i].texture
+                                         : nullptr;
+                const bool clicked = texture ? ImGui::ImageButton(
+                                                   "thumbnail",
+                                                   reinterpret_cast<ImTextureID>(texture),
+                                                   ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE},
+                                                   ImVec2{0.0f, 1.0f},
+                                                   ImVec2{1.0f, 0.0f})
+                                             : ImGui::Button("No Preview", ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE});
                 const bool doubleClicked =
                     ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
                 if (doubleClicked && onFlatpackEditCb)

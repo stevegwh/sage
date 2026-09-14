@@ -97,6 +97,9 @@ namespace sage
         [[nodiscard]] Music GetMusic(const std::string& path);
         [[nodiscard]] Sound GetSFX(const std::string& path);
         [[nodiscard]] Shader ShaderLoad(const char* vsFileName, const char* fsFileName);
+        // Compiles a separate GPU program from the same preprocessed sources as
+        // ShaderLoad. The caller owns it and must call UnloadShader.
+        [[nodiscard]] Shader ShaderLoadUnique(const char* vsFileName, const char* fsFileName);
         [[nodiscard]] Texture TextureLoad(const std::string& path);
         [[nodiscard]] Texture TextureLoadFromImage(const std::string& name, Image image);
         Font FontLoad(const std::string& path);

@@ -207,8 +207,9 @@ namespace sage
             DrawTextEx(font, text.c_str(), {x, y}, fontSize, spacing, cell.style.textColor);
         }
 
-        void drawImage(const Texture image, const Cell& cell, const float scale)
+        void drawImage(const CellImage& imageContent, const Cell& cell, const float scale)
         {
+            const Texture image = imageContent.texture;
             if (image.id == 0 || image.width <= 0 || image.height <= 0) return;
             Rectangle destination = contentBounds(cell, scale);
             const float imageRatio = static_cast<float>(image.width) / image.height;
@@ -227,7 +228,11 @@ namespace sage
             }
             DrawTexturePro(
                 image,
-                {0, 0, static_cast<float>(image.width), static_cast<float>(image.height)},
+                {0,
+                 imageContent.flipVertically ? static_cast<float>(image.height) : 0.0f,
+                 static_cast<float>(image.width),
+                 imageContent.flipVertically ? -static_cast<float>(image.height)
+                                             : static_cast<float>(image.height)},
                 destination,
                 {},
                 0,
@@ -262,7 +267,7 @@ namespace sage
 
                     if (const auto* text = std::get_if<std::string>(&cell->content))
                         drawText(*text, *cell, scale);
-                    else if (const auto* image = std::get_if<Texture>(&cell->content))
+                    else if (const auto* image = std::get_if<CellImage>(&cell->content))
                         drawImage(*image, *cell, scale);
                 }
             }
@@ -314,9 +319,9 @@ namespace sage
         return *this;
     }
 
-    Cell& Cell::Image(const Texture texture)
+    Cell& Cell::Image(const Texture texture, const bool flipVertically)
     {
-        content = texture;
+        content = CellImage{texture, flipVertically};
         return *this;
     }
 

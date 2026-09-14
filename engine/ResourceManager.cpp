@@ -371,6 +371,21 @@ namespace sage
         return gpuShaderLoad(vShaderStr, fShaderStr);
     }
 
+    Shader ResourceManager::ShaderLoadUnique(const char* vsFileName, const char* fsFileName)
+    {
+        const bool noShaderFiles = vsFileName == nullptr && fsFileName == nullptr;
+        const bool vertexShaderMissing = vsFileName != nullptr && !FileExists(vsFileName);
+        const bool fragmentShaderMissing = fsFileName != nullptr && !FileExists(fsFileName);
+        if (noShaderFiles || vertexShaderMissing || fragmentShaderMissing) return {};
+
+        // ShaderLoad performs and caches the include preprocessing. Only the GPU
+        // program below is unique; source text can remain shared.
+        static_cast<void>(ShaderLoad(vsFileName, fsFileName));
+        const char* vertexSource = vsFileName ? vertShaderFileText.at(vsFileName) : nullptr;
+        const char* fragmentSource = fsFileName ? fragShaderFileText.at(fsFileName) : nullptr;
+        return LoadShaderFromMemory(vertexSource, fragmentSource);
+    }
+
     Texture ResourceManager::TextureLoad(const std::string& path)
     {
         auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE

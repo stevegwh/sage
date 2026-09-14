@@ -88,7 +88,12 @@ namespace sage
     };
 
     class Table;
-    using CellContent = std::variant<std::monostate, std::string, Texture, std::unique_ptr<Table>>;
+    struct CellImage
+    {
+        Texture texture{};
+        bool flipVertically = false;
+    };
+    using CellContent = std::variant<std::monostate, std::string, CellImage, std::unique_ptr<Table>>;
 
     class Cell
     {
@@ -107,7 +112,7 @@ namespace sage
         Cell& operator=(const Cell&) = delete;
 
         Cell& Text(std::string value);
-        Cell& Image(Texture texture);
+        Cell& Image(Texture texture, bool flipVertically = false);
         Table& AddTable();
         Cell& SetPadding(Padding value);
         Cell& UseStyle(const CellStyle& value);
