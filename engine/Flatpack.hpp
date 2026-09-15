@@ -24,6 +24,7 @@ namespace sage
             std::string key;
             std::function<bool(const entt::registry&, entt::entity)> has;
             std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
+            std::function<std::string(const std::string&)> migrate;
             std::function<std::string(const entt::registry&, entt::entity,
                 const std::unordered_map<std::uint32_t, entt::entity>&)> serialize;
             std::function<void(entt::registry&, entt::entity,
@@ -54,6 +55,18 @@ namespace sage
                      T component{};
                      archive(component);
                      registry.template emplace_or_replace<T>(entity, std::move(component));
+                 },
+             .migrate =
+                 [](const std::string& data) {
+                     std::istringstream inputStream(data, std::ios::binary);
+                     cereal::BinaryInputArchive input(inputStream);
+                     T component{};
+                     input(component);
+
+                     std::ostringstream outputStream(std::ios::binary);
+                     cereal::BinaryOutputArchive output(outputStream);
+                     output(component);
+                     return outputStream.str();
                  },
              .serialize =
                  [](const entt::registry& registry, entt::entity entity,
@@ -102,6 +115,20 @@ namespace sage
     };
 
     [[nodiscard]] bool IsFlatpackFile(const char* path);
+
+    struct FlatpackComponentMigrationResult
+    {
+        bool hasComponentSection = false;
+        std::size_t recognizedComponents = 0;
+        std::size_t changedComponents = 0;
+        bool wroteChanges = false;
+    };
+
+    // Canonicalizes registered game-component payloads through their current
+    // load/save functions. Current LQF5 flatpacks carry this opaque component
+    // section; older container versions have no section and are left untouched.
+    [[nodiscard]] std::optional<FlatpackComponentMigrationResult> MigrateFlatpackComponents(
+        const std::filesystem::path& path, bool writeChanges);
 
     // Serializes the transform subtree rooted at `root`. The root is rebased to
     // the origin and every entity's optional Archetype is persisted by id.

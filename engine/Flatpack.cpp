@@ -48,7 +48,21 @@ namespace sage
         // to touch the registry-bound proxies on the source transforms.
         // Component blobs are flagged so we can leave optional components empty
         // when the source entity doesn't carry them.
-        struct FlatpackEntityRecord
+        struct StoredRenderableRecord
+        {
+            std::uint8_t kind = 0;
+            std::string key;
+            Matrix initialTransform{};
+
+            template <class Archive>
+            void serialize(Archive& archive)
+            {
+                archive(kind, key, initialTransform);
+            }
+        };
+
+        template <class RenderableRecord>
+        struct BasicFlatpackEntityRecord
         {
             std::int32_t parentLocalId = -1;
             Vector3 worldPos{};
@@ -65,7 +79,7 @@ namespace sage
             bool hasCursorTarget = false;
             CursorTarget cursorTarget{};
             bool hasRenderable = false;
-            Renderable renderable{};
+            RenderableRecord renderable{};
             bool hasLight = false;
             Light light{};
 
@@ -89,6 +103,9 @@ namespace sage
                 if (hasLight) archive(light);
             }
         };
+
+        using FlatpackEntityRecord = BasicFlatpackEntityRecord<Renderable>;
+        using MigrationFlatpackEntityRecord = BasicFlatpackEntityRecord<StoredRenderableRecord>;
 
         // Component sections reference entities by localId, which indexes the
         // records vector.
@@ -188,6 +205,45 @@ namespace sage
             }
         };
 
+        struct MigrationFlatpackData
+        {
+            std::vector<MigrationFlatpackEntityRecord> records;
+            std::vector<std::string> names;
+            std::vector<FlatpackScriptRecord> scripts;
+            std::vector<FlatpackAnimationRecord> animations;
+            std::vector<FlatpackMoveableActorRecord> moveables;
+            std::vector<FlatpackArchetypeRecord> archetypes;
+            std::vector<FlatpackCustomShaderRecord> customShaders;
+            std::vector<FlatpackCustomComponentRecord> customComponents;
+
+            template <class Archive>
+            void archive(Archive& value)
+            {
+                value(records, names, scripts, animations, moveables, archetypes, customShaders, customComponents);
+            }
+        };
+
+        MigrationFlatpackData ReadMigrationFlatpack(const std::filesystem::path& path)
+        {
+            MigrationFlatpackData data;
+            sage::serializer::ReadCompressedBinary(
+                path.string().c_str(), kFlatpackMagic,
+                [&data](cereal::BinaryInputArchive& input, std::istream&) { data.archive(input); });
+            return data;
+        }
+
+        bool SameComponentPayloads(const MigrationFlatpackData& left, const MigrationFlatpackData& right)
+        {
+            if (left.customComponents.size() != right.customComponents.size()) return false;
+            for (std::size_t index = 0; index < left.customComponents.size(); ++index)
+            {
+                const auto& lhs = left.customComponents[index];
+                const auto& rhs = right.customComponents[index];
+                if (lhs.localId != rhs.localId || lhs.key != rhs.key || lhs.data != rhs.data) return false;
+            }
+            return true;
+        }
+
     } // namespace
 
     void detail::RegisterFlatpackComponentCodec(FlatpackComponentCodec codec)
@@ -231,6 +287,64 @@ namespace sage
                 std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kLegacyFlatpackMagic, sizeof(fileMagic)) == 0);
+    }
+
+    std::optional<FlatpackComponentMigrationResult> MigrateFlatpackComponents(
+        const std::filesystem::path& path, const bool writeChanges)
+    {
+        std::ifstream header(path, std::ios::binary);
+        char fileMagic[4]{};
+        header.read(fileMagic, sizeof(fileMagic));
+        if (header.gcount() != sizeof(fileMagic)) return std::nullopt;
+
+        FlatpackComponentMigrationResult result;
+        if (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) != 0)
+        {
+            if (!IsFlatpackFile(path.string().c_str())) return std::nullopt;
+            return result;
+        }
+
+        result.hasComponentSection = true;
+        auto data = ReadMigrationFlatpack(path);
+        for (auto& record : data.customComponents)
+        {
+            const auto codec =
+                std::ranges::find(FlatpackComponentCodecs(), record.key, &detail::FlatpackComponentCodec::key);
+            if (codec == FlatpackComponentCodecs().end()) continue;
+
+            ++result.recognizedComponents;
+            auto migrated = codec->migrate(record.data);
+            if (migrated == record.data) continue;
+            record.data = std::move(migrated);
+            ++result.changedComponents;
+        }
+
+        if (!writeChanges || result.changedComponents == 0) return result;
+
+        auto temporaryPath = path;
+        temporaryPath += ".migrating";
+        std::error_code error;
+        std::filesystem::remove(temporaryPath, error);
+        if (!sage::serializer::WriteCompressedBinary(
+                temporaryPath.string().c_str(), kFlatpackMagic,
+                [&data](cereal::BinaryOutputArchive& output) { data.archive(output); }))
+            return std::nullopt;
+
+        const auto verification = ReadMigrationFlatpack(temporaryPath);
+        if (!SameComponentPayloads(data, verification))
+        {
+            std::filesystem::remove(temporaryPath, error);
+            return std::nullopt;
+        }
+
+        std::filesystem::rename(temporaryPath, path, error);
+        if (error)
+        {
+            std::filesystem::remove(temporaryPath, error);
+            return std::nullopt;
+        }
+        result.wroteChanges = true;
+        return result;
     }
 
     bool SaveFlatpack(entt::registry& source, entt::entity root, const char* path)
