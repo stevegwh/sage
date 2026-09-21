@@ -21,6 +21,7 @@ namespace sage
         int skinnedLoc;
         int hasEmissiveTexLoc;
         int hasEmissiveColLoc;
+        int grayscaleLoc;
         int colEmissionLoc;
 
         void onComponentAdded(entt::entity entity);

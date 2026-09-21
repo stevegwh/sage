@@ -3,6 +3,7 @@
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/MoveableActor.hpp"
+#include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "ScriptApi.hpp"
 
@@ -15,5 +16,6 @@ namespace sage
         api.RegisterComponent<Collideable>("Collideable");
         api.RegisterComponent<MoveableActor>("MoveableActor");
         api.RegisterComponent<Animation>("Animation");
+        api.RegisterComponent<Renderable>("Renderable");
     }
 } // namespace sage

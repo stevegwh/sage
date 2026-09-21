@@ -27,6 +27,7 @@ namespace sage
         uber.skinnedLoc = skinnedLoc;
         uber.hasEmissiveTexLoc = hasEmissiveTexLoc;
         uber.hasEmissiveColLoc = hasEmissiveColLoc;
+        uber.grayscaleLoc = grayscaleLoc;
         uber.colEmissiveLoc = colEmissionLoc;
         auto& renderable = registry->get<Renderable>(entity);
         auto* model = renderable.GetModel();
@@ -78,6 +79,7 @@ namespace sage
         skinnedLoc = GetShaderLocation(shader, "skinned");
         hasEmissiveTexLoc = GetShaderLocation(shader, "hasEmissionTex");
         hasEmissiveColLoc = GetShaderLocation(shader, "hasEmissionCol");
+        grayscaleLoc = GetShaderLocation(shader, "grayscale");
         // debug
     }
 } // namespace sage

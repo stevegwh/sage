@@ -19,7 +19,8 @@ namespace sage
             Skinned = 1 << 0,
             Lit = 1 << 1,
             EmissiveTexture = 1 << 2,
-            EmissiveCol = 1 << 3
+            EmissiveCol = 1 << 3,
+            Grayscale = 1 << 4
         };
 
         // uint32_t flags{};
@@ -28,6 +29,7 @@ namespace sage
         int skinnedLoc{};
         int hasEmissiveTexLoc{}; // The boolean, not the texture
         int hasEmissiveColLoc{};
+        int grayscaleLoc{};
         int colEmissiveLoc{}; // Loc of the color itself (not the bool)
 
         std::vector<uint32_t> materialMap;
@@ -43,6 +45,7 @@ namespace sage
             setBool(litLoc, Lit);
             setBool(hasEmissiveTexLoc, EmissiveTexture);
             setBool(hasEmissiveColLoc, EmissiveCol);
+            setBool(grayscaleLoc, Grayscale);
         }
 
         void SetShaderBools() const

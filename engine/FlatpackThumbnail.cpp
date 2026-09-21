@@ -40,6 +40,7 @@ namespace sage
             uber.skinnedLoc = GetShaderLocation(shader, "skinned");
             uber.hasEmissiveTexLoc = GetShaderLocation(shader, "hasEmissionTex");
             uber.hasEmissiveColLoc = GetShaderLocation(shader, "hasEmissionCol");
+            uber.grayscaleLoc = GetShaderLocation(shader, "grayscale");
             uber.colEmissiveLoc = GetShaderLocation(shader, "colEmission");
             uber.SetFlagAll(UberShaderComponent::Flags::Lit);
 

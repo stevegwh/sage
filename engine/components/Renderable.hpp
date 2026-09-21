@@ -64,6 +64,12 @@ namespace sage
         void Enable();
         void Disable();
 
+        template <class Api>
+        static void define_script_api(Api& api)
+        {
+            api.property("Active", &Renderable::active);
+        }
+
         Renderable() = default;
         ~Renderable() = default;
         Renderable(const Renderable&) = default;
