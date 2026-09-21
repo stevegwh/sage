@@ -30,7 +30,8 @@ namespace sage
 {
     namespace
     {
-        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '5'};
+        constexpr char kFlatpackMagic[4] = {'L', 'Q', 'F', '6'};
+        constexpr char kVersionFiveFlatpackMagic[4] = {'L', 'Q', 'F', '5'};
         constexpr char kVersionFourFlatpackMagic[4] = {'L', 'Q', 'F', '4'};
         constexpr char kVersionThreeFlatpackMagic[4] = {'L', 'Q', 'F', '3'};
         constexpr char kVersionTwoFlatpackMagic[4] = {'L', 'Q', 'F', '2'};
@@ -61,7 +62,33 @@ namespace sage
             }
         };
 
-        template <class RenderableRecord>
+        struct LegacyCursorTargetRecord
+        {
+            std::string cursor{cursors::Regular};
+            bool hoverable = false;
+            bool allowNavigationClickThrough = true;
+
+            template <class Archive>
+            void save(Archive& archive) const
+            {
+                const bool ignoredCursorFlag = false;
+                archive(cursor, hoverable, allowNavigationClickThrough, ignoredCursorFlag);
+            }
+
+            template <class Archive>
+            void load(Archive& archive)
+            {
+                bool ignoredCursorFlag = false;
+                archive(cursor, hoverable, allowNavigationClickThrough, ignoredCursorFlag);
+            }
+
+            [[nodiscard]] CursorTarget Current() const
+            {
+                return {cursor, hoverable, allowNavigationClickThrough};
+            }
+        };
+
+        template <class RenderableRecord, class CursorTargetRecord>
         struct BasicFlatpackEntityRecord
         {
             std::int32_t parentLocalId = -1;
@@ -77,7 +104,7 @@ namespace sage
             bool hasTriggerVolume = false;
             TriggerVolume triggerVolume{};
             bool hasCursorTarget = false;
-            CursorTarget cursorTarget{};
+            CursorTargetRecord cursorTarget{};
             bool hasRenderable = false;
             RenderableRecord renderable{};
             bool hasLight = false;
@@ -104,8 +131,35 @@ namespace sage
             }
         };
 
-        using FlatpackEntityRecord = BasicFlatpackEntityRecord<Renderable>;
-        using MigrationFlatpackEntityRecord = BasicFlatpackEntityRecord<StoredRenderableRecord>;
+        using FlatpackEntityRecord = BasicFlatpackEntityRecord<Renderable, CursorTarget>;
+        using LegacyFlatpackEntityRecord = BasicFlatpackEntityRecord<Renderable, LegacyCursorTargetRecord>;
+        using MigrationFlatpackEntityRecord = BasicFlatpackEntityRecord<StoredRenderableRecord, CursorTarget>;
+        using LegacyMigrationFlatpackEntityRecord =
+            BasicFlatpackEntityRecord<StoredRenderableRecord, LegacyCursorTargetRecord>;
+
+        FlatpackEntityRecord CurrentRecord(LegacyFlatpackEntityRecord&& legacy)
+        {
+            FlatpackEntityRecord current;
+            current.parentLocalId = legacy.parentLocalId;
+            current.worldPos = legacy.worldPos;
+            current.worldRot = legacy.worldRot;
+            current.worldScale = legacy.worldScale;
+            current.hasCollideable = legacy.hasCollideable;
+            current.collideable = std::move(legacy.collideable);
+            current.hasNavigationSurface = legacy.hasNavigationSurface;
+            current.navigationSurface = legacy.navigationSurface;
+            current.hasNavigationObstacle = legacy.hasNavigationObstacle;
+            current.navigationObstacle = legacy.navigationObstacle;
+            current.hasTriggerVolume = legacy.hasTriggerVolume;
+            current.triggerVolume = legacy.triggerVolume;
+            current.hasCursorTarget = legacy.hasCursorTarget;
+            current.cursorTarget = legacy.cursorTarget.Current();
+            current.hasRenderable = legacy.hasRenderable;
+            current.renderable = std::move(legacy.renderable);
+            current.hasLight = legacy.hasLight;
+            current.light = legacy.light;
+            return current;
+        }
 
         // Component sections reference entities by localId, which indexes the
         // records vector.
@@ -205,9 +259,10 @@ namespace sage
             }
         };
 
-        struct MigrationFlatpackData
+        template <class EntityRecord>
+        struct BasicMigrationFlatpackData
         {
-            std::vector<MigrationFlatpackEntityRecord> records;
+            std::vector<EntityRecord> records;
             std::vector<std::string> names;
             std::vector<FlatpackScriptRecord> scripts;
             std::vector<FlatpackAnimationRecord> animations;
@@ -223,16 +278,21 @@ namespace sage
             }
         };
 
-        MigrationFlatpackData ReadMigrationFlatpack(const std::filesystem::path& path)
+        using MigrationFlatpackData = BasicMigrationFlatpackData<MigrationFlatpackEntityRecord>;
+        using LegacyMigrationFlatpackData = BasicMigrationFlatpackData<LegacyMigrationFlatpackEntityRecord>;
+
+        template <class Data>
+        Data ReadMigrationFlatpack(const std::filesystem::path& path, const char (&magic)[4])
         {
-            MigrationFlatpackData data;
+            Data data;
             sage::serializer::ReadCompressedBinary(
-                path.string().c_str(), kFlatpackMagic,
+                path.string().c_str(), magic,
                 [&data](cereal::BinaryInputArchive& input, std::istream&) { data.archive(input); });
             return data;
         }
 
-        bool SameComponentPayloads(const MigrationFlatpackData& left, const MigrationFlatpackData& right)
+        template <class Left, class Right>
+        bool SameComponentPayloads(const Left& left, const Right& right)
         {
             if (left.customComponents.size() != right.customComponents.size()) return false;
             for (std::size_t index = 0; index < left.customComponents.size(); ++index)
@@ -283,6 +343,7 @@ namespace sage
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
                (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0 ||
+                std::memcmp(fileMagic, kVersionFiveFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionFourFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0 ||
                 std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0 ||
@@ -297,54 +358,65 @@ namespace sage
         header.read(fileMagic, sizeof(fileMagic));
         if (header.gcount() != sizeof(fileMagic)) return std::nullopt;
 
-        FlatpackComponentMigrationResult result;
-        if (std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) != 0)
+        const bool currentFormat = std::memcmp(fileMagic, kFlatpackMagic, sizeof(fileMagic)) == 0;
+        const bool versionFiveFormat =
+            std::memcmp(fileMagic, kVersionFiveFlatpackMagic, sizeof(fileMagic)) == 0;
+        if (!currentFormat && !versionFiveFormat)
         {
             if (!IsFlatpackFile(path.string().c_str())) return std::nullopt;
+            return FlatpackComponentMigrationResult{};
+        }
+
+        const auto migrate = [&](auto data, const char (&magic)[4])
+            -> std::optional<FlatpackComponentMigrationResult> {
+            FlatpackComponentMigrationResult result;
+            result.hasComponentSection = true;
+            for (auto& record : data.customComponents)
+            {
+                const auto codec = std::ranges::find(
+                    FlatpackComponentCodecs(), record.key, &detail::FlatpackComponentCodec::key);
+                if (codec == FlatpackComponentCodecs().end()) continue;
+
+                ++result.recognizedComponents;
+                auto migrated = codec->migrate(record.data);
+                if (migrated == record.data) continue;
+                record.data = std::move(migrated);
+                ++result.changedComponents;
+            }
+
+            if (!writeChanges || result.changedComponents == 0) return result;
+
+            auto temporaryPath = path;
+            temporaryPath += ".migrating";
+            std::error_code error;
+            std::filesystem::remove(temporaryPath, error);
+            if (!sage::serializer::WriteCompressedBinary(
+                    temporaryPath.string().c_str(), magic,
+                    [&data](cereal::BinaryOutputArchive& output) { data.archive(output); }))
+                return std::nullopt;
+
+            const auto verification = ReadMigrationFlatpack<decltype(data)>(temporaryPath, magic);
+            if (!SameComponentPayloads(data, verification))
+            {
+                std::filesystem::remove(temporaryPath, error);
+                return std::nullopt;
+            }
+
+            std::filesystem::rename(temporaryPath, path, error);
+            if (error)
+            {
+                std::filesystem::remove(temporaryPath, error);
+                return std::nullopt;
+            }
+            result.wroteChanges = true;
             return result;
-        }
+        };
 
-        result.hasComponentSection = true;
-        auto data = ReadMigrationFlatpack(path);
-        for (auto& record : data.customComponents)
-        {
-            const auto codec =
-                std::ranges::find(FlatpackComponentCodecs(), record.key, &detail::FlatpackComponentCodec::key);
-            if (codec == FlatpackComponentCodecs().end()) continue;
-
-            ++result.recognizedComponents;
-            auto migrated = codec->migrate(record.data);
-            if (migrated == record.data) continue;
-            record.data = std::move(migrated);
-            ++result.changedComponents;
-        }
-
-        if (!writeChanges || result.changedComponents == 0) return result;
-
-        auto temporaryPath = path;
-        temporaryPath += ".migrating";
-        std::error_code error;
-        std::filesystem::remove(temporaryPath, error);
-        if (!sage::serializer::WriteCompressedBinary(
-                temporaryPath.string().c_str(), kFlatpackMagic,
-                [&data](cereal::BinaryOutputArchive& output) { data.archive(output); }))
-            return std::nullopt;
-
-        const auto verification = ReadMigrationFlatpack(temporaryPath);
-        if (!SameComponentPayloads(data, verification))
-        {
-            std::filesystem::remove(temporaryPath, error);
-            return std::nullopt;
-        }
-
-        std::filesystem::rename(temporaryPath, path, error);
-        if (error)
-        {
-            std::filesystem::remove(temporaryPath, error);
-            return std::nullopt;
-        }
-        result.wroteChanges = true;
-        return result;
+        if (versionFiveFormat)
+            return migrate(
+                ReadMigrationFlatpack<LegacyMigrationFlatpackData>(path, kVersionFiveFlatpackMagic),
+                kVersionFiveFlatpackMagic);
+        return migrate(ReadMigrationFlatpack<MigrationFlatpackData>(path, kFlatpackMagic), kFlatpackMagic);
     }
 
     bool SaveFlatpack(entt::registry& source, entt::entity root, const char* path)
@@ -506,6 +578,7 @@ namespace sage
         }
 
         std::vector<FlatpackEntityRecord> records;
+        std::vector<LegacyFlatpackEntityRecord> legacyRecords;
         std::vector<std::string> names;
         std::vector<FlatpackScriptRecord> scripts;
         std::vector<FlatpackAnimationRecord> animations;
@@ -520,10 +593,15 @@ namespace sage
         const bool versionTwoFormat = std::memcmp(fileMagic, kVersionTwoFlatpackMagic, sizeof(fileMagic)) == 0;
         const bool versionThreeFormat = std::memcmp(fileMagic, kVersionThreeFlatpackMagic, sizeof(fileMagic)) == 0;
         const bool versionFourFormat = std::memcmp(fileMagic, kVersionFourFlatpackMagic, sizeof(fileMagic)) == 0;
+        const bool versionFiveFormat = std::memcmp(fileMagic, kVersionFiveFlatpackMagic, sizeof(fileMagic)) == 0;
         const auto readArchive = [&](const auto& magic) {
             sage::serializer::ReadCompressedBinary(
                 path, magic, [&](cereal::BinaryInputArchive& input, std::istream&) {
-                    input(records, names, scripts, animations);
+                    if (versionFiveFormat || versionFourFormat || versionThreeFormat || versionTwoFormat ||
+                        legacyFormat)
+                        input(legacyRecords, names, scripts, animations);
+                    else
+                        input(records, names, scripts, animations);
                     if (legacyFormat)
                     {
                         std::vector<LegacyFlatpackMoveableActorRecord> legacyMoveables;
@@ -567,8 +645,12 @@ namespace sage
             readArchive(kVersionThreeFlatpackMagic);
         else if (versionFourFormat)
             readArchive(kVersionFourFlatpackMagic);
+        else if (versionFiveFormat)
+            readArchive(kVersionFiveFlatpackMagic);
         else
             readArchive(kFlatpackMagic);
+        records.reserve(legacyRecords.size());
+        for (auto& record : legacyRecords) records.push_back(CurrentRecord(std::move(record)));
         if (records.empty()) return {};
 
         // Create entities up-front so parent local ids resolve to real entt::entity values.

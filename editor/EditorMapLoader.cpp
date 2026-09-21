@@ -98,9 +98,7 @@ namespace sage::editor
         char fileMagic[4]{};
         storage.read(fileMagic, sizeof(fileMagic));
         return storage.gcount() == sizeof(fileMagic) &&
-               (std::memcmp(fileMagic, MapMagic, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, PreviousMapMagic, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0);
+               std::memcmp(fileMagic, MapMagic, sizeof(fileMagic)) == 0;
     }
 
     bool LoadMap(entt::registry* destination, const char* path, const InspectorRegistry* components)
@@ -114,18 +112,11 @@ namespace sage::editor
 
         std::cout << "START: Loading layout map data from file (editor)." << std::endl;
 
-        std::ifstream header(path, std::ios::binary);
-        char fileMagic[4]{};
-        header.read(fileMagic, sizeof(fileMagic));
-        const bool previousFormat = std::memcmp(fileMagic, PreviousMapMagic, sizeof(fileMagic)) == 0;
-        const bool legacyFormat = std::memcmp(fileMagic, LegacyMapMagic, sizeof(fileMagic)) == 0;
-
         std::unordered_map<std::uint32_t, entt::entity> idMap;
         std::vector<entt::entity> loadedEntities;
 
         sage::serializer::ReadCompressedBinary(
-            path,
-            legacyFormat ? LegacyMapMagic : (previousFormat ? PreviousMapMagic : MapMagic),
+            path, MapMagic,
             [&](cereal::BinaryInputArchive& input, std::istream&) {
                 std::vector<Light> lights;
                 input(lights);
@@ -204,105 +195,69 @@ namespace sage::editor
                     destination->emplace<Animation>(target, record.modelKey);
                 }
 
-                const auto loadMoveables = [&](const auto& moveables) {
-                    for (const auto& record : moveables)
+                std::vector<EntityMoveableActorRecord> moveables;
+                input(moveables);
+                for (const auto& record : moveables)
+                {
+                    const entt::entity target = resolveTarget(record.targetId);
+                    if (target == entt::null) continue;
+                    auto& moveable = destination->get_or_emplace<MoveableActor>(target);
+                    moveable.movementSpeed = record.movementSpeed;
+                    moveable.turnSpeed = record.turnSpeed;
+                    moveable.pathfindingBounds = record.pathfindingBounds;
+                    moveable.moveClip = record.moveClip;
+                    moveable.idleClip = record.idleClip;
+                }
+
+                std::vector<TerrainRecord> terrains;
+                input(terrains);
+                for (auto& record : terrains)
+                {
+                    Terrain terrain;
+                    terrain.resolution = record.resolution;
+                    terrain.cellSize = record.cellSize;
+                    terrain.heights = std::move(record.heights);
+                    if (!terrain.IsValid())
+                    {
+                        std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
+                        continue;
+                    }
+
+                    const auto entity = destination->create();
+                    destination->emplace<EditorMapEntity>(entity);
+                    destination->emplace<sgTransform>(entity, std::move(record.transform));
+                    auto& transform = destination->get<sgTransform>(entity);
+                    if (transform.name.empty())
+                        transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
+                    destination->emplace<Terrain>(entity, std::move(terrain));
+                    auto& collideable = destination->emplace<Collideable>(entity, record.collideable);
+                    collideable.isStatic = true;
+                    // The mesh, shader and collision bounds are derived after
+                    // load (EditorScene::refreshAfterMapLoad).
+                }
+
+                std::vector<EntityArchetypeRecord> archetypes;
+                input(archetypes);
+                for (const auto& record : archetypes)
+                {
+                    const entt::entity target = resolveTarget(record.targetId);
+                    if (target == entt::null) continue;
+                    destination->emplace_or_replace<Archetype>(target, record.archetype);
+                }
+
+                std::vector<EntityGameComponentRecord> gameComponents;
+                input(gameComponents);
+                if (components != nullptr)
+                {
+                    std::unordered_map<entt::entity, std::vector<InspectorRegistry::PersistentComponent>> byEntity;
+                    for (auto& record : gameComponents)
                     {
                         const entt::entity target = resolveTarget(record.targetId);
                         if (target == entt::null) continue;
-                        auto& moveable = destination->get_or_emplace<MoveableActor>(target);
-                        moveable.movementSpeed = record.movementSpeed;
-                        if constexpr (requires { record.turnSpeed; }) moveable.turnSpeed = record.turnSpeed;
-                        moveable.pathfindingBounds = record.pathfindingBounds;
-                        moveable.moveClip = record.moveClip;
-                        moveable.idleClip = record.idleClip;
+                        byEntity[target].push_back({std::move(record.key), std::move(record.data)});
                     }
-                };
-                if (legacyFormat)
-                {
-                    std::vector<LegacyEntityMoveableActorRecord> moveables;
-                    input(moveables);
-                    loadMoveables(moveables);
-                }
-                else
-                {
-                    std::vector<EntityMoveableActorRecord> moveables;
-                    input(moveables);
-                    loadMoveables(moveables);
-                }
-
-                const auto loadTerrains = [&](auto& terrains) {
-                    for (auto& record : terrains)
-                    {
-                        Terrain terrain;
-                        terrain.resolution = record.resolution;
-                        terrain.cellSize = record.cellSize;
-                        terrain.heights = std::move(record.heights);
-                        if (!terrain.IsValid())
-                        {
-                            std::cerr << "EditorMapLoader: invalid terrain record, skipping.\n";
-                            continue;
-                        }
-
-                        const auto entity = destination->create();
-                        destination->emplace<EditorMapEntity>(entity);
-                        sgTransform transform;
-                        if constexpr (requires { record.transform; })
-                            transform = std::move(record.transform);
-                        else
-                            transform.position.world = record.position;
-                        if (transform.name.empty())
-                            transform.name = "terrain_" + std::to_string(entt::to_integral(entity));
-                        destination->emplace<sgTransform>(entity, std::move(transform));
-                        destination->emplace<Terrain>(entity, std::move(terrain));
-                        auto& collideable = destination->emplace<Collideable>(entity, record.collideable);
-                        collideable.isStatic = true;
-                        // The mesh, shader and collision bounds are derived after
-                        // load (EditorScene::refreshAfterMapLoad).
-                    }
-                };
-                if (previousFormat || legacyFormat)
-                {
-                    std::vector<LegacyTerrainRecord> terrains;
-                    input(terrains);
-                    loadTerrains(terrains);
-                }
-                else
-                {
-                    std::vector<TerrainRecord> terrains;
-                    input(terrains);
-                    loadTerrains(terrains);
-                }
-
-                // Trailing optional sections. Older maps may end after terrain or
-                // archetypes, so missing data degrades to no archetypes/game components.
-                try
-                {
-                    std::vector<EntityArchetypeRecord> archetypes;
-                    input(archetypes);
-                    for (const auto& record : archetypes)
-                    {
-                        const entt::entity target = resolveTarget(record.targetId);
-                        if (target == entt::null) continue;
-                        destination->emplace_or_replace<Archetype>(target, record.archetype);
-                    }
-
-                    std::vector<EntityGameComponentRecord> gameComponents;
-                    input(gameComponents);
-                    if (components != nullptr)
-                    {
-                        std::unordered_map<entt::entity, std::vector<InspectorRegistry::PersistentComponent>> byEntity;
-                        for (auto& record : gameComponents)
-                        {
-                            const entt::entity target = resolveTarget(record.targetId);
-                            if (target == entt::null) continue;
-                            byEntity[target].push_back({std::move(record.key), std::move(record.data)});
-                        }
-                        for (const auto& [entity, states] : byEntity)
-                            components->RestorePersistent(*destination, entity, states);
-                    }
-                }
-                catch (const std::exception&)
-                {
+                    for (const auto& [entity, states] : byEntity)
+                        components->RestorePersistent(*destination, entity, states);
                 }
             });
 

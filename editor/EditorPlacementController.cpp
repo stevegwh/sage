@@ -159,14 +159,13 @@ namespace sage::editor
         const Matrix defaultTransform = assets.DefaultTransform(placeable);
         model.SetTransform(defaultTransform);
         const auto localBounds = model.CalcLocalBoundingBox();
-        const Vector3 position = snapToGrid
-                                     ? PositionForBoundsMinSnap(
-                                           *snappedPlacementPosition, localBounds, placementRotationY, placementScale)
-                                     : *snappedPlacementPosition;
+        const Vector3 position =
+            snapToGrid ? PositionForBoundsMinSnap(
+                             *snappedPlacementPosition, localBounds, placementRotationY, placementScale)
+                       : *snappedPlacementPosition;
 
         transform.position.world = position;
-        auto& renderable =
-            sys->registry->emplace<Renderable>(entity, std::move(model), defaultTransform);
+        auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), defaultTransform);
         auto& uber =
             sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
         uber.SetFlagAll(UberShaderComponent::Flags::Lit);
@@ -180,7 +179,6 @@ namespace sage::editor
         auto& cursorTarget = sys->registry->emplace<CursorTarget>(entity);
         cursorTarget.cursor = cursors::Denied;
         cursorTarget.allowNavigationClickThrough = false;
-        cursorTarget.deniesNavigation = true;
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
 
         return entity;
@@ -194,10 +192,10 @@ namespace sage::editor
         auto previewModel = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
         previewModel.SetTransform(assets.SelectedDefaultTransform());
         const auto localBounds = previewModel.CalcLocalBoundingBox();
-        const Vector3 position = snapToGrid
-                                     ? PositionForBoundsMinSnap(
-                                           *snappedPlacementPosition, localBounds, placementRotationY, placementScale)
-                                     : *snappedPlacementPosition;
+        const Vector3 position =
+            snapToGrid ? PositionForBoundsMinSnap(
+                             *snappedPlacementPosition, localBounds, placementRotationY, placementScale)
+                       : *snappedPlacementPosition;
         previewModel.Draw(
             position,
             {0.0f, 1.0f, 0.0f},

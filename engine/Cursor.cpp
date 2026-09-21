@@ -5,6 +5,8 @@
 #include "Cursor.hpp"
 
 #include "components/CollisionIntent.hpp"
+#include "components/Hoverable.hpp"
+#include "components/sgTransform.hpp"
 #include "EngineSystems.hpp"
 #include "MousePicker.hpp"
 #include "ResourceManager.hpp"
@@ -12,10 +14,27 @@
 #include "systems/CollisionSystem.hpp"
 #include "systems/NavigationGridSystem.hpp"
 
+#include <algorithm>
 #include <utility>
 
 namespace sage
 {
+    entt::entity Cursor::findHoverTarget(entt::entity entity) const
+    {
+        while (entity != entt::null && registry->valid(entity))
+        {
+            if (registry->all_of<Hoverable>(entity)) return entity;
+
+            const auto* cursorTarget = registry->try_get<CursorTarget>(entity);
+            if (cursorTarget != nullptr && cursorTarget->hoverable) return entity;
+
+            const auto* transform = registry->try_get<sgTransform>(entity);
+            if (transform == nullptr) break;
+            entity = transform->GetParent();
+        }
+        return entt::null;
+    }
+
     void Cursor::clearHover()
     {
         if (m_hoverInfo.has_value())
@@ -34,16 +53,16 @@ namespace sage
             return;
         }
 
-        const auto* cursorTarget = registry->try_get<CursorTarget>(mouseHitInfo.collidedEntityId);
-        if (cursorTarget == nullptr || !cursorTarget->hoverable)
+        const auto target = findHoverTarget(mouseHitInfo.collidedEntityId);
+        if (target == entt::null)
         {
             clearHover();
             return;
         }
-        if (!m_hoverInfo.has_value() || mouseHitInfo.collidedEntityId != m_hoverInfo->target)
+        if (!m_hoverInfo.has_value() || target != m_hoverInfo->target)
         {
             HoverInfo newInfo;
-            newInfo.target = mouseHitInfo.collidedEntityId;
+            newInfo.target = target;
             newInfo.beginHoverTime = GetTime();
             m_hoverInfo.emplace(newInfo);
         }
@@ -54,7 +73,8 @@ namespace sage
         if (!enabled) return;
 
         const auto& hitInfo = getMouseHitInfo();
-        onHover.Publish(hitInfo.collidedEntityId, hitInfo.collisionLayer);
+        if (!m_hoverInfo.has_value()) return;
+        onHover.Publish(m_hoverInfo->target, hitInfo.collisionLayer);
     }
 
     void Cursor::onMouseLeftClick() const
@@ -156,8 +176,7 @@ namespace sage
         const bool navigationHit = navigationSurface != nullptr && navigationSurface->active;
         const bool invalidNavigation = navigationHit && navigationValidityProvider &&
                                        !navigationValidityProvider(getFirstNaviCollision().point);
-        const bool deniedTarget = cursorTarget != nullptr && cursorTarget->deniesNavigation;
-        if (OutOfRange() || invalidNavigation || deniedTarget)
+        if (OutOfRange() || invalidNavigation)
         {
             currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Denied});
             currentIsRegular = false;
@@ -251,7 +270,7 @@ namespace sage
 
         const auto* target = registry->try_get<CursorTarget>(mouseHitInfo.collidedEntityId);
         if (target == nullptr) return true;
-        return target->allowNavigationClickThrough && !target->deniesNavigation;
+        return target->allowNavigationClickThrough;
     }
 
     void Cursor::DrawDebug() const
@@ -274,8 +293,37 @@ namespace sage
     void Cursor::Draw2D() const
     {
         if (hideCursor) return;
-        if (currentTex.id == 0) return;
         Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
+
+        if (m_hoverInfo.has_value() && GetTime() >= m_hoverInfo->beginHoverTime + m_hoverInfo->hoverTimeThreshold)
+        {
+            if (const auto* hoverable = registry->try_get<Hoverable>(m_hoverInfo->target);
+                hoverable != nullptr && !hoverable->label.empty())
+            {
+                const float scale = sys->settings->GetCurrentScaleFactor();
+                const float fontSize = 20.0f * scale;
+                const float horizontalPadding = 8.0f * scale;
+                const float verticalPadding = 5.0f * scale;
+                const Vector2 textSize = MeasureTextEx(GetFontDefault(), hoverable->label.c_str(), fontSize, 1.0f);
+                const Vector2 viewport = sys->settings->GetViewPort();
+                const float width = textSize.x + horizontalPadding * 2.0f;
+                const float height = textSize.y + verticalPadding * 2.0f;
+                Vector2 tooltipPos = {pos.x + 18.0f * scale, pos.y + 18.0f * scale};
+                tooltipPos.x = Clamp(tooltipPos.x, 0.0f, std::max(0.0f, viewport.x - width));
+                tooltipPos.y = Clamp(tooltipPos.y, 0.0f, std::max(0.0f, viewport.y - height));
+
+                DrawRectangleRounded({tooltipPos.x, tooltipPos.y, width, height}, 0.2f, 4, Color{20, 24, 28, 230});
+                DrawTextEx(
+                    GetFontDefault(),
+                    hoverable->label.c_str(),
+                    {tooltipPos.x + horizontalPadding, tooltipPos.y + verticalPadding},
+                    fontSize,
+                    1.0f,
+                    RAYWHITE);
+            }
+        }
+
+        if (currentTex.id == 0) return;
         // The pointer (Regular) cursor draws from its tip (top-left); every other cursor
         // is centred on the mouse position.
         if (!currentIsRegular)

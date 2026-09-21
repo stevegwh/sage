@@ -94,22 +94,16 @@ namespace sage
         }
     };
 
-    // The cursor image shown while hovering an entity that carries a CursorTarget.
-    // `cursor` is an opaque CursorKey (a ResourceManager texture key); the engine
-    // resolves it directly and never enumerates the project's cursor vocabulary.
-    // The engine's own cursors live in engine/CursorTypes.hpp; game cursors are
-    // declared in project/CustomCursors.hpp.
     struct CursorTarget
     {
         std::string cursor{cursors::Regular};
         bool hoverable = false;
         bool allowNavigationClickThrough = true;
-        bool deniesNavigation = false;
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(cursor, hoverable, allowNavigationClickThrough, deniesNavigation);
+            archive(cursor, hoverable, allowNavigationClickThrough);
         }
 
         template <class Inspector>
@@ -119,7 +113,6 @@ namespace sage
             i.cursorDropdown("Cursor", cursor);
             i.field("Hoverable", hoverable);
             i.field("Allow Navigation Click Through", allowNavigationClickThrough);
-            i.field("Denies Navigation", deniesNavigation);
         }
     };
 } // namespace sage

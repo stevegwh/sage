@@ -9,8 +9,8 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
-#include "engine/SceneTags.hpp"
 #include "engine/EngineSystems.hpp"
+#include "engine/SceneTags.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 
@@ -62,8 +62,7 @@ namespace sage::editor
         bool cursorTargetEqual(const CursorTarget& a, const CursorTarget& b)
         {
             return a.cursor == b.cursor && a.hoverable == b.hoverable &&
-                   a.allowNavigationClickThrough == b.allowNavigationClickThrough &&
-                   a.deniesNavigation == b.deniesNavigation;
+                   a.allowNavigationClickThrough == b.allowNavigationClickThrough;
         }
 
         bool lightEqual(const Light& a, const Light& b)
@@ -76,8 +75,7 @@ namespace sage::editor
 
     } // namespace
 
-    EditorHistory::EditorHistory(
-        EngineSystems* _sys, const InspectorRegistry* _components, OnApplied _onApplied)
+    EditorHistory::EditorHistory(EngineSystems* _sys, const InspectorRegistry* _components, OnApplied _onApplied)
         : sys(_sys), components(_components), onApplied(std::move(_onApplied))
     {
     }
@@ -131,30 +129,26 @@ namespace sage::editor
         if (a.hasAssetReference != b.hasAssetReference || a.assetKey != b.assetKey) return false;
         if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
         if (a.hasScript != b.hasScript ||
-            (a.hasScript &&
-             (a.script.className != b.script.className || a.script.enabled != b.script.enabled)))
+            (a.hasScript && (a.script.className != b.script.className || a.script.enabled != b.script.enabled)))
         {
             return false;
         }
-        if (a.hasAnimation != b.hasAnimation ||
-            (a.hasAnimation && a.animationModelKey != b.animationModelKey))
+        if (a.hasAnimation != b.hasAnimation || (a.hasAnimation && a.animationModelKey != b.animationModelKey))
         {
             return false;
         }
         if (a.hasMoveableActor != b.hasMoveableActor ||
-            (a.hasMoveableActor &&
-             (a.moveableActorSpeed != b.moveableActorSpeed ||
-              a.moveableActorTurnSpeed != b.moveableActorTurnSpeed ||
-              a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds ||
-              a.moveableActorMoveClip != b.moveableActorMoveClip ||
-              a.moveableActorIdleClip != b.moveableActorIdleClip)))
+            (a.hasMoveableActor && (a.moveableActorSpeed != b.moveableActorSpeed ||
+                                    a.moveableActorTurnSpeed != b.moveableActorTurnSpeed ||
+                                    a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds ||
+                                    a.moveableActorMoveClip != b.moveableActorMoveClip ||
+                                    a.moveableActorIdleClip != b.moveableActorIdleClip)))
         {
             return false;
         }
         if (a.hasTerrain != b.hasTerrain ||
-            (a.hasTerrain &&
-             (a.terrainResolution != b.terrainResolution || a.terrainCellSize != b.terrainCellSize ||
-              a.terrainHeights != b.terrainHeights)))
+            (a.hasTerrain && (a.terrainResolution != b.terrainResolution ||
+                              a.terrainCellSize != b.terrainCellSize || a.terrainHeights != b.terrainHeights)))
         {
             return false;
         }
@@ -226,8 +220,7 @@ namespace sage::editor
             s.parentId = ensureId(parent);
             const auto& siblings = reg.get<sgTransform>(parent).GetChildren();
             const auto current = std::ranges::find(siblings, entity);
-            for (auto next = current == siblings.end() ? siblings.end() : current + 1;
-                 next != siblings.end();
+            for (auto next = current == siblings.end() ? siblings.end() : current + 1; next != siblings.end();
                  ++next)
             {
                 if (reg.valid(*next) && reg.all_of<sgTransform>(*next))
@@ -323,8 +316,7 @@ namespace sage::editor
         return s;
     }
 
-    std::vector<EditorHistory::EntityState> EditorHistory::captureAll(
-        const std::vector<entt::entity>& entities)
+    std::vector<EditorHistory::EntityState> EditorHistory::captureAll(const std::vector<entt::entity>& entities)
     {
         auto& reg = registry();
         std::vector<EntityState> states;
@@ -356,8 +348,7 @@ namespace sage::editor
         for (const auto& before : activeBefore)
         {
             const auto it = idMap.find(before.persistentId);
-            if (it != idMap.end() && registry().valid(it->second) &&
-                registry().all_of<sgTransform>(it->second))
+            if (it != idMap.end() && registry().valid(it->second) && registry().all_of<sgTransform>(it->second))
             {
                 after.push_back(capture(it->second));
             }
@@ -555,8 +546,7 @@ namespace sage::editor
         {
             const auto& target = pick(delta);
             if (target.exists) continue;
-            if (const auto it = idMap.find(target.persistentId);
-                it != idMap.end() && reg.valid(it->second))
+            if (const auto it = idMap.find(target.persistentId); it != idMap.end() && reg.valid(it->second))
             {
                 destroySingle(it->second);
                 idMap.erase(it);
@@ -568,8 +558,7 @@ namespace sage::editor
         {
             const auto& target = pick(delta);
             if (!target.exists) continue;
-            if (const auto it = idMap.find(target.persistentId);
-                it != idMap.end() && reg.valid(it->second))
+            if (const auto it = idMap.find(target.persistentId); it != idMap.end() && reg.valid(it->second))
             {
                 restored.push_back(it->second);
             }
@@ -584,8 +573,7 @@ namespace sage::editor
         auto& reg = registry();
 
         entt::entity entity;
-        if (const auto it = idMap.find(target.persistentId);
-            it != idMap.end() && reg.valid(it->second))
+        if (const auto it = idMap.find(target.persistentId); it != idMap.end() && reg.valid(it->second))
         {
             entity = it->second;
         }
@@ -730,8 +718,7 @@ namespace sage::editor
         else if (reg.all_of<MetaData>(entity))
             reg.remove<MetaData>(entity);
 
-        if (components != nullptr)
-            components->RestorePersistent(reg, entity, target.persistentComponents);
+        if (components != nullptr) components->RestorePersistent(reg, entity, target.persistentComponents);
 
         setNavigationOccupied(entity, true);
     }
@@ -757,8 +744,7 @@ namespace sage::editor
         if (target.nextSiblingId != 0)
         {
             if (const auto sibling = idMap.find(target.nextSiblingId);
-                sibling != idMap.end() && reg.valid(sibling->second) &&
-                reg.all_of<sgTransform>(sibling->second) &&
+                sibling != idMap.end() && reg.valid(sibling->second) && reg.all_of<sgTransform>(sibling->second) &&
                 reg.get<sgTransform>(sibling->second).GetParent() == parent)
             {
                 insertBefore = sibling->second;
@@ -783,8 +769,7 @@ namespace sage::editor
         const auto* obstacle = reg.try_get<NavigationObstacle>(entity);
         if (obstacle != nullptr && obstacle->active)
         {
-            sys->navigationGridSystem->MarkSquareAreaOccupied(
-                collideable.worldBoundingBox, occupied, entity);
+            sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, occupied, entity);
         }
     }
 } // namespace sage::editor

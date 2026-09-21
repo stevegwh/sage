@@ -50,6 +50,7 @@ namespace sage
         bool hideCursor = false;
         bool enabled = true;
 
+        [[nodiscard]] entt::entity findHoverTarget(entt::entity entity) const;
         void checkMouseHover();
         void clearHover();
         void onMouseHover() const;

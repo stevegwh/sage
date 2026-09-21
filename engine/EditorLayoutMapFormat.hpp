@@ -22,9 +22,7 @@
 
 namespace sage::editor_layout
 {
-    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '5'};
-    inline constexpr char PreviousMapMagic[4] = {'L', 'Q', 'E', '4'};
-    inline constexpr char LegacyMapMagic[4] = {'L', 'Q', 'E', '3'};
+    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '6'};
     inline constexpr std::string_view MapBaseNameMarker = "_MAPBASE_";
 
     [[nodiscard]] inline bool IsMapBaseTransformName(const std::string_view name)
@@ -136,36 +134,6 @@ namespace sage::editor_layout
         void serialize(Archive& archive)
         {
             archive(targetId, movementSpeed, turnSpeed, pathfindingBounds, moveClip, idleClip);
-        }
-    };
-
-    struct LegacyEntityMoveableActorRecord
-    {
-        std::uint32_t targetId = 0;
-        float movementSpeed = 0.0f;
-        std::int32_t pathfindingBounds = 0;
-        std::string moveClip;
-        std::string idleClip;
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(targetId, movementSpeed, pathfindingBounds, moveClip, idleClip);
-        }
-    };
-
-    struct LegacyTerrainRecord
-    {
-        Vector3 position{};
-        std::int32_t resolution = 0;
-        float cellSize = 1.0f;
-        Collideable collideable{};
-        std::vector<float> heights;
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(position, resolution, cellSize, collideable, heights);
         }
     };
 
