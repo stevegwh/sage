@@ -5,6 +5,11 @@
 SAGE is a C++20 game engine and editor layer built on top of raylib and EnTT. It provides the reusable runtime,
 tooling, rendering, scripting, serialization, and editor systems needed to build 3D games.
 
+## Screenshots
+
+![The scene hierarchy, inspector, and flatpack asset catalog.](screenshots/01.png)
+![Terrain sculpting and navigation visualization.](screenshots/02.png)
+
 ## Core Features
 
 - Integrated editor for building maps, placing entities, editing components, and testing changes in play mode.
@@ -43,17 +48,6 @@ scene.
 The editor presents flatpacks in an asset catalog with generated thumbnails and supports isolated editing without
 discarding the current map session. At runtime, C++ and C# code can instantiate a flatpack by name, making the same
 authored object available to editor workflows and procedural gameplay.
-
-- [Flatpack API and component persistence](engine/Flatpack.hpp)
-- [Serialization and instantiation](engine/Flatpack.cpp)
-- [Thumbnail rendering](engine/FlatpackThumbnail.cpp)
-- [Isolated editor sessions](editor/EditorFlatpackEditSession.hpp)
-- [C# spawning API](managed/Sage.Scripting/NativeApi.cs)
-
-## Screenshots
-
-![The scene hierarchy, inspector, and flatpack asset catalog.](screenshots/01.png)
-![Terrain sculpting and navigation visualization.](screenshots/02.png)
 
 ## Dependencies
 
