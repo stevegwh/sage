@@ -3,7 +3,7 @@
 [Click here for a video demonstration](https://www.youtube.com/watch?v=yNF9LtaBrrs)
 
 SAGE is a C++20 game engine and editor layer built on top of raylib and EnTT. It provides the reusable runtime,
-tooling, rendering, scripting, serialization, and editor systems used by Hero Herder.
+tooling, rendering, scripting, serialization, and editor systems needed to build 3D games.
 
 ## Core Features
 
@@ -19,6 +19,41 @@ tooling, rendering, scripting, serialization, and editor systems used by Hero He
   and multi-selection edits.
 - Packed asset and serialization pipeline for loading game resources, saving editor maps, and reusing groups of entities
   as flatpacks.
+
+## Code Examples
+
+- [Component registration](engine/ComponentRegistration.hpp) uses one declaration to expose components to scripting,
+  editor inspectors, and persistence without coupling the runtime to game-specific types.
+- [Navigation grid system](engine/systems/NavigationGridSystem.cpp) implements grid construction, occupancy, and route
+  finding for actors with different footprints.
+- [Collision system](engine/systems/CollisionSystem.cpp) handles collision queries and interaction between registered
+  collision layers.
+- [Custom UI engine](engine/ui/GameUIEngine.cpp) drives retained game UI, layout, input, and rendering.
+- [C# scripting bridge](engine/systems/CSharpScriptSystem.cpp) connects managed behaviours to entities and native engine
+  services.
+- [Editor history](editor/EditorHistory.cpp) provides undo and redo for editor operations.
+
+## Flatpacks
+
+Flatpacks are reusable, prefab-like entity hierarchies. A flatpack stores a root entity and its transform subtree,
+including supported engine components, registered game-specific components, scripts, animations, and internal entity
+references. Each instance receives fresh entities and can be positioned or rotated as a group when it is added to a
+scene.
+
+The editor presents flatpacks in an asset catalog with generated thumbnails and supports isolated editing without
+discarding the current map session. At runtime, C++ and C# code can instantiate a flatpack by name, making the same
+authored object available to editor workflows and procedural gameplay.
+
+- [Flatpack API and component persistence](engine/Flatpack.hpp)
+- [Serialization and instantiation](engine/Flatpack.cpp)
+- [Thumbnail rendering](engine/FlatpackThumbnail.cpp)
+- [Isolated editor sessions](editor/EditorFlatpackEditSession.hpp)
+- [C# spawning API](managed/Sage.Scripting/NativeApi.cs)
+
+## Screenshots
+
+![The scene hierarchy, inspector, and flatpack asset catalog.](screenshots/01.png)
+![Terrain sculpting and navigation visualization.](screenshots/02.png)
 
 ## Dependencies
 
