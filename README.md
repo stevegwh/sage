@@ -1,5 +1,7 @@
 # SAGE (Steve's Awesome Game Engine)
 
+[Click here for a video demonstration](https://www.youtube.com/watch?v=yNF9LtaBrrs)
+
 SAGE is a C++20 game engine and editor layer built on top of raylib and EnTT. It provides the reusable runtime,
 tooling, rendering, scripting, serialization, and editor systems used by Hero Herder.
 
