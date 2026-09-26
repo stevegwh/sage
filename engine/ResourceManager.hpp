@@ -227,7 +227,7 @@ namespace sage
             for (int i = 0; i < animatedModelKeys.size(); ++i)
             {
                 auto count = modelAnimCounts[i];
-                auto* animations = static_cast<ModelAnimation*>(RL_MALLOC(count * sizeof(ModelAnimation)));
+                auto* animations = static_cast<ModelAnimation*>(MemAlloc(count * sizeof(ModelAnimation)));
                 std::memcpy(animations, modelAnimationsData[i].data(), count * sizeof(ModelAnimation));
                 modelAnimations.emplace(animatedModelKeys[i], std::make_pair(animations, count));
             }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "entt/entt.hpp"
+#include "engine/Colors.hpp"
 #include "raylib.h"
 #include "raymath.h"
 
@@ -15,7 +16,7 @@ namespace sage
         std::string name = "DynamicRenderable";
 
       public:
-        Color hint = WHITE;
+        Color hint = sage::colors::WHITE_COLOR;
         bool active = true;
         Matrix initialTransform{};
         std::function<void(entt::entity)> reqShaderUpdate;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include "entt/core/hashed_string.hpp"
 #include "entt/entity/fwd.hpp"
 
@@ -39,13 +41,13 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(id);
+            archive(cereal::make_nvp("id", id));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.archetypeDropdown("Kind", *this);
+            i.archetypeDropdown("kind", "Kind", *this);
         }
 
     };

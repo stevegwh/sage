@@ -1,4 +1,5 @@
 #include "EditorApplication.hpp"
+#include "engine/Colors.hpp"
 
 #include "EditorScene.hpp"
 
@@ -51,14 +52,14 @@ namespace sage
             const int padding = std::max(4, static_cast<int>(std::round(10.0f * scale)));
             const int textWidth = MeasureText(fpsText, fontSize);
 
-            Color color = LIME;
+            Color color = sage::colors::LIME_COLOR;
             if (fps < 15)
             {
-                color = RED;
+                color = sage::colors::RED_COLOR;
             }
             else if (fps < 30)
             {
-                color = ORANGE;
+                color = sage::colors::ORANGE_COLOR;
             }
 
             const int x = std::max(padding, static_cast<int>(viewport.x) - textWidth - padding);
@@ -115,7 +116,7 @@ namespace sage
         const bool playing = scene->IsPlaying();
 
         BeginTextureMode(renderTexture);
-        ClearBackground(BLANK);
+        ClearBackground(sage::colors::BLANK_COLOR);
         // ActiveCamera() is the running game's camera during play, the editor's
         // otherwise.
         BeginMode3D(*scene->ActiveCamera());
@@ -130,13 +131,15 @@ namespace sage
             // coords (so its scissor clipping stays consistent), then blit it at
             // the viewport offset where the game's mouse mapping expects it.
             BeginTextureMode(gameUiTexture);
-            ClearBackground(BLANK);
+            ClearBackground(sage::colors::BLANK_COLOR);
             scene->DrawGame2D();
             EndTextureMode();
         }
 
+        scene->CaptureAutomationFrame(renderTexture.texture, playing ? gameUiTexture.texture : Texture2D{});
+
         BeginDrawing();
-        ClearBackground(BLACK);
+        ClearBackground(sage::colors::BLACK_COLOR);
 
         const auto appViewportOffset = settings->GetViewportOffset();
         const auto renderViewport = settings->GetRenderViewPort();
@@ -146,7 +149,7 @@ namespace sage
             renderTexture.texture,
             {0, 0, renderViewport.x, -renderViewport.y},
             {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
-            WHITE);
+            sage::colors::WHITE_COLOR);
 
         if (playing)
         {
@@ -154,7 +157,7 @@ namespace sage
                 gameUiTexture.texture,
                 {0, 0, renderViewport.x, -renderViewport.y},
                 {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
-                WHITE);
+                sage::colors::WHITE_COLOR);
         }
 
         scene->DrawOverlay2D();

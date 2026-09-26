@@ -22,12 +22,12 @@
 
 namespace sage::editor_layout
 {
-    inline constexpr char MapMagic[4] = {'L', 'Q', 'E', '6'};
-    inline constexpr std::string_view MapBaseNameMarker = "_MAPBASE_";
+    inline constexpr char MAP_MAGIC[4] = {'L', 'Q', 'E', '6'};
+    inline constexpr std::string_view MAP_BASE_NAME_MARKER = "_MAPBASE_";
 
     [[nodiscard]] inline bool IsMapBaseTransformName(const std::string_view name)
     {
-        return name.find(MapBaseNameMarker) != std::string_view::npos;
+        return name.find(MAP_BASE_NAME_MARKER) != std::string_view::npos;
     }
 
     [[nodiscard]] inline bool IsMapBaseTransform(const sgTransform& transform)
@@ -48,16 +48,17 @@ namespace sage::editor_layout
     }
 
     // A single map entity is just a transform plus whatever components it was
-    // authored with (Unity-style composition). Every optional component is gated by
+    // created with (Unity-style composition). Every optional component is gated by
     // a presence flag, so an empty grouping node, a collider-only box, a renderable
     // prop, a trigger marker and a full layout object all round-trip through this one
     // record. Light and Terrain keep dedicated sections (engine-managed / bulk data).
-    struct EntityRecord
+    template <class TransformRecord = sgTransform, class RenderableRecord = Renderable>
+    struct BasicEntityRecord
     {
         serializer::entity entity{};
-        sgTransform transform{};
+        TransformRecord transform{};
         bool hasRenderable = false;
-        Renderable renderable{};
+        RenderableRecord renderable{};
         bool hasCollideable = false;
         Collideable collideable{};
         bool hasNavigationSurface = false;
@@ -93,6 +94,8 @@ namespace sage::editor_layout
                 metaData);
         }
     };
+
+    using EntityRecord = BasicEntityRecord<>;
 
     // Attachment records (script/animation/moveable/archetype) name their owning
     // entity by its saved id, resolved through the load's id map.
@@ -137,9 +140,10 @@ namespace sage::editor_layout
         }
     };
 
-    struct TerrainRecord
+    template <class TransformRecord = sgTransform>
+    struct BasicTerrainRecord
     {
-        sgTransform transform{};
+        TransformRecord transform{};
         std::int32_t resolution = 0;
         float cellSize = 1.0f;
         Collideable collideable{};
@@ -151,6 +155,8 @@ namespace sage::editor_layout
             archive(transform, resolution, cellSize, collideable, heights);
         }
     };
+
+    using TerrainRecord = BasicTerrainRecord<>;
 
     struct EntityArchetypeRecord
     {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -37,7 +39,7 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(bit);
+            archive(cereal::make_nvp("bit", bit));
         }
 
         friend constexpr bool operator==(const CollisionLayer a, const CollisionLayer b)
@@ -74,7 +76,7 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(bits);
+            archive(cereal::make_nvp("bits", bits));
         }
 
         friend constexpr bool operator==(CollisionMask, CollisionMask) = default;
@@ -165,7 +167,7 @@ namespace sage
         return detail::MutableCollisionLayers();
     }
 
-    // Registers a user-created layer (e.g. authored in the editor's collision matrix
+    // Registers a user-created layer (e.g. configured in the editor's collision matrix
     // window) at the given bit index. Returns the already-registered layer when the
     // bit is taken, so re-loading settings is idempotent.
     inline CollisionLayer RegisterUserCollisionLayer(const std::string& layerName, const std::uint8_t index)

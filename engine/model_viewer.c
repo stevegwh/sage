@@ -19,9 +19,9 @@
 #include "raymath.h"
 
 #if defined(PLATFORM_DESKTOP)
-#define GLSL_VERSION 330
+static const int GlslVersion = 330;
 #else // PLATFORM_ANDROID, PLATFORM_WEB
-#define GLSL_VERSION 100
+static const int GlslVersion = 100;
 #endif
 
 //------------------------------------------------------------------------------------
@@ -50,8 +50,8 @@ int main(void)
 
     // Load skinning shader
     Shader skinningShader = LoadShader(
-        TextFormat("resources/shaders/glsl%i/skinning.vs", GLSL_VERSION),
-        TextFormat("resources/shaders/glsl%i/skinning.fs", GLSL_VERSION));
+        TextFormat("resources/shaders/glsl%i/skinning.vs", GlslVersion),
+        TextFormat("resources/shaders/glsl%i/skinning.fs", GlslVersion));
 
     for (int i = 0; i < characterModel.materialCount; ++i)
     {
@@ -94,20 +94,20 @@ int main(void)
         //----------------------------------------------------------------------------------
         BeginDrawing();
 
-        ClearBackground(RAYWHITE);
+        ClearBackground((Color){245, 245, 245, 255});
 
         BeginMode3D(camera);
 
         // Draw character
         // characterModel.transform = MatrixTranslate(position.x, position.y, position.z);
         UpdateModelAnimationBoneMatrices(characterModel, anim, animCurrentFrame);
-        DrawModel(characterModel, position, 1.0f, WHITE);
+        DrawModel(characterModel, position, 1.0f, (Color){255, 255, 255, 255});
         // DrawMesh(characterModel.meshes[0], characterModel.materials[1], characterModel.transform);
 
         DrawGrid(10, 1.0f);
         EndMode3D();
 
-        DrawText("Use the T/G to switch animation", 10, 10, 20, GRAY);
+        DrawText("Use the T/G to switch animation", 10, 10, 20, (Color){130, 130, 130, 255});
 
         EndDrawing();
         //----------------------------------------------------------------------------------

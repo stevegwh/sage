@@ -1,49 +1,162 @@
 #pragma once
 
 #include "cereal/archives/binary.hpp"
+#include "content/ContentInspector.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <type_traits>
-#include <utility>
 #include <unordered_map>
-#include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace sage
 {
     namespace detail
     {
-        struct FlatpackComponentCodec
+        template <class T>
+        void EditComponentField(T& value, const std::string& field, const std::string& replacement)
+        {
+            const auto next = json::Parse(replacement);
+            content::ContentInspector inspector(field, next);
+            if constexpr (requires { value.define_editor_options(inspector); })
+                value.define_editor_options(inspector);
+            inspector.RequireMatch();
+        }
+
+        struct ComponentOperations
         {
             std::string key;
+            entt::id_type typeId = 0;
+            std::vector<entt::id_type> requirements;
+            std::vector<entt::id_type> incompatible;
+            std::function<std::string(const std::string&)> toJson;
+            std::function<std::string(
+                const entt::registry&, entt::entity, const std::unordered_map<std::uint32_t, entt::entity>&)>
+                captureJson;
+            std::function<void(entt::registry&, entt::entity, const std::string&)> restoreJson;
+            std::function<bool(const std::string&, const std::unordered_map<std::uint32_t, entt::entity>&)>
+                validateJson;
+            std::function<std::string(const std::string&, const std::string&, const std::string&)> editJson;
+            std::function<std::string(const std::string&)> schema;
+            std::function<void(entt::registry&, entt::entity, const std::string&, const std::string&)> edit;
+            std::function<void(entt::registry&, entt::entity)> remove;
+            std::function<std::string(const std::string&, const std::unordered_map<std::uint32_t, entt::entity>&)>
+                remapJson;
             std::function<bool(const entt::registry&, entt::entity)> has;
             std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
             std::function<std::string(const std::string&)> migrate;
-            std::function<std::string(const entt::registry&, entt::entity,
-                const std::unordered_map<std::uint32_t, entt::entity>&)> serialize;
-            std::function<void(entt::registry&, entt::entity,
-                const std::unordered_map<std::uint32_t, entt::entity>&)> resolveReferences;
+            std::function<void(
+                entt::registry&, entt::entity, const std::unordered_map<std::uint32_t, entt::entity>&)>
+                resolveReferences;
         };
 
-        void RegisterFlatpackComponentCodec(FlatpackComponentCodec codec);
+        void RegisterComponentOperations(ComponentOperations operations);
+        const std::vector<ComponentOperations>& RegisteredComponentOperations();
     } // namespace detail
 
     // Registers a game-owned component for opaque flatpack persistence without
     // introducing an engine-to-game dependency. Re-registering the same key
-    // replaces its codec, so game/editor startup can safely call this repeatedly.
+    // replaces its registered operations, so game/editor startup can safely call this repeatedly.
     template <class T>
     void RegisterFlatpackComponent(std::string key)
     {
         static_assert(std::is_default_constructible_v<T>);
 
-        detail::RegisterFlatpackComponentCodec(
+        T defaultValue{};
+        content::ContentInspector description;
+        if constexpr (requires { defaultValue.define_editor_options(description); })
+            defaultValue.define_editor_options(description);
+        detail::RegisterComponentOperations(
             {.key = std::move(key),
+             .typeId = entt::type_hash<T>::value(),
+             .requirements = description.Requirements(),
+             .incompatible = description.Incompatible(),
+             .toJson =
+                 [](const std::string& data) {
+                     T value{};
+                     std::istringstream stream(data, std::ios::binary);
+                     cereal::BinaryInputArchive input(stream);
+                     input(value);
+                     return json::Stringify(json::Encode(value));
+                 },
+             .captureJson =
+                 [](const entt::registry& registry,
+                    entt::entity entity,
+                    const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                     if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
+                     {
+                         auto value = registry.template get<T>(entity);
+                         value.ResolveEntityReferences(ids);
+                         return json::Stringify(json::Encode(value));
+                     }
+                     else
+                         return json::Stringify(json::Encode(registry.template get<T>(entity)));
+                 },
+             .restoreJson =
+                 [](entt::registry& registry, entt::entity entity, const std::string& data) {
+                     if constexpr (std::is_move_constructible_v<T>)
+                     {
+                         T value{};
+                         json::Decode(json::Parse(data), value);
+                         registry.template emplace_or_replace<T>(entity, std::move(value));
+                     }
+                     else
+                     {
+                         // Event-owning components cannot move: keep their subscriptions in place.
+                         json::Decode(json::Parse(data), registry.template get_or_emplace<T>(entity));
+                     }
+                 },
+             .validateJson =
+                 [](const std::string& data, const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                     T value{};
+                     json::Decode(json::Parse(data), value);
+                     if constexpr (requires { value.ResolveEntityReferences(ids); })
+                     {
+                         const auto before = json::Stringify(json::Encode(value));
+                         value.ResolveEntityReferences(ids);
+                         return before == json::Stringify(json::Encode(value));
+                     }
+                     return true;
+                 },
+             .editJson =
+                 [](const std::string& data, const std::string& field, const std::string& replacement) {
+                     T value{};
+                     json::Decode(json::Parse(data), value);
+                     detail::EditComponentField(value, field, replacement);
+                     return json::Stringify(json::Encode(value));
+                 },
+             .schema =
+                 [](const std::string& data) {
+                     T value{};
+                     if (!data.empty()) json::Decode(json::Parse(data), value);
+                     content::ContentInspector inspector;
+                     if constexpr (requires { value.define_editor_options(inspector); })
+                         value.define_editor_options(inspector);
+                     return json::Stringify(inspector.Take());
+                 },
+             .edit =
+                 [](entt::registry& registry,
+                    entt::entity entity,
+                    const std::string& field,
+                    const std::string& replacement) {
+                     detail::EditComponentField(registry.template get<T>(entity), field, replacement);
+                 },
+             .remove = [](entt::registry& registry, entt::entity entity) { registry.template remove<T>(entity); },
+             .remapJson =
+                 [](const std::string& data, const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                     T value{};
+                     json::Decode(json::Parse(data), value);
+                     if constexpr (requires { value.ResolveEntityReferences(ids); })
+                         value.ResolveEntityReferences(ids);
+                     return json::Stringify(json::Encode(value));
+                 },
              .has =
                  [](const entt::registry& registry, const entt::entity entity) {
                      return registry.valid(entity) && registry.template any_of<T>(entity);
@@ -52,9 +165,14 @@ namespace sage
                  [](entt::registry& registry, const entt::entity entity, const std::string& data) {
                      std::istringstream stream(data, std::ios::binary);
                      cereal::BinaryInputArchive archive(stream);
-                     T component{};
-                     archive(component);
-                     registry.template emplace_or_replace<T>(entity, std::move(component));
+                     if constexpr (std::is_move_constructible_v<T>)
+                     {
+                         T component{};
+                         archive(component);
+                         registry.template emplace_or_replace<T>(entity, std::move(component));
+                     }
+                     else
+                         archive(registry.template get_or_emplace<T>(entity));
                  },
              .migrate =
                  [](const std::string& data) {
@@ -68,22 +186,9 @@ namespace sage
                      output(component);
                      return outputStream.str();
                  },
-             .serialize =
-                 [](const entt::registry& registry, entt::entity entity,
-                    const std::unordered_map<std::uint32_t, entt::entity>& ids) {
-                     std::ostringstream stream(std::ios::binary);
-                     cereal::BinaryOutputArchive archive(stream);
-                     if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
-                     {
-                         auto component = registry.template get<T>(entity);
-                         component.ResolveEntityReferences(ids);
-                         archive(component);
-                     }
-                     else archive(registry.template get<T>(entity));
-                     return stream.str();
-                 },
              .resolveReferences =
-                 [](entt::registry& registry, entt::entity entity,
+                 [](entt::registry& registry,
+                    entt::entity entity,
                     const std::unordered_map<std::uint32_t, entt::entity>& ids) {
                      if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
                          if (auto* component = registry.template try_get<T>(entity))
@@ -92,10 +197,10 @@ namespace sage
     }
 
     // Map loading uses the same registered codecs as flatpack loading.
-    bool RestoreRegisteredComponent(entt::registry& registry, entt::entity entity,
-        const std::string& key, const std::string& data);
-    void ResolveRegisteredComponentReferences(entt::registry& registry, entt::entity entity,
-        const std::unordered_map<std::uint32_t, entt::entity>& ids);
+    bool RestoreRegisteredComponent(
+        entt::registry& registry, entt::entity entity, const std::string& key, const std::string& data);
+    void ResolveRegisteredComponentReferences(
+        entt::registry& registry, entt::entity entity, const std::unordered_map<std::uint32_t, entt::entity>& ids);
 
     struct FlatpackCatalogEntry
     {
@@ -140,8 +245,7 @@ namespace sage
     [[nodiscard]] FlatpackInstance LoadFlatpack(
         entt::registry& destination, const char* path, Vector3 anchorWorldPos);
 
-    [[nodiscard]] std::vector<FlatpackCatalogEntry> ListFlatpacks(
-        const std::filesystem::path& directory);
+    [[nodiscard]] std::vector<FlatpackCatalogEntry> ListFlatpacks(const std::filesystem::path& directory);
 
     // Load + universal fix-ups layered over LoadFlatpack: optionally re-orients the
     // root (Euler degrees; propagates to children synchronously), refits every

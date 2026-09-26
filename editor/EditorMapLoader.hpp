@@ -11,8 +11,8 @@ namespace sage::editor
     // separate from the game/respacker map .bin format.
     [[nodiscard]] bool IsEditorLayoutMap(const char* path);
     bool LoadMap(entt::registry* destination, const char* path, const InspectorRegistry* components = nullptr);
-    void SaveMap(entt::registry& source, const char* path, const InspectorRegistry* components = nullptr);
-    void SaveMap(
+    bool SaveMap(entt::registry& source, const char* path, const InspectorRegistry* components = nullptr);
+    bool SaveMap(
         entt::registry& source,
         const char* path,
         const std::vector<entt::entity>& hierarchyOrder,

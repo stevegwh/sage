@@ -37,7 +37,7 @@ uniform vec2 resolution;
 //
 // More info here: http://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
 
-#define AA 1   // make this 1 is your machine is too slow
+const int AA = 1; // make this 1 is your machine is too slow
 
 //------------------------------------------------------------------
 
@@ -392,16 +392,12 @@ mat3 setCamera( in vec3 ro, in vec3 ta, float cr )
 void main()
 {
     vec3 tot = vec3(0.0);
-#if AA>1
     for( int m=0; m<AA; m++ )
     for( int n=0; n<AA; n++ )
     {
-        // pixel coordinates
-        vec2 o = vec2(float(m),float(n)) / float(AA) - 0.5;
+        // A single sample uses the pixel center; multiple samples use offsets.
+        vec2 o = AA > 1 ? vec2(float(m),float(n)) / float(AA) - 0.5 : vec2(0.0);
         vec2 p = (-resolution.xy + 2.0*(gl_FragCoord.xy+o))/resolution.y;
-#else
-        vec2 p = (-resolution.xy + 2.0*gl_FragCoord.xy)/resolution.y;
-#endif
 
         // RAY: Camera is provided from raylib
         //vec3 ro = vec3( -0.5+3.5*cos(0.1*time + 6.0*mo.x), 1.0 + 2.0*mo.y, 0.5 + 4.0*sin(0.1*time + 6.0*mo.x) );
@@ -421,10 +417,8 @@ void main()
         col = pow( col, vec3(0.4545) );
 
         tot += col;
-#if AA>1
     }
     tot /= float(AA*AA);
-#endif
 
     finalColor = vec4( tot, 1.0 );
 }

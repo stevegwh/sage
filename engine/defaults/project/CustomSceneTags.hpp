@@ -6,5 +6,5 @@
 
 namespace sage
 {
-    inline constexpr std::array<SceneTag, 0> CustomSceneTags{};
+    inline constexpr std::array<SceneTag, 0> CUSTOM_SCENE_TAGS{};
 } // namespace sage

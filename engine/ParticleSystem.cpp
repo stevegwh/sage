@@ -1,4 +1,5 @@
 #include "ParticleSystem.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "raylib.h"
 #include "raymath.h"
@@ -124,9 +125,9 @@ namespace sage
         Vector3 direction = Vector3Normalize(cfg.direction);
 
         // Get a small random angle to find a random velocity direction.
-        float randaX = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * DEG2RAD;
-        float randaY = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * DEG2RAD;
-        float randaZ = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * DEG2RAD;
+        float randaX = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        float randaY = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        float randaZ = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
 
         // Rotate base direction with the given angles.
         direction = RotateV3(direction, randaX, randaY, randaZ);
@@ -138,9 +139,9 @@ namespace sage
         velocity = Vector3Scale(direction, randv);
 
         // Get a small random angle to rotate the velocity vector.
-        randaX = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * DEG2RAD;
-        randaY = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * DEG2RAD;
-        randaZ = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * DEG2RAD;
+        randaX = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        randaY = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        randaZ = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
 
         // Rotate velocity vector with given angles.
         velocity = RotateV3(velocity, randaX, randaY, randaZ);
@@ -220,6 +221,7 @@ namespace sage
         }
 
         config = cfg;
+        offset = {config.texture.width / 2.0f, config.texture.height / 2.0f};
 
         for (size_t i = 0; i < config.capacity; i++)
         {
@@ -274,6 +276,7 @@ namespace sage
         if (isEmitting)
         {
             mustEmit += dt * (float)config.emissionRate;
+            mustEmit = std::min(mustEmit, static_cast<float>(config.capacity));
             emitNow = (size_t)mustEmit; // floor
         }
 
@@ -371,6 +374,7 @@ namespace sage
         BeginBlendMode(config.blendMode);
         for (const auto& p : particles)
         {
+            if (!p->active) continue;
             DrawBillboard(
                 *camera,
                 config.texture,

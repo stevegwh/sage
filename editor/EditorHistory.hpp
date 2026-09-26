@@ -15,6 +15,7 @@
 #pragma once
 
 #include "EditorInspector.hpp"
+#include "engine/content/ContentDocument.hpp"
 
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
@@ -114,60 +115,19 @@ namespace sage::editor
       private:
         // A captured snapshot of one entity's editable state. parentId/component
         // payloads are only meaningful when `exists` is true. Renderable is held as
-        // its cereal blob so restore re-loads a fresh model handle from the
+        // its content JSON so restore re-loads a fresh model handle from the
         // ResourceManager rather than aliasing GPU resources.
         struct EntityState
         {
             std::uint64_t persistentId = 0;
             bool exists = false;
-            std::uint64_t parentId = 0;      // 0 = no parent (root)
-            std::uint64_t nextSiblingId = 0; // 0 = append within parent/root
-            std::string name;
-            Vector3 worldPos{};
-            Vector3 worldRot{};
-            Vector3 worldScale{1.0f, 1.0f, 1.0f};
+            std::uint64_t parentId = 0;
+            std::uint64_t nextSiblingId = 0;
             bool isMapEntity = false;
             bool isMapBase = false;
-            bool hasCollideable = false;
-            Collideable collideable{};
-            bool hasNavigationSurface = false;
-            NavigationSurface navigationSurface{};
-            bool hasNavigationObstacle = false;
-            NavigationObstacle navigationObstacle{};
-            bool hasTriggerVolume = false;
-            TriggerVolume triggerVolume{};
-            bool hasCursorTarget = false;
-            CursorTarget cursorTarget{};
-            bool hasRenderable = false;
-            std::string renderableBlob;
-            bool hasLight = false;
-            Light light{};
             bool hasAssetReference = false;
             std::string assetKey;
-            bool hasMetaData = false;
-            MetaData metaData{};
-            bool hasScript = false;
-            ScriptComponent script{};
-            // Animation is registry-bound (raw clip pointer, non-copyable), so only
-            // its authored state — the model key — is captured; restore reconstructs
-            // the component from the ResourceManager.
-            bool hasAnimation = false;
-            std::string animationModelKey;
-            // MoveableActor is mostly runtime state (path, events); only the
-            // authored fields are captured.
-            bool hasMoveableActor = false;
-            float moveableActorSpeed = 0.0f;
-            float moveableActorTurnSpeed = 240.0f;
-            int moveableActorPathfindingBounds = 0;
-            std::string moveableActorMoveClip;
-            std::string moveableActorIdleClip;
-            // Terrain is its authored height field; the DynamicRenderable mesh is
-            // derived, so restore rebuilds it (EditorScene::onHistoryApplied).
-            bool hasTerrain = false;
-            int terrainResolution = 0;
-            float terrainCellSize = 1.0f;
-            std::vector<float> terrainHeights;
-            std::vector<InspectorRegistry::PersistentComponent> persistentComponents;
+            std::string contentJson;
         };
 
         struct EntityDelta

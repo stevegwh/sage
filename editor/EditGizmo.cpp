@@ -3,6 +3,8 @@
 //
 
 #include "EditGizmo.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "raymath.h"
 
@@ -30,17 +32,17 @@ namespace sage::editor
             switch (axis)
             {
             case EditGizmo::Axis::X:
-                return RED;
+                return sage::colors::RED_COLOR;
             case EditGizmo::Axis::Y:
-                return GREEN;
+                return sage::colors::GREEN_COLOR;
             case EditGizmo::Axis::Z:
-                return BLUE;
+                return sage::colors::BLUE_COLOR;
             case EditGizmo::Axis::Uniform:
-                return GOLD;
+                return sage::colors::GOLD_COLOR;
             case EditGizmo::Axis::None:
-                return ORANGE;
+                return sage::colors::ORANGE_COLOR;
             }
-            return ORANGE;
+            return sage::colors::ORANGE_COLOR;
         }
 
         Vector3 RotationRingPoint(
@@ -89,7 +91,7 @@ namespace sage::editor
 
             for (int i = 1; i <= GIZMO_RING_SEGMENTS; ++i)
             {
-                const float angle = (2.0f * PI * static_cast<float>(i)) / static_cast<float>(GIZMO_RING_SEGMENTS);
+                const float angle = (2.0f * sage::math::MATH_PI * static_cast<float>(i)) / static_cast<float>(GIZMO_RING_SEGMENTS);
                 const Vector2 currentScreen =
                     WorldToScreen(camera, viewport, RotationRingPoint(origin, radius, axis, angle));
                 closestDistance = std::min(
@@ -234,7 +236,7 @@ namespace sage::editor
                 float deltaDegrees =
                     (std::atan2(currentVector.y, currentVector.x) -
                      std::atan2(previousVector.y, previousVector.x)) *
-                    RAD2DEG;
+                    sage::math::RADIANS_TO_DEGREES;
                 if (deltaDegrees > 180.0f) deltaDegrees -= 360.0f;
                 if (deltaDegrees < -180.0f) deltaDegrees += 360.0f;
                 sample.rotationDegrees = deltaDegrees;
@@ -264,10 +266,10 @@ namespace sage::editor
         const float shaftRadius = size * 0.024f;
         const float handleSize = size * 0.14f;
 
-        DrawSphere(origin, size * 0.035f, ORANGE);
+        DrawSphere(origin, size * 0.035f, sage::colors::ORANGE_COLOR);
 
         const auto axisColor = [this](const Axis axis) {
-            return drag.active && drag.axis == axis ? GOLD : AxisColor(axis);
+            return drag.active && drag.axis == axis ? sage::colors::GOLD_COLOR : AxisColor(axis);
         };
 
         const auto drawTranslateAxis = [&](const Axis axis) {
@@ -300,7 +302,7 @@ namespace sage::editor
                 for (int i = 1; i <= GIZMO_RING_SEGMENTS; ++i)
                 {
                     const float angle =
-                        (2.0f * PI * static_cast<float>(i)) / static_cast<float>(GIZMO_RING_SEGMENTS);
+                        (2.0f * sage::math::MATH_PI * static_cast<float>(i)) / static_cast<float>(GIZMO_RING_SEGMENTS);
                     const Vector3 current = RotationRingPoint(origin, size, axis, angle);
                     DrawLine3D(previous, current, ringColor);
                     previous = current;
@@ -314,7 +316,7 @@ namespace sage::editor
             DrawCubeV(
                 origin,
                 {handleSize * 0.9f, handleSize * 0.9f, handleSize * 0.9f},
-                drag.active && drag.axis == Axis::Uniform ? GOLD : Color{245, 245, 245, 255});
+                drag.active && drag.axis == Axis::Uniform ? sage::colors::GOLD_COLOR : Color{245, 245, 245, 255});
             break;
         case Mode::BoxCollider:
             // Drawn by BoxColliderGizmo, not here.

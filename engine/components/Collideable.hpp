@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "cereal/archives/json.hpp"
 
 #include "../CollisionLayers.hpp"
 
@@ -39,14 +40,18 @@ namespace sage
         void save(Archive& archive) const
         {
             const auto shapeValue = static_cast<std::uint8_t>(shape);
-            archive(localBoundingBox, worldBoundingBox, collisionLayer, shapeValue);
+            archive(cereal::make_nvp("localBoundingBox", localBoundingBox), cereal::make_nvp("worldBoundingBox", worldBoundingBox), cereal::make_nvp("collisionLayer", collisionLayer), cereal::make_nvp("shapeValue", shapeValue));
+            if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
+                archive(cereal::make_nvp("active", active), cereal::make_nvp("isStatic", isStatic), cereal::make_nvp("debugDraw", debugDraw));
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
             std::uint8_t shapeValue = 0;
-            archive(localBoundingBox, worldBoundingBox, collisionLayer, shapeValue);
+            archive(cereal::make_nvp("localBoundingBox", localBoundingBox), cereal::make_nvp("worldBoundingBox", worldBoundingBox), cereal::make_nvp("collisionLayer", collisionLayer), cereal::make_nvp("shapeValue", shapeValue));
+            if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
+                archive(cereal::make_nvp("active", active), cereal::make_nvp("isStatic", isStatic), cereal::make_nvp("debugDraw", debugDraw));
             shape = static_cast<ColliderShape>(shapeValue);
             collisionLayer.layerName = GetCollisionLayerName(collisionLayer.bit);
         }
@@ -55,15 +60,15 @@ namespace sage
         void define_editor_options(Inspector& i)
         {
             const bool meshCollider = shape == ColliderShape::RenderMesh;
-            i.field("Active", active);
-            i.field("IsStatic", isStatic);
-            i.field("Debug Draw", debugDraw);
-            i.field("Shape", shape);
-            i.field("Collision Layer", collisionLayer);
+            i.field("active", "Active", active);
+            i.field("isstatic", "IsStatic", isStatic);
+            i.field("debug_draw", "Debug Draw", debugDraw);
+            i.field("shape", "Shape", shape);
+            i.field("collision_layer", "Collision Layer", collisionLayer);
             // A mesh collider's box must enclose the meshes or rays never reach
             // them, so hand edits are disabled.
-            i.field("Local Bounds", localBoundingBox, !meshCollider);
-            // i.field("World Bounds", worldBoundingBox, false);
+            i.field("local_bounds", "Local Bounds", localBoundingBox, !meshCollider);
+            // i.field("world_bounds", "World Bounds", worldBoundingBox, false);
         }
 
         template <class Api>
@@ -75,7 +80,7 @@ namespace sage
     };
 
     // Transient ECS tag: when present, CollisionSystem ignores Collideable::isStatic
-    // for bounds refreshes without changing the authored static flag.
+    // for bounds refreshes without changing the configured static flag.
     struct CollideableStaticOverride
     {
     };

@@ -39,10 +39,10 @@ namespace sage
         Mesh mesh = {0};
         mesh.vertexCount = vertexCount;
         mesh.triangleCount = (maxRow - 1) * (maxCol - 1) * 2;
-        mesh.vertices = static_cast<float*>(RL_MALLOC(vertexCount * 3 * sizeof(float)));
-        mesh.normals = static_cast<float*>(RL_MALLOC(vertexCount * 3 * sizeof(float)));
-        mesh.texcoords = static_cast<float*>(RL_MALLOC(vertexCount * 2 * sizeof(float)));
-        mesh.indices = static_cast<unsigned short*>(RL_MALLOC(mesh.triangleCount * 3 * sizeof(unsigned short)));
+        mesh.vertices = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
+        mesh.normals = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
+        mesh.texcoords = static_cast<float*>(MemAlloc(vertexCount * 2 * sizeof(float)));
+        mesh.indices = static_cast<unsigned short*>(MemAlloc(mesh.triangleCount * 3 * sizeof(unsigned short)));
 
         updateMeshData(mesh, minRange, maxRange);
         generateIndices(mesh, maxRow, maxCol);

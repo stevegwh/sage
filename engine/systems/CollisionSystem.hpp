@@ -5,6 +5,7 @@
 #pragma once
 
 #include "engine/CollisionMatrix.hpp"
+#include "engine/Colors.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/Event.hpp"
 
@@ -72,7 +73,7 @@ namespace sage
             const BoundingBox& bb, CollisionLayer layer = sage::collision_layers::Default);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithBoundingBox(
             const BoundingBox& bb, CollisionMask mask);
-        void BoundingBoxDraw(entt::entity entityId, Color color = LIME) const;
+        void BoundingBoxDraw(entt::entity entityId, Color color = sage::colors::LIME_COLOR) const;
         static bool CheckBoxCollision(const BoundingBox& col1, const BoundingBox& col2);
         bool GetFirstCollisionBB(entt::entity caller, BoundingBox bb, CollisionLayer layer, CollisionInfo& out);
         bool GetFirstCollisionBB(

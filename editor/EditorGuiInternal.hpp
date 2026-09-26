@@ -11,6 +11,8 @@
 
 #include "raylib.h"
 
+#include <iterator>
+
 #include <algorithm>
 #include <functional>
 
@@ -54,7 +56,7 @@ namespace sage::editor
         const float buttonWidth = ImGui::GetFrameHeight();
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         ImGui::SetNextItemWidth(std::max(1.0f, width - buttonWidth - spacing));
-        if (ImGui::InputTextWithHint("##filter_input", hint, filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf)))
+        if (ImGui::InputTextWithHint("##filter_input", hint, filter.InputBuf, std::size(filter.InputBuf)))
         {
             filter.Build();
         }

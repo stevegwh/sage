@@ -68,7 +68,7 @@ namespace sage::editor
         std::vector<entt::entity> hierarchyOrder;
         if (callbacks.prepareMapStash) hierarchyOrder = callbacks.prepareMapStash();
         stashPath = mapStashPath();
-        SaveMap(*sys->registry, stashPath.string().c_str(), hierarchyOrder, components);
+        if (!SaveMap(*sys->registry, stashPath.string().c_str(), hierarchyOrder, components)) return;
         stashedMapDirty = history && history->HasUnsavedChanges();
         stashedCamera = *sys->camera->getRaylibCam();
 

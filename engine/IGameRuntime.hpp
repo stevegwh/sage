@@ -11,6 +11,7 @@
 #include "systems/CSharpScriptSystem.hpp"
 
 #include "raylib.h"
+#include "content/Json.hpp"
 
 #include <functional>
 #include <memory>
@@ -40,7 +41,7 @@ namespace sage
     };
 
     // A live, tickable game world. Created fresh on Play and destroyed on Stop,
-    // so its registry never touches the editor's authored scene.
+    // so its registry never touches the editor's scene.
     class IGameRuntime
     {
       public:
@@ -48,6 +49,10 @@ namespace sage
 
         // One simulation step (input, systems, cleanup).
         virtual void Update() = 0;
+        virtual void SetPaused(bool paused) = 0;
+        virtual void Step(float deltaTime, std::uint32_t frames = 1) = 0;
+        virtual json::Document Inspect() = 0;
+        virtual json::Document Command(const json::Value& command) = 0;
         virtual void Draw3D() = 0;
         virtual void Draw2D() = 0;
 

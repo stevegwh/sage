@@ -1,4 +1,5 @@
 #include "TransformSystem.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "components/sgTransform.hpp"
 #include "raylib.h"
@@ -140,7 +141,7 @@ namespace sage
     void TransformSystem::SetLocalRot(entt::entity entity, const Quaternion& rotation)
     {
         Vector3 rot = QuaternionToEuler(rotation);
-        rot = Vector3MultiplyByValue(rot, RAD2DEG);
+        rot = Vector3MultiplyByValue(rot, sage::math::RADIANS_TO_DEGREES);
         SetLocalRot(entity, rot);
     }
 

@@ -1,3 +1,6 @@
+#include "engine/SimulationClock.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 //
 // Created by Steve Wheeler on 12/02/2024.
 //
@@ -107,7 +110,7 @@ namespace sage
         if (lockInput || IsMetaKeyDown() || IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
             return;
 
-        const float deltaTime = GetFrameTime();
+        const float deltaTime = sage::FrameTime();
         handleMouseScroll(deltaTime);
         const float moveStep = cameraMoveSpeed * deltaTime;
         const float rotateStep = cameraRotateSpeed * deltaTime;
@@ -115,7 +118,7 @@ namespace sage
         if (backKeyDown)
         {
             auto right = GetCameraRight(&rlCamera);
-            right = Vector3RotateByAxisAngle(right, {0, 1, 0}, DEG2RAD * 90);
+            right = Vector3RotateByAxisAngle(right, {0, 1, 0}, sage::math::DEGREES_TO_RADIANS * 90);
             auto newPos = Vector3MultiplyByValue(right, moveStep);
             rlCamera.position = Vector3Subtract(rlCamera.position, newPos);
             rlCamera.target = Vector3Subtract(rlCamera.target, newPos);
@@ -124,7 +127,7 @@ namespace sage
         if (forwardKeyDown)
         {
             auto right = GetCameraRight(&rlCamera);
-            right = Vector3RotateByAxisAngle(right, {0, 1, 0}, DEG2RAD * 90);
+            right = Vector3RotateByAxisAngle(right, {0, 1, 0}, sage::math::DEGREES_TO_RADIANS * 90);
             auto newPos = Vector3MultiplyByValue(right, moveStep);
             rlCamera.position = Vector3Add(newPos, rlCamera.position);
             rlCamera.target = Vector3Add(newPos, rlCamera.target);
@@ -226,7 +229,7 @@ namespace sage
         rlCamera.position.y = rlCamera.target.y;
 
         auto [rotx, roty, rotz] = location.GetWorldRot();
-        const Matrix rotationMatrix = MatrixRotateXYZ({rotx * DEG2RAD, roty * DEG2RAD, rotz * DEG2RAD});
+        const Matrix rotationMatrix = MatrixRotateXYZ({rotx * sage::math::DEGREES_TO_RADIANS, roty * sage::math::DEGREES_TO_RADIANS, rotz * sage::math::DEGREES_TO_RADIANS});
 
         const Vector3 rotatedOffset = Vector3Transform(localOffset, rotationMatrix);
         const Vector3 cameraPosition = Vector3Add(location.GetWorldPos(), rotatedOffset);
@@ -316,7 +319,7 @@ namespace sage
 
     void Camera::DrawDebug()
     {
-        DrawCube(getRaylibCam()->target, 2, 2, 2, RED);
+        DrawCube(getRaylibCam()->target, 2, 2, 2, sage::colors::RED_COLOR);
     }
 
     void Camera::Update()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/EditorLayoutTags.hpp"
+#include "engine/content/ContentDocument.hpp"
 
 #include <cstdint>
 #include <string>
@@ -18,22 +19,7 @@ namespace sage::editor
     {
     };
 
-    struct PersistentEntityId
-    {
-        std::uint64_t id = 0;
-
-        template <class Archive>
-        void serialize(Archive& archive)
-        {
-            archive(id);
-        }
-
-        template <class Inspector>
-        void define_editor_options(Inspector& i)
-        {
-            i.field("Id", id, false);
-        }
-    };
+    using PersistentEntityId = sage::PersistentEntityId;
 
     struct AssetReference
     {

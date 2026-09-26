@@ -19,10 +19,10 @@ namespace sage
 {
     namespace
     {
-        constexpr int kPreviewLightDirectional = 0;
-        constexpr int kPreviewLightPoint = 1;
-        constexpr float kPreviewGamma = 1.9f;
-        constexpr Color kPreviewLightColor = {255, 244, 214, 255};
+        constexpr int PREVIEW_LIGHT_DIRECTIONAL = 0;
+        constexpr int PREVIEW_LIGHT_POINT = 1;
+        constexpr float PREVIEW_GAMMA = 1.9f;
+        constexpr Color PREVIEW_LIGHT_COLOR = {255, 244, 214, 255};
 
         Shader LoadThumbnailShader()
         {
@@ -132,16 +132,16 @@ namespace sage
 
             constexpr int lightCount = 2;
             SetShaderValue(shader, GetShaderLocation(shader, "lightsCount"), &lightCount, SHADER_UNIFORM_INT);
-            SetShaderValue(shader, GetShaderLocation(shader, "gamma"), &kPreviewGamma, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(shader, GetShaderLocation(shader, "gamma"), &PREVIEW_GAMMA, SHADER_UNIFORM_FLOAT);
 
             const float viewPosition[3] = {camera.position.x, camera.position.y, camera.position.z};
             SetShaderValue(shader, GetShaderLocation(shader, "viewPos"), viewPosition, SHADER_UNIFORM_VEC3);
 
-            SetThumbnailLight(shader, 0, kPreviewLightPoint, camera.position, center, kPreviewLightColor, 1.17f);
+            SetThumbnailLight(shader, 0, PREVIEW_LIGHT_POINT, camera.position, center, PREVIEW_LIGHT_COLOR, 1.17f);
             SetThumbnailLight(
                 shader,
                 1,
-                kPreviewLightDirectional,
+                PREVIEW_LIGHT_DIRECTIONAL,
                 Vector3Add(center, {-3.0f, 4.0f, -4.0f}),
                 center,
                 Color{172, 202, 255, 255},

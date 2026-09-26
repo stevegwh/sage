@@ -20,7 +20,7 @@ namespace sage
             const auto& light = registry->get<Light>(entity);
             if (!light.enabled) continue;
 
-            if (lightsCount < MAX_LIGHTS)
+            if (lightsCount < MAX_LIGHT_COUNT)
             {
                 light.LinkShader(_shader, lightsCount);
                 lightsCount++;
@@ -54,7 +54,7 @@ namespace sage
     entt::entity LightManager::CreateLight(
         LightType type, Vector3 position, Vector3 target, Color color, float intensity)
     {
-        if (lightsCount < MAX_LIGHTS)
+        if (lightsCount < MAX_LIGHT_COUNT)
         {
             auto entity = registry->create();
             auto& light = registry->emplace<Light>(entity);

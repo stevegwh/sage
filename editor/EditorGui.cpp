@@ -1,4 +1,5 @@
 #include "EditorGui.hpp"
+#include "engine/Colors.hpp"
 
 #include "EditorGuiInternal.hpp"
 #include "engine/ResourceManager.hpp"
@@ -30,7 +31,7 @@ namespace sage::editor
                 --fontSize;
             }
 
-            DrawTextEx(font, text.c_str(), {position.x + 1.0f, position.y + 1.0f}, fontSize, 1.0f, BLACK);
+            DrawTextEx(font, text.c_str(), {position.x + 1.0f, position.y + 1.0f}, fontSize, 1.0f, sage::colors::BLACK_COLOR);
             DrawTextEx(font, text.c_str(), position, fontSize, 1.0f, color);
         }
 

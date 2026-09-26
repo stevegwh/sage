@@ -73,7 +73,12 @@ if (NOT SAGE_DOTNET_NATIVE_HOST_DIRS)
     message(FATAL_ERROR ".NET 10 native hosting pack was not found for ${SAGE_DOTNET_RID} under ${SAGE_DOTNET_ROOT}.")
 endif ()
 list(GET SAGE_DOTNET_NATIVE_HOST_DIRS 0 SAGE_DOTNET_NATIVE_HOST_DIR)
-if (WIN32)
+if (APPLE)
+    # The static SDK host embeds private std::exception RTTI, preventing catches
+    # of standard-library errors elsewhere in the executable on macOS.
+    find_file(SAGE_NETHOST_SHARED_LIBRARY NAMES libnethost.dylib PATHS "${SAGE_DOTNET_NATIVE_HOST_DIR}" NO_DEFAULT_PATH REQUIRED)
+    set(SAGE_NETHOST_LIBRARY "${SAGE_NETHOST_SHARED_LIBRARY}")
+elseif (WIN32)
     find_library(SAGE_NETHOST_LIBRARY NAMES nethost PATHS "${SAGE_DOTNET_NATIVE_HOST_DIR}" NO_DEFAULT_PATH REQUIRED)
 else ()
     find_file(SAGE_NETHOST_LIBRARY NAMES libnethost.a PATHS "${SAGE_DOTNET_NATIVE_HOST_DIR}" NO_DEFAULT_PATH REQUIRED)
@@ -131,12 +136,14 @@ target_include_directories(engine
 )
 
 target_include_directories(engine PRIVATE "${SAGE_DOTNET_NATIVE_HOST_DIR}")
-target_compile_definitions(engine PRIVATE
-        SAGE_MANAGED_RUNTIME_CONFIG_PATH="${SAGE_MANAGED_OUTPUT}/Sage.Scripting.runtimeconfig.json"
-        SAGE_MANAGED_HOST_ASSEMBLY_PATH="${SAGE_MANAGED_OUTPUT}/Sage.Scripting.dll")
+configure_file(scripting/ManagedHostPaths.hpp.in generated/ManagedHostPaths.hpp @ONLY)
+target_include_directories(engine PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 if (BUILD_TESTING)
     add_executable(actor_movement_tests "${SAGE_ROOT_DIR}/tests/ActorMovementTests.cpp")
     target_link_libraries(actor_movement_tests PRIVATE engine)
     add_test(NAME actor_movement_tests COMMAND actor_movement_tests)
+    add_executable(particle_persistence_tests "${SAGE_ROOT_DIR}/tests/ParticlePersistenceTests.cpp")
+    target_link_libraries(particle_persistence_tests PRIVATE engine)
+    add_test(NAME particle_persistence_tests COMMAND particle_persistence_tests)
 endif ()

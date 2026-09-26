@@ -36,6 +36,7 @@ namespace sage
     class UberShaderSystem;
     class FullscreenTextOverlayManager;
     class SpatialAudioSystem;
+    class ParticleEmitterSystem;
 
     class EngineSystems
     {
@@ -61,6 +62,7 @@ namespace sage
         std::unique_ptr<UberShaderSystem> uberShaderSystem;
         std::unique_ptr<FullscreenTextOverlayManager> fullscreenTextOverlayManager;
         std::unique_ptr<SpatialAudioSystem> spatialAudioSystem;
+        std::unique_ptr<ParticleEmitterSystem> particleEmitterSystem;
         std::unique_ptr<CSharpScriptSystem> csharpScriptSystem;
 
         EngineSystems(

@@ -1,0 +1,7 @@
+#pragma once
+
+namespace sage::scripting
+{
+    inline constexpr char RUNTIME_CONFIG_PATH[] = R"path(@SAGE_MANAGED_OUTPUT@/Sage.Scripting.runtimeconfig.json)path";
+    inline constexpr char HOST_ASSEMBLY_PATH[] = R"path(@SAGE_MANAGED_OUTPUT@/Sage.Scripting.dll)path";
+}

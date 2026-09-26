@@ -240,9 +240,10 @@ namespace sage::editor
         std::vector<entt::entity> hierarchyOrder;
         if (callbacks.prepareSave) hierarchyOrder = callbacks.prepareSave();
 
-        currentMapPath = ensureMapExtension(path);
-        const auto pathString = currentMapPath.string();
-        editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder, components);
+        const auto outputPath = ensureMapExtension(path);
+        const auto pathString = outputPath.string();
+        if (!editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder, components)) return;
+        currentMapPath = outputPath;
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
         markSaved(currentMapPath);

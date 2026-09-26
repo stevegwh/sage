@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include "cereal/types/string.hpp"
 
 #include <string>
@@ -19,13 +21,13 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(label);
+            archive(cereal::make_nvp("label", label));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& inspector)
         {
-            inspector.field("Label", label);
+            inspector.field("label", "Label", label);
         }
 
         template <class Persistence>

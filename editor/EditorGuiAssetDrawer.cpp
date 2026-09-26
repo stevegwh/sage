@@ -1,4 +1,5 @@
 #include "EditorGui.hpp"
+#include "engine/Colors.hpp"
 
 #include "EditorGuiInternal.hpp"
 #include "engine/components/UberShaderComponent.hpp"
@@ -340,7 +341,7 @@ namespace sage::editor
         ClearBackground(Color{244, 247, 251, 255});
         BeginMode3D(camera);
         ConfigureThumbnailLighting(shader, camera, center);
-        model.DrawUber(&uber, Vector3Zero(), {0.0f, 1.0f, 0.0f}, 0.0f, Vector3One(), WHITE);
+        model.DrawUber(&uber, Vector3Zero(), {0.0f, 1.0f, 0.0f}, 0.0f, Vector3One(), sage::colors::WHITE_COLOR);
         EndMode3D();
         EndTextureMode();
 

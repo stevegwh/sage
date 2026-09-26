@@ -3,6 +3,7 @@
 //
 
 #include "BoxColliderGizmo.hpp"
+#include "engine/Colors.hpp"
 
 #include "EditGizmo.hpp"
 
@@ -144,13 +145,13 @@ namespace sage::editor
     void BoxColliderGizmo::Draw(
         const Camera3D& camera, const BoundingBox& worldBox, const float viewportScale) const
     {
-        DrawBoundingBox(worldBox, drag.active ? GOLD : SKYBLUE);
+        DrawBoundingBox(worldBox, drag.active ? sage::colors::GOLD_COLOR : sage::colors::SKY_BLUE_COLOR);
 
         for (const auto face : ALL_FACES)
         {
             const Vector3 center = FaceCenter(worldBox, face);
             const float radius = EditGizmo::SizeForCamera(camera.position, center, viewportScale) * 0.06f;
-            const Color color = drag.active && drag.face == face ? GOLD : SKYBLUE;
+            const Color color = drag.active && drag.face == face ? sage::colors::GOLD_COLOR : sage::colors::SKY_BLUE_COLOR;
             DrawSphere(center, radius, color);
         }
     }

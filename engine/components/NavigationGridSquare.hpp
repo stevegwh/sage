@@ -5,6 +5,7 @@
 #pragma once
 
 #include "entt/entt.hpp"
+#include "engine/Colors.hpp"
 #include "raylib.h"
 #include <compare>
 
@@ -79,7 +80,7 @@ namespace sage
         TerrainTile heightMap{};
         int pathfindingCost = 1;
         bool drawDebug = false;
-        Color debugColor = RED;
+        Color debugColor = sage::colors::RED_COLOR;
         GridSquare gridSquareIndex;
         Vector3 worldPosMin; // Top Left
         Vector3 worldPosMax; // Bottom Right

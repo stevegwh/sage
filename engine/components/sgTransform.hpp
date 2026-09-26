@@ -178,10 +178,10 @@ namespace sage
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.field("Name", name, true);
-            i.field("Position", position.local);
-            i.field("Rotation", rotation.local);
-            i.field("Scale", scale.local);
+            i.field("name", "Name", name, true);
+            i.field("position", "Position", position.local);
+            i.field("rotation", "Rotation", rotation.local);
+            i.field("scale", "Scale", scale.local);
         }
 
         template <class Api>

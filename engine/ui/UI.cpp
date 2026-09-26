@@ -1,4 +1,5 @@
 #include "UI.hpp"
+#include "engine/Colors.hpp"
 
 #include "../Settings.hpp"
 
@@ -236,7 +237,7 @@ namespace sage
                 destination,
                 {},
                 0,
-                WHITE);
+                sage::colors::WHITE_COLOR);
         }
 
         void drawTable(
@@ -275,13 +276,13 @@ namespace sage
 
         void drawDebugTable(const Table& table)
         {
-            DrawRectangleLinesEx(table.bounds, 1, BLUE);
+            DrawRectangleLinesEx(table.bounds, 1, sage::colors::BLUE_COLOR);
             for (const auto& row : table.rows)
             {
-                DrawRectangleLinesEx(row->bounds, 1, GREEN);
+                DrawRectangleLinesEx(row->bounds, 1, sage::colors::GREEN_COLOR);
                 for (const auto& cell : row->cells)
                 {
-                    DrawRectangleLinesEx(cell->bounds, 1, RED);
+                    DrawRectangleLinesEx(cell->bounds, 1, sage::colors::RED_COLOR);
                     if (const auto* table = std::get_if<std::unique_ptr<Table>>(&cell->content))
                         drawDebugTable(**table);
                 }
@@ -300,9 +301,9 @@ namespace sage
         button.border = Color{151, 164, 184, 255};
         button.borderWidth = 1;
         button.horizontalAlignment = HorizontalAlignment::CENTER;
-        button.textColor = BLACK;
+        button.textColor = sage::colors::BLACK_COLOR;
 
-        title.textColor = WHITE;
+        title.textColor = sage::colors::WHITE_COLOR;
         title.horizontalAlignment = HorizontalAlignment::CENTER;
         title.fontSize = 18;
     }
@@ -455,7 +456,7 @@ namespace sage
                 bounds,
                 {},
                 0,
-                WHITE);
+                sage::colors::WHITE_COLOR);
         }
 
         const ScissorScope clip{bounds};
@@ -464,7 +465,7 @@ namespace sage
 
     void Window::DrawDebug() const
     {
-        DrawRectangleLinesEx(bounds, 2, YELLOW);
+        DrawRectangleLinesEx(bounds, 2, sage::colors::YELLOW_COLOR);
         drawDebugTable(root);
     }
 } // namespace sage

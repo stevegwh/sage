@@ -1,4 +1,6 @@
 #include "CSharpScriptSystem.hpp"
+#include "engine/MathConstants.hpp"
+#include "ManagedHostPaths.hpp"
 
 #include "engine/Archetypes.hpp"
 #include "engine/components/Collideable.hpp"
@@ -29,22 +31,15 @@
 #include <utility>
 #include <vector>
 
+// The managed ABI requires explicit cdecl on Windows; C++ has no portable spelling.
 #if defined(_WIN32)
 #include <Windows.h>
-#define SAGE_HOST_TEXT(value) L##value
 #define SAGE_MANAGED_CALL __cdecl
 #else
 #include <dlfcn.h>
-#define SAGE_HOST_TEXT(value) value
 #define SAGE_MANAGED_CALL
 #endif
 
-#ifndef SAGE_MANAGED_RUNTIME_CONFIG_PATH
-#error "SAGE_MANAGED_RUNTIME_CONFIG_PATH must be provided by CMake"
-#endif
-#ifndef SAGE_MANAGED_HOST_ASSEMBLY_PATH
-#error "SAGE_MANAGED_HOST_ASSEMBLY_PATH must be provided by CMake"
-#endif
 
 namespace sage
 {
@@ -188,13 +183,15 @@ namespace sage
             StopSessionFunction stopSession = nullptr;
             bool ready = false;
 
-            bool loadEntryPoint(const char_t* methodName, void** destination) const
+            bool loadEntryPoint(const char* methodName, void** destination) const
             {
-                const auto assemblyPath = ToHostString(SAGE_MANAGED_HOST_ASSEMBLY_PATH);
+                const auto assemblyPath = ToHostString(scripting::HOST_ASSEMBLY_PATH);
+                const auto typeName = ToHostString("Sage.ScriptRuntime, Sage.Scripting");
+                const auto hostMethodName = ToHostString(methodName);
                 const int result = loadAssembly(
                     assemblyPath.c_str(),
-                    SAGE_HOST_TEXT("Sage.ScriptRuntime, Sage.Scripting"),
-                    methodName,
+                    typeName.c_str(),
+                    hostMethodName.c_str(),
                     UNMANAGEDCALLERSONLY_METHOD,
                     nullptr,
                     destination);
@@ -231,7 +228,7 @@ namespace sage
                     TraceLog(LOG_ERROR, "C#: hostfxr is missing required exports.");
                     return false;
                 }
-                const auto configPath = ToHostString(SAGE_MANAGED_RUNTIME_CONFIG_PATH);
+                const auto configPath = ToHostString(scripting::RUNTIME_CONFIG_PATH);
                 hostfxr_handle context = nullptr;
                 const int initializeResult = initialize(configPath.c_str(), nullptr, &context);
                 if (initializeResult < 0 || context == nullptr)
@@ -250,14 +247,14 @@ namespace sage
                     return false;
                 }
                 loadAssembly = reinterpret_cast<load_assembly_and_get_function_pointer_fn>(loadAssemblyAddress);
-                if (!loadEntryPoint(SAGE_HOST_TEXT("StartSession"), reinterpret_cast<void**>(&startSession)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("CreateScript"), reinterpret_cast<void**>(&createScript)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("AwakeScripts"), reinterpret_cast<void**>(&awakeScripts)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("UpdateScript"), reinterpret_cast<void**>(&updateScript)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("DispatchTrigger"), reinterpret_cast<void**>(&dispatchTrigger)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("DispatchEvent"), reinterpret_cast<void**>(&dispatchEvent)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("DestroyScript"), reinterpret_cast<void**>(&destroyScript)) ||
-                    !loadEntryPoint(SAGE_HOST_TEXT("StopSession"), reinterpret_cast<void**>(&stopSession)))
+                if (!loadEntryPoint("StartSession", reinterpret_cast<void**>(&startSession)) ||
+                    !loadEntryPoint("CreateScript", reinterpret_cast<void**>(&createScript)) ||
+                    !loadEntryPoint("AwakeScripts", reinterpret_cast<void**>(&awakeScripts)) ||
+                    !loadEntryPoint("UpdateScript", reinterpret_cast<void**>(&updateScript)) ||
+                    !loadEntryPoint("DispatchTrigger", reinterpret_cast<void**>(&dispatchTrigger)) ||
+                    !loadEntryPoint("DispatchEvent", reinterpret_cast<void**>(&dispatchEvent)) ||
+                    !loadEntryPoint("DestroyScript", reinterpret_cast<void**>(&destroyScript)) ||
+                    !loadEntryPoint("StopSession", reinterpret_cast<void**>(&stopSession)))
                     return false;
                 ready = true;
                 return true;
@@ -553,7 +550,7 @@ namespace sage
             const float toY,
             const float toZ)
         {
-            return ::Vector3Angle({fromX, fromY, fromZ}, {toX, toY, toZ}) * RAD2DEG;
+            return ::Vector3Angle({fromX, fromY, fromZ}, {toX, toY, toZ}) * sage::math::RADIANS_TO_DEGREES;
         }
 
         void dispatchTrigger(

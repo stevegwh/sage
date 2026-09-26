@@ -5,6 +5,7 @@
 #pragma once
 
 #include "engine/raylib-cereal.hpp"
+#include "engine/Colors.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/slib.hpp"
 
@@ -35,7 +36,7 @@ namespace sage
         static std::vector<std::string> ParseMaterialKeys(std::string& modelKey);
 
       public:
-        Color hint = WHITE;
+        Color hint = sage::colors::WHITE_COLOR;
         bool active = true;
         Matrix initialTransform{};
         std::function<void(entt::entity)> reqShaderUpdate;

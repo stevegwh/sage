@@ -9,7 +9,9 @@
 #include "raylib/src/config.h"
 #include "raymath.h"
 #include "rlgl.h"
+// stb_include requires an implementation switch in exactly one translation unit.
 #define STB_INCLUDE_IMPLEMENTATION
+// Its default C-style #line filenames are rejected by our GLSL compiler.
 #define STB_INCLUDE_LINE_NONE
 
 #include "external/cgltf.h"
@@ -32,7 +34,7 @@ namespace sage
 {
     namespace
     {
-        constexpr const char* DefaultMaterialName = "Default";
+        constexpr const char* DEFAULT_MATERIAL_NAME = "Default";
 
         void RegisterSourcePath(
             std::unordered_map<std::string, std::string>& sources,
@@ -181,7 +183,7 @@ namespace sage
 
             std::vector<std::string> names;
             names.reserve(gltf.data->materials_count + 1);
-            names.emplace_back(DefaultMaterialName);
+            names.emplace_back(DEFAULT_MATERIAL_NAME);
 
             // raylib's glTF loader reserves material slot 0 for its default material.
             for (size_t i = 0; i < gltf.data->materials_count; ++i)
@@ -236,7 +238,7 @@ namespace sage
                 // With old glTF-packed data, slot 0 may be empty because raylib reserves it.
                 if ((originalSize == 0 && model.materialCount == 1) || (originalSize > 0 && i == 0))
                 {
-                    materialNames[i] = DefaultMaterialName;
+                    materialNames[i] = DEFAULT_MATERIAL_NAME;
                 }
                 else
                 {
@@ -783,15 +785,15 @@ namespace sage
             UnloadMesh(model.meshes[i]);
 
         // Unload arrays
-        RL_FREE(model.meshes);
-        RL_FREE(model.materials);
-        RL_FREE(model.meshMaterial);
+        MemFree(model.meshes);
+        MemFree(model.materials);
+        MemFree(model.meshMaterial);
 
         // Unload animation data
-        RL_FREE(model.bones);
-        RL_FREE(model.bindPose);
+        MemFree(model.bones);
+        MemFree(model.bindPose);
 
-        TRACELOG(LOG_INFO, "MODEL: Unloaded model (and meshes) from RAM and VRAM");
+        TraceLog(LOG_INFO, "MODEL: Unloaded model (and meshes) from RAM and VRAM");
     }
 
     void ResourceManager::UnloadAll()
@@ -812,7 +814,7 @@ namespace sage
             }
             std::cout << "Material key: " << key << std::endl;
             std::cout << "Material maps address : " << &mat.maps << std::endl;
-            RL_FREE(mat.maps);
+            MemFree(mat.maps);
         }
         std::cout << "Unloading models" << std::endl;
         for (auto& info : modelCopies | std::views::values)
@@ -825,17 +827,17 @@ namespace sage
                 Model& m = info.model;
                 for (int i = 0; i < m.materialCount; ++i)
                 {
-                    RL_FREE(m.materials[i].maps);
+                    MemFree(m.materials[i].maps);
                 }
                 for (int i = 0; i < m.meshCount; ++i)
                 {
                     UnloadMesh(m.meshes[i]);
                 }
-                RL_FREE(m.meshes);
-                RL_FREE(m.materials);
-                RL_FREE(m.meshMaterial);
-                RL_FREE(m.bones);
-                RL_FREE(m.bindPose);
+                MemFree(m.meshes);
+                MemFree(m.materials);
+                MemFree(m.meshMaterial);
+                MemFree(m.bones);
+                MemFree(m.bindPose);
             }
             else
             {

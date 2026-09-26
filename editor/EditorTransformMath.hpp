@@ -7,6 +7,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "engine/MathConstants.hpp"
 #include "raymath.h"
 
 #include <algorithm>
@@ -60,8 +61,8 @@ namespace sage::editor
     inline Matrix BuildRenderableEntityMatrix(const Vector3 position, const Vector3 rotation, const Vector3 scale)
     {
         const Matrix rotationMatrix = MatrixMultiply(
-            MatrixMultiply(MatrixRotateZ(rotation.z * DEG2RAD), MatrixRotateY(rotation.y * DEG2RAD)),
-            MatrixRotateX(rotation.x * DEG2RAD));
+            MatrixMultiply(MatrixRotateZ(rotation.z * sage::math::DEGREES_TO_RADIANS), MatrixRotateY(rotation.y * sage::math::DEGREES_TO_RADIANS)),
+            MatrixRotateX(rotation.x * sage::math::DEGREES_TO_RADIANS));
         return MatrixMultiply(
             MatrixMultiply(MatrixScale(scale.x, scale.y, scale.z), rotationMatrix),
             MatrixTranslate(position.x, position.y, position.z));

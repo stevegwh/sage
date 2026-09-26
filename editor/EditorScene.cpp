@@ -1,4 +1,7 @@
 #include "EditorScene.hpp"
+#include "engine/Colors.hpp"
+
+#include <iterator>
 
 #include "EditorAssetRename.hpp"
 #include "EditorComponents.hpp"
@@ -23,6 +26,8 @@
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Flatpack.hpp"
+#include "engine/components/ParticleEmitterComponent.hpp"
+#include "engine/systems/ParticleEmitterSystem.hpp"
 #include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
@@ -71,9 +76,9 @@ namespace sage
         constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
         constexpr const char* SHADERS_DIRECTORY = "resources/shaders";
-        // Temp map the editor snapshots the authored scene into when entering
+        // Temp map the editor snapshots the editor scene into when entering
         // play mode; the game runtime loads it, and Stop deletes it.
-        constexpr const char* kPlaySessionMapPath = "resources/.play_session.map";
+        constexpr const char* PLAY_SESSION_MAP_PATH = "resources/.play_session.map";
         constexpr const char* DEFAULT_MAP_BASE_NAME = "_MAPBASE_EDITOR_BASE";
         constexpr const char* DEFAULT_MAP_BASE_MODEL_KEY = "primitive_plane";
         constexpr float DEFAULT_MAP_BASE_SIZE = 1000.0f;
@@ -372,6 +377,7 @@ namespace sage
 
     void EditorScene::Update() const
     {
+        automation.Poll([this](const json::Value& request) { return automationCommand(request); });
         // While playing, the game runtime drives its own registry; the editor's
         // own systems are idle so the two worlds don't fight over input/state.
         if (gameRuntime)
@@ -428,6 +434,7 @@ namespace sage
             }
         }
         editorModes->Update();
+        sys->particleEmitterSystem->Update(GetFrameTime());
         syncLightTransforms();
         sys->lightSubSystem->Update();
         sys->lightSubSystem->RefreshLights();
@@ -444,6 +451,7 @@ namespace sage
         }
 
         sys->renderSystem->Draw();
+        sys->particleEmitterSystem->Draw(*sys->camera->getRaylibCam());
         sys->lightSubSystem->DrawDebugLights();
         placementController->DrawGridAndAxes();
         if (navigationGridVisible)
@@ -468,7 +476,7 @@ namespace sage
         for (const auto entity : sys->registry->view<Collideable, TriggerVolume>())
         {
             const auto& collideable = sys->registry->get<Collideable>(entity);
-            DrawBoundingBox(collideable.worldBoundingBox, GREEN);
+            DrawBoundingBox(collideable.worldBoundingBox, sage::colors::GREEN_COLOR);
         }
 
         for (const auto entity : selection->SelectedWithChildren())
@@ -487,7 +495,7 @@ namespace sage
                 {
                     if (auto* model = sys->registry->get<Renderable>(entity).GetModel(); model != nullptr)
                     {
-                        model->Draw(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), GREEN);
+                        model->Draw(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), sage::colors::GREEN_COLOR);
                     }
                 }
                 else if (sys->registry->any_of<DynamicRenderable>(entity))
@@ -500,15 +508,15 @@ namespace sage
                             {0.0f, 1.0f, 0.0f},
                             transform.GetWorldRot().y,
                             transform.GetScale(),
-                            GREEN);
+                            sage::colors::GREEN_COLOR);
                     }
                 }
                 rlDisableWireMode();
-                DrawBoundingBox(collideable.worldBoundingBox, Fade(ORANGE, 0.35f));
+                DrawBoundingBox(collideable.worldBoundingBox, Fade(sage::colors::ORANGE_COLOR, 0.35f));
             }
             else
             {
-                DrawBoundingBox(collideable.worldBoundingBox, ORANGE);
+                DrawBoundingBox(collideable.worldBoundingBox, sage::colors::ORANGE_COLOR);
             }
         }
     }
@@ -523,7 +531,7 @@ namespace sage
 
     void EditorScene::rebuildNavigationGrid() const
     {
-        // Initialize clears stale height/occupancy data, then samples authored
+        // Initialize clears stale height/occupancy data, then samples source
         // navigation surfaces and stamps active obstacles exactly as play mode does.
         placementController->Initialize();
         sys->navigationGridSystem->InitGridHeightAndNormals();
@@ -566,6 +574,7 @@ namespace sage
         }
         const auto inspectorEdit = gui->DrawInspectorWindow();
         handleInspectorEdit(inspectorEdit);
+        drawParticlePreviewWindow();
 
         gui->DrawHierarchyWindow();
         if (gameRuntime)
@@ -595,7 +604,7 @@ namespace sage
 
     void EditorScene::drawExitConfirmationModal(bool& exitRequested, bool& exitConfirmed) const
     {
-        constexpr const char* kPopupId = "Unsaved Changes";
+        constexpr const char* popupId = "Unsaved Changes";
 
         // While a flatpack is open the live history belongs to it, and the map's
         // own dirty flag is parked in the session stash — check both.
@@ -616,15 +625,15 @@ namespace sage
             return;
         }
 
-        if ((exitRequested || newMapRequested) && !ImGui::IsPopupOpen(kPopupId))
+        if ((exitRequested || newMapRequested) && !ImGui::IsPopupOpen(popupId))
         {
-            ImGui::OpenPopup(kPopupId);
+            ImGui::OpenPopup(popupId);
         }
 
         const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
         ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2{0.5f, 0.5f});
         ImGui::SetNextWindowSize(ImVec2{440.0f, 0.0f}, ImGuiCond_Appearing);
-        if (ImGui::BeginPopupModal(kPopupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+        if (ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
         {
             const bool creatingNewMap = newMapRequested && !exitRequested;
             ImGui::TextWrapped(
@@ -667,15 +676,15 @@ namespace sage
 
     void EditorScene::drawHierarchyContextMenu() const
     {
-        constexpr const char* kPopupId = "hierarchy_context_menu";
+        constexpr const char* popupId = "hierarchy_context_menu";
 
         if (const auto entity = gui->ConsumeHierarchyContextEntity(); entity.has_value())
         {
             hierarchyContextEntity = *entity;
-            ImGui::OpenPopup(kPopupId);
+            ImGui::OpenPopup(popupId);
         }
 
-        if (ImGui::BeginPopup(kPopupId))
+        if (ImGui::BeginPopup(popupId))
         {
             if (!sys->registry->valid(hierarchyContextEntity))
             {
@@ -1543,7 +1552,7 @@ namespace sage
         // Mirror the post-load/post-paste fixups: re-hook the lit shader and re-derive
         // collision bounds from the restored world transforms.
         applyLitShaderToLoadedRenderables();
-        // Terrain restores only the authored height field; rebuild the derived
+        // Terrain restores only the saved height field; rebuild the derived
         // mesh and bounds.
         for (const auto entity : restored)
         {
@@ -1559,6 +1568,7 @@ namespace sage
                 if (sys->registry->valid(entity)) transformEditor->RefreshCollisionBoundsRecursive(entity);
             }
         }
+        syncLightTransforms();
         if (sys->lightSubSystem) sys->lightSubSystem->RefreshLights();
 
         if (selection)
@@ -1896,6 +1906,10 @@ namespace sage
             {
                 addEmptyTransform();
             }
+            if (ImGui::MenuItem("Particle System"))
+            {
+                addParticleEmitter();
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Project"))
@@ -2107,7 +2121,7 @@ namespace sage
             static const char* const modeNames[] = {
                 "Raise / Lower", "Smooth", "Flatten", "Noise", "Erosion", "Ramp"};
             int mode = static_cast<int>(sculpt->brushMode);
-            if (ImGui::Combo("Brush", &mode, modeNames, IM_ARRAYSIZE(modeNames)))
+            if (ImGui::Combo("Brush", &mode, modeNames, std::size(modeNames)))
             {
                 sculpt->brushMode = static_cast<TerrainBrushMode>(mode);
             }
@@ -2217,6 +2231,41 @@ namespace sage
         const auto entity = entityOperations->CreateEmptyTransform(position);
         if (history) history->RecordCreate(editor::EditAction::AddEmptyTransform, {entity});
         editorModes->SelectSceneEntity(entity);
+    }
+
+    void EditorScene::addParticleEmitter() const
+    {
+        Vector3 position = sys->camera->getRaylibCam()->target;
+        if (const auto snapped = placementController->SnappedPlacementPosition()) position = *snapped;
+        const auto entity = entityOperations->CreateEmptyTransform(position);
+        sys->registry->get<sgTransform>(entity).name = "Particle System";
+        sys->registry->emplace<ParticleEmitterComponent>(entity);
+        adoptIntoFlatpackRoot({entity});
+        if (history) history->RecordCreate(editor::EditAction::AddEmptyTransform, {entity});
+        editorModes->SelectSceneEntity(entity);
+    }
+
+    void EditorScene::drawParticlePreviewWindow() const
+    {
+        const auto selected = selection->Active();
+        if (!selected || !sys->registry->valid(*selected) ||
+            !sys->registry->all_of<ParticleEmitterComponent, sgTransform>(*selected)) return;
+        if (!ImGui::Begin("Particle Preview"))
+        {
+            ImGui::End();
+            return;
+        }
+        ImGui::Text("%s", sys->registry->get<sgTransform>(*selected).name.c_str());
+        if (ImGui::Button("Play")) sys->particleEmitterSystem->Play(*selected);
+        ImGui::SameLine();
+        if (ImGui::Button("Pause")) sys->particleEmitterSystem->Pause(*selected);
+        ImGui::SameLine();
+        if (ImGui::Button("Restart")) sys->particleEmitterSystem->Restart(*selected);
+        ImGui::SameLine();
+        if (ImGui::Button("Burst")) sys->particleEmitterSystem->Burst(*selected);
+        ImGui::Text("Alive: %zu", sys->particleEmitterSystem->Alive(*selected));
+        ImGui::TextUnformatted("Select this object in the Inspector to edit its emitter modules.");
+        ImGui::End();
     }
 
     void EditorScene::addMesh(const char* modelKey, const char* name) const
@@ -2501,17 +2550,17 @@ namespace sage
             return;
         }
 
-        // Snapshot the authored scene (including unsaved edits) to a temp map the
+        // Snapshot the editor scene (including unsaved edits) to a temp map the
         // runtime loads into its own registry. collectMapHierarchyOrder() also
         // ensures the default map base exists before serialising.
         const auto hierarchyOrder = collectMapHierarchyOrder();
-        editor::SaveMap(*sys->registry, kPlaySessionMapPath, hierarchyOrder, &inspectorRegistry);
+        if (!editor::SaveMap(*sys->registry, PLAY_SESSION_MAP_PATH, hierarchyOrder, &inspectorRegistry)) return;
 
         GameRuntimeContext context;
         context.audioManager = sys->audioManager;
         context.windowSize = sys->settings->GetScreenSize();
         context.viewportScreenRect = gameViewportScreenRect();
-        context.mapPath = kPlaySessionMapPath;
+        context.mapPath = PLAY_SESSION_MAP_PATH;
         gui->ClearConsole();
         context.managedLogSink = [this](const CSharpLogLevel level, const std::string_view message) {
             gui->AddConsoleEntry(level, message);
@@ -2527,10 +2576,10 @@ namespace sage
     {
         if (!gameRuntime) return;
         // The runtime owned its own registry, so tearing it down leaves the
-        // editor's authored scene exactly as it was — no restore needed.
+        // editor's scene exactly as it was — no restore needed.
         gameRuntime.reset();
         std::error_code ec;
-        std::filesystem::remove(kPlaySessionMapPath, ec);
+        std::filesystem::remove(PLAY_SESSION_MAP_PATH, ec);
     }
 
     Rectangle EditorScene::gameViewportScreenRect() const

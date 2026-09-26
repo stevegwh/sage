@@ -1,3 +1,4 @@
+#include "engine/SimulationClock.hpp"
 //
 // Created by Steve Wheeler on 03/01/2025.
 //
@@ -60,10 +61,10 @@ namespace sage
 
         std::string GetText()
         {
-            if (GetTime() >= initialTime + delay)
+            if (sage::Time() >= initialTime + delay)
             {
                 ++currentIdx;
-                initialTime = GetTime();
+                initialTime = sage::Time();
             }
             return getNextText();
         }
@@ -74,7 +75,7 @@ namespace sage
             delay = _delay;
         }
 
-        explicit OverheadDialogComponent(bool _loop = false) : initialTime(GetTime()), loop(_loop)
+        explicit OverheadDialogComponent(bool _loop = false) : initialTime(sage::Time()), loop(_loop)
         {
         }
     };

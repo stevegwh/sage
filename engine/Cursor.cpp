@@ -1,3 +1,5 @@
+#include "engine/SimulationClock.hpp"
+#include "engine/Colors.hpp"
 //
 // Created by Steve Wheeler on 04/05/2024.
 //
@@ -63,7 +65,7 @@ namespace sage
         {
             HoverInfo newInfo;
             newInfo.target = target;
-            newInfo.beginHoverTime = GetTime();
+            newInfo.beginHoverTime = sage::Time();
             m_hoverInfo.emplace(newInfo);
         }
     }
@@ -100,7 +102,7 @@ namespace sage
     void Cursor::onMouseLeftDown()
     {
         if (!enabled) return;
-        leftClickTimer += GetFrameTime();
+        leftClickTimer += sage::FrameTime();
 
         if (leftClickTimer < 0.1) return;
         leftClickTimer = 0;
@@ -255,7 +257,7 @@ namespace sage
         }
         else if (
             !OutOfRange() && m_hoverInfo.has_value() &&
-            GetTime() >= m_hoverInfo.value().beginHoverTime + m_hoverInfo.value().hoverTimeThreshold)
+            sage::Time() >= m_hoverInfo.value().beginHoverTime + m_hoverInfo.value().hoverTimeThreshold)
         {
             onMouseHover();
         }
@@ -283,7 +285,7 @@ namespace sage
         normalEnd.x = mouseHitInfo.rlCollision.point.x + mouseHitInfo.rlCollision.normal.x;
         normalEnd.y = mouseHitInfo.rlCollision.point.y + mouseHitInfo.rlCollision.normal.y;
         normalEnd.z = mouseHitInfo.rlCollision.point.z + mouseHitInfo.rlCollision.normal.z;
-        DrawLine3D(mouseHitInfo.rlCollision.point, normalEnd, RED);
+        DrawLine3D(mouseHitInfo.rlCollision.point, normalEnd, sage::colors::RED_COLOR);
     }
 
     void Cursor::Draw3D()
@@ -295,7 +297,7 @@ namespace sage
         if (hideCursor) return;
         Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
 
-        if (m_hoverInfo.has_value() && GetTime() >= m_hoverInfo->beginHoverTime + m_hoverInfo->hoverTimeThreshold)
+        if (m_hoverInfo.has_value() && sage::Time() >= m_hoverInfo->beginHoverTime + m_hoverInfo->hoverTimeThreshold)
         {
             if (const auto* hoverable = registry->try_get<Hoverable>(m_hoverInfo->target);
                 hoverable != nullptr && !hoverable->label.empty())
@@ -319,7 +321,7 @@ namespace sage
                     {tooltipPos.x + horizontalPadding, tooltipPos.y + verticalPadding},
                     fontSize,
                     1.0f,
-                    RAYWHITE);
+                    sage::colors::RAY_WHITE_COLOR);
             }
         }
 
@@ -331,7 +333,7 @@ namespace sage
             pos = Vector2Subtract(
                 pos, {static_cast<float>(currentTex.width / 2), static_cast<float>(currentTex.height / 2)});
         }
-        DrawTextureEx(currentTex, pos, 0.0, 1.0f, WHITE);
+        DrawTextureEx(currentTex, pos, 0.0, 1.0f, sage::colors::WHITE_COLOR);
     }
 
     Cursor::Cursor(entt::registry* _registry, EngineSystems* _sys) : registry(_registry), sys(_sys)

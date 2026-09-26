@@ -1,3 +1,6 @@
+#include "RaylibMemory.hpp"
+#include "engine/MathConstants.hpp"
+#include "engine/SimulationClock.hpp"
 #include "TerrainMesh.hpp"
 
 #include "components/Collideable.hpp"
@@ -94,11 +97,11 @@ namespace sage
             Mesh mesh{};
             mesh.vertexCount = vertexCount;
             mesh.triangleCount = (vertsX - 1) * (vertsZ - 1) * 2;
-            mesh.vertices = static_cast<float*>(RL_MALLOC(vertexCount * 3 * sizeof(float)));
-            mesh.normals = static_cast<float*>(RL_MALLOC(vertexCount * 3 * sizeof(float)));
-            mesh.texcoords = static_cast<float*>(RL_MALLOC(vertexCount * 2 * sizeof(float)));
+            mesh.vertices = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
+            mesh.normals = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
+            mesh.texcoords = static_cast<float*>(MemAlloc(vertexCount * 2 * sizeof(float)));
             mesh.indices =
-                static_cast<unsigned short*>(RL_MALLOC(mesh.triangleCount * 3 * sizeof(unsigned short)));
+                static_cast<unsigned short*>(MemAlloc(mesh.triangleCount * 3 * sizeof(unsigned short)));
 
             fillChunkVertexData(terrain, range, mesh);
 
@@ -135,11 +138,11 @@ namespace sage
         Model model{};
         model.transform = MatrixIdentity();
         model.meshCount = meshCount;
-        model.meshes = static_cast<Mesh*>(RL_CALLOC(meshCount, sizeof(Mesh)));
+        model.meshes = static_cast<Mesh*>(sage::AllocateZeroedMemory(meshCount, sizeof(Mesh)));
         model.materialCount = 1;
-        model.materials = static_cast<Material*>(RL_CALLOC(1, sizeof(Material)));
+        model.materials = static_cast<Material*>(sage::AllocateZeroedMemory(1, sizeof(Material)));
         model.materials[0] = LoadMaterialDefault();
-        model.meshMaterial = static_cast<int*>(RL_CALLOC(meshCount, sizeof(int)));
+        model.meshMaterial = static_cast<int*>(sage::AllocateZeroedMemory(meshCount, sizeof(int)));
 
         for (int chunkRow = 0; chunkRow < chunks; ++chunkRow)
         {
@@ -163,8 +166,8 @@ namespace sage
         // raylib's default vertex-buffer slot numbers (mirror the rlgl macros
         // RL_DEFAULT_SHADER_ATTRIB_LOCATION_POSITION / _NORMAL, which aren't exposed
         // through the public headers). UpdateMeshBuffer addresses VBOs by these.
-        constexpr int kVboPositionSlot = 0;
-        constexpr int kVboNormalSlot = 2;
+        constexpr int vboPositionSlot = 0;
+        constexpr int vboNormalSlot = 2;
 
         // Normals of vertices adjacent to the edited range change too.
         const int minRow = region.minRow - 1;
@@ -185,8 +188,8 @@ namespace sage
 
                 auto& mesh = model.meshes[chunkRow * chunks + chunkCol];
                 fillChunkVertexData(terrain, range, mesh);
-                UpdateMeshBuffer(mesh, kVboPositionSlot, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
-                UpdateMeshBuffer(mesh, kVboNormalSlot, mesh.normals, mesh.vertexCount * 3 * sizeof(float), 0);
+                UpdateMeshBuffer(mesh, vboPositionSlot, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
+                UpdateMeshBuffer(mesh, vboNormalSlot, mesh.normals, mesh.vertexCount * 3 * sizeof(float), 0);
             }
         }
     }
@@ -206,7 +209,7 @@ namespace sage
         const auto scale = transform.GetScale();
         return MatrixMultiply(
             MatrixMultiply(
-                MatrixScale(scale.x, scale.y, scale.z), MatrixRotateY(transform.GetWorldRot().y * DEG2RAD)),
+                MatrixScale(scale.x, scale.y, scale.z), MatrixRotateY(transform.GetWorldRot().y * sage::math::DEGREES_TO_RADIANS)),
             MatrixTranslate(position.x, position.y, position.z));
     }
 
@@ -274,7 +277,7 @@ namespace sage
         };
 
         // A per-stroke-frame seed keeps Noise from layering the same pattern.
-        const auto seed = static_cast<unsigned int>(GetTime() * 1000.0) + 1u;
+        const auto seed = static_cast<unsigned int>(sage::Time() * 1000.0) + 1u;
 
         for (int row = region.minRow; row <= region.maxRow; ++row)
         {

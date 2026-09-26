@@ -18,6 +18,7 @@
 #include "systems/RenderSystem.hpp"
 #include "systems/CSharpScriptSystem.hpp"
 #include "systems/SpatialAudioSystem.hpp"
+#include "systems/ParticleEmitterSystem.hpp"
 #include "systems/TransformSystem.hpp"
 #include "systems/UberShaderSystem.hpp"
 #include "ui/GameUIEngine.hpp"
@@ -51,7 +52,8 @@ namespace sage
           animationSystem(std::make_unique<AnimationSystem>(_registry)),
           uberShaderSystem(std::make_unique<UberShaderSystem>(_registry, this)),
           fullscreenTextOverlayManager(std::make_unique<FullscreenTextOverlayManager>(this)),
-          spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this))
+          spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
+          particleEmitterSystem(std::make_unique<ParticleEmitterSystem>(*_registry))
     {
         uiEngine = std::make_unique<GameUIEngine>(_settings, cursor.get());
         csharpScriptSystem = std::make_unique<CSharpScriptSystem>(_registry, this, std::move(scripting));

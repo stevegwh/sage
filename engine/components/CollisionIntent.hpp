@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include "engine/CollisionLayers.hpp"
 #include "engine/CursorTypes.hpp"
 
@@ -37,14 +39,14 @@ namespace sage
         void save(Archive& archive) const
         {
             const auto sourceValue = static_cast<std::uint8_t>(heightSource);
-            archive(active, sourceValue);
+            archive(cereal::make_nvp("active", active), cereal::make_nvp("sourceValue", sourceValue));
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
             std::uint8_t sourceValue = 0;
-            archive(active, sourceValue);
+            archive(cereal::make_nvp("active", active), cereal::make_nvp("sourceValue", sourceValue));
             heightSource = static_cast<NavigationHeightSource>(sourceValue);
         }
 
@@ -53,8 +55,8 @@ namespace sage
         {
             i.template requiresComponent<Collideable>();
             i.template incompatibleComponent<NavigationObstacle>();
-            i.field("Active", active);
-            i.field("Height Source", heightSource);
+            i.field("active", "Active", active);
+            i.field("height_source", "Height Source", heightSource);
         }
     };
 
@@ -63,7 +65,7 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(active);
+            archive(cereal::make_nvp("active", active));
         }
 
         template <class Inspector>
@@ -71,7 +73,7 @@ namespace sage
         {
             i.template requiresComponent<Collideable>();
             i.template incompatibleComponent<NavigationSurface>();
-            i.field("Active", active);
+            i.field("active", "Active", active);
         }
     };
 
@@ -82,15 +84,15 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(active, overlapMask);
+            archive(cereal::make_nvp("active", active), cereal::make_nvp("overlapMask", overlapMask));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Collideable>();
-            i.field("Active", active);
-            i.field("Overlap Mask", overlapMask.bits);
+            i.field("active", "Active", active);
+            i.field("overlap_mask", "Overlap Mask", overlapMask.bits);
         }
     };
 
@@ -103,16 +105,16 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(cursor, hoverable, allowNavigationClickThrough);
+            archive(cereal::make_nvp("cursor", cursor), cereal::make_nvp("hoverable", hoverable), cereal::make_nvp("allowNavigationClickThrough", allowNavigationClickThrough));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Collideable>();
-            i.cursorDropdown("Cursor", cursor);
-            i.field("Hoverable", hoverable);
-            i.field("Allow Navigation Click Through", allowNavigationClickThrough);
+            i.cursorDropdown("cursor", "Cursor", cursor);
+            i.field("hoverable", "Hoverable", hoverable);
+            i.field("allow_navigation_click_through", "Allow Navigation Click Through", allowNavigationClickThrough);
         }
     };
 } // namespace sage

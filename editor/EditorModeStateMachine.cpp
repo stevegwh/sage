@@ -1,4 +1,6 @@
 #include "EditorModeStateMachine.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "EditorGui.hpp"
 #include "EditorHistory.hpp"
@@ -339,8 +341,8 @@ namespace sage::editor
             snappedPlacementPosition->x,
             snappedPlacementPosition->y + PLACEMENT_MARKER_HEIGHT,
             snappedPlacementPosition->z};
-        DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, GOLD);
-        DrawSphere(marker, 0.08f, GOLD);
+        DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, sage::colors::GOLD_COLOR);
+        DrawSphere(marker, 0.08f, sage::colors::GOLD_COLOR);
     }
 
     bool EditorPlaceState::SelectSceneEntityUnderCursor(EditorModeStateMachine& machine)
@@ -614,8 +616,8 @@ namespace sage::editor
             snappedPlacementPosition->x,
             snappedPlacementPosition->y + PLACEMENT_MARKER_HEIGHT,
             snappedPlacementPosition->z};
-        DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, ORANGE);
-        DrawSphere(marker, 0.08f, ORANGE);
+        DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, sage::colors::ORANGE_COLOR);
+        DrawSphere(marker, 0.08f, sage::colors::ORANGE_COLOR);
 
         machine.transformEditor.Draw3D(entities);
     }
@@ -868,15 +870,15 @@ namespace sage::editor
         Vector3 previous{};
         for (int i = 0; i <= segments; ++i)
         {
-            const float angle = static_cast<float>(i) / segments * 2.0f * PI;
+            const float angle = static_cast<float>(i) / segments * 2.0f * sage::math::MATH_PI;
             const float x = localHit.x + std::cos(angle) * localRadius;
             const float z = localHit.z + std::sin(angle) * localRadius;
             const Vector3 point =
                 Vector3Transform({x, terrainData.SampleHeight(x, z) + localRingLift, z}, terrainToWorld);
-            if (i > 0) DrawLine3D(previous, point, GOLD);
+            if (i > 0) DrawLine3D(previous, point, sage::colors::GOLD_COLOR);
             previous = point;
         }
-        DrawSphere({cursorHit->x, cursorHit->y + ringLift, cursorHit->z}, 0.12f, GOLD);
+        DrawSphere({cursorHit->x, cursorHit->y + ringLift, cursorHit->z}, 0.12f, sage::colors::GOLD_COLOR);
 
         // Ramp preview: a height-conformed line from the placed first endpoint
         // to the cursor, sampled in segments so it hugs the surface.
@@ -894,10 +896,10 @@ namespace sage::editor
                 const float z = Lerp(rampStart->y, localHit.z, f);
                 const Vector3 point =
                     Vector3Transform({x, terrainData.SampleHeight(x, z) + localRingLift, z}, terrainToWorld);
-                DrawLine3D(last, point, SKYBLUE);
+                DrawLine3D(last, point, sage::colors::SKY_BLUE_COLOR);
                 last = point;
             }
-            DrawSphere(start, 0.18f, SKYBLUE);
+            DrawSphere(start, 0.18f, sage::colors::SKY_BLUE_COLOR);
         }
     }
 

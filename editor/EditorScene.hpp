@@ -18,6 +18,7 @@
 #include "EditorTransformEditor.hpp"
 
 #include "engine/Settings.hpp"
+#include "engine/content/AutomationInbox.hpp"
 
 #include "entt/entt.hpp"
 
@@ -68,8 +69,13 @@ namespace sage
         std::unique_ptr<editor::EditorMapController> mapController;
         std::unique_ptr<editor::EditorFlatpackEditSession> flatpackSession;
         // Non-null only while play-in-editor is running. Owns its own registry,
-        // so Play/Stop never touches the authored scene (see startPlay/stopPlay).
+        // so Play/Stop never touches the editor scene (see startPlay/stopPlay).
         mutable std::unique_ptr<IGameRuntime> gameRuntime;
+        mutable content::AutomationInbox automation;
+        json::Document automationState() const;
+        json::Document automationCommand(const json::Value& request) const;
+        mutable std::optional<std::filesystem::path> automationCapture;
+        mutable std::optional<std::filesystem::path> automationBundle;
         editor::CSharpScriptEditorConfig csharpScripts;
         std::unique_ptr<ImGui::FileBrowser> scriptBrowser;
         std::unique_ptr<ImGui::FileBrowser> shaderBrowser;
@@ -92,7 +98,7 @@ namespace sage
         void setSnapToGrid(bool enabled) const;
         void rebuildNavigationGrid() const;
         void drawMainMenuBar(bool& exitRequested) const;
-        // Play-in-editor (items 2-4): snapshot the authored scene to a temp map,
+        // Play-in-editor (items 2-4): snapshot the editor scene to a temp map,
         // spin up a game runtime on its own registry, tear it down on stop.
         void drawPlayStopButton() const;
         void startPlay() const;
@@ -107,6 +113,8 @@ namespace sage
         void addTriggerVolume() const;
         void addTerrain() const;
         void addEmptyTransform() const;
+        void addParticleEmitter() const;
+        void drawParticlePreviewWindow() const;
         void addMesh(const char* modelKey, const char* name) const;
         // Brush settings panel, shown only while terrain sculpting is active.
         void drawTerrainBrushWindow() const;
@@ -166,6 +174,7 @@ namespace sage
 
       public:
         void Update() const;
+        void CaptureAutomationFrame(Texture2D sceneTexture, Texture2D uiTexture = {}) const;
         void Draw3D() const;
         void DrawOverlay2D() const;
         // The running game's 2D UI. Rendered by EditorApplication into a

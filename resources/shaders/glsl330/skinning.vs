@@ -6,7 +6,7 @@ in vec4 vertexColor;
 in vec4 vertexBoneIds;
 in vec4 vertexBoneWeights;
 
-#define MAX_BONE_NUM 128
+const int MAX_BONE_NUM = 128;
 uniform mat4 boneMatrices[MAX_BONE_NUM];
 
 uniform mat4 mvp;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include "engine/components/Renderable.hpp"
 
 #include "cereal/types/string.hpp"
@@ -9,7 +11,7 @@
 
 namespace sage
 {
-    // Authored custom shader assignment for a Renderable. GPU handles and uniform
+    // Custom shader assignment for a Renderable. GPU handles and uniform
     // locations are derived at runtime from the persisted file/uniform names.
     struct CustomShaderComponent
     {
@@ -29,20 +31,19 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(
-                vertexShaderPath, fragmentShaderPath, timeUniform, secondTextureUniform, texture0Key, texture1Key);
+            archive(cereal::make_nvp("vertexShaderPath", vertexShaderPath), cereal::make_nvp("fragmentShaderPath", fragmentShaderPath), cereal::make_nvp("timeUniform", timeUniform), cereal::make_nvp("secondTextureUniform", secondTextureUniform), cereal::make_nvp("texture0Key", texture0Key), cereal::make_nvp("texture1Key", texture1Key));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<Renderable>();
-            i.vertexShaderFile("Vertex Shader", vertexShaderPath);
-            i.fragmentShaderFile("Fragment Shader", fragmentShaderPath);
-            i.field("Time Uniform", timeUniform);
-            i.field("Second Texture Uniform", secondTextureUniform);
-            i.textureDropdown("Texture 0", texture0Key);
-            i.textureDropdown("Texture 1", texture1Key);
+            i.vertexShaderFile("vertex_shader", "Vertex Shader", vertexShaderPath);
+            i.fragmentShaderFile("fragment_shader", "Fragment Shader", fragmentShaderPath);
+            i.field("time_uniform", "Time Uniform", timeUniform);
+            i.field("second_texture_uniform", "Second Texture Uniform", secondTextureUniform);
+            i.textureDropdown("texture_0", "Texture 0", texture0Key);
+            i.textureDropdown("texture_1", "Texture 1", texture1Key);
         }
 
       private:

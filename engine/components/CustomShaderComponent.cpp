@@ -1,3 +1,4 @@
+#include "engine/SimulationClock.hpp"
 #include "CustomShaderComponent.hpp"
 
 #include "engine/ResourceManager.hpp"
@@ -54,7 +55,7 @@ namespace sage
 
         if (timeLocation >= 0)
         {
-            const float seconds = static_cast<float>(GetTime());
+            const float seconds = static_cast<float>(sage::Time());
             SetShaderValue(shader, timeLocation, &seconds, SHADER_UNIFORM_FLOAT);
         }
     }

@@ -9,8 +9,7 @@ out vec4 finalColor;
 
 // NOTE: Add here your custom variables
 
-#define MAX_SPOTS   3
-
+const int MAX_SPOTS = 3;
 struct Spot {
     vec2 pos;        // window coords of spot
     float inner;    // inner fully transparent centre radius

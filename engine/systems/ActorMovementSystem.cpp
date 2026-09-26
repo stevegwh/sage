@@ -1,4 +1,6 @@
 #include "ActorMovementSystem.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "components/Collideable.hpp"
 #include "components/MoveableActor.hpp"
@@ -187,7 +189,7 @@ namespace sage
             if (actor.path.empty()) continue;
             for (auto p : actor.path)
             {
-                DrawCube({p.x, p.y + 1, p.z}, 1, 1, 1, GREEN);
+                DrawCube({p.x, p.y + 1, p.z}, 1, 1, 1, sage::colors::GREEN_COLOR);
             }
         }
     }
@@ -343,7 +345,7 @@ namespace sage
     bool ActorMovementSystem::updateActorRotation(
         sgTransform& transform, const MoveableActor& moveableActor, const float deltaTime)
     {
-        const float target = atan2f(transform.direction.x, transform.direction.z) * RAD2DEG;
+        const float target = atan2f(transform.direction.x, transform.direction.z) * sage::math::RADIANS_TO_DEGREES;
         const Vector3 currentRotation = transform.GetWorldRot();
         float angle = target;
         if (moveableActor.turnSpeed > 0.0f)

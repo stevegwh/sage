@@ -5,6 +5,7 @@
 #pragma once
 
 #include "Event.hpp"
+#include "engine/Colors.hpp"
 #include "systems/CollisionSystem.hpp"
 
 #include "entt/entt.hpp"
@@ -41,10 +42,10 @@ namespace sage
         std::function<bool(Vector3)> navigationRangeProvider{};
         std::function<bool(Vector3)> navigationValidityProvider{};
 
-        Color defaultColor = WHITE;
-        Color hoverColor = LIME;
-        Color invalidColor = RED;
-        Color currentColor = WHITE;
+        Color defaultColor = sage::colors::WHITE_COLOR;
+        Color hoverColor = sage::colors::LIME_COLOR;
+        Color invalidColor = sage::colors::RED_COLOR;
+        Color currentColor = sage::colors::WHITE_COLOR;
 
         bool contextLocked = false;
         bool hideCursor = false;

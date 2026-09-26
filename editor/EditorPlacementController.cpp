@@ -1,4 +1,6 @@
 #include "EditorPlacementController.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "EditorComponents.hpp"
 #include "EditorTransformMath.hpp"
@@ -36,7 +38,7 @@ namespace sage::editor
         Matrix BuildPlacementMatrix(const Vector3 position, const float rotationY, const float scale)
         {
             return MatrixMultiply(
-                MatrixMultiply(MatrixScale(scale, scale, scale), MatrixRotateY(rotationY * DEG2RAD)),
+                MatrixMultiply(MatrixScale(scale, scale, scale), MatrixRotateY(rotationY * sage::math::DEGREES_TO_RADIANS)),
                 MatrixTranslate(position.x, position.y, position.z));
         }
 
@@ -216,9 +218,9 @@ namespace sage::editor
         DrawGrid(gridSlices, EDITOR_GRID_SPACING);
         rlPopMatrix();
 
-        DrawLine3D({0, 0.02f, 0}, {8, 0.02f, 0}, RED);
-        DrawLine3D({0, 0.02f, 0}, {0, 8, 0}, GREEN);
-        DrawLine3D({0, 0.02f, 0}, {0, 0.02f, 8}, BLUE);
+        DrawLine3D({0, 0.02f, 0}, {8, 0.02f, 0}, sage::colors::RED_COLOR);
+        DrawLine3D({0, 0.02f, 0}, {0, 8, 0}, sage::colors::GREEN_COLOR);
+        DrawLine3D({0, 0.02f, 0}, {0, 0.02f, 8}, sage::colors::BLUE_COLOR);
     }
 
     entt::entity EditorPlacementController::GridSurfaceEntity() const

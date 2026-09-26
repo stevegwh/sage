@@ -5,8 +5,6 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
-#define MAX_LIGHTS 50 // Max dynamic lights supported by shader
-
 namespace sage
 {
     class Camera;
@@ -14,6 +12,7 @@ namespace sage
 
     class LightManager
     {
+        static constexpr int MAX_LIGHT_COUNT = 50; // Must match the shader light array.
         entt::registry* registry;
         Camera* camera;
         Shader defaultShader{};

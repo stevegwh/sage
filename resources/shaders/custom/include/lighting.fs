@@ -1,7 +1,6 @@
-#define     MAX_LIGHTS              50
-#define     LIGHT_DIRECTIONAL       0
-#define     LIGHT_POINT             1
-
+const int MAX_LIGHTS = 50;
+const int LIGHT_DIRECTIONAL = 0;
+const int LIGHT_POINT = 1;
 struct Light {
     int enabled;
     int type;

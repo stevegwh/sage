@@ -27,7 +27,7 @@ namespace sage
                 cereal::make_nvp("ambient_green", ambient.y),
                 cereal::make_nvp("ambient_blue", ambient.z),
                 cereal::make_nvp("ambient_alpha", ambient.w),
-                CEREAL_NVP(gamma));
+                cereal::make_nvp("gamma", gamma));
         }
     };
 

@@ -3,6 +3,7 @@
 //
 
 #include "RenderSystem.hpp"
+#include "engine/Colors.hpp"
 
 #include "components/CustomShaderComponent.hpp"
 #include "components/DynamicRenderable.hpp"
@@ -92,7 +93,7 @@ namespace sage
         {
             rlDisableBackfaceCulling();
             rlDisableDepthMask();
-            DrawModel(model, Vector3Zero(), 1.0f, WHITE);
+            DrawModel(model, Vector3Zero(), 1.0f, sage::colors::WHITE_COLOR);
             rlEnableDepthMask();
             rlEnableBackfaceCulling();
         }

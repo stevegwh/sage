@@ -3,6 +3,7 @@
 //
 
 #include "EditorTransformEditor.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "EditorTransformMath.hpp"
 #include "engine/Camera.hpp"
@@ -507,15 +508,15 @@ namespace sage::editor
 
         if (axis == EditGizmo::Axis::X)
         {
-            rotationDelta = MatrixRotateX(amount * DEG2RAD);
+            rotationDelta = MatrixRotateX(amount * sage::math::DEGREES_TO_RADIANS);
         }
         else if (axis == EditGizmo::Axis::Z)
         {
-            rotationDelta = MatrixRotateZ(amount * DEG2RAD);
+            rotationDelta = MatrixRotateZ(amount * sage::math::DEGREES_TO_RADIANS);
         }
         else
         {
-            rotationDelta = MatrixRotateY(amount * DEG2RAD);
+            rotationDelta = MatrixRotateY(amount * sage::math::DEGREES_TO_RADIANS);
         }
 
         const Vector3 pivot = PivotWorldPosition(entities);
@@ -599,7 +600,7 @@ namespace sage::editor
 
             const Matrix entityMatrix = BuildRenderableEntityMatrix(
                 transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-            // Box colliders may have hand-authored bounds. Only mesh colliders
+            // Box colliders may have manually configured bounds. Only mesh colliders
             // derive their broad-phase box from the render model.
             if (collideable.shape == ColliderShape::RenderMesh && sys->registry->any_of<Renderable>(entity))
             {
@@ -680,7 +681,7 @@ namespace sage::editor
         auto& collideable = sys->registry->get<Collideable>(entity);
 
         // The handle is dragged in world units along the face's outward normal,
-        // but the box is authored in local space — divide out the entity's scale
+        // but the box is defined in local space — divide out the entity's scale
         // on that axis. Assumes an axis-aligned (unrotated) box, which holds for
         // trigger volumes and other meshless collideables.
         const Vector3 scale = transform.GetScale();

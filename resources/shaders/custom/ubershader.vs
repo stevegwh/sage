@@ -18,7 +18,7 @@ uniform mat4 matProjection;
 uniform mat4 matModel;
 uniform mat4 matNormal;
 
-#define MAX_BONE_NUM 128
+const int MAX_BONE_NUM = 128;
 uniform mat4 boneMatrices[MAX_BONE_NUM];
 
 // Output vertex attributes (to fragment shader)

@@ -1,4 +1,5 @@
 #include "EditorAssetCatalog.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "engine/raylib-cereal.hpp"
 #include "engine/ResourceManager.hpp"
@@ -285,7 +286,7 @@ namespace sage::editor
         const Matrix editableTransform = MatrixMultiply(
             MatrixMultiply(
                 MatrixScale(placeable.modelDefaultScale, placeable.modelDefaultScale, placeable.modelDefaultScale),
-                MatrixRotateY(placeable.modelDefaultRotationY * DEG2RAD)),
+                MatrixRotateY(placeable.modelDefaultRotationY * sage::math::DEGREES_TO_RADIANS)),
             MatrixTranslate(0.0f, placeable.modelDefaultHeightOffset, 0.0f));
 
         // Raymath composes these left-to-right. Apply the imported/model-space

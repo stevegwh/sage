@@ -2,6 +2,7 @@
 // Created by Steve Wheeler on 18/02/2024.
 //
 #include "CollisionSystem.hpp"
+#include "engine/Colors.hpp"
 
 #include "components/CollisionIntent.hpp"
 #include "components/Renderable.hpp"
@@ -214,10 +215,10 @@ namespace sage
                 c.debugDraw || registry->any_of<NavigationSurface, NavigationObstacle, TriggerVolume>(entity);
             if (draw)
             {
-                auto col = ORANGE;
-                if (registry->any_of<NavigationSurface>(entity)) col = GREEN;
-                if (registry->any_of<NavigationObstacle>(entity)) col = YELLOW;
-                if (registry->any_of<TriggerVolume>(entity)) col = BLUE;
+                auto col = sage::colors::ORANGE_COLOR;
+                if (registry->any_of<NavigationSurface>(entity)) col = sage::colors::GREEN_COLOR;
+                if (registry->any_of<NavigationObstacle>(entity)) col = sage::colors::YELLOW_COLOR;
+                if (registry->any_of<TriggerVolume>(entity)) col = sage::colors::BLUE_COLOR;
                 DrawBoundingBox(c.worldBoundingBox, col);
             }
         }

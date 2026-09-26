@@ -11,7 +11,7 @@
 
 namespace sage
 {
-    // Authored reference to a managed Sage.Script type. Runtime instances live in
+    // Reference to a managed Sage.Script type. Runtime instances live in
     // CSharpScriptSystem and are recreated for every Play session.
     struct ScriptComponent
     {
@@ -24,14 +24,14 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(className, enabled);
+            archive(cereal::make_nvp("className", className), cereal::make_nvp("enabled", enabled));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.scriptFile("Class", className);
-            i.field("Enabled", enabled);
+            i.scriptFile("class", "Class", className);
+            i.field("enabled", "Enabled", enabled);
         }
     };
 } // namespace sage

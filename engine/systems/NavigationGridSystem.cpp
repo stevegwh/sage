@@ -1,4 +1,6 @@
 #include "NavigationGridSystem.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "CollisionSystem.hpp"
 #include "components/CollisionIntent.hpp"
@@ -23,7 +25,7 @@
 
 namespace sage
 {
-    static constexpr float kMaxWalkableSlopeDegrees = 45.0f;
+    static constexpr float MAX_WALKABLE_SLOPE_DEGREES = 45.0f;
 
     static Vector3 calculateGridsquareCentre(Vector3 min, Vector3 max)
     {
@@ -35,7 +37,7 @@ namespace sage
     {
         const Vector3 up = {0.0f, 1.0f, 0.0f};
         const float dotProduct = normal.x * up.x + normal.y * up.y + normal.z * up.z;
-        return std::acos(dotProduct) * RAD2DEG;
+        return std::acos(dotProduct) * sage::math::RADIANS_TO_DEGREES;
     }
 
     inline double heuristic(GridSquare a, GridSquare b)
@@ -151,7 +153,7 @@ namespace sage
             for (int col = min_col; col <= max_col; ++col)
             {
                 const auto normal = gridSquares[row][col].heightMap.GetNormal();
-                if (slopeAngleDegrees(normal) > kMaxWalkableSlopeDegrees)
+                if (slopeAngleDegrees(normal) > MAX_WALKABLE_SLOPE_DEGREES)
                 {
                     gridSquares[row][col].occupied = occupied;
                     gridSquares[row][col].drawDebug = occupied;
@@ -994,7 +996,7 @@ namespace sage
 
             auto& cell = gridSquares[square.row][square.col];
             cell.drawDebug = true;
-            cell.debugColor = PURPLE;
+            cell.debugColor = sage::colors::PURPLE_COLOR;
 
             if (cell.occupant != entt::null)
             {

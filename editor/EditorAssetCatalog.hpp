@@ -40,12 +40,12 @@ namespace sage::editor
             void serialize(Archive& archive)
             {
                 archive(
-                    CEREAL_NVP(displayName),
-                    CEREAL_NVP(modelKey),
-                    CEREAL_NVP(modelDefaultHeightOffset),
-                    CEREAL_NVP(modelDefaultRotationY),
-                    CEREAL_NVP(modelDefaultScale),
-                    CEREAL_NVP(appliedModelDefaultTransform));
+                    cereal::make_nvp("displayName", displayName),
+                    cereal::make_nvp("modelKey", modelKey),
+                    cereal::make_nvp("modelDefaultHeightOffset", modelDefaultHeightOffset),
+                    cereal::make_nvp("modelDefaultRotationY", modelDefaultRotationY),
+                    cereal::make_nvp("modelDefaultScale", modelDefaultScale),
+                    cereal::make_nvp("appliedModelDefaultTransform", appliedModelDefaultTransform));
             }
         };
 

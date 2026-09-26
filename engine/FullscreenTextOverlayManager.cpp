@@ -1,3 +1,4 @@
+#include "engine/SimulationClock.hpp"
 //
 // Created by Steve Wheeler on 02/01/2025.
 //
@@ -72,7 +73,7 @@ namespace sage
 
     void FullscreenTextOverlayManager::Update()
     {
-        timer.Update(GetFrameTime());
+        timer.Update(sage::FrameTime());
         if (timer.HasFinished())
         {
             if (currentTextIdx + 1 < overlayText.size())

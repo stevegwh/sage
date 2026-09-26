@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include "cereal/cereal.hpp"
+#include "cereal/types/string.hpp"
 #include "engine/Event.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -31,14 +33,26 @@ namespace sage
         // of its rendered bounds, so yaw rotates the actor in place.
         bool hasCenteredTurnPivot = false;
 
+        // Persist configured movement settings; routes, flags and subscriptions are runtime state.
+        template <class Archive>
+        void serialize(Archive& archive)
+        {
+            archive(
+                cereal::make_nvp("movementSpeed", movementSpeed),
+                cereal::make_nvp("turnSpeed", turnSpeed),
+                cereal::make_nvp("pathfindingBounds", pathfindingBounds),
+                cereal::make_nvp("moveClip", moveClip),
+                cereal::make_nvp("idleClip", idleClip));
+        }
+
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.field("Movement Speed", movementSpeed);
-            i.field("Turn Speed", turnSpeed);
-            i.field("Pathfinding Bounds", pathfindingBounds);
-            i.clipDropdown("Move Clip", moveClip);
-            i.clipDropdown("Idle Clip", idleClip);
+            i.field("movement_speed", "Movement Speed", movementSpeed);
+            i.field("turn_speed", "Turn Speed", turnSpeed);
+            i.field("pathfinding_bounds", "Pathfinding Bounds", pathfindingBounds);
+            i.clipDropdown("move_clip", "Move Clip", moveClip);
+            i.clipDropdown("idle_clip", "Idle Clip", idleClip);
         }
 
         std::deque<Vector3> path{};

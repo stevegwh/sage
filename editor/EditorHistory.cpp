@@ -24,57 +24,6 @@
 
 namespace sage::editor
 {
-    namespace
-    {
-        bool vecEqual(const Vector3& a, const Vector3& b)
-        {
-            return a.x == b.x && a.y == b.y && a.z == b.z;
-        }
-
-        bool boxEqual(const BoundingBox& a, const BoundingBox& b)
-        {
-            return vecEqual(a.min, b.min) && vecEqual(a.max, b.max);
-        }
-
-        bool collideableEqual(const Collideable& a, const Collideable& b)
-        {
-            return a.isStatic == b.isStatic && a.active == b.active && a.shape == b.shape &&
-                   a.collisionLayer.bit == b.collisionLayer.bit &&
-                   boxEqual(a.localBoundingBox, b.localBoundingBox) &&
-                   boxEqual(a.worldBoundingBox, b.worldBoundingBox);
-        }
-
-        bool navigationSurfaceEqual(const NavigationSurface& a, const NavigationSurface& b)
-        {
-            return a.active == b.active && a.heightSource == b.heightSource;
-        }
-
-        bool navigationObstacleEqual(const NavigationObstacle& a, const NavigationObstacle& b)
-        {
-            return a.active == b.active;
-        }
-
-        bool triggerVolumeEqual(const TriggerVolume& a, const TriggerVolume& b)
-        {
-            return a.active == b.active && a.overlapMask == b.overlapMask;
-        }
-
-        bool cursorTargetEqual(const CursorTarget& a, const CursorTarget& b)
-        {
-            return a.cursor == b.cursor && a.hoverable == b.hoverable &&
-                   a.allowNavigationClickThrough == b.allowNavigationClickThrough;
-        }
-
-        bool lightEqual(const Light& a, const Light& b)
-        {
-            return a.type == b.type && a.enabled == b.enabled && vecEqual(a.position, b.position) &&
-                   vecEqual(a.target, b.target) && a.color.r == b.color.r && a.color.g == b.color.g &&
-                   a.color.b == b.color.b && a.color.a == b.color.a && a.brightness == b.brightness &&
-                   a.constant == b.constant && a.linear == b.linear && a.quadratic == b.quadratic;
-        }
-
-    } // namespace
-
     EditorHistory::EditorHistory(EngineSystems* _sys, const InspectorRegistry* _components, OnApplied _onApplied)
         : sys(_sys), components(_components), onApplied(std::move(_onApplied))
     {
@@ -87,73 +36,11 @@ namespace sage::editor
 
     bool EditorHistory::statesEqual(const EntityState& a, const EntityState& b)
     {
-        if (a.exists != b.exists) return false;
-        if (!a.exists) return true;
-        if (a.parentId != b.parentId || a.nextSiblingId != b.nextSiblingId || a.name != b.name)
-        {
-            return false;
-        }
-        if (!vecEqual(a.worldPos, b.worldPos) || !vecEqual(a.worldRot, b.worldRot) ||
-            !vecEqual(a.worldScale, b.worldScale))
-        {
-            return false;
-        }
-        if (a.isMapEntity != b.isMapEntity || a.isMapBase != b.isMapBase) return false;
-        if (a.hasCollideable != b.hasCollideable ||
-            (a.hasCollideable && !collideableEqual(a.collideable, b.collideable)))
-        {
-            return false;
-        }
-        if (a.hasNavigationSurface != b.hasNavigationSurface ||
-            (a.hasNavigationSurface && !navigationSurfaceEqual(a.navigationSurface, b.navigationSurface)))
-        {
-            return false;
-        }
-        if (a.hasNavigationObstacle != b.hasNavigationObstacle ||
-            (a.hasNavigationObstacle && !navigationObstacleEqual(a.navigationObstacle, b.navigationObstacle)))
-        {
-            return false;
-        }
-        if (a.hasTriggerVolume != b.hasTriggerVolume ||
-            (a.hasTriggerVolume && !triggerVolumeEqual(a.triggerVolume, b.triggerVolume)))
-        {
-            return false;
-        }
-        if (a.hasCursorTarget != b.hasCursorTarget ||
-            (a.hasCursorTarget && !cursorTargetEqual(a.cursorTarget, b.cursorTarget)))
-        {
-            return false;
-        }
-        if (a.hasRenderable != b.hasRenderable || a.renderableBlob != b.renderableBlob) return false;
-        if (a.hasLight != b.hasLight || (a.hasLight && !lightEqual(a.light, b.light))) return false;
-        if (a.hasAssetReference != b.hasAssetReference || a.assetKey != b.assetKey) return false;
-        if (a.hasMetaData != b.hasMetaData || (a.hasMetaData && a.metaData.tags != b.metaData.tags)) return false;
-        if (a.hasScript != b.hasScript ||
-            (a.hasScript && (a.script.className != b.script.className || a.script.enabled != b.script.enabled)))
-        {
-            return false;
-        }
-        if (a.hasAnimation != b.hasAnimation || (a.hasAnimation && a.animationModelKey != b.animationModelKey))
-        {
-            return false;
-        }
-        if (a.hasMoveableActor != b.hasMoveableActor ||
-            (a.hasMoveableActor && (a.moveableActorSpeed != b.moveableActorSpeed ||
-                                    a.moveableActorTurnSpeed != b.moveableActorTurnSpeed ||
-                                    a.moveableActorPathfindingBounds != b.moveableActorPathfindingBounds ||
-                                    a.moveableActorMoveClip != b.moveableActorMoveClip ||
-                                    a.moveableActorIdleClip != b.moveableActorIdleClip)))
-        {
-            return false;
-        }
-        if (a.hasTerrain != b.hasTerrain ||
-            (a.hasTerrain && (a.terrainResolution != b.terrainResolution ||
-                              a.terrainCellSize != b.terrainCellSize || a.terrainHeights != b.terrainHeights)))
-        {
-            return false;
-        }
-        if (a.persistentComponents != b.persistentComponents) return false;
-        return true;
+        return a.exists == b.exists &&
+               (!a.exists || (a.parentId == b.parentId && a.nextSiblingId == b.nextSiblingId &&
+                              a.isMapEntity == b.isMapEntity && a.isMapBase == b.isMapBase &&
+                              a.hasAssetReference == b.hasAssetReference && a.assetKey == b.assetKey &&
+                              a.contentJson == b.contentJson));
     }
 
     std::uint64_t EditorHistory::ensureId(const entt::entity entity)
@@ -165,6 +52,8 @@ namespace sage::editor
             nextPersistentId = std::max(nextPersistentId, pid->id + 1);
             return pid->id;
         }
+        for (const auto other : reg.view<PersistentEntityId>())
+            nextPersistentId = std::max(nextPersistentId, reg.get<PersistentEntityId>(other).id + 1);
         const auto id = nextPersistentId++;
         reg.emplace<PersistentEntityId>(entity, PersistentEntityId{id});
         return id;
@@ -209,10 +98,6 @@ namespace sage::editor
         s.exists = true;
 
         const auto& transform = reg.get<sgTransform>(entity);
-        s.name = transform.name;
-        s.worldPos = transform.GetWorldPos();
-        s.worldRot = transform.GetWorldRot();
-        s.worldScale = transform.GetScale();
 
         if (const auto parent = transform.GetParent();
             parent != entt::null && reg.valid(parent) && reg.all_of<sgTransform>(parent))
@@ -234,85 +119,13 @@ namespace sage::editor
         s.isMapEntity = reg.all_of<EditorMapEntity>(entity);
         s.isMapBase = reg.all_of<EditorMapBase>(entity);
 
-        if (reg.all_of<Collideable>(entity))
-        {
-            s.hasCollideable = true;
-            s.collideable = reg.get<Collideable>(entity);
-        }
-        if (reg.all_of<NavigationSurface>(entity))
-        {
-            s.hasNavigationSurface = true;
-            s.navigationSurface = reg.get<NavigationSurface>(entity);
-        }
-        if (reg.all_of<NavigationObstacle>(entity))
-        {
-            s.hasNavigationObstacle = true;
-            s.navigationObstacle = reg.get<NavigationObstacle>(entity);
-        }
-        if (reg.all_of<TriggerVolume>(entity))
-        {
-            s.hasTriggerVolume = true;
-            s.triggerVolume = reg.get<TriggerVolume>(entity);
-        }
-        if (reg.all_of<CursorTarget>(entity))
-        {
-            s.hasCursorTarget = true;
-            s.cursorTarget = reg.get<CursorTarget>(entity);
-        }
-        if (reg.all_of<Renderable>(entity))
-        {
-            s.hasRenderable = true;
-            std::ostringstream stream(std::ios::binary);
-            {
-                cereal::BinaryOutputArchive archive(stream);
-                archive(reg.get<Renderable>(entity));
-            }
-            s.renderableBlob = stream.str();
-        }
-        if (reg.all_of<Light>(entity))
-        {
-            s.hasLight = true;
-            s.light = reg.get<Light>(entity);
-        }
-        if (reg.all_of<AssetReference>(entity))
+        if (auto* asset = reg.try_get<AssetReference>(entity))
         {
             s.hasAssetReference = true;
-            s.assetKey = reg.get<AssetReference>(entity).assetKey;
+            s.assetKey = asset->assetKey;
         }
-        if (reg.all_of<ScriptComponent>(entity))
-        {
-            s.hasScript = true;
-            s.script = reg.get<ScriptComponent>(entity);
-        }
-        if (reg.all_of<Animation>(entity))
-        {
-            s.hasAnimation = true;
-            s.animationModelKey = reg.get<Animation>(entity).modelKey;
-        }
-        if (reg.all_of<MoveableActor>(entity))
-        {
-            const auto& moveable = reg.get<MoveableActor>(entity);
-            s.hasMoveableActor = true;
-            s.moveableActorSpeed = moveable.movementSpeed;
-            s.moveableActorTurnSpeed = moveable.turnSpeed;
-            s.moveableActorPathfindingBounds = moveable.pathfindingBounds;
-            s.moveableActorMoveClip = moveable.moveClip;
-            s.moveableActorIdleClip = moveable.idleClip;
-        }
-        if (reg.all_of<Terrain>(entity))
-        {
-            const auto& terrain = reg.get<Terrain>(entity);
-            s.hasTerrain = true;
-            s.terrainResolution = terrain.resolution;
-            s.terrainCellSize = terrain.cellSize;
-            s.terrainHeights = terrain.heights;
-        }
-        if (reg.all_of<MetaData>(entity))
-        {
-            s.hasMetaData = true;
-            s.metaData = reg.get<MetaData>(entity);
-        }
-        if (components != nullptr) s.persistentComponents = components->CapturePersistent(reg, entity);
+        auto document = content::Capture(reg, {entity}, "map", entt::null, true);
+        s.contentJson = json::Stringify(document["entities"][0]);
         return s;
     }
 
@@ -531,6 +344,14 @@ namespace sage::editor
             return undo ? delta.before : delta.after;
         };
 
+        for (const auto& delta : entry.deltas)
+        {
+            const auto& target = pick(delta);
+            if (!target.exists || idMap.contains(target.persistentId)) continue;
+            const auto entity = reg.create();
+            reg.emplace<PersistentEntityId>(entity, target.persistentId);
+            idMap[target.persistentId] = entity;
+        }
         // Pass 1: create / update every entity the target state says should exist.
         for (const auto& delta : entry.deltas)
         {
@@ -594,132 +415,15 @@ namespace sage::editor
         else if (reg.all_of<EditorMapBase>(entity))
             reg.remove<EditorMapBase>(entity);
 
-        // emplace (not replace) so TransformSystem's on_construct hook binds a fresh
-        // transform; an existing one is mutated in place.
-        if (!reg.all_of<sgTransform>(entity)) reg.emplace<sgTransform>(entity);
-        auto& transform = reg.get<sgTransform>(entity);
-        transform.name = target.name;
-        transform.position.world = target.worldPos;
-        transform.rotation.world = target.worldRot;
-        transform.scale.world = target.worldScale;
-
-        // Collideable: release the cells the current box occupies before swapping it,
-        // then re-mark from the restored box (handled after the replace, below).
         setNavigationOccupied(entity, false);
-        if (target.hasCollideable)
-            reg.emplace_or_replace<Collideable>(entity, target.collideable);
-        else if (reg.all_of<Collideable>(entity))
-            reg.remove<Collideable>(entity);
-
-        if (target.hasNavigationSurface)
-            reg.emplace_or_replace<NavigationSurface>(entity, target.navigationSurface);
-        else if (reg.all_of<NavigationSurface>(entity))
-            reg.remove<NavigationSurface>(entity);
-
-        if (target.hasNavigationObstacle)
-            reg.emplace_or_replace<NavigationObstacle>(entity, target.navigationObstacle);
-        else if (reg.all_of<NavigationObstacle>(entity))
-            reg.remove<NavigationObstacle>(entity);
-
-        if (target.hasTriggerVolume)
-            reg.emplace_or_replace<TriggerVolume>(entity, target.triggerVolume);
-        else if (reg.all_of<TriggerVolume>(entity))
-            reg.remove<TriggerVolume>(entity);
-
-        if (target.hasCursorTarget)
-            reg.emplace_or_replace<CursorTarget>(entity, target.cursorTarget);
-        else if (reg.all_of<CursorTarget>(entity))
-            reg.remove<CursorTarget>(entity);
-
-        if (target.hasRenderable)
-        {
-            std::istringstream stream(target.renderableBlob, std::ios::binary);
-            Renderable renderable;
-            {
-                cereal::BinaryInputArchive archive(stream);
-                archive(renderable);
-            }
-            reg.emplace_or_replace<Renderable>(entity, std::move(renderable));
-        }
-        else if (reg.all_of<Renderable>(entity))
-        {
-            reg.remove<Renderable>(entity);
-            if (reg.all_of<UberShaderComponent>(entity)) reg.remove<UberShaderComponent>(entity);
-        }
-        else if (reg.all_of<UberShaderComponent>(entity))
-        {
-            reg.remove<UberShaderComponent>(entity);
-        }
-
-        if (target.hasLight)
-            reg.emplace_or_replace<Light>(entity, target.light);
-        else if (reg.all_of<Light>(entity))
-            reg.remove<Light>(entity);
-
+        std::unordered_map<std::uint32_t, entt::entity> references;
+        for (const auto& [id, handle] : idMap)
+            references.emplace(static_cast<std::uint32_t>(id), handle);
+        content::RestoreEntity(reg, entity, json::Parse(target.contentJson), references);
         if (target.hasAssetReference)
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});
-        else if (reg.all_of<AssetReference>(entity))
+        else
             reg.remove<AssetReference>(entity);
-
-        if (target.hasScript)
-            reg.emplace_or_replace<ScriptComponent>(entity, target.script);
-        else if (reg.all_of<ScriptComponent>(entity))
-            reg.remove<ScriptComponent>(entity);
-
-        if (target.hasAnimation)
-        {
-            // Animation is neither copyable nor movable (live Subscriptions hold
-            // its address), so replace by remove + emplace.
-            const auto* current = reg.try_get<Animation>(entity);
-            if (current == nullptr || current->modelKey != target.animationModelKey)
-            {
-                reg.remove<Animation>(entity);
-                reg.emplace<Animation>(entity, target.animationModelKey);
-            }
-        }
-        else if (reg.all_of<Animation>(entity))
-        {
-            reg.remove<Animation>(entity);
-        }
-
-        if (target.hasMoveableActor)
-        {
-            auto& moveable = reg.get_or_emplace<MoveableActor>(entity);
-            moveable.movementSpeed = target.moveableActorSpeed;
-            moveable.turnSpeed = target.moveableActorTurnSpeed;
-            moveable.pathfindingBounds = target.moveableActorPathfindingBounds;
-            moveable.moveClip = target.moveableActorMoveClip;
-            moveable.idleClip = target.moveableActorIdleClip;
-        }
-        else if (reg.all_of<MoveableActor>(entity))
-        {
-            reg.remove<MoveableActor>(entity);
-        }
-
-        if (target.hasTerrain)
-        {
-            auto& terrain = reg.get_or_emplace<Terrain>(entity);
-            terrain.resolution = target.terrainResolution;
-            terrain.cellSize = target.terrainCellSize;
-            terrain.heights = target.terrainHeights;
-            // The derived DynamicRenderable is rebuilt by the OnApplied callback
-            // (EditorScene::onHistoryApplied).
-        }
-        else if (reg.all_of<Terrain>(entity))
-        {
-            reg.remove<Terrain>(entity);
-            if (reg.all_of<DynamicRenderable>(entity)) reg.remove<DynamicRenderable>(entity);
-        }
-
-        if (target.hasMetaData)
-            reg.emplace_or_replace<MetaData>(entity, target.metaData);
-        else if (target.isMapEntity)
-            reg.emplace_or_replace<MetaData>(entity);
-        else if (reg.all_of<MetaData>(entity))
-            reg.remove<MetaData>(entity);
-
-        if (components != nullptr) components->RestorePersistent(reg, entity, target.persistentComponents);
-
         setNavigationOccupied(entity, true);
     }
 

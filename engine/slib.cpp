@@ -3,6 +3,8 @@
 //
 
 #include "slib.hpp"
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "components/UberShaderComponent.hpp"
 #include "raymath.h"
@@ -28,7 +30,7 @@ namespace sage
 
         Color TintMaterialColor(const Color color, const Color tint)
         {
-            Color colorTint = WHITE;
+            Color colorTint = sage::colors::WHITE_COLOR;
             colorTint.r = static_cast<unsigned char>((static_cast<int>(color.r) * static_cast<int>(tint.r)) / 255);
             colorTint.g = static_cast<unsigned char>((static_cast<int>(color.g) * static_cast<int>(tint.g)) / 255);
             colorTint.b = static_cast<unsigned char>((static_cast<int>(color.b) * static_cast<int>(tint.b)) / 255);
@@ -41,8 +43,8 @@ namespace sage
     {
         return MatrixMultiply(
             MatrixMultiply(
-                MatrixRotateZ(eulerDegrees.z * DEG2RAD), MatrixRotateY(eulerDegrees.y * DEG2RAD)),
-            MatrixRotateX(eulerDegrees.x * DEG2RAD));
+                MatrixRotateZ(eulerDegrees.z * sage::math::DEGREES_TO_RADIANS), MatrixRotateY(eulerDegrees.y * sage::math::DEGREES_TO_RADIANS)),
+            MatrixRotateX(eulerDegrees.x * sage::math::DEGREES_TO_RADIANS));
     }
 
     const Image& ImageSafe::GetImage() const
@@ -322,7 +324,7 @@ namespace sage
         const Color& tint) const
     {
         const Matrix matScale = MatrixScale(scale.x, scale.y, scale.z);
-        const Matrix matRotation = MatrixRotate(rotationAxis, rotationAngle * DEG2RAD);
+        const Matrix matRotation = MatrixRotate(rotationAxis, rotationAngle * sage::math::DEGREES_TO_RADIANS);
         const Matrix matTranslation = MatrixTranslate(position.x, position.y, position.z);
         const Matrix matTransform = MatrixMultiply(MatrixMultiply(matScale, matRotation), matTranslation);
         auto model = rlmodel;
@@ -350,7 +352,7 @@ namespace sage
                 SetShaderValue(model.materials[i].shader, uber->colEmissiveLoc, &values, SHADER_UNIFORM_VEC4);
             }
             const Color color = model.materials[model.meshMaterial[i]].maps[MATERIAL_MAP_DIFFUSE].color;
-            auto colorTint = WHITE;
+            auto colorTint = sage::colors::WHITE_COLOR;
             colorTint.r = static_cast<unsigned char>((static_cast<int>(color.r) * static_cast<int>(tint.r)) / 255);
             colorTint.g = static_cast<unsigned char>((static_cast<int>(color.g) * static_cast<int>(tint.g)) / 255);
             colorTint.b = static_cast<unsigned char>((static_cast<int>(color.b) * static_cast<int>(tint.b)) / 255);
@@ -606,7 +608,7 @@ namespace sage
      */
     Image GenImageGradientRadialTrans(int width, int height, float density, Color inner, Color outer)
     {
-        auto* pixels = static_cast<Color*>(RL_MALLOC(width * height * sizeof(Color)));
+        auto* pixels = static_cast<Color*>(MemAlloc(width * height * sizeof(Color)));
         float radius = (width < height) ? static_cast<float>(width) / 2.0f : static_cast<float>(height) / 2.0f;
 
         float centerX = static_cast<float>(width) / 2.0f;

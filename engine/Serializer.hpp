@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include <stdexcept>
 
 #include "ViewSerializer.hpp"
 
@@ -159,8 +160,8 @@ namespace sage::serializer
     }
 
     // Per-file-type magic prefixes for compressed binaries. Bumped if on-disk layout changes.
-    inline constexpr char kAssetBinMagic[4] = {'L', 'Q', 'B', '2'};
-    inline constexpr char kMapBinMagic[4] = {'L', 'Q', 'M', '2'};
+    inline constexpr char ASSET_BIN_MAGIC[4] = {'L', 'Q', 'B', '2'};
+    inline constexpr char MAP_BIN_MAGIC[4] = {'L', 'Q', 'M', '2'};
 
     // Writes a 20-byte header (magic + uncompressed size + compressed size) followed by a
     // DEFLATE-compressed cereal binary payload. The lambda receives a BinaryOutputArchive and
@@ -219,7 +220,7 @@ namespace sage::serializer
         if (!storage.is_open())
         {
             std::cerr << "ERROR: Unable to open file for reading." << std::endl;
-            exit(1);
+            throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
         }
 
         char fileMagic[4]{};
@@ -234,9 +235,17 @@ namespace sage::serializer
             std::cerr << "ERROR: file magic mismatch at " << path << " (got '"
                       << std::string(fileMagic, 4) << "', expected '" << std::string(magic, 4) << "')."
                       << std::endl;
-            exit(1);
+            throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
         }
 
+        constexpr std::uint64_t maxBytes = 512ull * 1024 * 1024;
+        if (!storage || compressedSize == 0 || compressedSize > maxBytes || uncompressedSize > maxBytes)
+            throw std::runtime_error(std::string("Invalid compressed asset size: ") + path);
+        const auto payloadStart = storage.tellg();
+        storage.seekg(0, std::ios::end);
+        if (static_cast<std::uint64_t>(storage.tellg() - payloadStart) != compressedSize)
+            throw std::runtime_error(std::string("Truncated compressed asset: ") + path);
+        storage.seekg(payloadStart);
         std::vector<unsigned char> compBuf(compressedSize);
         storage.read(reinterpret_cast<char*>(compBuf.data()), static_cast<std::streamsize>(compressedSize));
         storage.close();
@@ -249,7 +258,7 @@ namespace sage::serializer
             std::cerr << "ERROR: DecompressData failed (got " << decompSize << ", expected "
                       << uncompressedSize << ")." << std::endl;
             if (decompData) MemFree(decompData);
-            exit(1);
+            throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
         }
 
         std::string decompStr(reinterpret_cast<const char*>(decompData), uncompressedSize);
@@ -266,7 +275,7 @@ namespace sage::serializer
     bool SaveClassBinary(const char* path, const T& toSave)
     {
         std::cout << "START: Saving class data to binary file." << std::endl;
-        const bool ok = WriteCompressedBinary(path, kAssetBinMagic, [&](cereal::BinaryOutputArchive& output) {
+        const bool ok = WriteCompressedBinary(path, ASSET_BIN_MAGIC, [&](cereal::BinaryOutputArchive& output) {
             output(toSave);
         });
         std::cout << "FINISH: Saving class data to binary file." << std::endl;

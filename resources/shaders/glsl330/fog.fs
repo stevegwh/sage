@@ -15,10 +15,9 @@ out vec4 finalColor;
 
 // NOTE: Add here your custom variables
 
-#define     MAX_LIGHTS              4
-#define     LIGHT_DIRECTIONAL       0
-#define     LIGHT_POINT             1
-
+const int MAX_LIGHTS = 4;
+const int LIGHT_DIRECTIONAL = 0;
+const int LIGHT_POINT = 1;
 struct MaterialProperty {
     vec3 color;
     int useSampler;

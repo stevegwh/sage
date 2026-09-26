@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include "cereal/types/string.hpp"
 #include "entt/entt.hpp"
 
@@ -18,7 +20,7 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(tags);
+            archive(cereal::make_nvp("tags", tags));
         }
 
         template <class Inspector>
@@ -26,7 +28,7 @@ namespace sage
         {
             // Dropdown sourced from the project's scene tags
             // (sage::CustomSceneTags) rather than free-text entry.
-            i.tagSet("Tags", tags);
+            i.tagSet("tags", "Tags", tags);
         }
     };
 

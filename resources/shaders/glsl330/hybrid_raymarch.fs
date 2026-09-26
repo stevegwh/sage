@@ -13,9 +13,7 @@ uniform vec3 camPos;
 uniform vec3 camDir;
 uniform vec2 screenCenter;
 
-#define ZERO 0
-
-// https://learnopengl.com/Advanced-OpenGL/Depth-testing
+const int ZERO = 0; // https://learnopengl.com/Advanced-OpenGL/Depth-testing
 float CalcDepth(in vec3 rd, in float Idist){
     float local_z = dot(normalize(camDir),rd)*Idist;
     return (1.0/(local_z) - 1.0/0.01)/(1.0/1000.0 -1.0/0.01);

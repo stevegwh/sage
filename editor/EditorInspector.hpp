@@ -159,6 +159,8 @@ namespace sage::editor
         std::vector<EditorComponentId> incompatibleComponents_;
         std::string labelPrefix_;
         bool editableScope_ = true;
+        void stringDropdown(
+            const std::string& label, std::string& value, std::vector<std::string> options, bool editable);
         // The entity being described; lets bespoke fields source options from
         // sibling components (e.g. clipDropdown reads the entity's Animation).
         entt::registry* contextRegistry_ = nullptr;
@@ -198,6 +200,75 @@ namespace sage::editor
         void incompatibleComponent()
         {
             incompatibleComponents_.push_back(ComponentIdOf<T>());
+        }
+
+        template <class T, class... Options>
+        void field(const std::string&, const std::string& label, T& value, Options&&... options)
+        {
+            field(label, value, std::forward<Options>(options)...);
+        }
+        void boundedCollection(
+            const std::string&,
+            std::string label,
+            std::size_t count,
+            std::size_t maximum,
+            std::function<void()> add,
+            std::function<void()> remove)
+        {
+            boundedCollection(std::move(label), count, maximum, std::move(add), std::move(remove));
+        }
+        template <class T>
+        void scriptFile(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            scriptFile(label, value, editable);
+        }
+
+        template <class T>
+        void vertexShaderFile(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            vertexShaderFile(label, value, editable);
+        }
+
+        template <class T>
+        void fragmentShaderFile(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            fragmentShaderFile(label, value, editable);
+        }
+
+        template <class T>
+        void textureDropdown(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            textureDropdown(label, value, editable);
+        }
+
+        template <class T>
+        void particleTextureDropdown(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            particleTextureDropdown(label, value, editable);
+        }
+
+        template <class T>
+        void tagSet(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            tagSet(label, value, editable);
+        }
+
+        template <class T>
+        void clipDropdown(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            clipDropdown(label, value, editable);
+        }
+
+        template <class T>
+        void cursorDropdown(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            cursorDropdown(label, value, editable);
+        }
+
+        template <class T>
+        void archetypeDropdown(const std::string&, const std::string& label, T& value, bool editable = true)
+        {
+            archetypeDropdown(label, value, editable);
         }
 
         // --- Informational row ---------------------------------------------------------
@@ -298,6 +369,7 @@ namespace sage::editor
             shaderFile(std::move(label), path, ShaderFileSlot::Fragment, rw);
         }
         void textureDropdown(const std::string& label, std::string& value, bool rw = true);
+        void particleTextureDropdown(const std::string& label, std::string& value, bool rw = true);
         void field(std::string label, Vector2& v, bool rw = true)
         {
             addLeaf(std::move(label), &v, rw);
@@ -326,7 +398,7 @@ namespace sage::editor
         // Bespoke: dropdown sourced from GetCollisionLayers(). Stored as EnumField.
         void field(const std::string& label, sage::CollisionLayer& v, bool rw = true);
 
-        // Bespoke: dropdown of the project's scene tags (sage::CustomSceneTags),
+        // Bespoke: dropdown of the project's scene tags (sage::CUSTOM_SCENE_TAGS),
         // sourced like the CollisionLayer field. `tags` is the MetaData::tags
         // string; picking an option replaces it. Stored as EnumField.
         void tagSet(const std::string& label, std::string& tags, bool rw = true);
@@ -337,7 +409,7 @@ namespace sage::editor
         void clipDropdown(const std::string& label, std::string& value, bool rw = true);
 
         // Bespoke: dropdown of cursor keys — the engine's own cursors plus the
-        // project's (sage::CustomCursors) — for a CursorTarget::cursor key. Sourced
+        // project's (sage::CUSTOM_CURSORS) — for a CursorTarget::cursor key. Sourced
         // like tagSet; the current value stays selectable even if unlisted. Stored
         // as EnumField.
         void cursorDropdown(const std::string& label, std::string& value, bool rw = true);
@@ -396,6 +468,7 @@ namespace sage::editor
 
         // --- Composite template --------------------------------------------------------
         template <class T>
+            requires (!std::is_array_v<T> && !std::is_enum_v<T>)
         void field(std::string label, T& v, bool rw = true)
         {
             const auto savedPrefix = labelPrefix_;

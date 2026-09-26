@@ -21,7 +21,7 @@ namespace sage::serializer
 
         std::unordered_map<std::uint32_t, entt::entity> idMap;
 
-        ReadCompressedBinary(path, kAssetBinMagic, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
+        ReadCompressedBinary(path, ASSET_BIN_MAGIC, [&](cereal::BinaryInputArchive& input, std::istream& stream) {
             input(ResourceManager::GetInstance());
 
             // Not necessary for asset bin?

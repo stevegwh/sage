@@ -1,6 +1,7 @@
 #pragma once
 
 #include "raylib.h"
+#include "engine/Colors.hpp"
 
 #include <functional>
 #include <memory>
@@ -57,22 +58,22 @@ namespace sage
 
     struct CellStyle
     {
-        Color background = BLANK;
-        Color hoveredBackground = BLANK;
-        Color pressedBackground = BLANK;
-        Color border = BLANK;
+        Color background = sage::colors::BLANK_COLOR;
+        Color hoveredBackground = sage::colors::BLANK_COLOR;
+        Color pressedBackground = sage::colors::BLANK_COLOR;
+        Color border = sage::colors::BLANK_COLOR;
         float borderWidth = 0;
         Font font{};
         float fontSize = 16;
         float fontSpacing = 1;
-        Color textColor = BLACK;
+        Color textColor = sage::colors::BLACK_COLOR;
         HorizontalAlignment horizontalAlignment = HorizontalAlignment::LEFT;
         VerticalAlignment verticalAlignment = VerticalAlignment::MIDDLE;
     };
 
     struct WindowStyle
     {
-        Color background = BLANK;
+        Color background = sage::colors::BLANK_COLOR;
         Texture backgroundTexture{};
         Padding padding{};
     };

@@ -86,7 +86,7 @@ namespace sage::editor
 
         // Rebuilds collision bounds for `entity` alone. Used when an inspector
         // edit invalidates one entity's box (e.g. switching its layer to mesh
-        // collision) without touching descendants' possibly hand-authored boxes.
+        // collision) without touching descendants' possibly manually configured boxes.
         void RefreshCollisionBounds(entt::entity entity) const
         {
             refitEntityCollisionBounds(entity);

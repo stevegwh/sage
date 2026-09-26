@@ -7,6 +7,7 @@
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/MoveableActor.hpp"
+#include "engine/components/ParticleEmitterComponent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <utility>
@@ -325,7 +327,7 @@ namespace sage::editor
         // current tag if it isn't one of them, so saved values stay selectable.
         EnumField e{.data = &tags};
         e.options.emplace_back("(none)");
-        for (const auto& tag : CustomSceneTags)
+        for (const auto& tag : CUSTOM_SCENE_TAGS)
             e.options.emplace_back(tag);
 
         const auto current = std::string{TrimSceneTag(SceneTagText(tags))};
@@ -351,7 +353,7 @@ namespace sage::editor
     void ComponentInspector::cursorDropdown(const std::string& label, std::string& value, const bool ed)
     {
         // A cursor key chosen from the engine's own cursors plus the project's
-        // (sage::CustomCursors), rendered as a dropdown via EnumField (same path as
+        // (sage::CUSTOM_CURSORS), rendered as a dropdown via EnumField (same path as
         // tagSet). The current value is appended if it isn't one of the known keys,
         // so saved values stay selectable.
         EnumField e{.data = &value};
@@ -361,7 +363,7 @@ namespace sage::editor
         addOption(cursors::Regular);
         addOption(cursors::Move);
         addOption(cursors::Denied);
-        for (const auto& key : CustomCursors)
+        for (const auto& key : CUSTOM_CURSORS)
             addOption(key);
         if (!value.empty()) addOption(value);
 
@@ -376,14 +378,14 @@ namespace sage::editor
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
     }
 
-    void ComponentInspector::textureDropdown(const std::string& label, std::string& value, const bool rw)
+    void ComponentInspector::stringDropdown(
+        const std::string& label, std::string& value, std::vector<std::string> options, const bool editable)
     {
-        EnumField field{.data = &value};
-        field.options = ResourceManager::GetInstance().GetImageKeys("T_");
-        field.options.insert(field.options.begin(), "(none)");
-        if (!value.empty() && std::ranges::find(field.options, value) == field.options.end())
-            field.options.push_back(value);
+        options.insert(options.begin(), "(none)");
+        if (!value.empty() && std::ranges::find(options, value) == options.end())
+            options.push_back(value);
 
+        EnumField field{.data = &value, .options = std::move(options)};
         field.getIndex = [&value, options = field.options]() {
             const auto& selected = value.empty() ? options.front() : value;
             const auto found = std::ranges::find(options, selected);
@@ -392,9 +394,25 @@ namespace sage::editor
         field.setIndex = [&value, options = field.options](const std::size_t index) {
             if (index < options.size()) value = index == 0 ? std::string{} : options[index];
         };
-
         fields_.push_back(
-            {.label = qualified(label), .editable = rw && editableScope_, .value = std::move(field)});
+            {.label = qualified(label), .editable = editable && editableScope_, .value = std::move(field)});
+    }
+
+    void ComponentInspector::textureDropdown(const std::string& label, std::string& value, const bool rw)
+    {
+        stringDropdown(label, value, ResourceManager::GetInstance().GetImageKeys("T_"), rw);
+    }
+
+    void ComponentInspector::particleTextureDropdown(const std::string& label, std::string& value, const bool rw)
+    {
+        std::vector<std::string> options;
+        const std::filesystem::path directory{ParticleTextureDirectory};
+        if (std::filesystem::exists(directory))
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(directory))
+                if (entry.is_regular_file() && entry.path().extension() == ".png")
+                    options.push_back(entry.path().lexically_relative(directory).generic_string());
+        std::ranges::sort(options);
+        stringDropdown(label, value, std::move(options), rw);
     }
 
     void ComponentInspector::archetypeDropdown(const std::string& label, sage::Archetype& v, const bool ed)
@@ -451,7 +469,7 @@ namespace sage::editor
         }
         else if (!value.empty() && std::ranges::find(e.options, value) == e.options.end())
         {
-            // Keep an authored value that matches no clip visible and selected
+            // Keep a configured value that matches no clip visible and selected
             // rather than silently displaying the first clip.
             e.options.insert(e.options.begin(), value);
         }
@@ -808,6 +826,7 @@ namespace sage::editor
         registry.Register<MetaData>("Meta Data");
         registry.Register<Renderable>("Renderable", true, true);
         registry.RegisterPersistent<CustomShaderComponent>("Custom Shader", "sage.CustomShader", true, true);
+        registry.RegisterPersistent<ParticleEmitterComponent>("Particle System", "sage.ParticleEmitter", true, true);
         registry.Register<Collideable>("Collideable", true, true);
         registry.Register<NavigationSurface>("Navigation Surface", true, true);
         registry.Register<NavigationObstacle>("Navigation Obstacle", true, true);

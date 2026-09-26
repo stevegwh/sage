@@ -10,5 +10,5 @@
 
 namespace sage
 {
-    inline constexpr std::array<CursorKey, 0> CustomCursors{};
+    inline constexpr std::array<CursorKey, 0> CUSTOM_CURSORS{};
 } // namespace sage

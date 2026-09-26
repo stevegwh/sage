@@ -65,6 +65,8 @@ namespace sage
             void NewMap();
             void LoadMap(const std::filesystem::path& path);
             void SaveMap();
+            void SaveAs(const std::filesystem::path& path) { saveMapAs(path); }
+            const std::filesystem::path& Path() const { return currentMapPath; }
             void RestoreLastOpenedMap();
 
             [[nodiscard]] bool HasUnsavedChanges() const;

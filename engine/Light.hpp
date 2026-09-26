@@ -3,6 +3,9 @@
 //
 
 #pragma once
+#include "cereal/archives/json.hpp"
+
+#include "cereal/cereal.hpp"
 
 // #include "raylib-cereal.hpp"
 #include "raylib.h"
@@ -65,21 +68,23 @@ namespace sage
         template <typename Archive>
         void serialize(Archive& archive)
         {
-            archive(type, position, target, color, brightness);
+            archive(cereal::make_nvp("type", type), cereal::make_nvp("position", position), cereal::make_nvp("target", target), cereal::make_nvp("color", color), cereal::make_nvp("brightness", brightness));
+            if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
+                archive(cereal::make_nvp("enabled", enabled), cereal::make_nvp("constant", constant), cereal::make_nvp("linear", linear), cereal::make_nvp("quadratic", quadratic));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
-            i.field("Enabled", enabled);
-            i.field("Type", type);
-            i.field("Position", position);
-            i.field("Target", target);
-            i.field("Color", color);
-            i.field("Brightness", brightness);
-            i.field("Constant", constant);
-            i.field("Linear", linear);
-            i.field("Quadratic", quadratic);
+            i.field("enabled", "Enabled", enabled);
+            i.field("type", "Type", type);
+            i.field("position", "Position", position);
+            i.field("target", "Target", target);
+            i.field("color", "Color", color);
+            i.field("brightness", "Brightness", brightness);
+            i.field("constant", "Constant", constant);
+            i.field("linear", "Linear", linear);
+            i.field("quadratic", "Quadratic", quadratic);
         }
     };
 } // namespace sage

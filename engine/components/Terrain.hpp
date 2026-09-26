@@ -1,5 +1,7 @@
 #pragma once
 
+#include "cereal/cereal.hpp"
+
 #include "cereal/types/vector.hpp"
 #include "raylib.h"
 
@@ -7,7 +9,7 @@
 
 namespace sage
 {
-    // Editor-authored height-field terrain. The grid is local to the owning
+    // Editor-created height-field terrain. The grid is local to the owning
     // entity: vertex (row, col) sits at (col * cellSize, height, row * cellSize)
     // relative to the entity's world position. Rotation and scale are not
     // supported. The DynamicRenderable mesh is derived from this data and never
@@ -33,7 +35,7 @@ namespace sage
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(resolution, cellSize, heights);
+            archive(cereal::make_nvp("resolution", resolution), cereal::make_nvp("cellSize", cellSize), cereal::make_nvp("heights", heights));
         }
     };
 } // namespace sage
