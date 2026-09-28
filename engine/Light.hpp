@@ -26,10 +26,9 @@ namespace sage
         Vector3 target;
         Color color;
         float brightness;
-        // TODO: Allow user to set below values
-        float constant = 0;
-        float linear = 1.0;
-        float quadratic = 0.5;
+        float constant = 1.0f;
+        float linear = 0.025f;
+        float quadratic = 0.004f;
 
         void LinkShader(const Shader shader, const int lightsCount) const
         {

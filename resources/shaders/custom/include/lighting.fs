@@ -22,7 +22,7 @@ uniform float gamma;
 
 vec4 Lighting_CalculateLighting(vec4 texelColor)
 {
-    vec3 lightDot = vec3(0.0);
+    vec3 diffuse = vec3(0.0);
     vec3 normal = normalize(fragNormal);
     vec3 viewD = normalize(viewPos - fragPosition);
     vec3 specular = vec3(0.0);
@@ -47,35 +47,23 @@ vec4 Lighting_CalculateLighting(vec4 texelColor)
 
                 float distance = length(lightVector);
 
-                // https://developer.valvesoftware.com/wiki/Constant-Linear-Quadratic_Falloff
-                // constant (I = 1)
-                float constant = lights[i].constant * (1.0);
-                // linear (I = 1/d)
-                float linear = lights[i].linear * (1.0/distance);
-                // quadratic (I = 100/d^2)
-                float quadratic = lights[i].quadratic * (100.0/(distance*distance));
-                
-                attenuation = constant + linear + quadratic;
+                float falloff = lights[i].constant + lights[i].linear * distance
+                    + lights[i].quadratic * distance * distance;
+                attenuation = 1.0 / max(falloff, 1.0);
             }
 
             float NdotL = max(dot(normal, light), 0.0);
-            lightDot += lights[i].color.rgb * NdotL * attenuation * strength;
+            vec3 lightColor = lights[i].color.rgb * attenuation * strength;
+            diffuse += lightColor * NdotL;
 
             float specCo = 0.0;
             if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(light), normal))), 16.0);// 16 refers to shine
-            specCo *= 0.5;
-            specular += specCo * attenuation * strength;
+            specular += lightColor * specCo * 0.5;
         }
     }
 
-    // Combine lighting with texel color and vertex color
-    vec4 final = (texelColor * ((colDiffuse + vec4(specular, 1.0)) * vec4(lightDot, 1.0)));
-    final += texelColor * (ambient/10.0) * colDiffuse;
-
-    // Apply vertex color
-    final *= fragColor;
-
-    // Gamma correction
-    final = pow(final, vec4(1.0/gamma));
-    return final;
+    vec3 baseColor = texelColor.rgb * colDiffuse.rgb;
+    vec3 litColor = (baseColor * (ambient.rgb / 10.0 + diffuse) + specular) * fragColor.rgb;
+    vec3 correctedColor = pow(max(litColor, vec3(0.0)), vec3(1.0 / gamma));
+    return vec4(correctedColor, texelColor.a * colDiffuse.a * fragColor.a);
 }
