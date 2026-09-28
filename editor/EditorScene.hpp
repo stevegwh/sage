@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorAssetCatalog.hpp"
+#include "EditorCamera.hpp"
 #include "CSharpScriptEditorConfig.hpp"
 #include "EditorEntityOperations.hpp"
 #include "EditorFlatpackEditSession.hpp"
@@ -89,8 +90,9 @@ namespace sage
         mutable LightSettings lightSettingsDraft{};
         mutable bool newMapRequested = false;
         mutable std::string newCollisionLayerName;
-        mutable bool orbitingCamera = false;
-        mutable bool panningCamera = false;
+        mutable bool middleCameraDrag = false;
+        mutable bool rightCameraDrag = false;
+        mutable editor::EditorCamera editorCamera;
         void applyLitShaderToLoadedRenderables() const;
         void giveTransformsToLights() const;
         void refreshOverlay() const;
@@ -163,7 +165,8 @@ namespace sage
 
         void focusSelectedObject() const;
         void focusSelectedObjectInHierarchy() const;
-        void handleMouseCameraControls() const;
+        void handleMouseCameraControls(bool canBeginDrag) const;
+        void setCameraMode(editor::CameraMode mode) const;
 
         [[nodiscard]] const editor::PlaceableAsset& selectedPlaceable() const;
         [[nodiscard]] bool isPlaceState() const;

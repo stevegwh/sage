@@ -1,31 +1,18 @@
 #include "Flatpack.hpp"
-#include "content/FlatpackRecords.hpp"
 #include "content/ContentDocument.hpp"
 
-#include "Archetypes.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
-#include "engine/components/CollisionIntent.hpp"
 #include "engine/components/CustomShaderComponent.hpp"
-#include "engine/components/MoveableActor.hpp"
 #include "engine/components/ParticleEmitterComponent.hpp"
 #include "engine/components/Renderable.hpp"
-#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/UberShaderComponent.hpp"
-#include "engine/Light.hpp"
-#include "engine/ResourceManager.hpp"
-#include "engine/Serializer.hpp"
 
-#include "cereal/types/string.hpp"
-#include "cereal/types/vector.hpp"
 #include "raymath.h"
 
 #include <algorithm>
 #include <cstdint>
-#include <cstring>
-#include <format>
-#include <fstream>
 #include <iostream>
 #include <unordered_map>
 
@@ -33,50 +20,11 @@ namespace sage
 {
     namespace
     {
-        constexpr char FLATPACK_MAGIC[4] = {'L', 'Q', 'F', '6'};
-        constexpr char VERSION_FIVE_FLATPACK_MAGIC[4] = {'L', 'Q', 'F', '5'};
-        constexpr char VERSION_FOUR_FLATPACK_MAGIC[4] = {'L', 'Q', 'F', '4'};
-        constexpr char VERSION_THREE_FLATPACK_MAGIC[4] = {'L', 'Q', 'F', '3'};
-        constexpr char VERSION_TWO_FLATPACK_MAGIC[4] = {'L', 'Q', 'F', '2'};
-        constexpr char LEGACY_FLATPACK_MAGIC[4] = {'L', 'Q', 'F', 'P'};
-
         std::vector<detail::ComponentOperations>& ComponentOperationsRegistry()
         {
             static std::vector<detail::ComponentOperations> registrations;
             return registrations;
         }
-
-        // A serialized entity from the source registry. parentLocalId points into
-        // this same vector (-1 for the root). Transform values are captured as
-        // plain Vector3 (rather than sgTransform itself) so saving doesn't have
-        // to touch the registry-bound proxies on the source transforms.
-        // Component blobs are flagged so we can leave optional components empty
-        // when the source entity doesn't carry them.
-        using namespace content_binary;
-
-        template <class Data>
-        Data ReadMigrationFlatpack(const std::filesystem::path& path, const char (&magic)[4])
-        {
-            Data data;
-            sage::serializer::ReadCompressedBinary(
-                path.string().c_str(), magic,
-                [&data](cereal::BinaryInputArchive& input, std::istream&) { data.archive(input); });
-            return data;
-        }
-
-        template <class Left, class Right>
-        bool SameComponentPayloads(const Left& left, const Right& right)
-        {
-            if (left.customComponents.size() != right.customComponents.size()) return false;
-            for (std::size_t index = 0; index < left.customComponents.size(); ++index)
-            {
-                const auto& lhs = left.customComponents[index];
-                const auto& rhs = right.customComponents[index];
-                if (lhs.localId != rhs.localId || lhs.key != rhs.key || lhs.data != rhs.data) return false;
-            }
-            return true;
-        }
-
     } // namespace
 
     const std::vector<detail::ComponentOperations>& detail::RegisteredComponentOperations()
@@ -128,98 +76,7 @@ namespace sage
 
     bool IsFlatpackFile(const char* path)
     {
-        if (content::IsDocument(path, "flatpack")) return true;
-        std::ifstream storage(path, std::ios::binary);
-        if (!storage.is_open()) return false;
-
-        char fileMagic[4]{};
-        storage.read(fileMagic, sizeof(fileMagic));
-        return storage.gcount() == sizeof(fileMagic) &&
-               (std::memcmp(fileMagic, FLATPACK_MAGIC, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, VERSION_FIVE_FLATPACK_MAGIC, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, VERSION_FOUR_FLATPACK_MAGIC, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, VERSION_THREE_FLATPACK_MAGIC, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, VERSION_TWO_FLATPACK_MAGIC, sizeof(fileMagic)) == 0 ||
-                std::memcmp(fileMagic, LEGACY_FLATPACK_MAGIC, sizeof(fileMagic)) == 0);
-    }
-
-    std::optional<FlatpackComponentMigrationResult> MigrateFlatpackComponents(
-        const std::filesystem::path& path, const bool writeChanges)
-    {
-        if (content::IsDocument(path, "flatpack"))
-        {
-            const auto document = content::ReadDocument(path);
-            FlatpackComponentMigrationResult result;
-            result.hasComponentSection = true;
-            for (const auto& node : document["entities"].GetArray())
-                result.recognizedComponents += node["components"].MemberCount();
-            return result;
-        }
-        EnsureEngineComponentOperations();
-        std::ifstream header(path, std::ios::binary);
-        char fileMagic[4]{};
-        header.read(fileMagic, sizeof(fileMagic));
-        if (header.gcount() != sizeof(fileMagic)) return std::nullopt;
-
-        const bool currentFormat = std::memcmp(fileMagic, FLATPACK_MAGIC, sizeof(fileMagic)) == 0;
-        const bool versionFiveFormat =
-            std::memcmp(fileMagic, VERSION_FIVE_FLATPACK_MAGIC, sizeof(fileMagic)) == 0;
-        if (!currentFormat && !versionFiveFormat)
-        {
-            if (!IsFlatpackFile(path.string().c_str())) return std::nullopt;
-            return FlatpackComponentMigrationResult{};
-        }
-
-        const auto migrate = [&](auto data, const char (&magic)[4])
-            -> std::optional<FlatpackComponentMigrationResult> {
-            FlatpackComponentMigrationResult result;
-            result.hasComponentSection = true;
-            for (auto& record : data.customComponents)
-            {
-                const auto operations = std::ranges::find(
-                    ComponentOperationsRegistry(), record.key, &detail::ComponentOperations::key);
-                if (operations == ComponentOperationsRegistry().end()) continue;
-
-                ++result.recognizedComponents;
-                auto migrated = operations->migrate(record.data);
-                if (migrated == record.data) continue;
-                record.data = std::move(migrated);
-                ++result.changedComponents;
-            }
-
-            if (!writeChanges || result.changedComponents == 0) return result;
-
-            auto temporaryPath = path;
-            temporaryPath += ".migrating";
-            std::error_code error;
-            std::filesystem::remove(temporaryPath, error);
-            if (!sage::serializer::WriteCompressedBinary(
-                    temporaryPath.string().c_str(), magic,
-                    [&data](cereal::BinaryOutputArchive& output) { data.archive(output); }))
-                return std::nullopt;
-
-            const auto verification = ReadMigrationFlatpack<decltype(data)>(temporaryPath, magic);
-            if (!SameComponentPayloads(data, verification))
-            {
-                std::filesystem::remove(temporaryPath, error);
-                return std::nullopt;
-            }
-
-            std::filesystem::rename(temporaryPath, path, error);
-            if (error)
-            {
-                std::filesystem::remove(temporaryPath, error);
-                return std::nullopt;
-            }
-            result.wroteChanges = true;
-            return result;
-        };
-
-        if (versionFiveFormat)
-            return migrate(
-                ReadMigrationFlatpack<LegacyMigrationFlatpackData>(path, VERSION_FIVE_FLATPACK_MAGIC),
-                VERSION_FIVE_FLATPACK_MAGIC);
-        return migrate(ReadMigrationFlatpack<MigrationFlatpackData>(path, FLATPACK_MAGIC), FLATPACK_MAGIC);
+        return content::IsDocument(path, "flatpack");
     }
 
     bool SaveFlatpack(entt::registry& source, entt::entity root, const char* path)
@@ -265,11 +122,11 @@ namespace sage
         std::vector<FlatpackCatalogEntry> entries;
         if (!std::filesystem::is_directory(directory)) return entries;
 
-        for (const auto& dirEntry : std::filesystem::directory_iterator{directory})
+        for (const auto& dirEntry : std::filesystem::recursive_directory_iterator{directory})
         {
             if (!dirEntry.is_regular_file()) continue;
             const auto& path = dirEntry.path();
-            if (path.extension() != ".flatpack" && path.extension() != ".bin") continue;
+            if (path.extension() != ".flatpack") continue;
             if (!IsFlatpackFile(path.string().c_str())) continue;
             entries.push_back({.displayName = path.stem().string(), .path = path});
         }

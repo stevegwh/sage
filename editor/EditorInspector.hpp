@@ -69,6 +69,7 @@ namespace sage::editor
     {
         void* data = nullptr;
         std::vector<std::string> options;
+        std::vector<std::string> displayOptions;
         std::function<std::size_t()> getIndex;
         std::function<void(std::size_t)> setIndex;
     };
@@ -503,6 +504,7 @@ namespace sage::editor
     {
         std::string currentKey;
         std::vector<std::string> options;
+        std::vector<std::string> displayOptions;
         bool mixed = false;
         bool animationCompatibleOnly = false;
     };

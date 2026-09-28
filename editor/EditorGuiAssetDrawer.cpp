@@ -1,12 +1,15 @@
 #include "EditorGui.hpp"
+#include "engine/AssetKey.hpp"
 #include "engine/Colors.hpp"
 
 #include "EditorGuiInternal.hpp"
 #include "engine/components/UberShaderComponent.hpp"
+#include "engine/Flatpack.hpp"
 #include "engine/FlatpackThumbnail.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
 
+#include "extras/IconsFontAwesome6.h"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
@@ -15,12 +18,15 @@
 #include "rlImGui.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <optional>
+#include <set>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -29,9 +35,6 @@ namespace sage::editor
     namespace
     {
         constexpr int THUMBNAIL_SIZE = 128;
-        constexpr float ASSET_TILE_WIDTH = 152.0f;
-        constexpr float ASSET_TILE_HEIGHT = 188.0f;
-        constexpr float FLATPACK_TILE_HEIGHT = ASSET_TILE_HEIGHT;
         constexpr float ASSET_DEFAULTS_PANEL_WIDTH = 260.0f;
         constexpr int PREVIEW_LIGHT_DIRECTIONAL = 0;
         constexpr int PREVIEW_LIGHT_POINT = 1;
@@ -41,21 +44,46 @@ namespace sage::editor
         constexpr const char* FLATPACK_RENAME_POPUP = "Rename Flatpack";
         constexpr const char* FLATPACK_DELETE_POPUP = "Delete Flatpack";
 
-        template <typename Matches>
-        std::vector<std::size_t> FilteredIndices(const std::size_t count, Matches matches)
+        const std::filesystem::path RESOURCES_DIRECTORY{"resources"};
+        constexpr float RESOURCE_TREE_WIDTH = 180.0f;
+
+        std::string AbsoluteResourcePath(const std::filesystem::path& path)
         {
-            std::vector<std::size_t> indices;
-            indices.reserve(count);
-            for (std::size_t i = 0; i < count; ++i)
-            {
-                if (matches(i)) indices.push_back(i);
-            }
-            return indices;
+            return std::filesystem::absolute(path).lexically_normal().generic_string();
+        }
+
+        std::string Lowercase(std::string value)
+        {
+            for (auto& c : value)
+                c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            return value;
+        }
+
+        std::optional<std::filesystem::path> RelativeResourcePath(const std::filesystem::path& path)
+        {
+            if (path.empty()) return std::nullopt;
+            const auto root = std::filesystem::absolute(RESOURCES_DIRECTORY).lexically_normal();
+            const auto relative = std::filesystem::absolute(path).lexically_normal().lexically_relative(root);
+            if (relative.empty() || relative == "." || *relative.begin() == "..") return std::nullopt;
+            return relative;
+        }
+
+        bool IsVirtualResourceFolder(const std::filesystem::path& path)
+        {
+            return path == "Materials" || path == "Unlocated images" || path == "External models";
+        }
+
+        std::string ResourceFolderTooltip(const std::filesystem::path& path)
+        {
+            if (path == "Materials") return "Packed materials have no separate source files";
+            if (path == "Unlocated images") return "Imported images without a unique source path";
+            if (path == "External models") return "Imported models with source paths outside resources";
+            return (RESOURCES_DIRECTORY / path).generic_string();
         }
 
         Shader LoadThumbnailShader()
         {
-            auto shader = ResourceManager::GetInstance().ShaderLoad(
+            auto shader = ResourceManager::GetInstance().ShaderLoadUnique(
                 "resources/shaders/custom/ubershader.vs", "resources/shaders/custom/ubershader.fs");
             shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
             return shader;
@@ -228,7 +256,7 @@ namespace sage::editor
 
         if (ImGui::Begin("Asset Drawer", nullptr, windowFlags))
         {
-            const bool splitView = selectedAssetIndex.has_value() &&
+            const bool splitView = showAssetDefaults && selectedAssetIndex.has_value() &&
                                    ImGui::BeginTable("asset_drawer_split", 2, ImGuiTableFlags_SizingStretchProp);
             if (splitView)
             {
@@ -237,24 +265,12 @@ namespace sage::editor
                 ImGui::TableNextColumn();
             }
 
-            if (ImGui::BeginTabBar("asset_tabs"))
-            {
-                if (ImGui::BeginTabItem("Assets"))
-                {
-                    drawAssetGrid();
-                    ImGui::EndTabItem();
-                }
-                if (ImGui::BeginTabItem("Flatpacks"))
-                {
-                    drawFlatpackGrid();
-                    ImGui::EndTabItem();
-                }
-                ImGui::EndTabBar();
-            }
+            drawResourceBrowser();
 
             if (splitView)
             {
                 ImGui::TableNextColumn();
+                if (ImGui::SmallButton("Close Defaults")) showAssetDefaults = false;
                 drawAssetDefaultsControls();
                 ImGui::EndTable();
             }
@@ -310,19 +326,20 @@ namespace sage::editor
         flatpackThumbnails.clear();
 
         flatpackEntries = std::move(entries);
-        flatpackThumbnails.reserve(flatpackEntries.size());
-        for (const auto& flatpack : flatpackEntries)
-        {
-            flatpackThumbnails.push_back(createFlatpackThumbnail(flatpack));
-        }
+        flatpackThumbnails.resize(flatpackEntries.size());
+        resourceBrowserNeedsRefresh = true;
     }
 
     RenderTexture2D EditorGui::createAssetThumbnail(const AssetEntry& asset) const
     {
         auto thumbnail = LoadRenderTexture(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
         auto model = ResourceManager::GetInstance().GetModelView(asset.modelKey);
-        const auto shader = LoadThumbnailShader();
+        if (assetPreviewShader.id == 0) assetPreviewShader = LoadThumbnailShader();
+        const auto shader = assetPreviewShader;
         auto uber = CreateThumbnailUberComponent(model, shader);
+        std::vector<Shader> originalShaders;
+        for (int material = 0; material < model.GetMaterialCount(); ++material)
+            originalShaders.push_back(model.GetShader(material));
         model.SetShader(shader);
 
         const auto bounds = model.CalcLocalBoundingBox();
@@ -345,12 +362,59 @@ namespace sage::editor
         EndMode3D();
         EndTextureMode();
 
+        for (int material = 0; material < model.GetMaterialCount(); ++material)
+            model.SetShader(originalShaders[static_cast<std::size_t>(material)], material);
+
         return thumbnail;
     }
 
-    RenderTexture2D EditorGui::createFlatpackThumbnail(const FlatpackEntry& flatpack) const
+    RenderTexture2D EditorGui::createMaterialThumbnail(const std::string& key) const
     {
-        return CreateFlatpackThumbnail(flatpack.path, THUMBNAIL_SIZE);
+        auto thumbnail = LoadRenderTexture(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+        const auto& material = ResourceManager::GetInstance().GetMaterial(key);
+        auto sphere = GenMeshSphere(0.75f, 32, 20);
+        Camera3D camera{};
+        camera.position = {1.8f, 1.1f, 1.8f};
+        camera.target = {0.0f, 0.0f, 0.0f};
+        camera.up = {0.0f, 1.0f, 0.0f};
+        camera.fovy = 45.0f;
+        camera.projection = CAMERA_PERSPECTIVE;
+
+        BeginTextureMode(thumbnail);
+        ClearBackground(Color{244, 247, 251, 255});
+        BeginMode3D(camera);
+        DrawMesh(sphere, material, MatrixIdentity());
+        EndMode3D();
+        EndTextureMode();
+        UnloadMesh(sphere);
+        return thumbnail;
+    }
+
+    RenderTexture2D EditorGui::createImageThumbnail(const std::string& key) const
+    {
+        const auto packedImage = ResourceManager::GetInstance().GetImage(key);
+        const auto& image = packedImage.GetImage();
+        if (!image.data || image.width <= 0 || image.height <= 0) return {};
+
+        auto preview = ImageCopy(image);
+        const float scale = std::min(
+            1.0f, static_cast<float>(THUMBNAIL_SIZE) / static_cast<float>(std::max(image.width, image.height)));
+        const int width = std::max(1, static_cast<int>(image.width * scale));
+        const int height = std::max(1, static_cast<int>(image.height * scale));
+        if (width != image.width || height != image.height) ImageResize(&preview, width, height);
+        const auto texture = LoadTextureFromImage(preview);
+        UnloadImage(preview);
+
+        auto thumbnail = LoadRenderTexture(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
+        BeginTextureMode(thumbnail);
+        ClearBackground(Color{244, 247, 251, 255});
+        for (int y = 0; y < THUMBNAIL_SIZE; y += 16)
+            for (int x = 0; x < THUMBNAIL_SIZE; x += 16)
+                if (((x + y) / 16) % 2 == 0) DrawRectangle(x, y, 16, 16, Color{220, 225, 232, 255});
+        DrawTexture(texture, (THUMBNAIL_SIZE - width) / 2, (THUMBNAIL_SIZE - height) / 2, WHITE);
+        EndTextureMode();
+        UnloadTexture(texture);
+        return thumbnail;
     }
 
     void EditorGui::openAssetRenamePopup(const std::size_t index)
@@ -425,6 +489,7 @@ namespace sage::editor
                     if (result.updatedEntry.has_value())
                     {
                         assetEntries[index] = std::move(*result.updatedEntry);
+                        resourceBrowserNeedsRefresh = true;
                     }
                     clearRename();
                     ImGui::CloseCurrentPopup();
@@ -659,227 +724,445 @@ namespace sage::editor
         ImGui::EndChild();
     }
 
-    void EditorGui::drawAssetGrid()
+    void EditorGui::refreshResourceBrowser()
     {
-        if (assetEntries.empty())
+        resourceBrowserNeedsRefresh = false;
+        resourceEntries.clear();
+        std::set<std::filesystem::path> directories;
+        const auto addDirectories = [&directories](std::filesystem::path path) {
+            for (path = path.parent_path(); !path.empty(); path = path.parent_path())
+                directories.insert(path);
+        };
+
+        for (std::size_t i = 0; i < assetEntries.size(); ++i)
         {
-            ImGui::TextDisabled("No assets loaded");
-            return;
+            const auto relative = RelativeResourcePath(assetEntries[i].sourcePath);
+            // Keep imported keys visible even when an older pack records a path outside resources.
+            const auto path = relative.value_or(std::filesystem::path{"External models"} / std::to_string(i));
+            resourceEntries.push_back({.path = path, .modelIndex = i});
+            addDirectories(path);
         }
 
-        DrawSearchFilter(assetFilter, "asset_filter", "Search...", ImGui::GetContentRegionAvail().x);
-        ImGui::Spacing();
-
-        // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
-        const auto visibleAssets = FilteredIndices(assetEntries.size(), [this](const std::size_t i) {
-            const auto& asset = assetEntries[i];
-            return assetFilter.PassFilter(asset.displayName.c_str()) ||
-                   assetFilter.PassFilter(asset.modelKey.c_str());
-        });
-
-        if (visibleAssets.empty())
+        // Older packs store image basenames only. Use source files to recover their
+        // folders, but never add a file unless its key is present in the loaded pack.
+        std::unordered_map<std::string, std::filesystem::path> legacyImagePaths;
+        std::set<std::string> ambiguousImageNames;
+        for (const auto& folder : {"textures", "icons"})
         {
-            ImGui::TextDisabled("No assets match the filter");
-            return;
-        }
-
-        const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
-        const float columnPitch = ASSET_TILE_WIDTH + ImGui::GetStyle().ItemSpacing.x;
-        const int columns = std::max(1, static_cast<int>(availableWidth / columnPitch));
-
-        if (!ImGui::BeginChild("asset_grid_scroll", ImVec2{0.0f, 0.0f}, false))
-        {
-            ImGui::EndChild();
-            return;
-        }
-
-        if (ImGui::BeginTable("asset_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
-        {
-            for (int column = 0; column < columns; ++column)
+            std::error_code error;
+            const auto root = RESOURCES_DIRECTORY / folder;
+            std::filesystem::recursive_directory_iterator it(
+                root, std::filesystem::directory_options::skip_permission_denied, error);
+            const std::filesystem::recursive_directory_iterator end;
+            while (!error && it != end)
             {
-                ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, ASSET_TILE_WIDTH);
-            }
-
-            for (std::size_t slot = 0; slot < visibleAssets.size(); ++slot)
-            {
-                const std::size_t i = visibleAssets[slot];
-                if (slot % static_cast<std::size_t>(columns) == 0)
+                if (it->is_regular_file(error) && it->path().extension() == ".png")
                 {
-                    ImGui::TableNextRow(ImGuiTableRowFlags_None, ASSET_TILE_HEIGHT);
-                }
-                ImGui::TableSetColumnIndex(static_cast<int>(slot % static_cast<std::size_t>(columns)));
-                const auto& asset = assetEntries[i];
-                const bool selected = selectedAssetIndex.has_value() && *selectedAssetIndex == i;
-
-                ImGui::PushID(static_cast<int>(i));
-                ImGui::BeginGroup();
-                ImGui::PushStyleColor(
-                    ImGuiCol_Button,
-                    selected ? ImVec4{0.20f, 0.39f, 0.72f, 1.00f} : ImVec4{0.14f, 0.16f, 0.19f, 1.00f});
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.23f, 0.34f, 0.50f, 1.00f});
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
-
-                Texture2D* texture = i < assetThumbnails.size() ? &assetThumbnails[i].texture : nullptr;
-                const bool clicked = texture ? ImGui::ImageButton(
-                                                   "thumbnail",
-                                                   reinterpret_cast<ImTextureID>(texture),
-                                                   ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE},
-                                                   ImVec2{0.0f, 1.0f},
-                                                   ImVec2{1.0f, 0.0f},
-                                                   ImVec4{0.10f, 0.11f, 0.13f, 1.00f})
-                                             : ImGui::Button("No Preview", ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE});
-                ImGui::PopStyleColor(3);
-
-                if (clicked && onAssetSelectedCb)
-                {
-                    onAssetSelectedCb(i);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    const auto sourcePath = asset.sourcePath.string();
-                    const auto tooltipPath = sourcePath.empty() ? asset.defaultsPath.string() : sourcePath;
-                    ImGui::SetTooltip(
-                        "%s\n%s\n%s", asset.displayName.c_str(), asset.modelKey.c_str(), tooltipPath.c_str());
-                }
-                if (ImGui::BeginPopupContextItem("asset_context"))
-                {
-                    if (ImGui::MenuItem("Rename File")) openAssetRenamePopup(i);
-                    if (ImGui::MenuItem("Copy Asset Name")) ImGui::SetClipboardText(asset.displayName.c_str());
-                    if (ImGui::MenuItem("Copy Model Key")) ImGui::SetClipboardText(asset.modelKey.c_str());
-                    const auto sourcePath = asset.sourcePath.string();
-                    if (!sourcePath.empty() && ImGui::MenuItem("Copy Source Path"))
+                    const auto name = it->path().stem().string();
+                    if (!ambiguousImageNames.contains(name) &&
+                        !legacyImagePaths.emplace(name, it->path()).second)
                     {
-                        ImGui::SetClipboardText(sourcePath.c_str());
+                        legacyImagePaths.erase(name);
+                        ambiguousImageNames.insert(name);
                     }
-                    ImGui::EndPopup();
                 }
-
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ASSET_TILE_WIDTH);
-                if (selected)
-                {
-                    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.72f, 0.83f, 1.00f, 1.00f});
-                    ImGui::TextWrapped("%s", asset.displayName.c_str());
-                    ImGui::PopStyleColor();
-                }
-                else
-                {
-                    ImGui::TextWrapped("%s", asset.displayName.c_str());
-                }
-                ImGui::PopTextWrapPos();
-                ImGui::EndGroup();
-                ImGui::PopID();
+                if (!error) it.increment(error);
             }
+        }
+        for (std::size_t i = 0; i < imageKeys.size(); ++i)
+        {
+            const auto& key = imageKeys[i];
+            std::optional<std::filesystem::path> source;
+            if (std::filesystem::path{key}.has_parent_path())
+                source = RelativeResourcePath(RESOURCES_DIRECTORY / key);
+            else if (const auto found = legacyImagePaths.find(key); found != legacyImagePaths.end())
+                source = RelativeResourcePath(found->second);
+            const auto path = source.value_or(std::filesystem::path{"Unlocated images"} / std::to_string(i));
+            resourceEntries.push_back(
+                {.path = path, .imageIndex = i, .sourcePath = source ? RESOURCES_DIRECTORY / *source : std::filesystem::path{}});
+            addDirectories(path);
+        }
+
+        // Packed materials have keys but no independent source files. Keep them
+        // together instead of inventing a path to one of their referencing models.
+        for (std::size_t i = 0; i < materialKeys.size(); ++i)
+        {
+            const auto path = std::filesystem::path{"Materials"} / std::to_string(i);
+            resourceEntries.push_back({.path = path, .materialIndex = i});
+            addDirectories(path);
+        }
+        for (std::size_t i = 0; i < flatpackEntries.size(); ++i)
+        {
+            const auto relative = RelativeResourcePath(flatpackEntries[i].path);
+            if (!relative) continue;
+            resourceEntries.push_back({.path = *relative, .flatpackIndex = i});
+            addDirectories(*relative);
+        }
+        for (const auto& directory : directories)
+            resourceEntries.push_back({.path = directory, .directory = true});
+        std::sort(
+            resourceEntries.begin(), resourceEntries.end(), [](const ResourceEntry& a, const ResourceEntry& b) {
+                if (a.directory != b.directory) return a.directory;
+                const auto left = Lowercase(a.path.generic_string());
+                const auto right = Lowercase(b.path.generic_string());
+                if (left != right) return left < right;
+                if (a.path != b.path) return a.path < b.path;
+                if (a.modelIndex != b.modelIndex) return a.modelIndex < b.modelIndex;
+                if (a.materialIndex != b.materialIndex) return a.materialIndex < b.materialIndex;
+                return a.imageIndex < b.imageIndex;
+            });
+        if (!resourceDirectory.empty() &&
+            !std::ranges::any_of(resourceEntries, [this](const ResourceEntry& entry) {
+                return entry.directory && entry.path == resourceDirectory;
+            }))
+            navigateResourceFolder({});
+    }
+
+    void EditorGui::navigateResourceFolder(const std::filesystem::path& path)
+    {
+        resourceDirectory = path;
+        resourceFilter.Clear();
+        showAssetDefaults = false;
+    }
+
+    void EditorGui::drawResourceFolderTree(const std::filesystem::path& path)
+    {
+        const bool hasChildren = std::ranges::any_of(resourceEntries, [&path](const ResourceEntry& entry) {
+            return entry.directory && entry.path.parent_path() == path;
+        });
+        const auto key = path.generic_string();
+        const auto selected = resourceDirectory.generic_string();
+        if (path.empty() || (!selected.empty() && selected.starts_with(key + '/')))
+            ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (!hasChildren) flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        if (path == resourceDirectory) flags |= ImGuiTreeNodeFlags_Selected;
+        const auto label = path.empty() ? std::string("resources") : path.filename().string();
+        const bool open = ImGui::TreeNodeEx(key.c_str(), flags, ICON_FA_FOLDER " %s", label.c_str());
+        if (ImGui::IsItemClicked()) navigateResourceFolder(path);
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ResourceFolderTooltip(path).c_str());
+        if (open && hasChildren)
+        {
+            for (const auto& entry : resourceEntries)
+                if (entry.directory && entry.path.parent_path() == path) drawResourceFolderTree(entry.path);
+            ImGui::TreePop();
+        }
+    }
+
+    void EditorGui::drawResourceBrowser()
+    {
+        if (resourceBrowserNeedsRefresh) refreshResourceBrowser();
+        if (ImGui::Button(ICON_FA_ROTATE_RIGHT " Refresh"))
+        {
+            std::vector<FlatpackEntry> flatpacks;
+            for (const auto& entry : ListFlatpacks(RESOURCES_DIRECTORY))
+                flatpacks.push_back({entry.displayName, entry.path});
+            SetFlatpacks(std::move(flatpacks));
+            refreshResourceBrowser();
+        }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(resourceDirectory.empty());
+        if (ImGui::Button(ICON_FA_ARROW_UP " Up")) navigateResourceFolder(resourceDirectory.parent_path());
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(110.0f);
+        ImGui::Combo("##resource_type", &resourceTypeFilter, "All assets\0Models\0Materials\0Images\0Flatpacks\0");
+        ImGui::SameLine();
+        DrawSearchFilter(
+            resourceFilter, "resource_filter", "Search resources...", ImGui::GetContentRegionAvail().x);
+
+        // Keep a copy because a breadcrumb click changes the current folder.
+        const auto directory = resourceDirectory;
+        if (ImGui::SmallButton("resources")) navigateResourceFolder({});
+        std::filesystem::path breadcrumb;
+        for (const auto& part : directory)
+        {
+            breadcrumb /= part;
+            ImGui::SameLine();
+            ImGui::TextDisabled("/");
+            ImGui::SameLine();
+            ImGui::PushID(breadcrumb.generic_string().c_str());
+            if (ImGui::SmallButton(part.string().c_str())) navigateResourceFolder(breadcrumb);
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+
+        if (ImGui::BeginTable(
+                "resource_browser", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp))
+        {
+            ImGui::TableSetupColumn("Folders", ImGuiTableColumnFlags_WidthFixed, RESOURCE_TREE_WIDTH);
+            ImGui::TableSetupColumn("Contents", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableNextColumn();
+            if (ImGui::BeginChild(
+                    "resource_folders", ImVec2{0.0f, 0.0f}, false, ImGuiWindowFlags_HorizontalScrollbar))
+                drawResourceFolderTree({});
+            ImGui::EndChild();
+            ImGui::TableNextColumn();
+            drawResourceGrid();
             ImGui::EndTable();
+        }
+    }
+
+    void EditorGui::drawResourceGrid()
+    {
+        std::vector<std::size_t> visible;
+        for (std::size_t i = 0; i < resourceEntries.size(); ++i)
+        {
+            const auto& entry = resourceEntries[i];
+            if (resourceFilter.IsActive())
+            {
+                const bool pathMatches = resourceFilter.PassFilter(entry.path.generic_string().c_str());
+                const bool keyMatches = entry.modelIndex &&
+                                        resourceFilter.PassFilter(assetEntries[*entry.modelIndex].modelKey.c_str());
+                const bool materialMatches = entry.materialIndex &&
+                                             resourceFilter.PassFilter(materialKeys[*entry.materialIndex].c_str());
+                const bool imageMatches = entry.imageIndex &&
+                                          resourceFilter.PassFilter(imageKeys[*entry.imageIndex].c_str());
+                if (!pathMatches && !keyMatches && !materialMatches && !imageMatches) continue;
+            }
+            else if (entry.path.parent_path() != resourceDirectory)
+                continue;
+            if (!entry.directory && resourceTypeFilter == 1 && !entry.modelIndex) continue;
+            if (!entry.directory && resourceTypeFilter == 2 && !entry.materialIndex) continue;
+            if (!entry.directory && resourceTypeFilter == 3 && !entry.imageIndex) continue;
+            if (!entry.directory && resourceTypeFilter == 4 && !entry.flatpackIndex) continue;
+            visible.push_back(i);
+        }
+
+        if (ImGui::BeginChild("resource_grid_scroll", ImVec2{0.0f, 0.0f}, false))
+        {
+            if (resourceFilter.IsActive()) ImGui::TextDisabled("Results from all resources");
+            if (visible.empty())
+                ImGui::TextDisabled(resourceFilter.IsActive() ? "No matching resources" : "This folder is empty");
+            const auto& style = ImGui::GetStyle();
+            const float tileExtraHeight =
+                ImGui::GetTextLineHeightWithSpacing() * 2.0f + style.FramePadding.y * 2.0f + style.ItemSpacing.y;
+            const float previewSize = std::clamp(
+                std::min(
+                    settings->ScaleValueWidth(THUMBNAIL_SIZE), ImGui::GetContentRegionAvail().y - tileExtraHeight),
+                48.0f,
+                static_cast<float>(THUMBNAIL_SIZE));
+            const float tileWidth = previewSize + 24.0f;
+            const float tileHeight = previewSize + tileExtraHeight;
+            const float pitch = tileWidth + style.ItemSpacing.x;
+            const int columns = std::max(1, static_cast<int>(ImGui::GetContentRegionAvail().x / pitch));
+            if (ImGui::BeginTable(
+                    "resource_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
+            {
+                for (int column = 0; column < columns; ++column)
+                    ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, tileWidth);
+                std::optional<std::filesystem::path> navigateTo;
+                for (std::size_t slot = 0; slot < visible.size(); ++slot)
+                {
+                    if (slot % columns == 0) ImGui::TableNextRow(ImGuiTableRowFlags_None, tileHeight);
+                    ImGui::TableSetColumnIndex(static_cast<int>(slot % columns));
+                    // Skip offscreen previews rather than rendering every model on startup.
+                    if (!ImGui::IsRectVisible(ImVec2{tileWidth, tileHeight})) continue;
+                    const auto entry = resourceEntries[visible[slot]];
+                    ImGui::PushID(static_cast<int>(visible[slot]));
+                    if (drawResourceTile(entry, previewSize)) navigateTo = entry.path;
+                    ImGui::PopID();
+                }
+                ImGui::EndTable();
+                if (navigateTo) navigateResourceFolder(*navigateTo);
+            }
         }
         ImGui::EndChild();
     }
 
-    void EditorGui::drawFlatpackGrid()
+    bool EditorGui::drawResourceTile(const ResourceEntry& entry, const float previewSize)
     {
-        if (flatpackEntries.empty())
+        ImGui::BeginGroup();
+        const bool selected = entry.modelIndex && selectedAssetIndex == entry.modelIndex;
+        if (entry.modelIndex)
         {
-            ImGui::TextDisabled("No flatpacks found");
-            return;
+            ImGui::PushStyleColor(
+                ImGuiCol_Button,
+                selected ? ImVec4{0.20f, 0.39f, 0.72f, 1.00f} : ImVec4{0.14f, 0.16f, 0.19f, 1.00f});
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.23f, 0.34f, 0.50f, 1.00f});
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
         }
-
-        DrawSearchFilter(flatpackFilter, "flatpack_filter", "Search...", ImGui::GetContentRegionAvail().x);
-        ImGui::Spacing();
-
-        // Compact the visible entries so filtered-out tiles don't leave gaps in the grid.
-        const auto visibleFlatpacks = FilteredIndices(flatpackEntries.size(), [this](const std::size_t i) {
-            return flatpackFilter.PassFilter(flatpackEntries[i].displayName.c_str());
-        });
-
-        if (visibleFlatpacks.empty())
+        RenderTexture2D* thumbnail = nullptr;
+        std::string fallbackLabel = "No Preview";
+        if (entry.modelIndex)
         {
-            ImGui::TextDisabled("No flatpacks match the filter");
-            return;
+            const auto i = *entry.modelIndex;
+            thumbnail = &assetThumbnails[i];
+            if (thumbnail->id == 0) *thumbnail = createAssetThumbnail(assetEntries[i]);
         }
-
-        const float availableWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
-        const float columnPitch = ASSET_TILE_WIDTH + ImGui::GetStyle().ItemSpacing.x;
-        const int columns = std::max(1, static_cast<int>(availableWidth / columnPitch));
-
-        if (!ImGui::BeginChild("flatpack_grid_scroll", ImVec2{0.0f, 0.0f}, false))
+        else if (entry.materialIndex)
         {
-            ImGui::EndChild();
-            return;
+            const auto i = *entry.materialIndex;
+            thumbnail = &materialThumbnails[i];
+            if (thumbnail->id == 0) *thumbnail = createMaterialThumbnail(materialKeys[i]);
         }
-
-        if (ImGui::BeginTable(
-                "flatpack_grid", columns, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX))
+        else if (entry.imageIndex)
         {
-            for (int column = 0; column < columns; ++column)
+            const auto i = *entry.imageIndex;
+            thumbnail = &imageThumbnails[i];
+            if (thumbnail->id == 0) *thumbnail = createImageThumbnail(imageKeys[i]);
+        }
+        else if (entry.flatpackIndex)
+        {
+            const auto i = *entry.flatpackIndex;
+            thumbnail = &flatpackThumbnails[i];
+            if (thumbnail->id == 0) *thumbnail = CreateFlatpackThumbnail(flatpackEntries[i].path, THUMBNAIL_SIZE);
+        }
+        else
+        {
+            fallbackLabel = ICON_FA_FOLDER "\nFolder";
+        }
+        Texture2D* texture = thumbnail && thumbnail->id != 0 ? &thumbnail->texture : nullptr;
+        const bool clicked = texture ? ImGui::ImageButton(
+                                           "thumbnail",
+                                           reinterpret_cast<ImTextureID>(texture),
+                                           ImVec2{previewSize, previewSize},
+                                           ImVec2{0.0f, 1.0f},
+                                           ImVec2{1.0f, 0.0f},
+                                           entry.modelIndex ? ImVec4{0.10f, 0.11f, 0.13f, 1.00f} : ImVec4{})
+                                     : ImGui::Button(fallbackLabel.c_str(), ImVec2{previewSize, previewSize});
+        if (entry.modelIndex)
+            ImGui::PopStyleColor(3);
+
+        const char* type = "Folder";
+        if (entry.modelIndex)
+        {
+            type = "Model";
+            const auto i = *entry.modelIndex;
+            const auto asset = assetEntries[i];
+            if (clicked && onAssetSelectedCb)
             {
-                ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, ASSET_TILE_WIDTH);
+                onAssetSelectedCb(i);
             }
-
-            for (std::size_t slot = 0; slot < visibleFlatpacks.size(); ++slot)
+            if (ImGui::IsItemHovered())
             {
-                const std::size_t i = visibleFlatpacks[slot];
-                if (slot % static_cast<std::size_t>(columns) == 0)
-                {
-                    ImGui::TableNextRow(ImGuiTableRowFlags_None, FLATPACK_TILE_HEIGHT);
-                }
-                ImGui::TableSetColumnIndex(static_cast<int>(slot % static_cast<std::size_t>(columns)));
-                const auto& flatpack = flatpackEntries[i];
-                ImGui::PushID(static_cast<int>(i));
-                ImGui::BeginGroup();
-                Texture2D* texture = i < flatpackThumbnails.size() && flatpackThumbnails[i].id != 0
-                                         ? &flatpackThumbnails[i].texture
-                                         : nullptr;
-                const bool clicked = texture ? ImGui::ImageButton(
-                                                   "thumbnail",
-                                                   reinterpret_cast<ImTextureID>(texture),
-                                                   ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE},
-                                                   ImVec2{0.0f, 1.0f},
-                                                   ImVec2{1.0f, 0.0f})
-                                             : ImGui::Button("No Preview", ImVec2{THUMBNAIL_SIZE, THUMBNAIL_SIZE});
-                const bool doubleClicked =
-                    ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
-                if (doubleClicked && onFlatpackEditCb)
-                {
-                    onFlatpackEditCb(flatpack.path);
-                }
-                else if (clicked && onFlatpackSelectedCb)
-                {
-                    onFlatpackSelectedCb(flatpack.path);
-                }
-                if (ImGui::IsItemHovered())
-                {
-                    ImGui::SetTooltip("%s\nClick: place  |  Double-click: edit", flatpack.path.string().c_str());
-                }
-                if (ImGui::BeginPopupContextItem("flatpack_context"))
-                {
-                    const auto path = flatpack.path.string();
-                    if (ImGui::MenuItem("Edit Flatpack") && onFlatpackEditCb) onFlatpackEditCb(flatpack.path);
-                    ImGui::Separator();
-                    // The open flatpack's file is in use by the edit session, so
-                    // renaming or deleting it from the browser is blocked.
-                    const bool openForEdit =
-                        sceneTabs.flatpackOpen && sceneTabs.flatpackLabel == flatpack.displayName;
-                    if (ImGui::MenuItem("Rename...", nullptr, false, !openForEdit))
-                    {
-                        openFlatpackRenamePopup(i);
-                    }
-                    if (ImGui::MenuItem("Delete", nullptr, false, !openForEdit))
-                    {
-                        openFlatpackDeleteConfirmation(i);
-                    }
-                    ImGui::Separator();
-                    if (ImGui::MenuItem("Copy Flatpack Name"))
-                        ImGui::SetClipboardText(flatpack.displayName.c_str());
-                    if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
-                    ImGui::EndPopup();
-                }
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ASSET_TILE_WIDTH);
-                ImGui::TextWrapped("%s", flatpack.displayName.c_str());
-                ImGui::PopTextWrapPos();
-                ImGui::EndGroup();
-                ImGui::PopID();
+                const auto sourcePath = asset.sourcePath.string();
+                const auto tooltipPath = sourcePath.empty() ? asset.defaultsPath.string() : sourcePath;
+                ImGui::SetTooltip(
+                    "%s\n%s\n%s", asset.displayName.c_str(), asset.modelKey.c_str(), tooltipPath.c_str());
             }
-            ImGui::EndTable();
+            if (ImGui::BeginPopupContextItem("asset_context"))
+            {
+                if (ImGui::MenuItem("Placement Defaults"))
+                {
+                    if (onAssetSelectedCb) onAssetSelectedCb(i);
+                    showAssetDefaults = true;
+                }
+                if (ImGui::MenuItem("Rename File")) openAssetRenamePopup(i);
+                if (ImGui::MenuItem("Copy Asset Name")) ImGui::SetClipboardText(asset.displayName.c_str());
+                if (ImGui::MenuItem("Copy Model Key")) ImGui::SetClipboardText(asset.modelKey.c_str());
+                const auto sourcePath = asset.sourcePath.string();
+                if (!sourcePath.empty() && ImGui::MenuItem("Copy Source Path"))
+                {
+                    ImGui::SetClipboardText(sourcePath.c_str());
+                }
+                ImGui::EndPopup();
+            }
         }
-        ImGui::EndChild();
+        else if (entry.materialIndex)
+        {
+            type = "Material";
+            const auto& key = materialKeys[*entry.materialIndex];
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClick to preview", key.c_str());
+            if (ImGui::BeginPopupContextItem("material_context"))
+            {
+                if (ImGui::MenuItem("Copy Material Key")) ImGui::SetClipboardText(key.c_str());
+                ImGui::EndPopup();
+            }
+        }
+        else if (entry.imageIndex)
+        {
+            type = "Image";
+            const auto& key = imageKeys[*entry.imageIndex];
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s\n%s\nClick to preview", key.c_str(), entry.sourcePath.string().c_str());
+            if (ImGui::BeginPopupContextItem("image_context"))
+            {
+                if (ImGui::MenuItem("Copy Image Key")) ImGui::SetClipboardText(key.c_str());
+                if (!entry.sourcePath.empty() && ImGui::MenuItem("Copy Source Path"))
+                    ImGui::SetClipboardText(entry.sourcePath.string().c_str());
+                ImGui::EndPopup();
+            }
+        }
+        else if (entry.flatpackIndex)
+        {
+            type = "Flatpack";
+            const auto i = *entry.flatpackIndex;
+            const auto flatpack = flatpackEntries[i];
+            const bool doubleClicked =
+                ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+            if (doubleClicked && onFlatpackEditCb)
+            {
+                onFlatpackEditCb(flatpack.path);
+            }
+            else if (clicked && onFlatpackSelectedCb)
+            {
+                onFlatpackSelectedCb(flatpack.path);
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s\nClick: place  |  Double-click: edit", flatpack.path.string().c_str());
+            }
+            if (ImGui::BeginPopupContextItem("flatpack_context"))
+            {
+                const auto path = flatpack.path.string();
+                if (ImGui::MenuItem("Edit Flatpack") && onFlatpackEditCb) onFlatpackEditCb(flatpack.path);
+                ImGui::Separator();
+                // The open flatpack's file is in use by the edit session, so
+                // renaming or deleting it from the browser is blocked.
+                const bool openForEdit = sceneTabs.flatpackOpen && AbsoluteResourcePath(sceneTabs.flatpackPath) ==
+                                                                       AbsoluteResourcePath(flatpack.path);
+                if (ImGui::MenuItem("Rename...", nullptr, false, !openForEdit))
+                {
+                    openFlatpackRenamePopup(i);
+                }
+                if (ImGui::MenuItem("Delete", nullptr, false, !openForEdit))
+                {
+                    openFlatpackDeleteConfirmation(i);
+                }
+                ImGui::Separator();
+                if (ImGui::MenuItem("Copy Flatpack Name")) ImGui::SetClipboardText(flatpack.displayName.c_str());
+                if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
+                ImGui::EndPopup();
+            }
+        }
+        else
+        {
+            const auto path = ResourceFolderTooltip(entry.path);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", path.c_str());
+            if (!IsVirtualResourceFolder(entry.path) && ImGui::BeginPopupContextItem("resource_context"))
+            {
+                if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
+                ImGui::EndPopup();
+            }
+        }
+
+        if (entry.modelIndex && selected) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.72f, 0.83f, 1.00f, 1.00f});
+        const auto label = entry.modelIndex      ? assetEntries[*entry.modelIndex].displayName
+                           : entry.materialIndex ? materialKeys[*entry.materialIndex]
+                           : entry.imageIndex    ? AssetNameFromKey(imageKeys[*entry.imageIndex])
+                                                 : entry.path.filename().string();
+        ImGui::TextUnformatted(label.c_str());
+        if (entry.modelIndex && selected) ImGui::PopStyleColor();
+        ImGui::TextDisabled("%s", type);
+        ImGui::EndGroup();
+
+        if (entry.materialIndex || entry.imageIndex)
+        {
+            if (clicked) ImGui::OpenPopup("asset_preview");
+            if (ImGui::BeginPopup("asset_preview"))
+            {
+                ImGui::TextUnformatted(label.c_str());
+                if (!entry.sourcePath.empty()) ImGui::TextDisabled("%s", entry.sourcePath.string().c_str());
+                if (texture)
+                    ImGui::Image(
+                        reinterpret_cast<ImTextureID>(texture),
+                        ImVec2{256.0f, 256.0f},
+                        ImVec2{0.0f, 1.0f},
+                        ImVec2{1.0f, 0.0f});
+                ImGui::EndPopup();
+            }
+        }
+        return entry.directory && clicked;
     }
 } // namespace sage::editor

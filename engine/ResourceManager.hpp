@@ -20,6 +20,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace sage
 {
@@ -58,6 +59,8 @@ namespace sage
         std::unordered_map<std::string, Font> fonts{};
         std::unordered_map<std::string, Shader> shaders{};
         std::unordered_map<std::string, Material> materialMap;
+        std::unordered_map<std::string, std::string> materialSourcePaths;
+        std::unordered_set<std::string> reportedSharedMaterials;
         std::unordered_map<std::string, Image> images{};                 // Image (CPU) data
         std::unordered_map<std::string, std::string> imageSourcePaths{}; // transient collision diagnostics
         std::unordered_map<std::string, Texture> nonModelTextures{}; // Textures loaded outside of model loading
@@ -73,6 +76,9 @@ namespace sage
         std::unordered_map<std::string, std::string> musicSourcePaths;
         std::unordered_map<std::string, std::string> sfxSourcePaths;
         std::unordered_map<std::string, std::string> animationSourcePaths;
+        std::unordered_map<std::string, std::string> modelAliases;
+        std::unordered_map<std::string, std::string> imageAliases;
+        std::unordered_map<std::string, std::string> animationAliases;
 
         Shader gpuShaderLoad(const char* vs, const char* fs);
         void dedupeAndShareMaterials(
@@ -86,6 +92,9 @@ namespace sage
         void ModelLoadFromFile(const std::string& path, const std::string& key);
         void StoreModel(const ModelInfo& modelInfo, const std::string& key);
         void ModelAnimationLoadFromFile(const std::string& path);
+        void RebuildAssetAliases();
+        [[nodiscard]] std::string ResolveModelKey(const std::string& key) const;
+        [[nodiscard]] std::string ResolveAnimationKey(const std::string& key) const;
 
       public:
         static ResourceManager& GetInstance()
@@ -105,6 +114,7 @@ namespace sage
         Font FontLoad(const std::string& path);
         void ImageUnload(const std::string& key);
         [[nodiscard]] ImageSafe GetImage(const std::string& key);
+        [[nodiscard]] std::string ResolveImageKey(const std::string& key) const;
         [[nodiscard]] bool HasModelKey(const std::string& key) const;
         [[nodiscard]] std::vector<std::string> GetModelKeys(bool includeGenerated = false) const;
         [[nodiscard]] std::vector<std::string> GetMaterialKeys() const;
@@ -223,7 +233,6 @@ namespace sage
                     model.model.materials[i] = materialMap[mat];
                 }
             }
-
             for (int i = 0; i < animatedModelKeys.size(); ++i)
             {
                 auto count = modelAnimCounts[i];
@@ -231,6 +240,7 @@ namespace sage
                 std::memcpy(animations, modelAnimationsData[i].data(), count * sizeof(ModelAnimation));
                 modelAnimations.emplace(animatedModelKeys[i], std::make_pair(animations, count));
             }
+            RebuildAssetAliases();
         }
 
         friend class ResourcePacker;

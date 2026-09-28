@@ -793,8 +793,9 @@ namespace sage::editor
         bool DrawInspectorFieldWidget(const EnumField& field, const bool editable, const bool mixed)
         {
             const auto currentIndex = field.getIndex ? field.getIndex() : 0;
+            const auto& labels = field.displayOptions.size() == field.options.size() ? field.displayOptions : field.options;
             const char* currentLabel = mixed                                 ? "-"
-                                       : currentIndex < field.options.size() ? field.options[currentIndex].c_str()
+                                       : currentIndex < labels.size() ? labels[currentIndex].c_str()
                                                                              : "";
             bool changed = false;
             ImGui::SetNextItemWidth(-FLT_MIN);
@@ -804,7 +805,7 @@ namespace sage::editor
                     for (std::size_t i = 0; i < field.options.size(); ++i)
                     {
                         const bool selected = i == currentIndex;
-                        if (ImGui::Selectable(field.options[i].c_str(), selected) && editable && field.setIndex)
+                        if (ImGui::Selectable(labels[i].c_str(), selected) && editable && field.setIndex)
                         {
                             field.setIndex(i);
                             changed = true;
@@ -876,14 +877,24 @@ namespace sage::editor
             ImGui::TextUnformatted("Model Key");
 
             ImGui::TableSetColumnIndex(1);
-            const char* preview = picker.mixed ? "-" : picker.currentKey.c_str();
+            const auto selected = std::ranges::find(picker.options, picker.currentKey);
+            const auto selectedIndex = selected == picker.options.end()
+                                           ? picker.options.size()
+                                           : static_cast<std::size_t>(selected - picker.options.begin());
+            const char* preview = picker.mixed ? "-"
+                                  : selectedIndex < picker.displayOptions.size()
+                                      ? picker.displayOptions[selectedIndex].c_str()
+                                      : picker.currentKey.c_str();
             ImGui::SetNextItemWidth(-FLT_MIN);
             if (ImGui::BeginCombo("##model", preview))
             {
-                for (const auto& option : picker.options)
+                for (std::size_t i = 0; i < picker.options.size(); ++i)
                 {
+                    const auto& option = picker.options[i];
                     const bool selected = !picker.mixed && option == picker.currentKey;
-                    if (ImGui::Selectable(option.c_str(), selected)) selectedModelKey = option;
+                    const auto& label = picker.displayOptions[i];
+                    if (ImGui::Selectable(label.c_str(), selected)) selectedModelKey = option;
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", option.c_str());
                     if (selected) ImGui::SetItemDefaultFocus();
                 }
                 ImGui::EndCombo();

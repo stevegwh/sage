@@ -192,10 +192,12 @@ namespace sage::editor
         }
     }
 
-    void EditorGui::SetOverlayStatus(const std::string& mode, const std::string& cursor) const
+    void EditorGui::SetOverlayStatus(
+        const std::string& mode, const std::string& cursor, const std::string& camera) const
     {
         modeStatus = mode;
         cursorStatus = cursor;
+        cameraStatus = camera;
     }
 
     void EditorGui::SetSaveStatus(const std::string& status, const bool hasUnsavedChanges) const
@@ -312,12 +314,19 @@ namespace sage::editor
             maxWidth,
             metaSize,
             Color{202, 211, 224, 255});
+        DrawTextFit(
+            metaFont,
+            "Camera: " + cameraStatus,
+            {x, y + settings->ScaleValueHeight(56.0f)},
+            maxWidth,
+            metaSize,
+            Color{202, 211, 224, 255});
         if (!saveStatus.empty())
         {
             DrawTextFit(
                 metaFont,
                 saveStatus,
-                {x, y + settings->ScaleValueHeight(56.0f)},
+                {x, y + settings->ScaleValueHeight(84.0f)},
                 maxWidth,
                 metaSize,
                 sceneHasUnsavedChanges ? Color{252, 211, 77, 255} : Color{134, 239, 172, 255});
@@ -449,15 +458,17 @@ namespace sage::editor
           modelDefaultCallbacks(std::move(callbacks))
     {
         assetEntries = assets;
-        assetThumbnails.reserve(assetEntries.size());
-        for (const auto& asset : assetEntries)
-        {
-            assetThumbnails.push_back(createAssetThumbnail(asset));
-        }
+        assetThumbnails.resize(assetEntries.size());
+        auto& resources = ResourceManager::GetInstance();
+        materialKeys = resources.GetMaterialKeys();
+        materialThumbnails.resize(materialKeys.size());
+        imageKeys = resources.GetImageKeys();
+        imageThumbnails.resize(imageKeys.size());
     }
 
     EditorGui::~EditorGui()
     {
+        if (assetPreviewShader.id != 0) UnloadShader(assetPreviewShader);
         for (auto& thumbnail : assetThumbnails)
         {
             if (thumbnail.id != 0)
@@ -465,6 +476,10 @@ namespace sage::editor
                 UnloadRenderTexture(thumbnail);
             }
         }
+        for (auto& thumbnail : materialThumbnails)
+            if (thumbnail.id != 0) UnloadRenderTexture(thumbnail);
+        for (auto& thumbnail : imageThumbnails)
+            if (thumbnail.id != 0) UnloadRenderTexture(thumbnail);
         for (auto& thumbnail : flatpackThumbnails)
         {
             if (thumbnail.id != 0)

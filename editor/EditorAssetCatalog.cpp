@@ -1,4 +1,5 @@
 #include "EditorAssetCatalog.hpp"
+#include "engine/AssetKey.hpp"
 #include "engine/MathConstants.hpp"
 
 #include "engine/raylib-cereal.hpp"
@@ -46,14 +47,15 @@ namespace sage::editor
         std::string AssetStemFromKey(const std::string& key)
         {
             constexpr std::array<std::string_view, 5> prefixes{"mdl_", "vfx_", "env_", "prop_", "item_"};
+            const auto name = AssetNameFromKey(key);
             for (const auto prefix : prefixes)
             {
-                if (key.starts_with(prefix))
+                if (name.starts_with(prefix))
                 {
-                    return key.substr(prefix.size());
+                    return name.substr(prefix.size());
                 }
             }
-            return key;
+            return name;
         }
 
         std::string DisplayNameFromModelKey(const std::string& key)
@@ -169,6 +171,9 @@ namespace sage::editor
 
     std::filesystem::path EditorAssetCatalog::AssetDefaultsPathForModelKey(const std::string& modelKey)
     {
+        const std::filesystem::path keyPath{modelKey};
+        if (keyPath.has_parent_path())
+            return IMPORTED_ASSETS_DIRECTORY / keyPath.parent_path() / (keyPath.filename().string() + ".json");
         return IMPORTED_ASSETS_DIRECTORY / (SanitizeAssetFileStem(modelKey) + ".json");
     }
 
@@ -340,7 +345,20 @@ namespace sage::editor
 
     void EditorAssetCatalog::loadAssetDefaults(PlaceableAsset& placeable) const
     {
-        const auto path = assetDefaultsPath(placeable);
+        auto path = assetDefaultsPath(placeable);
+        bool legacyPath = false;
+        if (!std::filesystem::exists(path) && std::filesystem::path(placeable.modelKey).has_parent_path())
+        {
+            const auto name = AssetNameFromKey(placeable.modelKey);
+            const auto oldPath = IMPORTED_ASSETS_DIRECTORY / (SanitizeAssetFileStem(name) + ".json");
+            const auto& resources = ResourceManager::GetInstance();
+            if (std::filesystem::exists(oldPath) &&
+                resources.GetModelSourcePath(name) == resources.GetModelSourcePath(placeable.modelKey))
+            {
+                path = oldPath.string();
+                legacyPath = true;
+            }
+        }
         if (!std::filesystem::exists(path))
         {
             if (!IsIdentityMatrix(placeable.modelSpaceDefaultTransform))
@@ -359,7 +377,8 @@ namespace sage::editor
                 input(cereal::make_nvp("assetDefaults", defaults));
             }
 
-            if (!defaults.modelKey.empty() && defaults.modelKey != placeable.modelKey)
+            if (!defaults.modelKey.empty() && defaults.modelKey != placeable.modelKey &&
+                !(legacyPath && defaults.modelKey == AssetNameFromKey(placeable.modelKey)))
             {
                 std::cerr << "WARN: Asset defaults model key mismatch in " << path << std::endl;
                 return;
@@ -379,6 +398,7 @@ namespace sage::editor
             {
                 placeable.appliedModelDefaultTransform = defaults.appliedModelDefaultTransform;
             }
+            if (legacyPath) saveAssetDefaults(placeable);
         }
         catch (const cereal::Exception& e)
         {
@@ -388,9 +408,8 @@ namespace sage::editor
 
     void EditorAssetCatalog::saveAssetDefaults(const PlaceableAsset& placeable) const
     {
-        std::filesystem::create_directories(IMPORTED_ASSETS_DIRECTORY);
-
         const auto path = assetDefaultsPath(placeable);
+        std::filesystem::create_directories(std::filesystem::path(path).parent_path());
         std::ofstream outputFile(path);
         if (!outputFile.is_open())
         {

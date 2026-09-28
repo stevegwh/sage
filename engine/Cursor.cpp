@@ -27,9 +27,6 @@ namespace sage
         {
             if (registry->all_of<Hoverable>(entity)) return entity;
 
-            const auto* cursorTarget = registry->try_get<CursorTarget>(entity);
-            if (cursorTarget != nullptr && cursorTarget->hoverable) return entity;
-
             const auto* transform = registry->try_get<sgTransform>(entity);
             if (transform == nullptr) break;
             entity = transform->GetParent();

@@ -1,15 +1,23 @@
 #include "ContentDocument.hpp"
 #include "ContentInspector.hpp"
+#include "engine/Archetypes.hpp"
+#include "engine/Flatpack.hpp"
+#include "engine/Light.hpp"
 #include "engine/components/Animation.hpp"
+#include "engine/components/Collideable.hpp"
+#include "engine/components/CollisionIntent.hpp"
+#include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/ParticleEmitterComponent.hpp"
+#include "engine/components/Renderable.hpp"
+#include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/systems/TransformSystem.hpp"
-#include "FlatpackRecords.hpp"
+#include "StoredRenderableRecord.hpp"
 #include <chrono>
 #include <set>
 
@@ -264,105 +272,6 @@ namespace sage::content
             NormalizeLegacyIds(doc);
             return doc;
         }
-        json::Document ReadFlatpack(const std::filesystem::path& path, const std::string& magic)
-        {
-            if (magic != "LQFP" && magic != "LQF2" && magic != "LQF3" && magic != "LQF4" && magic != "LQF5" &&
-                magic != "LQF6")
-                throw std::runtime_error("Unsupported flatpack version: " + magic);
-            using namespace content_binary;
-            auto doc = Empty("flatpack");
-            auto& a = doc.GetAllocator();
-            MigrationFlatpackData data;
-            LegacyMigrationFlatpackData legacy;
-            auto read = [&](const auto& bytes) {
-                serializer::ReadCompressedBinary(path.string().c_str(), bytes, [&](auto& input, std::istream&) {
-                    if (magic == "LQF6")
-                        input(data.records, data.names, data.scripts, data.animations);
-                    else
-                        input(legacy.records, data.names, data.scripts, data.animations);
-                    if (magic == "LQFP")
-                    {
-                        std::vector<LegacyFlatpackMoveableActorRecord> actors;
-                        input(actors);
-                        for (const auto& r : actors)
-                            data.moveables.push_back(
-                                {r.localId, r.movementSpeed, 240.f, r.pathfindingBounds, r.moveClip, r.idleClip});
-                    }
-                    else
-                        input(data.moveables);
-                    if (magic != "LQFP" && magic != "LQF2") input(data.archetypes);
-                    if (magic == "LQF4" || magic == "LQF5" || magic == "LQF6") input(data.customShaders);
-                    if (magic == "LQF5" || magic == "LQF6") input(data.customComponents);
-                });
-            };
-            const char bytes[4] = {magic[0], magic[1], magic[2], magic[3]};
-            read(bytes);
-            for (const auto& r : legacy.records)
-            {
-                MigrationFlatpackEntityRecord n;
-                n.parentLocalId = r.parentLocalId;
-                n.worldPos = r.worldPos;
-                n.worldRot = r.worldRot;
-                n.worldScale = r.worldScale;
-                n.hasRenderable = r.hasRenderable;
-                n.renderable = r.renderable;
-                n.hasCollideable = r.hasCollideable;
-                n.collideable = r.collideable;
-                n.hasNavigationSurface = r.hasNavigationSurface;
-                n.navigationSurface = r.navigationSurface;
-                n.hasNavigationObstacle = r.hasNavigationObstacle;
-                n.navigationObstacle = r.navigationObstacle;
-                n.hasTriggerVolume = r.hasTriggerVolume;
-                n.triggerVolume = r.triggerVolume;
-                n.hasCursorTarget = r.hasCursorTarget;
-                n.cursorTarget = r.cursorTarget.Current();
-                n.hasLight = r.hasLight;
-                n.light = r.light;
-                data.records.push_back(n);
-            }
-            for (std::uint32_t id = 0; id < data.records.size(); ++id)
-            {
-                const auto& r = data.records[id];
-                auto n = Node(
-                    id,
-                    id < data.names.size() ? data.names[id] : "",
-                    r.worldPos,
-                    r.worldRot,
-                    r.worldScale,
-                    r.parentLocalId < 0 ? NULL_ID : std::uint32_t(r.parentLocalId),
-                    a);
-                AddBase(n, r, a);
-                if (r.hasLight) Add(n, "sage.Light", r.light, a);
-                doc["entities"].PushBack(n, a);
-            }
-            json::Put(doc, "root", std::uint64_t(0), a);
-            for (const auto& r : data.scripts)
-                Add(Entity(doc, r.localId), "sage.Script", r.script, a);
-            for (const auto& r : data.animations)
-            {
-                json::Value v(rapidjson::kObjectType);
-                json::Put(v, "modelKey", r.modelKey, a);
-                Component(Entity(doc, r.localId), "sage.Animation", v, a);
-            }
-            for (const auto& r : data.moveables)
-            {
-                json::Value v(rapidjson::kObjectType);
-                json::Put(v, "movementSpeed", json::Encode(r.movementSpeed), a);
-                json::Put(v, "turnSpeed", json::Encode(r.turnSpeed), a);
-                json::Put(v, "pathfindingBounds", json::Encode(r.pathfindingBounds), a);
-                json::Put(v, "moveClip", r.moveClip, a);
-                json::Put(v, "idleClip", r.idleClip, a);
-                Component(Entity(doc, r.localId), "sage.MoveableActor", v, a);
-            }
-            for (const auto& r : data.archetypes)
-                Add(Entity(doc, r.localId), "sage.Archetype", r.archetype, a);
-            for (const auto& r : data.customShaders)
-                Add(Entity(doc, r.localId), "sage.CustomShader", r.shader, a);
-            for (const auto& r : data.customComponents)
-                Opaque(Entity(doc, r.localId), r.key, r.data, a);
-            NormalizeLegacyIds(doc);
-            return doc;
-        }
         std::uint32_t EnsureId(entt::registry& registry, entt::entity entity, std::uint32_t& next)
         {
             auto* existing = registry.try_get<PersistentEntityId>(entity);
@@ -421,8 +330,6 @@ namespace sage::content
             doc = json::Parse(bytes);
         else if (bytes.starts_with("LQE6"))
             doc = ReadMap(path);
-        else if (bytes.starts_with("LQF"))
-            doc = ReadFlatpack(path, bytes.substr(0, 4));
         else
             throw std::runtime_error("Unsupported content format: " + path.string());
         const auto errors = Validate(doc);

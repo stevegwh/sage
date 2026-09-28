@@ -3,6 +3,7 @@
 //
 
 #include "ResourceManager.hpp"
+#include "AssetKey.hpp"
 
 #include "components/Renderable.hpp"
 
@@ -50,6 +51,29 @@ namespace sage
                     "'");
             }
             sources.emplace(key, path);
+        }
+
+        template <typename Assets>
+        void BuildAliases(const Assets& assets, std::unordered_map<std::string, std::string>& aliases)
+        {
+            aliases.clear();
+            std::unordered_map<std::string, int> counts;
+            for (const auto& [key, asset] : assets)
+            {
+                if (key.find('/') == std::string::npos) continue;
+                const auto name = AssetNameFromKey(key);
+                ++counts[name];
+                aliases[name] = key;
+            }
+            for (const auto& [name, count] : counts)
+                if (count != 1) aliases.erase(name);
+        }
+
+        std::string ResolveKey(
+            const std::string& key, const std::unordered_map<std::string, std::string>& aliases)
+        {
+            if (const auto found = aliases.find(key); found != aliases.end()) return found->second;
+            return key;
         }
 
         std::string FallbackMaterialName(const std::string& sourcePath, int materialIndex)
@@ -277,9 +301,17 @@ namespace sage
             {
                 // First sighting of this name: donate the freshly-loaded material to the shared pool.
                 materialMap[name] = model.materials[i];
+                materialSourcePaths[name] = sourcePath;
             }
             else
             {
+                if (name != DEFAULT_MATERIAL_NAME && !sourcePath.empty() &&
+                    materialSourcePaths[name] != sourcePath && reportedSharedMaterials.insert(name).second)
+                {
+                    std::cerr << "ResourcePacker: Material name '" << name << "' appears in both '"
+                              << materialSourcePaths[name] << "' and '" << sourcePath
+                              << "'; the first loaded material is shared.\n";
+                }
                 // Already pooled: release raylib's freshly-allocated copy, swap in the shared one.
                 UnloadMaterial(model.materials[i]);
                 model.materials[i] = materialMap.at(name);
@@ -390,14 +422,20 @@ namespace sage
 
     Texture ResourceManager::TextureLoad(const std::string& path)
     {
-        auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
-        //  from QUEST_BONE.obj)
+        const auto requestedKey = AssetKeyForPath(path);
+        const auto key = requestedKey.find('/') != std::string::npos || images.contains(requestedKey)
+                             ? requestedKey
+                             : ResolveImageKey(StripPath(path));
         if (!nonModelTextures.contains(key))
         {
             if (!images.contains(key))
             {
-                registerImageKey(key, path);
-                images.emplace(key, LoadImage(path.c_str()));
+                const auto fileKey = AssetKeyForPath(path);
+                registerImageKey(fileKey, path);
+                images.emplace(fileKey, LoadImage(path.c_str()));
+                RebuildAssetAliases();
+                nonModelTextures[fileKey] = LoadTextureFromImage(images[fileKey]);
+                return nonModelTextures[fileKey];
             }
             nonModelTextures[key] = LoadTextureFromImage(images[key]);
         }
@@ -427,18 +465,21 @@ namespace sage
 
     void ResourceManager::ImageUnload(const std::string& key)
     {
-        if (images.contains(key))
+        const auto resolved = ResolveImageKey(key);
+        if (images.contains(resolved))
         {
-            UnloadImage(images.at(key));
-            images.erase(key);
-            imageSourcePaths.erase(key);
+            UnloadImage(images.at(resolved));
+            images.erase(resolved);
+            imageSourcePaths.erase(resolved);
+            RebuildAssetAliases();
         }
     }
 
     ImageSafe ResourceManager::GetImage(const std::string& key)
     {
-        assert(images.contains(key));
-        return ImageSafe(images[key], false);
+        const auto resolved = ResolveImageKey(key);
+        assert(images.contains(resolved));
+        return ImageSafe(images.at(resolved), false);
     }
 
     void ResourceManager::FontLoadFromFile(const std::string& path)
@@ -459,8 +500,7 @@ namespace sage
 
     void ResourceManager::ImageLoadFromFile(const std::string& path)
     {
-        auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
-        // from QUEST_BONE.obj)
+        const auto key = AssetKeyForPath(path);
         assert(FileExists(path.c_str()));
         registerImageKey(key, path);
         images[key] = LoadImage(path.c_str());
@@ -488,9 +528,7 @@ namespace sage
 
     void ResourceManager::ModelLoadFromFile(const std::string& path)
     {
-        auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
-                                    // from QUEST_BONE.obj)
-        ModelLoadFromFile(path, key);
+        ModelLoadFromFile(path, AssetKeyForPath(path));
     }
 
     void ResourceManager::ModelLoadFromFile(const std::string& path, const std::string& key)
@@ -515,6 +553,31 @@ namespace sage
     void ResourceManager::StoreModel(const ModelInfo& modelInfo, const std::string& key)
     {
         modelCopies.emplace(key, modelInfo);
+    }
+
+    void ResourceManager::RebuildAssetAliases()
+    {
+        BuildAliases(modelCopies, modelAliases);
+        BuildAliases(images, imageAliases);
+        BuildAliases(modelAnimations, animationAliases);
+    }
+
+    std::string ResourceManager::ResolveModelKey(const std::string& key) const
+    {
+        if (modelCopies.contains(key)) return key;
+        return ResolveKey(key, modelAliases);
+    }
+
+    std::string ResourceManager::ResolveImageKey(const std::string& key) const
+    {
+        if (images.contains(key)) return key;
+        return ResolveKey(key, imageAliases);
+    }
+
+    std::string ResourceManager::ResolveAnimationKey(const std::string& key) const
+    {
+        if (modelAnimations.contains(key)) return key;
+        return ResolveKey(key, animationAliases);
     }
 
     namespace
@@ -584,7 +647,7 @@ namespace sage
     underlying entry stays alive until UnloadAll (i.e. scene tear-down). */
     bool ResourceManager::HasModelKey(const std::string& key) const
     {
-        return modelCopies.contains(key);
+        return modelCopies.contains(ResolveModelKey(key));
     }
 
     std::vector<std::string> ResourceManager::GetModelKeys(const bool includeGenerated) const
@@ -605,8 +668,9 @@ namespace sage
 
     std::string ResourceManager::GetModelSourcePath(const std::string& key) const
     {
-        if (!modelCopies.contains(key)) return {};
-        return modelCopies.at(key).sourcePath;
+        const auto resolved = ResolveModelKey(key);
+        if (!modelCopies.contains(resolved)) return {};
+        return modelCopies.at(resolved).sourcePath;
     }
 
     bool ResourceManager::RenameModelAsset(
@@ -627,15 +691,18 @@ namespace sage
             modelAnimations.insert(std::move(animationNode));
         }
 
+        RebuildAssetAliases();
+
         return true;
     }
 
     ModelView ResourceManager::GetModelView(const std::string& viewKey) const
     {
-        assert(modelCopies.contains(viewKey));
+        const auto key = ResolveModelKey(viewKey);
+        assert(modelCopies.contains(key));
         ModelView view;
-        view.rlmodel = modelCopies.at(viewKey).model;
-        view.assetKey = viewKey;
+        view.rlmodel = modelCopies.at(key).model;
+        view.assetKey = key;
         return view;
     }
 
@@ -655,7 +722,7 @@ namespace sage
         keys.reserve(images.size());
         for (const auto& key : images | std::views::keys)
         {
-            if (prefix.empty() || key.starts_with(prefix)) keys.push_back(key);
+            if (prefix.empty() || AssetNameFromKey(key).starts_with(prefix)) keys.push_back(key);
         }
         std::ranges::sort(keys);
         return keys;
@@ -663,8 +730,9 @@ namespace sage
 
     const std::vector<std::string>& ResourceManager::GetModelMaterialKeys(const std::string& modelKey) const
     {
-        assert(modelCopies.contains(modelKey));
-        return modelCopies.at(modelKey).materialNames;
+        const auto key = ResolveModelKey(modelKey);
+        assert(modelCopies.contains(key));
+        return modelCopies.at(key).materialNames;
     }
 
     const Material& ResourceManager::GetMaterial(const std::string& key) const
@@ -681,10 +749,11 @@ namespace sage
     registered generator function. */
     ModelMutable ResourceManager::CreateModelMutable(const std::string& viewKey)
     {
-        assert(modelCopies.contains(viewKey));
-        const auto& info = modelCopies.at(viewKey);
+        const auto key = ResolveModelKey(viewKey);
+        assert(modelCopies.contains(key));
+        const auto& info = modelCopies.at(key);
 
-        const std::string instanceKey = viewKey + "#mut_" + std::to_string(mutableInstanceCounter++);
+        const std::string instanceKey = key + "#mut_" + std::to_string(mutableInstanceCounter++);
         assert(!modelCopies.contains(instanceKey) && "CreateModelMutable: instanceKey collision");
 
         Model model;
@@ -695,7 +764,7 @@ namespace sage
             assert(FileExists(info.sourcePath.c_str()) && "CreateModelMutable: source file missing at runtime");
             model = LoadModel(info.sourcePath.c_str());
         }
-        else if (const auto it = generators.find(viewKey); it != generators.end())
+        else if (const auto it = generators.find(key); it != generators.end())
         {
             // Baked primitive — regenerate mesh, raylib allocates fresh default materials.
             model = LoadModelFromMesh(it->second());
@@ -711,15 +780,14 @@ namespace sage
 
         ModelMutable mut;
         mut.rlmodel = modelCopies.at(instanceKey).model;
-        mut.assetKey = viewKey;
+        mut.assetKey = key;
         mut.instanceKey = instanceKey;
         return mut;
     }
 
     void ResourceManager::ModelAnimationLoadFromFile(const std::string& path)
     {
-        auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
-        // from QUEST_BONE.obj)
+        const auto key = AssetKeyForPath(path);
         RegisterSourcePath(animationSourcePaths, "Animation", key, path);
         if (!modelAnimations.contains(key))
         {
@@ -737,18 +805,19 @@ namespace sage
 
     bool ResourceManager::HasModelAnimation(const std::string& key) const
     {
-        return modelAnimations.contains(key);
+        return modelAnimations.contains(ResolveAnimationKey(key));
     }
 
     ModelAnimation* ResourceManager::GetModelAnimation(const std::string& key, int* animsCount) const
     {
-        if (!modelAnimations.contains(key))
+        const auto resolved = ResolveAnimationKey(key);
+        if (!modelAnimations.contains(resolved))
         {
             TraceLog(
                 LOG_FATAL, "ResourceManager::GetModelAnimation: animation '%s' was not pre-loaded.", key.c_str());
             assert(false && "missing model animation");
         }
-        const auto& pair = modelAnimations.at(key);
+        const auto& pair = modelAnimations.at(resolved);
         *animsCount = pair.second;
         return pair.first;
     }
@@ -875,10 +944,15 @@ namespace sage
         fonts.clear();
         shaders.clear();
         materialMap.clear();
+        materialSourcePaths.clear();
+        reportedSharedMaterials.clear();
         images.clear();
         nonModelTextures.clear();
         modelCopies.clear();
         modelAnimations.clear();
+        modelAliases.clear();
+        imageAliases.clear();
+        animationAliases.clear();
         animationSourcePaths.clear();
         vertShaderFileText.clear();
         fragShaderFileText.clear();

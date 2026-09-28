@@ -51,6 +51,7 @@
 #include "rlImGui.h"
 
 #include <algorithm>
+#include <array>
 #include <cerrno>
 #include <cctype>
 #include <format>
@@ -72,8 +73,8 @@ namespace sage
     namespace
     {
         constexpr float GRID_SURFACE_Y_STEP = 1.0f;
-        constexpr float EDITOR_FOCUS_CAMERA_DISTANCE = 38.0f;
-        constexpr float EDITOR_FOCUS_RADIUS_PADDING = 2.4f;
+        constexpr float FOCUSED_CAMERA_KEY_ROTATION_SPEED = 1.5f;
+        constexpr std::array<const char*, 3> CAMERA_MODE_NAMES = {"In-game", "Free", "Object Focused"};
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
         constexpr const char* SHADERS_DIRECTORY = "resources/shaders";
         // Temp map the editor snapshots the editor scene into when entering
@@ -260,7 +261,10 @@ namespace sage
     void EditorScene::refreshOverlay() const
     {
         const auto defaultsStatus = modelDefaults->Status(describeSelectedAsset());
-        gui->SetOverlayStatus(editorModes->GetStateName(), describeCursorPosition());
+        gui->SetOverlayStatus(
+            editorModes->GetStateName(),
+            describeCursorPosition(),
+            CAMERA_MODE_NAMES[static_cast<int>(editorCamera.mode)]);
         const bool flatpackOpen = flatpackSession && flatpackSession->IsActive();
         if (flatpackOpen)
         {
@@ -276,6 +280,7 @@ namespace sage
                                       : mapController->HasUnsavedChanges(),
              .flatpackOpen = flatpackOpen,
              .flatpackLabel = flatpackOpen ? flatpackSession->FlatpackName() : std::string{},
+             .flatpackPath = flatpackOpen ? flatpackSession->Path() : std::filesystem::path{},
              .flatpackDirty = flatpackOpen && flatpackSession->HasUnsavedChanges()});
         gui->SetAssetDefaultsStatus(
             defaultsStatus.assetName, defaultsStatus.height, defaultsStatus.rotation, defaultsStatus.scale);
@@ -312,20 +317,12 @@ namespace sage
 
     void EditorScene::focusSelectedObject() const
     {
-        const auto selectedEntities = selection->SelectedWithChildren();
-        if (selectedEntities.empty()) return;
+        const auto target = editor::ComputeFocusTarget(*sys->registry, selection->SelectedWithChildren());
+        if (!target) return;
 
-        auto target = editor::ComputeFocusTarget(*sys->registry, selectedEntities);
-        if (!target.has_value())
-        {
-            const auto primary = selection->Active();
-            if (!primary.has_value()) return;
-            target = editor::FocusTarget{.position = sys->registry->get<sgTransform>(*primary).GetWorldPos()};
-        }
-
-        const float focusDistance =
-            std::max(EDITOR_FOCUS_CAMERA_DISTANCE, target->radius * EDITOR_FOCUS_RADIUS_PADDING);
-        sys->camera->FocusPoint(target->position, focusDistance);
+        const auto viewport = gameViewportScreenRect();
+        editorCamera.Focus(*sys->camera->getRaylibCam(), *target, viewport.width / std::max(1.0f, viewport.height));
+        middleCameraDrag = rightCameraDrag = false;
     }
 
     void EditorScene::focusSelectedObjectInHierarchy() const
@@ -335,41 +332,56 @@ namespace sage
         gui->FocusHierarchyOnEntity(*selectedEntity);
     }
 
-    // Middle mouse orbits the camera around its target; right mouse drags (pans) it across the
-    // ground plane. A drag may only begin while the cursor is over the render viewport and the
-    // editor UI is not capturing the mouse, but continues until the button is released so the
-    // motion is not interrupted when the cursor leaves the viewport.
-    void EditorScene::handleMouseCameraControls() const
+    void EditorScene::setCameraMode(const editor::CameraMode mode) const
     {
-        const bool uiBlocksMouse = !viewportFullscreen && gui && gui->WantsMouseCapture();
-        const bool gizmoDragging = transformEditor && transformEditor->IsGizmoDragging();
-        const bool canBeginDrag =
-            !uiBlocksMouse && !gizmoDragging && sys->settings->IsPointInRenderViewport(GetMousePosition());
+        if (mode == editor::CameraMode::Focused)
+        {
+            focusSelectedObject();
+            return;
+        }
+        editorCamera.mode = mode;
+        middleCameraDrag = rightCameraDrag = false;
+        // Synchronize the game's height smoothing and discard old scroll momentum.
+        const auto* camera = sys->camera->getRaylibCam();
+        sys->camera->SetCamera(camera->position, camera->target);
+    }
 
+    // Drags start only in the viewport and continue until the button is released.
+    void EditorScene::handleMouseCameraControls(const bool canBeginDrag) const
+    {
         if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE) && canBeginDrag)
         {
-            orbitingCamera = true;
+            middleCameraDrag = true;
         }
         if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) && canBeginDrag)
         {
-            panningCamera = true;
+            rightCameraDrag = true;
         }
 
         if (!IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
         {
-            orbitingCamera = false;
+            middleCameraDrag = false;
         }
         if (!IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
         {
-            panningCamera = false;
+            rightCameraDrag = false;
         }
 
         const Vector2 delta = GetMouseDelta();
-        if (orbitingCamera)
+        if (editorCamera.mode != editor::CameraMode::Game)
+        {
+            auto& camera = *sys->camera->getRaylibCam();
+            if (rightCameraDrag || (middleCameraDrag && editorCamera.mode == editor::CameraMode::Focused))
+                editorCamera.Look(camera, delta);
+            else if (middleCameraDrag)
+                editorCamera.Pan(camera, delta);
+            return;
+        }
+        if (middleCameraDrag)
         {
             sys->camera->RotateByMouseDelta(delta);
         }
-        if (panningCamera)
+        if (rightCameraDrag)
         {
             sys->camera->PanByMouseDelta(delta);
         }
@@ -397,7 +409,11 @@ namespace sage
         sys->audioManager->Update();
         sys->userInput->ListenForInput();
         const bool uiBlocksScroll = !viewportFullscreen && gui && gui->WantsMouseCapture();
-        if (uiBlocksScroll || !sys->settings->IsPointInRenderViewport(GetMousePosition()))
+        const bool inViewport = sys->settings->IsPointInRenderViewport(GetMousePosition());
+        const bool gizmoDragging = transformEditor && transformEditor->IsGizmoDragging();
+        const bool uiBlocksCameraControls = !viewportFullscreen && gui && gui->WantsKeyboardCapture();
+        const bool cameraInputBlocked = uiBlocksCameraControls || gizmoDragging;
+        if (uiBlocksScroll || !inViewport)
         {
             sys->camera->ScrollDisable();
         }
@@ -406,19 +422,54 @@ namespace sage
             sys->camera->ScrollEnable();
         }
 
-        const bool uiBlocksCameraControls = !viewportFullscreen && gui && gui->WantsKeyboardCapture();
-        if (uiBlocksCameraControls)
+        if (cameraInputBlocked)
         {
             sys->camera->LockInput();
         }
-        else if (!transformEditor || !transformEditor->IsGizmoDragging())
+        else
         {
             sys->camera->UnlockInput();
         }
 
-        handleMouseCameraControls();
+        if (!cameraInputBlocked) handleMouseCameraControls(!uiBlocksScroll && inViewport);
+        else middleCameraDrag = rightCameraDrag = false;
 
-        sys->camera->Update();
+        if (editorCamera.mode == editor::CameraMode::Game)
+            sys->camera->Update();
+        else
+        {
+            auto& camera = *sys->camera->getRaylibCam();
+            if (editorCamera.mode == editor::CameraMode::Focused)
+            {
+                const auto target = editor::ComputeFocusTarget(*sys->registry, selection->SelectedWithChildren());
+                if (target) editorCamera.Follow(camera, *target);
+                else setCameraMode(editor::CameraMode::Free);
+            }
+            if (!cameraInputBlocked && !IsMetaKeyDown() &&
+                !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
+            {
+                if (inViewport || rightCameraDrag || middleCameraDrag)
+                {
+                    if (editorCamera.mode == editor::CameraMode::Focused)
+                    {
+                        const int rotationInput = IsKeyDown(KEY_E) - IsKeyDown(KEY_Q);
+                        if (rotationInput != 0)
+                            editorCamera.Yaw(
+                                camera, rotationInput * FOCUSED_CAMERA_KEY_ROTATION_SPEED * GetFrameTime());
+                        const int heightInput = IsKeyDown(KEY_S) - IsKeyDown(KEY_W);
+                        if (heightInput != 0)
+                            editorCamera.Pitch(
+                                camera, heightInput * FOCUSED_CAMERA_KEY_ROTATION_SPEED * GetFrameTime());
+                    }
+                    editorCamera.Move(camera,
+                        {float(IsKeyDown(KEY_D) - IsKeyDown(KEY_A)),
+                         float(IsKeyDown(KEY_E) - IsKeyDown(KEY_Q)),
+                         float(IsKeyDown(KEY_W) - IsKeyDown(KEY_S))},
+                        GetFrameTime(), IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+                }
+                if (!uiBlocksScroll && inViewport) editorCamera.Zoom(camera, GetMouseWheelMove());
+            }
+        }
         sys->cursor->Update();
         editorModes->RefreshPlacementTarget();
         // TODO: Should be part of some mode
@@ -1655,7 +1706,7 @@ namespace sage
 
     void EditorScene::refreshFlatpackCatalog() const
     {
-        auto catalog = sage::ListFlatpacks(std::filesystem::path{"resources/flatpacks"});
+        auto catalog = sage::ListFlatpacks(std::filesystem::path{"resources"});
         std::vector<editor::EditorGui::FlatpackEntry> entries;
         entries.reserve(catalog.size());
         for (auto& item : catalog)
@@ -1855,6 +1906,25 @@ namespace sage
             {
                 rebuildNavigationGrid();
             }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Camera", !IsPlaying()))
+        {
+            if (ImGui::MenuItem(CAMERA_MODE_NAMES[0], nullptr, editorCamera.mode == editor::CameraMode::Game))
+                setCameraMode(editor::CameraMode::Game);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Existing WASD/QE movement, MMB orbit, RMB ground pan");
+
+            if (ImGui::MenuItem(CAMERA_MODE_NAMES[1], nullptr, editorCamera.mode == editor::CameraMode::Free))
+                setCameraMode(editor::CameraMode::Free);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("WASD fly, Q/E down/up, Shift faster, RMB look, MMB pan");
+
+            if (ImGui::MenuItem(
+                    CAMERA_MODE_NAMES[2], "F", editorCamera.mode == editor::CameraMode::Focused,
+                    !selection->Selected().empty()))
+                setCameraMode(editor::CameraMode::Focused);
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("Q/E orbit sideways, W/S orbit up/down, RMB/MMB drag, wheel zoom; Esc returns to In-game");
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Add"))
@@ -2521,10 +2591,16 @@ namespace sage
 
     bool EditorScene::HandleEscapePressed() const
     {
-        // Esc exits a play session first; otherwise it cancels editor modes.
+        // Esc exits a play session first, then leaves object focus, then cancels editor modes.
         if (gameRuntime)
         {
             stopPlay();
+            return true;
+        }
+        if (editorCamera.mode == editor::CameraMode::Focused && !ImGui::GetIO().WantTextInput &&
+            !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId))
+        {
+            setCameraMode(editor::CameraMode::Game);
             return true;
         }
         return editorModes->HandleEscapePressed();

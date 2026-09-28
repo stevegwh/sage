@@ -60,6 +60,12 @@ target_link_libraries(editor
 )
 add_dependencies(editor sage_managed_host)
 
+if (BUILD_TESTING)
+    add_executable(editor_camera_tests ${SAGE_ROOT_DIR}/tests/EditorCameraTests.cpp)
+    target_link_libraries(editor_camera_tests PRIVATE sage_editor)
+    add_test(NAME editor_camera_tests COMMAND editor_camera_tests)
+endif ()
+
 # Symbolic link for resources folder
 set(source "${CMAKE_SOURCE_DIR}/resources")
 set(destination "${CMAKE_CURRENT_BINARY_DIR}/resources")

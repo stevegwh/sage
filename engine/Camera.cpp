@@ -279,6 +279,9 @@ namespace sage
     {
         rlCamera.position = _pos;
         rlCamera.target = _target;
+        verticalSmoothingCurrentY = _pos.y;
+        verticalSmoothingTargetY = _target.y;
+        cameraScrollVelY = 0.0f;
     }
 
     void Camera::FocusPoint(const Vector3 target, const float distance)

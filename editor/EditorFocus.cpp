@@ -13,18 +13,6 @@ namespace sage::editor
 {
     namespace
     {
-        FocusTarget focusTargetFromBounds(const BoundingBox& bounds)
-        {
-            const Vector3 center = BoundingBoxCenter(bounds);
-            const Vector3 halfSize = Vector3Scale(Vector3Subtract(bounds.max, bounds.min), 0.5f);
-            return {.position = center, .radius = std::max(1.0f, Vector3Length(halfSize))};
-        }
-
-        BoundingBox boundsFromPoint(const Vector3 point)
-        {
-            return BoundingBox{.min = point, .max = point};
-        }
-
         void expandBounds(BoundingBox& bounds, const BoundingBox& other)
         {
             bounds.min.x = std::min(bounds.min.x, other.min.x);
@@ -37,27 +25,28 @@ namespace sage::editor
 
         std::optional<BoundingBox> focusBoundsForEntity(entt::registry& registry, const entt::entity entity)
         {
-            if (!registry.valid(entity) || !registry.any_of<sgTransform>(entity)) return std::nullopt;
+            if (!registry.valid(entity)) return std::nullopt;
+            const auto* transform = registry.try_get<sgTransform>(entity);
+            if (!transform) return std::nullopt;
 
-            if (registry.any_of<Collideable>(entity))
+            if (const auto* renderable = registry.try_get<Renderable>(entity))
             {
-                return registry.get<Collideable>(entity).worldBoundingBox;
-            }
-
-            if (registry.any_of<Renderable>(entity))
-            {
-                const auto& transform = registry.get<sgTransform>(entity);
-                const auto& renderable = registry.get<Renderable>(entity);
-                if (const auto* model = renderable.GetModel(); model != nullptr)
+                if (const auto* model = renderable->GetModel())
                 {
                     const Matrix entityMatrix = BuildRenderableEntityMatrix(
-                        transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-                    const Matrix worldMatrix = MatrixMultiply(model->GetTransform(), entityMatrix);
-                    return TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), worldMatrix);
+                        transform->GetWorldPos(), transform->GetWorldRot(), transform->GetScale());
+                    // CalcLocalBoundingBox already includes the model's local transform.
+                    return TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), entityMatrix);
                 }
             }
 
-            return boundsFromPoint(registry.get<sgTransform>(entity).GetWorldPos());
+            if (const auto* collider = registry.try_get<Collideable>(entity))
+            {
+                return collider->worldBoundingBox;
+            }
+
+            const auto point = transform->GetWorldPos();
+            return BoundingBox{.min = point, .max = point};
         }
     } // namespace
 
@@ -77,6 +66,8 @@ namespace sage::editor
         }
 
         if (!combinedBounds.has_value()) return std::nullopt;
-        return focusTargetFromBounds(*combinedBounds);
+        const Vector3 halfSize = Vector3Scale(Vector3Subtract(combinedBounds->max, combinedBounds->min), 0.5f);
+        return FocusTarget{.position = BoundingBoxCenter(*combinedBounds),
+                           .radius = std::max(1.0f, Vector3Length(halfSize))};
     }
 } // namespace sage::editor

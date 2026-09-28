@@ -31,6 +31,12 @@ namespace sage
                                         : mapController->HasUnsavedChanges(),
             a);
         json::Put(state, "playing", IsPlaying(), a);
+        json::Value camera(rapidjson::kObjectType);
+        const char* modes[] = {"game", "free", "focused"};
+        json::Put(camera, "mode", modes[static_cast<int>(editorCamera.mode)], a);
+        json::Put(camera, "position", json::Encode(sys->camera->getRaylibCam()->position), a);
+        json::Put(camera, "target", json::Encode(sys->camera->getRaylibCam()->target), a);
+        json::Put(state, "camera", camera, a);
         json::Value selected(rapidjson::kArrayType);
         for (auto e : selection->Selected())
             if (auto* id = sys->registry->try_get<PersistentEntityId>(e))
@@ -163,10 +169,31 @@ namespace sage
             }
             else if (command == "camera")
             {
-                Vector3 position, target;
-                json::Decode(json::Require(request, "position"), position);
-                json::Decode(json::Require(request, "target"), target);
-                sys->camera->SetCamera(position, target);
+                if (request.HasMember("mode"))
+                {
+                    const auto mode = json::String(request, "mode");
+                    if (mode == "free") setCameraMode(editor::CameraMode::Free);
+                    else if (mode == "game") setCameraMode(editor::CameraMode::Game);
+                    else if (mode == "focused")
+                    {
+                        if (selection->Selected().empty()) throw std::runtime_error("Select an object to focus");
+                        setCameraMode(editor::CameraMode::Focused);
+                    }
+                    else throw std::runtime_error("Unknown camera mode");
+                }
+                if (request.HasMember("position") || (!request.HasMember("mode") && !request.HasMember("wheel")))
+                {
+                    Vector3 position, target;
+                    json::Decode(json::Require(request, "position"), position);
+                    json::Decode(json::Require(request, "target"), target);
+                    sys->camera->SetCamera(position, target);
+                }
+                if (request.HasMember("wheel"))
+                {
+                    float wheel;
+                    json::Decode(request["wheel"], wheel);
+                    editorCamera.Zoom(*sys->camera->getRaylibCam(), wheel);
+                }
             }
             else if (command == "edit")
             {

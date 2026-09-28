@@ -1,5 +1,6 @@
 #pragma once
 #include "ContentDocument.hpp"
+#include "engine/AssetKey.hpp"
 #include "engine/ResourceManager.hpp"
 #include <set>
 
@@ -39,9 +40,14 @@ namespace sage::content
         const auto has = [&](const char* group, const std::string& key) {
             const auto& values = json::Require(index, group);
             if (!values.IsArray()) throw std::runtime_error("Invalid asset index group");
-            return std::any_of(values.Begin(), values.End(), [&](const auto& value) {
+            if (std::any_of(values.Begin(), values.End(), [&](const auto& value) {
                 return value.IsString() && key == value.GetString();
-            });
+            })) return true;
+            if (std::string_view(group) == "materials") return false;
+            std::size_t aliases = 0;
+            for (const auto& value : values.GetArray())
+                if (value.IsString() && AssetNameFromKey(value.GetString()) == key) ++aliases;
+            return aliases == 1;
         };
         const auto check = [&](const char* group, const std::string& key) {
             if (!key.empty() && !has(group, key))

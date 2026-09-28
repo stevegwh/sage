@@ -91,6 +91,7 @@ namespace sage
                 bool mapDirty = false;
                 bool flatpackOpen = false;
                 std::string flatpackLabel;
+                std::filesystem::path flatpackPath;
                 bool flatpackDirty = false;
             };
 
@@ -168,6 +169,11 @@ namespace sage
             EditorDockLayout* dockLayout{};
             std::vector<AssetEntry> assetEntries;
             std::vector<RenderTexture2D> assetThumbnails;
+            std::vector<std::string> materialKeys;
+            std::vector<RenderTexture2D> materialThumbnails;
+            std::vector<std::string> imageKeys;
+            std::vector<RenderTexture2D> imageThumbnails;
+            mutable Shader assetPreviewShader{};
             std::vector<SceneObjectEntry> hierarchyEntries;
             std::vector<FlatpackEntry> flatpackEntries;
             std::vector<RenderTexture2D> flatpackThumbnails;
@@ -180,8 +186,24 @@ namespace sage
             std::function<void(const std::filesystem::path&)> onFlatpackDeleteCb;
             std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
-            ImGuiTextFilter assetFilter;
-            ImGuiTextFilter flatpackFilter;
+            struct ResourceEntry
+            {
+                // Path relative to resources.
+                std::filesystem::path path;
+                bool directory = false;
+                std::optional<std::size_t> modelIndex;
+                std::optional<std::size_t> materialIndex;
+                std::optional<std::size_t> imageIndex;
+                std::optional<std::size_t> flatpackIndex;
+                // Original image file when the pack key or source tree identifies it.
+                std::filesystem::path sourcePath;
+            };
+            std::vector<ResourceEntry> resourceEntries;
+            std::filesystem::path resourceDirectory;
+            ImGuiTextFilter resourceFilter;
+            bool resourceBrowserNeedsRefresh = true;
+            int resourceTypeFilter = 0;
+            bool showAssetDefaults = false;
             ImGuiTextFilter hierarchyFilter;
             ModelDefaultCallbacks modelDefaultCallbacks;
             DeleteConfirmationAction pendingDeleteConfirmationAction = DeleteConfirmationAction::None;
@@ -226,12 +248,14 @@ namespace sage
             mutable std::string sceneNameStatus = "Scene";
             mutable std::string modeStatus = "Select";
             mutable std::string cursorStatus = "-";
+            mutable std::string cameraStatus = "In-game";
             mutable std::string saveStatus = "";
             mutable bool sceneHasUnsavedChanges = false;
             bool dockLayoutChanged = false;
 
             RenderTexture2D createAssetThumbnail(const AssetEntry& asset) const;
-            RenderTexture2D createFlatpackThumbnail(const FlatpackEntry& flatpack) const;
+            RenderTexture2D createMaterialThumbnail(const std::string& key) const;
+            RenderTexture2D createImageThumbnail(const std::string& key) const;
             [[nodiscard]] std::optional<EditorComponentId> drawAddComponentControls();
             void syncInspectorComponentOrder();
             void applyInspectorComponentOrder();
@@ -243,8 +267,13 @@ namespace sage
             void openFlatpackDeleteConfirmation(std::size_t index);
             void drawFlatpackDeleteConfirmation();
             void drawAssetDefaultsControls();
-            void drawAssetGrid();
-            void drawFlatpackGrid();
+            void refreshResourceBrowser();
+            void navigateResourceFolder(const std::filesystem::path& path);
+            void drawResourceBrowser();
+            void drawResourceFolderTree(const std::filesystem::path& path);
+            void drawResourceGrid();
+            // Returns true when a folder was clicked.
+            [[nodiscard]] bool drawResourceTile(const ResourceEntry& entry, float previewSize);
             // Builds a selection request for a hierarchy click, reading the active
             // keyboard modifiers (shift = range, alt/meta = toggle single).
             [[nodiscard]] SceneSelectionRequest makeSceneSelectionRequest(entt::entity clicked) const;
@@ -259,7 +288,8 @@ namespace sage
             void AddConsoleEntry(CSharpLogLevel level, std::string_view message);
             void ClearConsole();
             void DrawDeleteConfirmationModal();
-            void SetOverlayStatus(const std::string& mode, const std::string& cursor) const;
+            void SetOverlayStatus(
+                const std::string& mode, const std::string& cursor, const std::string& camera) const;
             void SetSaveStatus(const std::string& status, bool hasUnsavedChanges) const;
             void SetAssetDefaultsStatus(
                 const std::string& assetName,

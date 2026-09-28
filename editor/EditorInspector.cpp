@@ -1,4 +1,5 @@
 #include "EditorInspector.hpp"
+#include "engine/AssetKey.hpp"
 
 #include "EditorComponents.hpp"
 #include "engine/CollisionLayers.hpp"
@@ -59,6 +60,8 @@ namespace sage::editor
                     return !ResourceManager::GetInstance().HasModelAnimation(key);
                 });
             }
+
+            picker.displayOptions = AssetLabels(picker.options);
 
             return picker;
         }
@@ -358,7 +361,8 @@ namespace sage::editor
         // so saved values stay selectable.
         EnumField e{.data = &value};
         const auto addOption = [&e](const std::string_view key) {
-            if (std::ranges::find(e.options, key) == e.options.end()) e.options.emplace_back(key);
+            const auto resolved = ResourceManager::GetInstance().ResolveImageKey(std::string(key));
+            if (std::ranges::find(e.options, resolved) == e.options.end()) e.options.push_back(resolved);
         };
         addOption(cursors::Regular);
         addOption(cursors::Move);
@@ -366,9 +370,11 @@ namespace sage::editor
         for (const auto& key : CUSTOM_CURSORS)
             addOption(key);
         if (!value.empty()) addOption(value);
+        e.displayOptions = AssetLabels(e.options);
 
         e.getIndex = [options = e.options, p = &value]() -> std::size_t {
-            const auto it = std::ranges::find(options, *p);
+            const auto resolved = ResourceManager::GetInstance().ResolveImageKey(*p);
+            const auto it = std::ranges::find(options, resolved);
             return it != options.end() ? static_cast<std::size_t>(std::distance(options.begin(), it)) : 0;
         };
         e.setIndex = [options = e.options, p = &value](const std::size_t idx) {
@@ -386,6 +392,7 @@ namespace sage::editor
             options.push_back(value);
 
         EnumField field{.data = &value, .options = std::move(options)};
+        field.displayOptions = AssetLabels(field.options);
         field.getIndex = [&value, options = field.options]() {
             const auto& selected = value.empty() ? options.front() : value;
             const auto found = std::ranges::find(options, selected);

@@ -20,7 +20,7 @@ namespace sage::editor
         float radius = 1.0f;
     };
 
-    // Frames the given entities by combining each one's collision box, renderable
+    // Frames the given entities by combining each one's renderable bounds, collision box,
     // bounds, or transform position (in that order of preference). Returns nullopt
     // when none of the entities can contribute a bound.
     [[nodiscard]] std::optional<FocusTarget> ComputeFocusTarget(

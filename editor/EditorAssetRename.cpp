@@ -3,16 +3,22 @@
 #include "EditorAssetCatalog.hpp"
 #include "EditorComponents.hpp"
 #include "engine/components/Renderable.hpp"
+#include "engine/components/Animation.hpp"
 #include "engine/components/UberShaderComponent.hpp"
+#include "engine/content/Json.hpp"
 #include "engine/ResourceManager.hpp"
+#include "engine/AssetKey.hpp"
 #include "engine/slib.hpp"
 
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <format>
 #include <optional>
+#include <regex>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 namespace sage::editor
 {
@@ -149,6 +155,55 @@ namespace sage::editor
 
             return sourcePath.parent_path() / finalFileName;
         }
+
+        struct DocumentEdit
+        {
+            std::filesystem::path path;
+            std::filesystem::path stagedPath;
+            std::string original;
+            std::string updated;
+        };
+
+        std::vector<DocumentEdit> FindDocumentReferences(const std::string& oldKey, const std::string& newKey)
+        {
+            static const std::regex reference{R"asset(("(?:key|modelKey|assetKey)"\s*:\s*")([^"\\]+)("))asset"};
+            std::vector<DocumentEdit> edits;
+            for (const auto& entry : std::filesystem::recursive_directory_iterator("resources"))
+            {
+                if (!entry.is_regular_file()) continue;
+                const auto extension = entry.path().extension();
+                if (extension != ".map" && extension != ".flatpack") continue;
+
+                std::ifstream input(entry.path(), std::ios::binary);
+                const std::string original{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+                if (original.find(oldKey) == std::string::npos) continue;
+
+                std::string updated;
+                auto last = original.cbegin();
+                for (std::sregex_iterator match(original.begin(), original.end(), reference), end; match != end; ++match)
+                {
+                    updated.append(last, match->prefix().second);
+                    updated += (*match)[1].str();
+                    updated += (*match)[2].str() == oldKey ? newKey : (*match)[2].str();
+                    updated += (*match)[3].str();
+                    last = match->suffix().first;
+                }
+                updated.append(last, original.cend());
+                if (updated == original) continue;
+                json::Parse(updated);
+                edits.push_back({entry.path(), entry.path().string() + ".asset-rename-tmp", original, updated});
+            }
+            return edits;
+        }
+
+        void RemoveStagedEdits(const std::vector<DocumentEdit>& edits)
+        {
+            for (const auto& edit : edits)
+            {
+                std::error_code ignored;
+                std::filesystem::remove(edit.stagedPath, ignored);
+            }
+        }
     } // namespace
 
     EditorGui::AssetRenameResult RenameAssetFile(
@@ -197,7 +252,7 @@ namespace sage::editor
         }
 
         const auto oldKey = entry.modelKey;
-        const auto newKey = StripPath(newSourcePath.string());
+        const auto newKey = AssetKeyForPath(newSourcePath);
         if (newKey.empty())
         {
             return {.message = "File name must have a non-empty stem."};
@@ -214,9 +269,32 @@ namespace sage::editor
             return {.message = *collision};
         }
 
+        std::vector<DocumentEdit> documentEdits;
+        bool stagingStarted = false;
+        try
+        {
+            documentEdits = FindDocumentReferences(oldKey, newKey);
+            for (const auto& edit : documentEdits)
+                if (std::filesystem::exists(edit.stagedPath))
+                    throw std::runtime_error("Staged rename file already exists: " + edit.stagedPath.string());
+            stagingStarted = true;
+            for (const auto& edit : documentEdits)
+            {
+                std::ofstream output(edit.stagedPath, std::ios::binary);
+                output << edit.updated;
+                if (!output) throw std::runtime_error("Could not stage changes to " + edit.path.string());
+            }
+        }
+        catch (const std::exception& exception)
+        {
+            if (stagingStarted) RemoveStagedEdits(documentEdits);
+            return {.message = exception.what()};
+        }
+
         std::filesystem::rename(oldSourcePath, newSourcePath, ec);
         if (ec)
         {
+            RemoveStagedEdits(documentEdits);
             return {.message = std::format("Could not rename source file: {}", ec.message())};
         }
 
@@ -228,6 +306,7 @@ namespace sage::editor
             {
                 std::error_code rollbackEc;
                 std::filesystem::rename(newSourcePath, oldSourcePath, rollbackEc);
+                RemoveStagedEdits(documentEdits);
                 return {.message = std::format("Could not rename defaults file: {}", ec.message())};
             }
             movedDefaults = true;
@@ -241,10 +320,38 @@ namespace sage::editor
                 std::filesystem::rename(newDefaultsPath, oldDefaultsPath, rollbackEc);
             }
             std::filesystem::rename(newSourcePath, oldSourcePath, rollbackEc);
+            RemoveStagedEdits(documentEdits);
             return {.message = "Could not update the loaded asset registry."};
         }
 
+        std::size_t committed = 0;
+        for (; committed < documentEdits.size(); ++committed)
+        {
+            std::filesystem::rename(documentEdits[committed].stagedPath, documentEdits[committed].path, ec);
+            if (ec) break;
+        }
+        if (ec)
+        {
+            for (std::size_t i = 0; i < committed; ++i)
+            {
+                std::ofstream restore(documentEdits[i].path, std::ios::binary | std::ios::trunc);
+                restore << documentEdits[i].original;
+            }
+            RemoveStagedEdits(documentEdits);
+            ResourceManager::GetInstance().RenameModelAsset(newKey, oldKey, oldSourcePath.string());
+            std::error_code rollbackEc;
+            if (movedDefaults) std::filesystem::rename(newDefaultsPath, oldDefaultsPath, rollbackEc);
+            std::filesystem::rename(newSourcePath, oldSourcePath, rollbackEc);
+            return {.message = std::format("Could not update saved references: {}", ec.message())};
+        }
+
         catalog.RenameAsset(index, newKey);
+
+        for (const auto entity : registry.view<Animation>())
+        {
+            auto& animation = registry.get<Animation>(entity);
+            if (animation.modelKey == oldKey) animation.modelKey = newKey;
+        }
 
         for (const auto entity : registry.view<AssetReference>())
         {
