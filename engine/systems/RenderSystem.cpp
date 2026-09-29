@@ -156,10 +156,10 @@ namespace sage
         }
     }
 
-    void RenderSystem::Draw() // Can't be const as GetModel returns pointers
+    void RenderSystem::drawScene(const bool includeSkybox) // Can't be const as GetModel returns pointers
     {
         lightManager->BindShadowMap();
-        if (skybox) skybox->Draw();
+        if (includeSkybox && skybox) skybox->Draw();
 
         auto normalView = registry->view<Renderable, sgTransform>(
             entt::exclude<RenderableDeferred, UberShaderComponent, CustomShaderComponent>);
@@ -241,6 +241,18 @@ namespace sage
         drawCustomAll(customShaderDeferredView);
         drawAll(dynamicDeferredView, renderDynamicEntity);
         lightManager->UnbindShadowMap();
+    }
+
+    void RenderSystem::Draw()
+    {
+        drawScene(true);
+    }
+
+    void RenderSystem::DrawBloomMask()
+    {
+        lightManager->SetBloomMask(true);
+        drawScene(false);
+        lightManager->SetBloomMask(false);
     }
 
     RenderSystem::RenderSystem(entt::registry* _registry, LightManager* _lightManager)

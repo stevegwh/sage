@@ -14,6 +14,7 @@
 namespace sage
 {
     class AudioManager;
+    class BloomPass;
     class EngineSystems;
     class KeyMapping;
     struct Settings;
@@ -30,6 +31,9 @@ namespace sage
         // and blitted at the viewport offset, mirroring the game's own 2D
         // compositing so its mouse mapping and scissor clipping stay consistent.
         RenderTexture gameUiTexture{};
+        Shader colorGradeShader{};
+        int bloomTextureLocation = -1;
+        std::unique_ptr<BloomPass> bloomPass;
         editor::EditorDockLayout dockLayout{};
         EditorSettings editorSettings{};
 

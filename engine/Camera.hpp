@@ -41,7 +41,7 @@ namespace sage
         static constexpr float cameraZoomForwardSpeed = 60.0f;
         static constexpr float cameraMaxY = 130.0f;
 
-        static constexpr float cameraRotateSpeed = 180.0f;
+        static constexpr float cameraRotateSpeed = 90.0f;
         static constexpr float cameraMoveSpeed = 84.0f;
 
         bool forwardKeyDown{};

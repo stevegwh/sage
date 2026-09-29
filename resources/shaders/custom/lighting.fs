@@ -16,12 +16,19 @@ uniform sampler2D texture2;
 
 // Output fragment color
 out vec4 finalColor;
+uniform int bloomMask;
 #include "lighting.fs"
 
 void main()
 {
     // Texel color fetching from texture sampler
     vec4 texelColor = texture(texture0, fragTexCoord);
+
+    if (bloomMask == 1)
+    {
+        finalColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
 	
 	finalColor = Lighting_CalculateLighting(texelColor);
 }

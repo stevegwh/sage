@@ -4,9 +4,11 @@
 #include "EditorScene.hpp"
 
 #include "engine/AudioManager.hpp"
+#include "engine/BloomPass.hpp"
 #include "engine/Camera.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/KeyMapping.hpp"
+#include "engine/ResourceManager.hpp"
 #include "engine/Serializer.hpp"
 #include "engine/Settings.hpp"
 #include "engine/systems/RenderSystem.hpp"
@@ -15,6 +17,7 @@
 #include "imgui.h"
 #include "raylib.h"
 #include "rlImGui.h"
+#include "ShaderPaths.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -81,6 +84,9 @@ namespace sage
             std::make_unique<EngineSystems>(registry.get(), keyMapping.get(), settings.get(), audioManager.get());
 
         serializer::LoadAssetBinFile(registry.get(), "resources/assets.bin");
+        colorGradeShader = ResourceManager::GetInstance().ShaderLoad(
+            nullptr, ShaderPath("custom/color_grade.fs").c_str());
+        bloomTextureLocation = GetShaderLocation(colorGradeShader, "bloomTexture");
         if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
         scene = std::make_unique<EditorScene>(
             systems.get(),
@@ -97,6 +103,8 @@ namespace sage
         // in the same area as the game's 3D view.
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        bloomPass = std::make_unique<BloomPass>(
+            static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         rlImGuiSetup(true);
 
 #if !defined(__APPLE__)
@@ -129,6 +137,14 @@ namespace sage
 
         if (playing)
         {
+            BeginTextureMode(bloomPass->MaskTarget());
+            ClearBackground(sage::colors::BLACK_COLOR);
+            BeginMode3D(*scene->ActiveCamera());
+            scene->DrawBloomMask();
+            EndMode3D();
+            EndTextureMode();
+            bloomPass->Blur();
+
             // Render the game UI into a viewport-sized texture at viewport-local
             // coords (so its scissor clipping stays consistent), then blit it at
             // the viewport offset where the game's mouse mapping expects it.
@@ -138,7 +154,11 @@ namespace sage
             EndTextureMode();
         }
 
-        scene->CaptureAutomationFrame(renderTexture.texture, playing ? gameUiTexture.texture : Texture2D{});
+        scene->CaptureAutomationFrame(
+            renderTexture.texture,
+            playing ? gameUiTexture.texture : Texture2D{},
+            playing ? colorGradeShader : Shader{},
+            playing ? bloomPass->Texture() : Texture2D{});
 
         BeginDrawing();
         ClearBackground(sage::colors::BLACK_COLOR);
@@ -147,11 +167,17 @@ namespace sage
         const auto renderViewport = settings->GetRenderViewPort();
         const auto renderViewportOffset = settings->GetRenderViewportOffset();
 
+        if (playing)
+        {
+            BeginShaderMode(colorGradeShader);
+            SetShaderValueTexture(colorGradeShader, bloomTextureLocation, bloomPass->Texture());
+        }
         DrawTextureRec(
             renderTexture.texture,
             {0, 0, renderViewport.x, -renderViewport.y},
             {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
             sage::colors::WHITE_COLOR);
+        if (playing) EndShaderMode();
 
         if (playing)
         {
@@ -223,6 +249,7 @@ namespace sage
         UnloadRenderTexture(gameUiTexture);
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        bloomPass->Resize(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
     }
 
     void EditorApplication::handleViewportFullscreenToggle()
@@ -291,6 +318,7 @@ namespace sage
         rlImGuiShutdown();
         UnloadRenderTexture(renderTexture);
         UnloadRenderTexture(gameUiTexture);
+        bloomPass.reset();
         scene.reset();
         systems.reset();
         CloseWindow();

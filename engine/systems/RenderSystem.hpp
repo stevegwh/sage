@@ -20,10 +20,12 @@ namespace sage
         entt::registry* registry;
         LightManager* lightManager;
         std::unique_ptr<Skybox> skybox;
+        void drawScene(bool includeSkybox);
 
       public:
         void Update();
         void Draw();
+        void DrawBloomMask();
         void DrawShadowCasters(Shader shader, int skinnedLocation) const;
         void SetSkybox(const std::string& imageKey);
         void ClearSkybox();

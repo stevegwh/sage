@@ -1,6 +1,11 @@
 const int MAX_LIGHTS = 50;
 const int LIGHT_DIRECTIONAL = 0;
 const int LIGHT_POINT = 1;
+// Daylight skybox horizon color; keep the fade partial so distant silhouettes remain readable.
+const vec3 FOG_COLOR = vec3(0.53, 0.59, 0.52);
+const float FOG_START = 65.0;
+const float FOG_END = 190.0;
+const float FOG_STRENGTH = 0.55;
 struct Light {
     int enabled;
     int type;
@@ -92,5 +97,6 @@ vec4 Lighting_CalculateLighting(vec4 texelColor)
     vec3 baseColor = texelColor.rgb * colDiffuse.rgb;
     vec3 litColor = (baseColor * (ambient.rgb / 10.0 + diffuse) + specular) * fragColor.rgb;
     vec3 correctedColor = pow(max(litColor, vec3(0.0)), vec3(1.0 / gamma));
-    return vec4(correctedColor, texelColor.a * colDiffuse.a * fragColor.a);
+    float fogAmount = smoothstep(FOG_START, FOG_END, length(viewPos - fragPosition)) * FOG_STRENGTH;
+    return vec4(mix(correctedColor, FOG_COLOR, fogAmount), texelColor.a * colDiffuse.a * fragColor.a);
 }

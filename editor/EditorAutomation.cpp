@@ -320,7 +320,8 @@ namespace sage
         }
         return automationState();
     }
-    void EditorScene::CaptureAutomationFrame(Texture2D sceneTexture, Texture2D uiTexture) const
+    void EditorScene::CaptureAutomationFrame(
+        Texture2D sceneTexture, Texture2D uiTexture, Shader sceneShader, Texture2D bloomTexture) const
     {
         if (!automationCapture) return;
         const auto path = *automationCapture;
@@ -332,8 +333,14 @@ namespace sage
             composite = LoadRenderTexture(sceneTexture.width, sceneTexture.height);
             BeginTextureMode(composite);
             ClearBackground(sage::colors::BLANK_COLOR);
+            if (sceneShader.id != 0)
+            {
+                BeginShaderMode(sceneShader);
+                SetShaderValueTexture(sceneShader, GetShaderLocation(sceneShader, "bloomTexture"), bloomTexture);
+            }
             DrawTextureRec(
                 sceneTexture, {0, 0, float(sceneTexture.width), -float(sceneTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
+            if (sceneShader.id != 0) EndShaderMode();
             DrawTextureRec(uiTexture, {0, 0, float(uiTexture.width), -float(uiTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
             EndTextureMode();
             sceneTexture = composite.texture;

@@ -173,6 +173,16 @@ namespace sage
         }
     }
 
+    void LightManager::SetBloomMask(const bool enabled) const
+    {
+        const int value = enabled ? 1 : 0;
+        for (const auto& shader : shaders)
+        {
+            const int location = GetShaderLocation(shader, "bloomMask");
+            if (location >= 0) SetShaderValue(shader, location, &value, SHADER_UNIFORM_INT);
+        }
+    }
+
     void LightManager::DrawShadowMap(const RenderSystem& renderer)
     {
         sunShadowLightIndex = -1;

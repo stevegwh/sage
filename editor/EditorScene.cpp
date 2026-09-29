@@ -572,6 +572,11 @@ namespace sage
         }
     }
 
+    void EditorScene::DrawBloomMask() const
+    {
+        if (gameRuntime) gameRuntime->DrawBloomMask();
+    }
+
     void EditorScene::DrawShadowMap() const
     {
         if (gameRuntime)

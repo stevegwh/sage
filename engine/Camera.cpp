@@ -113,7 +113,7 @@ namespace sage
         const float deltaTime = sage::FrameTime();
         handleMouseScroll(deltaTime);
         const float moveStep = cameraMoveSpeed * deltaTime;
-        const float rotateStep = cameraRotateSpeed * deltaTime;
+        const float rotateStep = cameraRotateSpeed * sage::math::DEGREES_TO_RADIANS * deltaTime;
 
         if (backKeyDown)
         {
@@ -149,14 +149,12 @@ namespace sage
 
         if (rotateLeftKeyDown)
         {
-            rlCamera.position = Vector3Add(
-                Vector3MultiplyByValue(GetCameraRight(&rlCamera), rotateStep), rlCamera.position);
+            CameraYaw(&rlCamera, rotateStep, true);
         }
 
         if (rotateRightKeyDown)
         {
-            rlCamera.position = Vector3Subtract(
-                rlCamera.position, Vector3MultiplyByValue(GetCameraRight(&rlCamera), rotateStep));
+            CameraYaw(&rlCamera, -rotateStep, true);
         }
 
         cameraHeightSmoothing();

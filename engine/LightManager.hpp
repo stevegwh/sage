@@ -53,6 +53,7 @@ namespace sage
         void DrawShadowMap(const RenderSystem& renderer);
         void BindShadowMap() const;
         void UnbindShadowMap() const;
+        void SetBloomMask(bool enabled) const;
         explicit LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings);
         ~LightManager();
     };

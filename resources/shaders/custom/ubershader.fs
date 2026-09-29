@@ -23,6 +23,7 @@ uniform int lit;
 uniform int hasEmissionTex;
 uniform int hasEmissionCol;
 uniform int grayscale;
+uniform int bloomMask;
 uniform sampler2D emissionMap;
 uniform vec4 colEmission;
 
@@ -32,6 +33,15 @@ void main()
 {
     // Texel color fetching from texture sampler
     vec4 texelColor = texture(texture0, fragTexCoord);
+
+    if (bloomMask == 1)
+    {
+        vec3 emission = vec3(0.0);
+        if (hasEmissionTex == 1) emission = texture(emissionMap, fragTexCoord).rgb;
+        else if (hasEmissionCol == 1) emission = colEmission.rgb;
+        finalColor = vec4(emission, texelColor.a * colDiffuse.a * fragColor.a);
+        return;
+    }
 
     if (lit == 1)
     {

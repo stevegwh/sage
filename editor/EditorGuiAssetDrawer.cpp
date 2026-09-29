@@ -831,7 +831,7 @@ namespace sage::editor
         const bool hasChildren = std::ranges::any_of(resourceEntries, [&path](const ResourceEntry& entry) {
             return entry.directory && entry.path.parent_path() == path;
         });
-        const auto key = path.generic_string();
+        const auto key = path.empty() ? std::string("resource_root") : path.generic_string();
         const auto selected = resourceDirectory.generic_string();
         if (path.empty() || (!selected.empty() && selected.starts_with(key + '/')))
             ImGui::SetNextItemOpen(true, ImGuiCond_Always);
