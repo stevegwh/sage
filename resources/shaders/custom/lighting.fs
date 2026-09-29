@@ -24,11 +24,12 @@ void main()
     // Texel color fetching from texture sampler
     vec4 texelColor = texture(texture0, fragTexCoord);
 
+    vec4 litColor = Lighting_CalculateLighting(texelColor);
     if (bloomMask == 1)
     {
-        finalColor = vec4(0.0, 0.0, 0.0, 1.0);
+        finalColor = vec4(max(litColor.rgb - vec3(0.7), vec3(0.0)) * 2.0, litColor.a);
         return;
     }
-	
-	finalColor = Lighting_CalculateLighting(texelColor);
+
+    finalColor = litColor;
 }

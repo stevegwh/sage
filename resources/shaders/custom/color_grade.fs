@@ -9,6 +9,15 @@ uniform sampler2D sceneDepth;
 uniform mat4 sceneProjection;
 uniform mat4 inverseSceneProjection;
 uniform vec4 colDiffuse;
+uniform int enableBloom;
+uniform float bloomStrength;
+uniform int enableAmbientOcclusion;
+uniform float occlusionRadius;
+uniform float occlusionStrength;
+uniform int enableFxaa;
+uniform int enableColorGrading;
+uniform float saturation;
+uniform float contrast;
 
 out vec4 finalColor;
 
@@ -44,7 +53,7 @@ float AmbientOcclusion(vec2 uv)
     float occlusion = 0.0;
     for (int i = 0; i < 12; ++i)
     {
-        float radius = 1.2 * mix(0.25, 1.0, float(i) / 11.0);
+        float radius = occlusionRadius * mix(0.25, 1.0, float(i) / 11.0);
         vec3 samplePosition = center +
             (tangent * samples[i].x + bitangent * samples[i].y + normal * samples[i].z) * radius;
         vec4 projected = sceneProjection * vec4(samplePosition, 1.0);
@@ -57,7 +66,7 @@ float AmbientOcclusion(vec2 uv)
         float withinRadius = smoothstep(0.0, 1.0, radius / max(abs(center.z - actualZ), 0.001));
         occlusion += step(samplePosition.z + 0.035, actualZ) * withinRadius;
     }
-    return 1.0 - occlusion * (0.7 / 12.0);
+    return 1.0 - occlusion * (occlusionStrength / 12.0);
 }
 
 float Luminance(vec3 color)
@@ -106,12 +115,17 @@ vec3 ApplyFxaa(vec2 uv)
 void main()
 {
     vec4 scene = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
-    vec3 color = ApplyFxaa(fragTexCoord) * colDiffuse.rgb * fragColor.rgb;
-    color = clamp(color * AmbientOcclusion(fragTexCoord) +
-                  texture(bloomTexture, fragTexCoord).rgb * 0.65, 0.0, 1.0);
-    float luminance = Luminance(color);
-    color = mix(vec3(luminance), color, 1.04);
-    color = (color - 0.5) * 1.04 + 0.5;
-    color *= vec3(1.012, 1.0, 0.988);
+    vec3 color = enableFxaa != 0
+        ? ApplyFxaa(fragTexCoord) * colDiffuse.rgb * fragColor.rgb : scene.rgb;
+    if (enableAmbientOcclusion != 0) color *= AmbientOcclusion(fragTexCoord);
+    if (enableBloom != 0) color += texture(bloomTexture, fragTexCoord).rgb * bloomStrength;
+    color = clamp(color, 0.0, 1.0);
+    if (enableColorGrading != 0)
+    {
+        float luminance = Luminance(color);
+        color = mix(vec3(luminance), color, saturation);
+        color = (color - 0.5) * contrast + 0.5;
+        color *= vec3(1.012, 1.0, 0.988);
+    }
     finalColor = vec4(clamp(color, 0.0, 1.0), scene.a);
 }

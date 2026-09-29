@@ -20,6 +20,8 @@
 namespace sage
 {
     class AudioManager;
+    struct LightSettings;
+    struct GraphicsSettings;
 
     // What the editor hands a runtime when entering play mode. The runtime owns
     // its own registry, scene, settings and per-frame systems; only the audio
@@ -57,6 +59,7 @@ namespace sage
         virtual void DrawBloomMask() = 0;
         virtual void DrawShadowMap() = 0;
         virtual void Draw2D() = 0;
+        virtual void ApplyProjectSettings(const LightSettings& light, const GraphicsSettings& graphics) = 0;
 
         // Keeps the game's viewport pinned to the editor's docked scene view as
         // it moves/resizes; called each frame before Update.

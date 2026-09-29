@@ -187,6 +187,11 @@ namespace sage
     {
         sunShadowLightIndex = -1;
         shadowLightIndex = -1;
+        if (!shadowsEnabled)
+        {
+            RefreshLights();
+            return;
+        }
         const Light* sun = nullptr;
         const Light* point = nullptr;
         int index = 0;
@@ -368,8 +373,9 @@ namespace sage
         rlActiveTextureSlot(0);
     }
 
-    LightManager::LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings)
-        : registry(_registry), camera(_camera)
+    LightManager::LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings,
+                               const bool _shadowsEnabled)
+        : registry(_registry), camera(_camera), shadowsEnabled(_shadowsEnabled)
     {
         registry->on_construct<Light>().connect<&LightManager::onLightAdded>(this);
         defaultShader = ResourceManager::GetInstance().ShaderLoad(

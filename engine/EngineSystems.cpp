@@ -42,7 +42,8 @@ namespace sage
           camera(std::make_unique<Camera>(_registry, userInput.get(), this)),
           picker(std::make_unique<MousePicker>(_registry, this)),
           cursor(std::make_unique<Cursor>(_registry, this)),
-          lightSubSystem(std::make_unique<LightManager>(_registry, camera.get(), _settings->GetLightSettings())),
+          lightSubSystem(std::make_unique<LightManager>(
+              _registry, camera.get(), _settings->GetLightSettings(), _settings->GetGraphicsSettings().shadows)),
           transformSystem(std::make_unique<TransformSystem>(_registry)),
           renderSystem(std::make_unique<RenderSystem>(_registry, lightSubSystem.get())),
           collisionSystem(std::make_unique<CollisionSystem>(_registry)),

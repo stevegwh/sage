@@ -39,7 +39,15 @@ void main()
         vec3 emission = vec3(0.0);
         if (hasEmissionTex == 1) emission = texture(emissionMap, fragTexCoord).rgb;
         else if (hasEmissionCol == 1) emission = colEmission.rgb;
-        finalColor = vec4(emission, texelColor.a * colDiffuse.a * fragColor.a);
+        vec4 baseColor = lit == 1 ? Lighting_CalculateLighting(texelColor)
+                                  : texelColor * colDiffuse * fragColor;
+        if (grayscale == 1)
+        {
+            float luminance = dot(baseColor.rgb, vec3(0.299, 0.587, 0.114));
+            baseColor.rgb = vec3(luminance);
+        }
+        vec3 highlights = max(baseColor.rgb - vec3(0.7), vec3(0.0)) * 2.0;
+        finalColor = vec4(max(highlights, emission), baseColor.a);
         return;
     }
 

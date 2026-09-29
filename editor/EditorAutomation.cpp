@@ -328,7 +328,7 @@ namespace sage
         automationCapture.reset();
         if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
         RenderTexture2D composite{};
-        if (uiTexture.id != 0)
+        if (uiTexture.id != 0 || sceneShader.id != 0)
         {
             composite = LoadRenderTexture(sceneTexture.width, sceneTexture.height);
             BeginTextureMode(composite);
@@ -341,7 +341,8 @@ namespace sage
             DrawTextureRec(
                 sceneTexture, {0, 0, float(sceneTexture.width), -float(sceneTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
             if (sceneShader.id != 0) EndShaderMode();
-            DrawTextureRec(uiTexture, {0, 0, float(uiTexture.width), -float(uiTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
+            if (uiTexture.id != 0)
+                DrawTextureRec(uiTexture, {0, 0, float(uiTexture.width), -float(uiTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
             EndTextureMode();
             sceneTexture = composite.texture;
         }

@@ -1,4 +1,5 @@
 #include "SceneRenderTarget.hpp"
+#include "Settings.hpp"
 
 #include "rlgl.h"
 #include "raymath.h"
@@ -46,5 +47,25 @@ namespace sage
         SetShaderValueTexture(shader, GetShaderLocation(shader, "sceneDepth"), scene.depth);
         SetShaderValueMatrix(shader, GetShaderLocation(shader, "sceneProjection"), projection);
         SetShaderValueMatrix(shader, GetShaderLocation(shader, "inverseSceneProjection"), MatrixInvert(projection));
+    }
+
+    void SetSceneGraphicsUniforms(const Shader shader, const GraphicsSettings& settings)
+    {
+        const auto setToggle = [shader](const char* name, const bool enabled) {
+            const int value = enabled ? 1 : 0;
+            SetShaderValue(shader, GetShaderLocation(shader, name), &value, SHADER_UNIFORM_INT);
+        };
+        const auto setFloat = [shader](const char* name, const float value) {
+            SetShaderValue(shader, GetShaderLocation(shader, name), &value, SHADER_UNIFORM_FLOAT);
+        };
+        setToggle("enableBloom", settings.bloom);
+        setFloat("bloomStrength", settings.bloomStrength);
+        setToggle("enableAmbientOcclusion", settings.ambientOcclusion);
+        setFloat("occlusionRadius", settings.occlusionRadius);
+        setFloat("occlusionStrength", settings.occlusionStrength);
+        setToggle("enableFxaa", settings.fxaa);
+        setToggle("enableColorGrading", settings.colorGrading);
+        setFloat("saturation", settings.saturation);
+        setFloat("contrast", settings.contrast);
     }
 } // namespace sage

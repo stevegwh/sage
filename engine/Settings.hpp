@@ -31,14 +31,60 @@ namespace sage
         }
     };
 
-    struct ProjectSettings
+    struct GraphicsSettings
     {
-        LightSettings lightSettings{};
+        bool shadows = true;
+        bool bloom = true;
+        float bloomStrength = 0.65f;
+        bool ambientOcclusion = true;
+        float occlusionRadius = 1.2f;
+        float occlusionStrength = 0.7f;
+        bool fxaa = true;
+        bool colorGrading = true;
+        float saturation = 1.04f;
+        float contrast = 1.04f;
 
         template <class Archive>
         void serialize(Archive& archive)
         {
+            archive(cereal::make_nvp("shadows", shadows),
+                    cereal::make_nvp("bloom", bloom),
+                    cereal::make_nvp("bloom_strength", bloomStrength),
+                    cereal::make_nvp("ambient_occlusion", ambientOcclusion),
+                    cereal::make_nvp("occlusion_radius", occlusionRadius),
+                    cereal::make_nvp("occlusion_strength", occlusionStrength),
+                    cereal::make_nvp("fxaa", fxaa),
+                    cereal::make_nvp("color_grading", colorGrading),
+                    cereal::make_nvp("saturation", saturation),
+                    cereal::make_nvp("contrast", contrast));
+        }
+    };
+
+    struct ProjectSettings
+    {
+        LightSettings lightSettings{};
+        GraphicsSettings graphicsSettings{};
+
+        template <class Archive>
+        void save(Archive& archive) const
+        {
+            archive(cereal::make_nvp("light_settings", lightSettings),
+                    cereal::make_nvp("graphics_settings", graphicsSettings));
+        }
+
+        template <class Archive>
+        void load(Archive& archive)
+        {
             archive(cereal::make_nvp("light_settings", lightSettings));
+            // Older projects contain only light_settings.
+            try
+            {
+                archive(cereal::make_nvp("graphics_settings", graphicsSettings));
+            }
+            catch (const cereal::Exception&)
+            {
+                graphicsSettings = {};
+            }
         }
     };
 
@@ -303,6 +349,16 @@ namespace sage
         void SetLightSettings(const LightSettings& value)
         {
             projectSettings.lightSettings = value;
+        }
+
+        [[nodiscard]] const GraphicsSettings& GetGraphicsSettings() const
+        {
+            return projectSettings.graphicsSettings;
+        }
+
+        void SetGraphicsSettings(const GraphicsSettings& value)
+        {
+            projectSettings.graphicsSettings = value;
         }
 
         [[nodiscard]] bool SaveProjectSettings() const

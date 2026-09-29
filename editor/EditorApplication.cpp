@@ -88,6 +88,7 @@ namespace sage
         colorGradeShader = ResourceManager::GetInstance().ShaderLoad(
             nullptr, ShaderPath("custom/color_grade.fs").c_str());
         bloomTextureLocation = GetShaderLocation(colorGradeShader, "bloomTexture");
+        SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
         if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
         scene = std::make_unique<EditorScene>(
             systems.get(),
@@ -135,7 +136,7 @@ namespace sage
         DrawViewportFpsCounter(*settings);
         EndTextureMode();
 
-        if (playing)
+        if (settings->GetGraphicsSettings().bloom)
         {
             BeginTextureMode(bloomPass->MaskTarget());
             ClearBackground(sage::colors::BLACK_COLOR);
@@ -144,7 +145,10 @@ namespace sage
             EndMode3D();
             EndTextureMode();
             bloomPass->Blur();
+        }
 
+        if (playing)
+        {
             // Render the game UI into a viewport-sized texture at viewport-local
             // coords (so its scissor clipping stays consistent), then blit it at
             // the viewport offset where the game's mouse mapping expects it.
@@ -154,12 +158,13 @@ namespace sage
             EndTextureMode();
         }
 
-        if (playing) SetSceneOcclusionUniforms(colorGradeShader, renderTexture, *scene->ActiveCamera());
+        SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
+        SetSceneOcclusionUniforms(colorGradeShader, renderTexture, *scene->ActiveCamera());
         scene->CaptureAutomationFrame(
             renderTexture.texture,
             playing ? gameUiTexture.texture : Texture2D{},
-            playing ? colorGradeShader : Shader{},
-            playing ? bloomPass->Texture() : Texture2D{});
+            colorGradeShader,
+            bloomPass->Texture());
 
         BeginDrawing();
         ClearBackground(sage::colors::BLACK_COLOR);
@@ -168,17 +173,14 @@ namespace sage
         const auto renderViewport = settings->GetRenderViewPort();
         const auto renderViewportOffset = settings->GetRenderViewportOffset();
 
-        if (playing)
-        {
-            BeginShaderMode(colorGradeShader);
-            SetShaderValueTexture(colorGradeShader, bloomTextureLocation, bloomPass->Texture());
-        }
+        BeginShaderMode(colorGradeShader);
+        SetShaderValueTexture(colorGradeShader, bloomTextureLocation, bloomPass->Texture());
         DrawTextureRec(
             renderTexture.texture,
             {0, 0, renderViewport.x, -renderViewport.y},
             {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
             sage::colors::WHITE_COLOR);
-        if (playing) EndShaderMode();
+        EndShaderMode();
 
         if (playing)
         {

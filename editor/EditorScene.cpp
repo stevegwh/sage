@@ -574,7 +574,10 @@ namespace sage
 
     void EditorScene::DrawBloomMask() const
     {
-        if (gameRuntime) gameRuntime->DrawBloomMask();
+        if (gameRuntime)
+            gameRuntime->DrawBloomMask();
+        else
+            sys->renderSystem->DrawBloomMask();
     }
 
     void EditorScene::DrawShadowMap() const
@@ -656,7 +659,7 @@ namespace sage
         drawScriptBrowser();
         drawShaderBrowser();
         drawCollisionMatrixWindow();
-        drawLightSettingsModal();
+        drawGraphicsSettingsWindow();
         drawTerrainBrushWindow();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
@@ -1901,11 +1904,6 @@ namespace sage
             {
                 editorModes->BeginTerrainSculptOnSelection();
             }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Light Settings..."))
-            {
-                lightSettingsPopupRequested = true;
-            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("View"))
@@ -1997,6 +1995,15 @@ namespace sage
         }
         if (ImGui::BeginMenu("Project"))
         {
+            if (ImGui::MenuItem("Graphics Settings", nullptr, graphicsSettingsWindowOpen,
+                                !graphicsSettingsWindowOpen))
+            {
+                graphicsSettingsWindowOpen = true;
+                lightSettingsBeforeEdit = sys->settings->GetLightSettings();
+                graphicsSettingsBeforeEdit = sys->settings->GetGraphicsSettings();
+                lightSettingsDraft = lightSettingsBeforeEdit;
+                graphicsSettingsDraft = graphicsSettingsBeforeEdit;
+            }
             if (ImGui::MenuItem("Collision Matrix", nullptr, collisionMatrixWindowOpen))
             {
                 collisionMatrixWindowOpen = !collisionMatrixWindowOpen;
@@ -2140,56 +2147,79 @@ namespace sage
         collisionMatrixWindowOpen = open;
     }
 
-    void EditorScene::drawLightSettingsModal() const
+    void EditorScene::applyGraphicsSettings(const LightSettings& light, const GraphicsSettings& graphics) const
     {
-        constexpr const char* popupId = "Light Settings";
-        if (lightSettingsPopupRequested)
+        sys->settings->SetLightSettings(light);
+        sys->settings->SetGraphicsSettings(graphics);
+        sys->lightSubSystem->ApplyLightSettings(light);
+        sys->lightSubSystem->SetShadowsEnabled(graphics.shadows);
+        if (gameRuntime) gameRuntime->ApplyProjectSettings(light, graphics);
+    }
+
+    void EditorScene::drawGraphicsSettingsWindow() const
+    {
+        if (!graphicsSettingsWindowOpen) return;
+        ImGui::SetNextWindowSize(ImVec2{380.0f, 0.0f}, ImGuiCond_FirstUseEver);
+        bool open = graphicsSettingsWindowOpen;
+        bool saved = false;
+        if (ImGui::Begin("Graphics Settings", &open))
         {
-            lightSettingsDraft = sys->settings->GetLightSettings();
-            ImGui::OpenPopup(popupId);
-            lightSettingsPopupRequested = false;
-        }
+            ImGui::TextUnformatted("Changes preview immediately. Save keeps them for this project.");
+            ImGui::TextUnformatted("The scene viewport previews these effects.");
+            bool changed = false;
+            ImGui::SeparatorText("Lighting");
+            changed |= ImGui::ColorEdit3("Ambient Color", &lightSettingsDraft.ambient.x);
+            changed |= ImGui::SliderFloat("Gamma", &lightSettingsDraft.gamma, 0.1f, 4.0f, "%.2f");
+            changed |= ImGui::Checkbox("Shadows", &graphicsSettingsDraft.shadows);
 
-        const ImVec2 center = ImGui::GetMainViewport()->GetCenter();
-        ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2{0.5f, 0.5f});
-        if (!ImGui::BeginPopupModal(popupId, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) return;
+            ImGui::SeparatorText("Bloom");
+            changed |= ImGui::Checkbox("Enable Bloom", &graphicsSettingsDraft.bloom);
+            ImGui::BeginDisabled(!graphicsSettingsDraft.bloom);
+            changed |= ImGui::SliderFloat("Bloom Strength", &graphicsSettingsDraft.bloomStrength, 0.0f, 2.0f, "%.2f");
+            ImGui::EndDisabled();
 
-        ImGui::TextUnformatted("Global lighting defaults for this project.");
-        ImGui::Spacing();
-        ImGui::ColorEdit3("Ambient Color", &lightSettingsDraft.ambient.x);
-        ImGui::SliderFloat("Gamma", &lightSettingsDraft.gamma, 0.1f, 4.0f, "%.2f");
+            ImGui::SeparatorText("Ambient Occlusion");
+            changed |= ImGui::Checkbox("Enable Ambient Occlusion", &graphicsSettingsDraft.ambientOcclusion);
+            ImGui::BeginDisabled(!graphicsSettingsDraft.ambientOcclusion);
+            changed |= ImGui::SliderFloat("Occlusion Radius", &graphicsSettingsDraft.occlusionRadius, 0.1f, 4.0f, "%.2f");
+            changed |= ImGui::SliderFloat("Occlusion Strength", &graphicsSettingsDraft.occlusionStrength, 0.0f, 1.5f, "%.2f");
+            ImGui::EndDisabled();
 
-        ImGui::Spacing();
-        if (ImGui::Button("Restore Defaults"))
-        {
-            lightSettingsDraft = LightSettings{};
-        }
+            ImGui::SeparatorText("Post Processing");
+            changed |= ImGui::Checkbox("FXAA", &graphicsSettingsDraft.fxaa);
+            changed |= ImGui::Checkbox("Color Grading", &graphicsSettingsDraft.colorGrading);
+            ImGui::BeginDisabled(!graphicsSettingsDraft.colorGrading);
+            changed |= ImGui::SliderFloat("Saturation", &graphicsSettingsDraft.saturation, 0.0f, 2.0f, "%.2f");
+            changed |= ImGui::SliderFloat("Contrast", &graphicsSettingsDraft.contrast, 0.5f, 2.0f, "%.2f");
+            ImGui::EndDisabled();
 
-        ImGui::Spacing();
-        constexpr float buttonWidth = 100.0f;
-        const float buttonsWidth = buttonWidth * 2.0f + ImGui::GetStyle().ItemSpacing.x;
-        ImGui::SetCursorPosX(ImGui::GetWindowSize().x - buttonsWidth - ImGui::GetStyle().WindowPadding.x);
-        if (ImGui::Button("Save", ImVec2{buttonWidth, 0.0f}))
-        {
-            const LightSettings previous = sys->settings->GetLightSettings();
-            sys->settings->SetLightSettings(lightSettingsDraft);
-            if (sys->settings->SaveProjectSettings())
+            if (ImGui::Button("Restore Defaults"))
             {
-                sys->lightSubSystem->ApplyLightSettings(lightSettingsDraft);
-                ImGui::CloseCurrentPopup();
+                lightSettingsDraft = LightSettings{};
+                graphicsSettingsDraft = GraphicsSettings{};
+                changed = true;
             }
-            else
+            if (changed) applyGraphicsSettings(lightSettingsDraft, graphicsSettingsDraft);
+            ImGui::SameLine();
+            if (ImGui::Button("Save"))
             {
-                sys->settings->SetLightSettings(previous);
+                applyGraphicsSettings(lightSettingsDraft, graphicsSettingsDraft);
+                if (sys->settings->SaveProjectSettings())
+                {
+                    saved = true;
+                    open = false;
+                }
+                else
+                {
+                    applyGraphicsSettings(lightSettingsBeforeEdit, graphicsSettingsBeforeEdit);
+                }
             }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) open = false;
         }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel", ImVec2{buttonWidth, 0.0f}))
-        {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
+        ImGui::End();
+        if (!open && !saved) applyGraphicsSettings(lightSettingsBeforeEdit, graphicsSettingsBeforeEdit);
+        graphicsSettingsWindowOpen = open;
     }
 
     void EditorScene::drawTerrainBrushWindow() const
@@ -2655,6 +2685,8 @@ namespace sage
             gui->AddConsoleEntry(level, message);
         };
         gameRuntime = CreateGameRuntime(context);
+        if (gameRuntime)
+            gameRuntime->ApplyProjectSettings(sys->settings->GetLightSettings(), sys->settings->GetGraphicsSettings());
         if (!gameRuntime)
         {
             TraceLog(LOG_WARNING, "Play: failed to create game runtime; staying in edit mode.");

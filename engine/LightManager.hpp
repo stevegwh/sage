@@ -29,6 +29,7 @@ namespace sage
         unsigned int sunShadowFramebuffer = 0;
         unsigned int sunShadowTexture = 0;
         int sunShadowLightIndex = -1;
+        bool shadowsEnabled = true;
         Matrix sunLightMatrix{};
         void updateShaderLights(Shader& _shader);
         void updateAmbientLight(Shader& _shader) const;
@@ -51,10 +52,12 @@ namespace sage
         void DrawDebugLights() const;
         void Update() const;
         void DrawShadowMap(const RenderSystem& renderer);
+        void SetShadowsEnabled(bool enabled) { shadowsEnabled = enabled; }
         void BindShadowMap() const;
         void UnbindShadowMap() const;
         void SetBloomMask(bool enabled) const;
-        explicit LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings);
+        explicit LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings,
+                              bool shadowsEnabled);
         ~LightManager();
     };
 } // namespace sage

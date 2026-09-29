@@ -86,8 +86,11 @@ namespace sage
         mutable bool snapToGrid = false;
         mutable bool navigationGridVisible = false;
         mutable bool collisionMatrixWindowOpen = false;
-        mutable bool lightSettingsPopupRequested = false;
+        mutable bool graphicsSettingsWindowOpen = false;
         mutable LightSettings lightSettingsDraft{};
+        mutable GraphicsSettings graphicsSettingsDraft{};
+        mutable LightSettings lightSettingsBeforeEdit{};
+        mutable GraphicsSettings graphicsSettingsBeforeEdit{};
         mutable bool newMapRequested = false;
         mutable std::string newCollisionLayerName;
         mutable bool middleCameraDrag = false;
@@ -109,7 +112,8 @@ namespace sage
         // is pinned to this so its UI lines up with the play area.
         [[nodiscard]] Rectangle gameViewportScreenRect() const;
         void drawCollisionMatrixWindow() const;
-        void drawLightSettingsModal() const;
+        void drawGraphicsSettingsWindow() const;
+        void applyGraphicsSettings(const LightSettings& light, const GraphicsSettings& graphics) const;
         void addLight() const;
         void addSpawnPoint() const;
         void addTriggerVolume() const;
