@@ -572,6 +572,14 @@ namespace sage
         }
     }
 
+    void EditorScene::DrawShadowMap() const
+    {
+        if (gameRuntime)
+            gameRuntime->DrawShadowMap();
+        else
+            sys->lightSubSystem->DrawShadowMap(*sys->renderSystem);
+    }
+
     void EditorScene::setSnapToGrid(const bool enabled) const
     {
         snapToGrid = enabled;

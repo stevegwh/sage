@@ -115,6 +115,8 @@ namespace sage
     {
         const bool playing = scene->IsPlaying();
 
+        scene->DrawShadowMap();
+
         BeginTextureMode(renderTexture);
         ClearBackground(sage::colors::BLANK_COLOR);
         // ActiveCamera() is the running game's camera during play, the editor's

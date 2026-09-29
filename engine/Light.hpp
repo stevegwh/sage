@@ -26,6 +26,7 @@ namespace sage
         Vector3 target;
         Color color;
         float brightness;
+        bool castsShadows = false;
         float constant = 1.0f;
         float linear = 0.025f;
         float quadratic = 0.004f;
@@ -69,13 +70,14 @@ namespace sage
         {
             archive(cereal::make_nvp("type", type), cereal::make_nvp("position", position), cereal::make_nvp("target", target), cereal::make_nvp("color", color), cereal::make_nvp("brightness", brightness));
             if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
-                archive(cereal::make_nvp("enabled", enabled), cereal::make_nvp("constant", constant), cereal::make_nvp("linear", linear), cereal::make_nvp("quadratic", quadratic));
+                archive(cereal::make_nvp("enabled", enabled), cereal::make_nvp("castsShadows", castsShadows), cereal::make_nvp("constant", constant), cereal::make_nvp("linear", linear), cereal::make_nvp("quadratic", quadratic));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.field("enabled", "Enabled", enabled);
+            i.field("castsShadows", "Casts Shadows", castsShadows);
             i.field("type", "Type", type);
             i.field("position", "Position", position);
             i.field("target", "Target", target);

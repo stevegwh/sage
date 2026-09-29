@@ -19,6 +19,12 @@ uniform Light lights[MAX_LIGHTS];
 uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform float gamma;
+uniform samplerCube pointShadowMap;
+uniform int shadowLightIndex;
+uniform float shadowFarPlane;
+uniform sampler2D sunShadowMap;
+uniform int sunShadowLightIndex;
+uniform mat4 sunLightMatrix;
 
 vec4 Lighting_CalculateLighting(vec4 texelColor)
 {
@@ -53,7 +59,28 @@ vec4 Lighting_CalculateLighting(vec4 texelColor)
             }
 
             float NdotL = max(dot(normal, light), 0.0);
-            vec3 lightColor = lights[i].color.rgb * attenuation * strength;
+            float visibility = 1.0;
+            if (i == shadowLightIndex && length(fragPosition - lights[i].position) < shadowFarPlane)
+            {
+                vec3 fromLight = fragPosition - lights[i].position;
+                float nearest = texture(pointShadowMap, fromLight).r * shadowFarPlane;
+                float bias = max(0.05, 0.05 * (1.0 - NdotL));
+                if (length(fromLight) > nearest + bias) visibility = 0.0;
+            }
+            if (i == sunShadowLightIndex)
+            {
+                vec4 clip = sunLightMatrix * vec4(fragPosition, 1.0);
+                vec3 projected = clip.xyz / clip.w;
+                vec2 uv = projected.xy * 0.5 + 0.5;
+                float depth = projected.z * 0.5 + 0.5;
+                if (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0 && depth >= 0.0 && depth <= 1.0)
+                {
+                    float nearest = texture(sunShadowMap, uv).r;
+                    float bias = max(0.001, 0.002 * (1.0 - NdotL));
+                    if (depth > nearest + bias) visibility = 0.0;
+                }
+            }
+            vec3 lightColor = lights[i].color.rgb * attenuation * strength * visibility;
             diffuse += lightColor * NdotL;
 
             float specCo = 0.0;

@@ -54,6 +54,7 @@ namespace sage
         virtual json::Document Inspect() = 0;
         virtual json::Document Command(const json::Value& command) = 0;
         virtual void Draw3D() = 0;
+        virtual void DrawShadowMap() = 0;
         virtual void Draw2D() = 0;
 
         // Keeps the game's viewport pinned to the editor's docked scene view as

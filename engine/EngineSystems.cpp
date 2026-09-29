@@ -44,7 +44,7 @@ namespace sage
           cursor(std::make_unique<Cursor>(_registry, this)),
           lightSubSystem(std::make_unique<LightManager>(_registry, camera.get(), _settings->GetLightSettings())),
           transformSystem(std::make_unique<TransformSystem>(_registry)),
-          renderSystem(std::make_unique<RenderSystem>(_registry)),
+          renderSystem(std::make_unique<RenderSystem>(_registry, lightSubSystem.get())),
           collisionSystem(std::make_unique<CollisionSystem>(_registry)),
           navigationGridSystem(std::make_unique<NavigationGridSystem>(_registry, collisionSystem.get())),
           actorMovementSystem(std::make_unique<ActorMovementSystem>(_registry, navigationGridSystem.get())),

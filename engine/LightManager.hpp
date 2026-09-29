@@ -8,6 +8,7 @@
 namespace sage
 {
     class Camera;
+    class RenderSystem;
     struct LightSettings;
 
     class LightManager
@@ -20,9 +21,20 @@ namespace sage
         int lightsCount = 0;
         float gamma = 1.9;
         std::array<float, 4> ambient{};
+        Shader shadowShader{};
+        unsigned int shadowFramebuffer = 0;
+        unsigned int shadowCubemap = 0;
+        int shadowLightIndex = -1;
+        Shader sunShadowShader{};
+        unsigned int sunShadowFramebuffer = 0;
+        unsigned int sunShadowTexture = 0;
+        int sunShadowLightIndex = -1;
+        Matrix sunLightMatrix{};
         void updateShaderLights(Shader& _shader);
         void updateAmbientLight(Shader& _shader) const;
         void onLightAdded(entt::entity entity);
+        void drawPointShadowMap(const RenderSystem& renderer, const Light& light);
+        void drawSunShadowMap(const RenderSystem& renderer, const Light& sun);
 
       public:
         void RemoveLight(entt::entity light);
@@ -38,6 +50,10 @@ namespace sage
         void LinkRenderableToLight(entt::entity entity) const;
         void DrawDebugLights() const;
         void Update() const;
+        void DrawShadowMap(const RenderSystem& renderer);
+        void BindShadowMap() const;
+        void UnbindShadowMap() const;
         explicit LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings);
+        ~LightManager();
     };
 } // namespace sage

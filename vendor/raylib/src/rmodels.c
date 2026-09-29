@@ -1529,7 +1529,9 @@ void DrawMesh(Mesh mesh, Material material, Matrix transform)
                 (i == MATERIAL_MAP_CUBEMAP)) rlEnableTextureCubemap(material.maps[i].texture.id);
             else rlEnableTexture(material.maps[i].texture.id);
 
-            rlSetUniform(material.shader.locs[SHADER_LOC_MAP_DIFFUSE + i], &i, SHADER_UNIFORM_INT, 1);
+            // Map slot 11 has no sampler location; the next slot is a vertex attribute.
+            if (i <= MATERIAL_MAP_BRDF)
+                rlSetUniform(material.shader.locs[SHADER_LOC_MAP_DIFFUSE + i], &i, SHADER_UNIFORM_INT, 1);
         }
     }
 
@@ -1776,7 +1778,9 @@ void DrawMeshInstanced(Mesh mesh, Material material, const Matrix *transforms, i
                 (i == MATERIAL_MAP_CUBEMAP)) rlEnableTextureCubemap(material.maps[i].texture.id);
             else rlEnableTexture(material.maps[i].texture.id);
 
-            rlSetUniform(material.shader.locs[SHADER_LOC_MAP_DIFFUSE + i], &i, SHADER_UNIFORM_INT, 1);
+            // Map slot 11 has no sampler location; the next slot is a vertex attribute.
+            if (i <= MATERIAL_MAP_BRDF)
+                rlSetUniform(material.shader.locs[SHADER_LOC_MAP_DIFFUSE + i], &i, SHADER_UNIFORM_INT, 1);
         }
     }
 

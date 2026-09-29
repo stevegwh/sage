@@ -4,8 +4,11 @@
 
 #include "RenderSystem.hpp"
 #include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
+#include "engine/LightManager.hpp"
 
 #include "components/CustomShaderComponent.hpp"
+#include "components/Animation.hpp"
 #include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
@@ -14,6 +17,7 @@
 #include "raylib.h"
 #include "ResourceManager.hpp"
 #include "rlgl.h"
+#include "raymath.h"
 
 #include <memory>
 #include <stdexcept>
@@ -103,8 +107,56 @@ namespace sage
     {
     }
 
+    void RenderSystem::DrawShadowCasters(const Shader shader, const int skinnedLocation) const
+    {
+        MaterialMap emptyMaps[MAX_MATERIAL_MAPS]{};
+        const auto drawModel = [&](const Model& model, const Matrix transform, const bool skinned) {
+            const int skinnedValue = skinned ? 1 : 0;
+            SetShaderValue(shader, skinnedLocation, &skinnedValue, SHADER_UNIFORM_INT);
+            for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex)
+            {
+                Material material = model.materials[model.meshMaterial[meshIndex]];
+                material.shader = shader;
+                material.maps = emptyMaps;
+                DrawMesh(model.meshes[meshIndex], material, transform);
+            }
+        };
+
+        for (const auto entity : registry->view<Renderable, sgTransform>(
+                 entt::exclude<CustomShaderComponent, RenderableDeferred>))
+        {
+            const auto& renderable = registry->get<Renderable>(entity);
+            if (!renderable.active || renderable.GetModel() == nullptr) continue;
+            const auto& transform = registry->get<sgTransform>(entity);
+            const auto& model = renderable.GetModel()->GetRlModel();
+            const Matrix srt = MatrixMultiply(
+                MatrixMultiply(
+                    MatrixScale(transform.GetScale().x, transform.GetScale().y, transform.GetScale().z),
+                    EulerToMatrix(transform.GetWorldRot())),
+                MatrixTranslate(
+                    transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
+            drawModel(model, MatrixMultiply(model.transform, srt), registry->any_of<Animation>(entity));
+        }
+
+        for (const auto entity : registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>))
+        {
+            const auto& renderable = registry->get<DynamicRenderable>(entity);
+            if (!renderable.active || renderable.GetModel() == nullptr) continue;
+            const auto& transform = registry->get<sgTransform>(entity);
+            const auto& model = *renderable.GetModel();
+            const Matrix srt = MatrixMultiply(
+                MatrixMultiply(
+                    MatrixScale(transform.GetScale().x, transform.GetScale().y, transform.GetScale().z),
+                    MatrixRotateY(transform.GetWorldRot().y * math::DEGREES_TO_RADIANS)),
+                MatrixTranslate(
+                    transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
+            drawModel(model, MatrixMultiply(model.transform, srt), false);
+        }
+    }
+
     void RenderSystem::Draw() // Can't be const as GetModel returns pointers
     {
+        lightManager->BindShadowMap();
         if (skybox) skybox->Draw();
 
         auto normalView = registry->view<Renderable, sgTransform>(
@@ -186,9 +238,11 @@ namespace sage
         drawAll(deferredView, renderEntity);
         drawCustomAll(customShaderDeferredView);
         drawAll(dynamicDeferredView, renderDynamicEntity);
+        lightManager->UnbindShadowMap();
     }
 
-    RenderSystem::RenderSystem(entt::registry* _registry) : registry(_registry)
+    RenderSystem::RenderSystem(entt::registry* _registry, LightManager* _lightManager)
+        : registry(_registry), lightManager(_lightManager)
     {
     }
 
