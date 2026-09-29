@@ -22,6 +22,7 @@ out vec4 finalColor;
 uniform int lit;
 uniform int hasEmissionTex;
 uniform int hasEmissionCol;
+uniform int grayscale;
 uniform sampler2D emissionMap;
 uniform vec4 colEmission;
 
@@ -49,5 +50,11 @@ void main()
     else if (hasEmissionCol == 1)
     {
         finalColor = finalColor + colEmission;
+    }
+
+    if (grayscale == 1)
+    {
+        float luminance = dot(finalColor.rgb, vec3(0.299, 0.587, 0.114));
+        finalColor.rgb = vec3(luminance);
     }
 }
