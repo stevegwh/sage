@@ -10,6 +10,7 @@
 #include "engine/KeyMapping.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/Serializer.hpp"
+#include "engine/SceneRenderTarget.hpp"
 #include "engine/Settings.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/UserInput.hpp"
@@ -97,8 +98,7 @@ namespace sage
             csharpScripts);
 
         const auto renderViewport = settings->GetRenderViewPort();
-        renderTexture =
-            LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        renderTexture = LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         // Game UI shares the (docked) render viewport so it scales to and centres
         // in the same area as the game's 3D view.
         gameUiTexture =
@@ -154,6 +154,7 @@ namespace sage
             EndTextureMode();
         }
 
+        if (playing) SetSceneOcclusionUniforms(colorGradeShader, renderTexture, *scene->ActiveCamera());
         scene->CaptureAutomationFrame(
             renderTexture.texture,
             playing ? gameUiTexture.texture : Texture2D{},
@@ -243,8 +244,7 @@ namespace sage
 
         UnloadRenderTexture(renderTexture);
         const auto renderViewport = settings->GetRenderViewPort();
-        renderTexture =
-            LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        renderTexture = LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
 
         UnloadRenderTexture(gameUiTexture);
         gameUiTexture =
