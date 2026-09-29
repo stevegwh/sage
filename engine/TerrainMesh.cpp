@@ -10,6 +10,7 @@
 #include "components/Terrain.hpp"
 #include "LightManager.hpp"
 #include "ResourceManager.hpp"
+#include "ShaderPaths.hpp"
 
 #include "raymath.h"
 
@@ -22,8 +23,6 @@ namespace sage
     namespace
     {
         constexpr int TERRAIN_CHUNK_QUADS = 64;
-        constexpr const char* TERRAIN_LIGHTING_VS = "resources/shaders/custom/lighting.vs";
-        constexpr const char* TERRAIN_LIGHTING_FS = "resources/shaders/custom/lighting.fs";
         constexpr Color TERRAIN_TINT = {92, 142, 74, 255};
         // Minimum half-thickness so a freshly created flat terrain still has a
         // pickable bounding box.
@@ -448,7 +447,8 @@ namespace sage
         renderable.SetName("Terrain");
         renderable.hint = TERRAIN_TINT;
 
-        Shader lighting = ResourceManager::GetInstance().ShaderLoad(TERRAIN_LIGHTING_VS, TERRAIN_LIGHTING_FS);
+        Shader lighting = ResourceManager::GetInstance().ShaderLoad(
+            ShaderPath("custom/lighting.vs").c_str(), ShaderPath("custom/lighting.fs").c_str());
         lightManager.LinkShaderToLights(lighting);
         renderable.SetShader(lighting);
 

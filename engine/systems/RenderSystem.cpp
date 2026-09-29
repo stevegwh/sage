@@ -6,6 +6,7 @@
 #include "engine/Colors.hpp"
 #include "engine/MathConstants.hpp"
 #include "engine/LightManager.hpp"
+#include "ShaderPaths.hpp"
 
 #include "components/CustomShaderComponent.hpp"
 #include "components/Animation.hpp"
@@ -28,11 +29,11 @@ namespace sage
     namespace
     {
 #if defined(PLATFORM_DESKTOP)
-        constexpr const char* SKYBOX_VERTEX_SHADER = "resources/shaders/glsl330/skybox.vs";
-        constexpr const char* SKYBOX_FRAGMENT_SHADER = "resources/shaders/glsl330/skybox.fs";
+        constexpr const char* SKYBOX_VERTEX_SHADER = "glsl330/skybox.vs";
+        constexpr const char* SKYBOX_FRAGMENT_SHADER = "glsl330/skybox.fs";
 #else
-        constexpr const char* SKYBOX_VERTEX_SHADER = "resources/shaders/glsl100/skybox.vs";
-        constexpr const char* SKYBOX_FRAGMENT_SHADER = "resources/shaders/glsl100/skybox.fs";
+        constexpr const char* SKYBOX_VERTEX_SHADER = "glsl100/skybox.vs";
+        constexpr const char* SKYBOX_FRAGMENT_SHADER = "glsl100/skybox.fs";
 #endif
     } // namespace
 
@@ -53,7 +54,8 @@ namespace sage
 
             model = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
             model.materials[0].shader =
-                ResourceManager::GetInstance().ShaderLoad(SKYBOX_VERTEX_SHADER, SKYBOX_FRAGMENT_SHADER);
+                ResourceManager::GetInstance().ShaderLoad(
+                    ShaderPath(SKYBOX_VERTEX_SHADER).c_str(), ShaderPath(SKYBOX_FRAGMENT_SHADER).c_str());
 
             const int environmentMap = MATERIAL_MAP_CUBEMAP;
             const int disabled = 0;

@@ -6,6 +6,7 @@
 #include "components/Renderable.hpp"
 #include "Light.hpp"
 #include "Settings.hpp"
+#include "ShaderPaths.hpp"
 #include "systems/RenderSystem.hpp"
 #include "rlgl.h"
 #include "raymath.h"
@@ -211,7 +212,7 @@ namespace sage
         if (shadowFramebuffer == 0)
         {
             shadowShader = ResourceManager::GetInstance().ShaderLoad(
-                "resources/shaders/custom/point_shadow.vs", "resources/shaders/custom/point_shadow.fs");
+                ShaderPath("custom/point_shadow.vs").c_str(), ShaderPath("custom/point_shadow.fs").c_str());
             const std::vector<float> clearData(6 * SHADOW_MAP_SIZE * SHADOW_MAP_SIZE, 1.0f);
             shadowCubemap = rlLoadTextureCubemap(
                 clearData.data(), SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
@@ -274,7 +275,7 @@ namespace sage
         if (sunShadowFramebuffer == 0)
         {
             sunShadowShader = ResourceManager::GetInstance().ShaderLoad(
-                "resources/shaders/custom/point_shadow.vs", "resources/shaders/custom/sun_shadow.fs");
+                ShaderPath("custom/point_shadow.vs").c_str(), ShaderPath("custom/sun_shadow.fs").c_str());
             const std::vector<float> clearData(SUN_SHADOW_MAP_SIZE * SUN_SHADOW_MAP_SIZE, 1.0f);
             sunShadowTexture = rlLoadTexture(
                 clearData.data(), SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
@@ -362,7 +363,7 @@ namespace sage
     {
         registry->on_construct<Light>().connect<&LightManager::onLightAdded>(this);
         defaultShader = ResourceManager::GetInstance().ShaderLoad(
-            "resources/shaders/custom/lighting.vs", "resources/shaders/custom/lighting.fs");
+            ShaderPath("custom/lighting.vs").c_str(), ShaderPath("custom/lighting.fs").c_str());
 
         ApplyLightSettings(settings);
         LinkShaderToLights(defaultShader);

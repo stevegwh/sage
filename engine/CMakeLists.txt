@@ -137,7 +137,8 @@ target_include_directories(engine
 
 target_include_directories(engine PRIVATE "${SAGE_DOTNET_NATIVE_HOST_DIR}")
 configure_file(scripting/ManagedHostPaths.hpp.in generated/ManagedHostPaths.hpp @ONLY)
-target_include_directories(engine PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+configure_file(ShaderPaths.hpp.in generated/ShaderPaths.hpp @ONLY)
+target_include_directories(engine PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 if (BUILD_TESTING)
     add_executable(actor_movement_tests "${SAGE_ROOT_DIR}/tests/ActorMovementTests.cpp")

@@ -6,6 +6,7 @@
 #include "components/UberShaderComponent.hpp"
 #include "Flatpack.hpp"
 #include "ResourceManager.hpp"
+#include "ShaderPaths.hpp"
 #include "systems/TransformSystem.hpp"
 
 #include "raymath.h"
@@ -27,7 +28,7 @@ namespace sage
         Shader LoadThumbnailShader()
         {
             auto shader = ResourceManager::GetInstance().ShaderLoadUnique(
-                "resources/shaders/custom/ubershader.vs", "resources/shaders/custom/ubershader.fs");
+                ShaderPath("custom/ubershader.vs").c_str(), ShaderPath("custom/ubershader.fs").c_str());
             shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
             return shader;
         }

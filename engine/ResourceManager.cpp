@@ -3,6 +3,7 @@
 //
 
 #include "ResourceManager.hpp"
+#include "ShaderPaths.hpp"
 #include "AssetKey.hpp"
 
 #include "components/Renderable.hpp"
@@ -370,7 +371,7 @@ namespace sage
         char* vShaderStr = nullptr;
         char* fShaderStr = nullptr;
 
-        const char* SHADER_INCLUDE_PATH = "resources/shaders/custom/include";
+        const auto shaderIncludePath = ShaderPath("custom/include");
 
         if (vsFileName != nullptr)
         {
@@ -380,7 +381,7 @@ namespace sage
                 // Load and preprocess vertex shader with stb_include
                 char* vertexSource = LoadFileText(vsFileName);
                 char* preprocessed =
-                    stb_include_string(vertexSource, nullptr, (char*)SHADER_INCLUDE_PATH, nullptr, nullptr);
+                    stb_include_string(vertexSource, nullptr, const_cast<char*>(shaderIncludePath.c_str()), nullptr, nullptr);
                 free(vertexSource);
                 vertShaderFileText[vsFileName] = preprocessed;
             }
@@ -395,7 +396,7 @@ namespace sage
                 // Load and preprocess fragment shader with stb_include
                 char* fragmentSource = LoadFileText(fsFileName);
                 char* preprocessed =
-                    stb_include_string(fragmentSource, nullptr, (char*)SHADER_INCLUDE_PATH, nullptr, nullptr);
+                    stb_include_string(fragmentSource, nullptr, const_cast<char*>(shaderIncludePath.c_str()), nullptr, nullptr);
                 free(fragmentSource);
                 fragShaderFileText[fsFileName] = preprocessed;
             }

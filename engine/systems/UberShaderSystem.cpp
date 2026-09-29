@@ -8,6 +8,7 @@
 #include "EngineSystems.hpp"
 #include "LightManager.hpp"
 #include "ResourceManager.hpp"
+#include "ShaderPaths.hpp"
 
 namespace sage
 {
@@ -67,7 +68,7 @@ namespace sage
         registry->on_destroy<UberShaderComponent>().connect<&UberShaderSystem::onComponentRemoved>(this);
 
         shader = ResourceManager::GetInstance().ShaderLoad(
-            "resources/shaders/custom/ubershader.vs", "resources/shaders/custom/ubershader.fs");
+            ShaderPath("custom/ubershader.vs").c_str(), ShaderPath("custom/ubershader.fs").c_str());
 
         shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
         colEmissionLoc = GetShaderLocation(shader, "colEmission");

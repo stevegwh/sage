@@ -1,0 +1,14 @@
+#pragma once
+
+#include <string>
+#include <string_view>
+
+namespace sage
+{
+    inline constexpr std::string_view SHADER_PATH = R"shader(@SAGE_ROOT_DIR@/resources/shaders)shader";
+
+    inline std::string ShaderPath(const std::string_view file)
+    {
+        return std::string(SHADER_PATH) + "/" + std::string(file);
+    }
+}
