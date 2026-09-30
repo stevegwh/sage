@@ -63,11 +63,12 @@ namespace sage
             void OpenLoadBrowser();
             void OpenSaveBrowser();
             void NewMap();
-            void LoadMap(const std::filesystem::path& path);
+            void LoadMap(
+                const std::filesystem::path& path, const std::function<void()>& updateLoadingScreen = {});
             void SaveMap();
             void SaveAs(const std::filesystem::path& path) { saveMapAs(path); }
             const std::filesystem::path& Path() const { return currentMapPath; }
-            void RestoreLastOpenedMap();
+            void RestoreLastOpenedMap(const std::function<void()>& updateLoadingScreen = {});
 
             [[nodiscard]] bool HasUnsavedChanges() const;
             [[nodiscard]] std::string CurrentSaveStatus() const;

@@ -181,7 +181,8 @@ namespace sage::editor
         loadBlankMap();
     }
 
-    void EditorMapController::LoadMap(const std::filesystem::path& path)
+    void EditorMapController::LoadMap(
+        const std::filesystem::path& path, const std::function<void()>& updateLoadingScreen)
     {
         const auto selectedPath = ensureMapExtension(path);
         const auto pathString = selectedPath.string();
@@ -201,7 +202,7 @@ namespace sage::editor
         }
 
         if (callbacks.prepareForLoad) callbacks.prepareForLoad();
-        if (!editor::LoadMap(sys->registry, pathString.c_str(), components)) return;
+        if (!editor::LoadMap(sys->registry, pathString.c_str(), components, updateLoadingScreen)) return;
         currentMapPath = selectedPath;
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
@@ -249,7 +250,7 @@ namespace sage::editor
         markSaved(currentMapPath);
     }
 
-    void EditorMapController::RestoreLastOpenedMap()
+    void EditorMapController::RestoreLastOpenedMap(const std::function<void()>& updateLoadingScreen)
     {
         if (editorSettings == nullptr || editorSettings->lastOpenedMap.empty()) return;
 
@@ -260,7 +261,7 @@ namespace sage::editor
             return;
         }
 
-        LoadMap(path);
+        LoadMap(path, updateLoadingScreen);
     }
 
     void EditorMapController::rememberCurrentMapPath()

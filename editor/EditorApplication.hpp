@@ -50,8 +50,13 @@ namespace sage
         std::string skyboxImageKey;
         std::function<void(editor::InspectorRegistry&)> registerGameComponents;
         editor::CSharpScriptEditorConfig csharpScripts;
+        std::function<bool()> prepareAssets;
+        bool windowReady = false;
+        bool imguiReady = false;
 
-        void init();
+        void initWindow();
+        void initEditor();
+        void drawLoadingScreen(const char* stage);
         void draw();
         void handleScreenUpdate();
         void handleWindowResize();
@@ -60,11 +65,12 @@ namespace sage
         void saveEditorSettings() const;
 
       public:
-        void Update();
+        [[nodiscard]] bool Update();
         explicit EditorApplication(
             std::string _skyboxImageKey = {},
             std::function<void(editor::InspectorRegistry&)> _registerGameComponents = {},
-            editor::CSharpScriptEditorConfig _csharpScripts = {});
+            editor::CSharpScriptEditorConfig _csharpScripts = {},
+            std::function<bool()> _prepareAssets = {});
         ~EditorApplication();
 
         EditorApplication(const EditorApplication&) = delete;

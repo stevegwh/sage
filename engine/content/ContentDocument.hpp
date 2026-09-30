@@ -3,6 +3,7 @@
 #include "Json.hpp"
 #include "raylib.h"
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <vector>
 
@@ -50,7 +51,11 @@ namespace sage
             entt::entity root = entt::null,
             bool keepExternalReferences = false);
         ContentLoadResult Instantiate(
-            entt::registry& registry, const json::Value& document, Vector3 anchor = {}, bool freshIds = false);
+            entt::registry& registry,
+            const json::Value& document,
+            Vector3 anchor = {},
+            bool freshIds = false,
+            const std::function<void()>& updateLoadingScreen = {});
         // Restore one incremental snapshot; callers own hierarchy ordering and editor tags.
         void RestoreEntity(
             entt::registry& registry,

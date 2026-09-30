@@ -20,13 +20,17 @@ namespace sage::editor
             return false;
         }
     }
-    bool LoadMap(entt::registry* destination, const char* path, const InspectorRegistry*)
+    bool LoadMap(
+        entt::registry* destination,
+        const char* path,
+        const InspectorRegistry*,
+        const std::function<void()>& updateLoadingScreen)
     {
         try
         {
             auto document = content::ReadDocument(path);
             if (json::String(document, "kind") != "map") throw std::runtime_error("Expected a map");
-            const auto result = content::Instantiate(*destination, document);
+            const auto result = content::Instantiate(*destination, document, {}, false, updateLoadingScreen);
             for (auto entity : result.entities)
             {
                 destination->emplace<EditorMapEntity>(entity);

@@ -2740,7 +2740,8 @@ namespace sage
         EditorSettings* _editorSettings,
         std::function<void()> _onEditorSettingsChanged,
         std::function<void(editor::InspectorRegistry&)> registerGameComponents,
-        editor::CSharpScriptEditorConfig _csharpScripts)
+        editor::CSharpScriptEditorConfig _csharpScripts,
+        std::function<void()> updateLoadingScreen)
         : sys(_sys), csharpScripts(std::move(_csharpScripts))
     {
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
@@ -2844,7 +2845,7 @@ namespace sage
                 .catalogChanged = [this]() { refreshFlatpackCatalog(); }});
 
         SetSceneName(UNTITLED_SCENE_NAME);
-        mapController->RestoreLastOpenedMap();
+        mapController->RestoreLastOpenedMap(updateLoadingScreen);
         refreshOverlay();
         refreshSceneWindows();
         refreshFlatpackCatalog();

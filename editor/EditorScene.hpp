@@ -221,7 +221,8 @@ namespace sage
             EditorSettings* editorSettings,
             std::function<void()> onEditorSettingsChanged,
             std::function<void(editor::InspectorRegistry&)> registerGameComponents = {},
-            editor::CSharpScriptEditorConfig csharpScripts = {});
+            editor::CSharpScriptEditorConfig csharpScripts = {},
+            std::function<void()> updateLoadingScreen = {});
         ~EditorScene();
     };
 } // namespace sage

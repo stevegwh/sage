@@ -21,7 +21,9 @@
 #include "ShaderPaths.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <future>
 #include <utility>
 
 namespace sage
@@ -71,32 +73,75 @@ namespace sage
         }
     } // namespace
 
-    void EditorApplication::init()
+    void EditorApplication::initWindow()
     {
         SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
         const auto screenSize = settings->GetScreenSize();
         InitWindow(static_cast<int>(screenSize.x), static_cast<int>(screenSize.y), "BG Raylib Editor");
+        windowReady = true;
         settings->UpdateViewport();
         ConfigureEditorSceneViewport(*settings, dockLayout, viewportFullscreen);
         SetExitKey(KEY_NULL);
         EnableCursor();
+        SetTargetFPS(60);
+    }
+
+    void EditorApplication::drawLoadingScreen(const char* stage)
+    {
+        if (WindowShouldClose()) exitWindowRequested = true;
+
+        const int width = GetScreenWidth();
+        const int height = GetScreenHeight();
+        const char* title = "Loading editor";
+        const int titleSize = 30;
+        const int stageSize = 20;
+        const int barWidth = std::min(400, width - 80);
+        const int barX = (width - barWidth) / 2;
+        const int barY = height / 2 + 50;
+        const int markerWidth = std::max(20, barWidth / 5);
+        const float travel = static_cast<float>(std::max(0, barWidth - markerWidth));
+        const float phase = static_cast<float>(std::fmod(GetTime() * 0.8, 2.0));
+        const float position = phase <= 1.0f ? phase : 2.0f - phase;
+
+        BeginDrawing();
+        ClearBackground({24, 27, 34, 255});
+        DrawText(title, (width - MeasureText(title, titleSize)) / 2, height / 2 - 65, titleSize, RAYWHITE);
+        DrawText(stage, (width - MeasureText(stage, stageSize)) / 2, height / 2 - 10, stageSize, LIGHTGRAY);
+        DrawRectangle(barX, barY, barWidth, 8, {55, 61, 72, 255});
+        DrawRectangle(barX + static_cast<int>(position * travel), barY, markerWidth, 8, SKYBLUE);
+        EndDrawing();
+    }
+
+    void EditorApplication::initEditor()
+    {
+        drawLoadingScreen("Initializing engine...");
 
         systems =
             std::make_unique<EngineSystems>(registry.get(), keyMapping.get(), settings.get(), audioManager.get());
 
-        serializer::LoadAssetBinFile(registry.get(), "resources/assets.bin");
+        drawLoadingScreen("Loading packed assets...");
+        serializer::LoadAssetBinFile(
+            registry.get(), "resources/assets.bin", [this]() { drawLoadingScreen("Loading packed assets..."); });
+        drawLoadingScreen("Preparing scene...");
         colorGradeShader = ResourceManager::GetInstance().ShaderLoad(
             nullptr, ShaderPath("custom/color_grade.fs").c_str());
         bloomTextureLocation = GetShaderLocation(colorGradeShader, "bloomTexture");
         SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
         if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
+        auto lastMapUpdate = std::chrono::steady_clock::now();
         scene = std::make_unique<EditorScene>(
             systems.get(),
             &dockLayout,
             &editorSettings,
             [this]() { saveEditorSettings(); },
             registerGameComponents,
-            csharpScripts);
+            csharpScripts,
+            [this, &lastMapUpdate]() {
+                const auto now = std::chrono::steady_clock::now();
+                if (now - lastMapUpdate < std::chrono::milliseconds(50)) return;
+                drawLoadingScreen("Restoring last map...");
+                lastMapUpdate = now;
+            });
 
         const auto renderViewport = settings->GetRenderViewPort();
         renderTexture = LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
@@ -107,6 +152,7 @@ namespace sage
         bloomPass = std::make_unique<BloomPass>(
             static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         rlImGuiSetup(true);
+        imguiReady = true;
 
 #if !defined(__APPLE__)
         // Keep Raylib's window and framebuffer coordinates identical. Its Linux
@@ -278,10 +324,20 @@ namespace sage
         refreshViewportLayout();
     }
 
-    void EditorApplication::Update()
+    bool EditorApplication::Update()
     {
-        init();
-        SetTargetFPS(60);
+        initWindow();
+        drawLoadingScreen("Checking assets...");
+        if (prepareAssets)
+        {
+            auto packing = std::async(std::launch::async, prepareAssets);
+            while (packing.wait_for(std::chrono::milliseconds(16)) != std::future_status::ready)
+                drawLoadingScreen("Checking or packing assets...");
+            if (!packing.get()) return false;
+        }
+        if (exitWindowRequested) return true;
+        initEditor();
+        if (exitWindowRequested) return true;
 
         while (!exitWindow)
         {
@@ -298,31 +354,34 @@ namespace sage
             }
             handleScreenUpdate();
         }
+        return true;
     }
 
     EditorApplication::EditorApplication(
         std::string _skyboxImageKey,
         std::function<void(editor::InspectorRegistry&)> _registerGameComponents,
-        editor::CSharpScriptEditorConfig _csharpScripts)
+        editor::CSharpScriptEditorConfig _csharpScripts,
+        std::function<bool()> _prepareAssets)
         : registry(std::make_unique<entt::registry>()),
           keyMapping(std::make_unique<KeyMapping>()),
           settings(std::make_unique<Settings>(&exitWindow)),
           audioManager(std::make_unique<AudioManager>()),
           skyboxImageKey(std::move(_skyboxImageKey)),
           registerGameComponents(std::move(_registerGameComponents)),
-          csharpScripts(std::move(_csharpScripts))
+          csharpScripts(std::move(_csharpScripts)),
+          prepareAssets(std::move(_prepareAssets))
     {
         serializer::DeserializeXMLFile<EditorSettings>(EDITOR_SETTINGS_PATH, editorSettings);
     }
 
     EditorApplication::~EditorApplication()
     {
-        rlImGuiShutdown();
-        UnloadRenderTexture(renderTexture);
-        UnloadRenderTexture(gameUiTexture);
+        if (imguiReady) rlImGuiShutdown();
+        if (renderTexture.id != 0) UnloadRenderTexture(renderTexture);
+        if (gameUiTexture.id != 0) UnloadRenderTexture(gameUiTexture);
         bloomPass.reset();
         scene.reset();
         systems.reset();
-        CloseWindow();
+        if (windowReady) CloseWindow();
     }
 } // namespace sage

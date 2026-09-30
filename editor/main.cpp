@@ -3,6 +3,5 @@
 int main()
 {
     sage::EditorApplication editor;
-    editor.Update();
-    return 0;
+    return editor.Update() ? 0 : 1;
 }

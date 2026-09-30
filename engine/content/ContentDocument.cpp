@@ -695,7 +695,12 @@ namespace sage::content
             collider->worldBoundingBox = TransformBoundingBoxByCorners(collider->localBoundingBox, t.GetMatrix());
     }
 
-    ContentLoadResult Instantiate(entt::registry& registry, const json::Value& doc, Vector3 anchor, bool freshIds)
+    ContentLoadResult Instantiate(
+        entt::registry& registry,
+        const json::Value& doc,
+        Vector3 anchor,
+        bool freshIds,
+        const std::function<void()>& updateLoadingScreen)
     {
         const auto errors = Validate(doc);
         if (!errors.empty()) throw std::runtime_error(errors.front());
@@ -738,6 +743,7 @@ namespace sage::content
                 auto e = ids.at(json::Id(n, "id"));
                 if (!n["parent"].IsNull()) registry.get<sgTransform>(e).SetParent(ids.at(n["parent"].GetUint()));
                 RestoreComponents(registry, e, n);
+                if (updateLoadingScreen) updateLoadingScreen();
             }
             for (auto e : result.entities)
             {

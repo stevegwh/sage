@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <vector>
 
@@ -36,7 +37,8 @@ namespace sage::serializer
         archive(entity.id);
     }
 
-    void LoadAssetBinFile(entt::registry* destination, const char* path);
+    void LoadAssetBinFile(
+        entt::registry* destination, const char* path, const std::function<void()>& updateLoadingScreen = {});
 
     template <typename T>
     bool SaveClassXML(const char* path, const T& toSave)
@@ -213,8 +215,7 @@ namespace sage::serializer
     // Reads a header-prefixed DEFLATE-compressed cereal payload, then invokes the lambda with
     // both a BinaryInputArchive and the underlying istream (so callers that use peek-until-EOF
     // loops still work).
-    template <typename ArchiveFn>
-    void ReadCompressedBinary(const char* path, const char (&magic)[4], ArchiveFn&& archiveFn)
+    inline std::string ReadCompressedBinaryPayload(const char* path, const char (&magic)[4])
     {
         std::ifstream storage(path, std::ios::binary);
         if (!storage.is_open())
@@ -263,8 +264,13 @@ namespace sage::serializer
 
         std::string decompStr(reinterpret_cast<const char*>(decompData), uncompressedSize);
         MemFree(decompData);
+        return decompStr;
+    }
 
-        std::istringstream inBuf(std::move(decompStr), std::ios::binary);
+    template <typename ArchiveFn>
+    void ReadCompressedBinary(const char* path, const char (&magic)[4], ArchiveFn&& archiveFn)
+    {
+        std::istringstream inBuf(ReadCompressedBinaryPayload(path, magic), std::ios::binary);
         {
             cereal::BinaryInputArchive input(inBuf);
             archiveFn(input, inBuf);
