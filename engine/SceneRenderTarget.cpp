@@ -44,6 +44,8 @@ namespace sage
                           rlGetCullDistanceNear(), rlGetCullDistanceFar())
             : MatrixPerspective(camera.fovy * DEG2RAD, aspect,
                                 rlGetCullDistanceNear(), rlGetCullDistanceFar());
+        const float targetDistance = Vector3Distance(camera.position, camera.target);
+        SetShaderValue(shader, GetShaderLocation(shader, "cameraTargetDistance"), &targetDistance, SHADER_UNIFORM_FLOAT);
         SetShaderValueTexture(shader, GetShaderLocation(shader, "sceneDepth"), scene.depth);
         SetShaderValueMatrix(shader, GetShaderLocation(shader, "sceneProjection"), projection);
         SetShaderValueMatrix(shader, GetShaderLocation(shader, "inverseSceneProjection"), MatrixInvert(projection));
@@ -68,6 +70,7 @@ namespace sage
         setFloat("saturation", settings.saturation);
         setFloat("contrast", settings.contrast);
         setToggle("enableDepthOfField", settings.depthOfField);
+        setToggle("focusCameraTarget", settings.focusCameraTarget);
         setFloat("focusDistance", settings.focusDistance);
         setFloat("focusRange", settings.focusRange);
         setFloat("maxBlurRadius", settings.maxBlurRadius);

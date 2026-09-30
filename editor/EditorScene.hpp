@@ -182,7 +182,7 @@ namespace sage
       public:
         void Update() const;
         void CaptureAutomationFrame(
-            Texture2D sceneTexture, Texture2D uiTexture = {}, Shader sceneShader = {}, Texture2D bloomTexture = {}) const;
+            RenderTexture sceneTarget, Texture2D uiTexture = {}, Shader sceneShader = {}, Texture2D bloomTexture = {}) const;
         void Draw3D() const;
         void DrawBloomMask() const;
         void DrawShadowMap() const;

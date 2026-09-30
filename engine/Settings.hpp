@@ -44,6 +44,7 @@ namespace sage
         float saturation = 1.04f;
         float contrast = 1.04f;
         bool depthOfField = false;
+        bool focusCameraTarget = true;
         float focusDistance = 12.0f;
         float focusRange = 5.0f;
         float maxBlurRadius = 6.0f;
@@ -61,6 +62,7 @@ namespace sage
                     cereal::make_nvp("color_grading", colorGrading),
                     cereal::make_nvp("saturation", saturation),
                     cereal::make_nvp("contrast", contrast),
+                    cereal::make_nvp("focus_camera_target", focusCameraTarget),
                     cereal::make_nvp("depth_of_field", depthOfField),
                     cereal::make_nvp("focus_distance", focusDistance),
                     cereal::make_nvp("focus_range", focusRange),
@@ -94,6 +96,14 @@ namespace sage
                 focusDistance = 12.0f;
                 focusRange = 5.0f;
                 maxBlurRadius = 6.0f;
+            }
+            try
+            {
+                archive(cereal::make_nvp("focus_camera_target", focusCameraTarget));
+            }
+            catch (const cereal::Exception&)
+            {
+                focusCameraTarget = true;
             }
         }
     };

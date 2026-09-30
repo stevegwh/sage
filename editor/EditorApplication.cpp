@@ -205,9 +205,8 @@ namespace sage
         }
 
         SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
-        SetSceneOcclusionUniforms(colorGradeShader, renderTexture, *scene->ActiveCamera());
         scene->CaptureAutomationFrame(
-            renderTexture.texture,
+            renderTexture,
             playing ? gameUiTexture.texture : Texture2D{},
             colorGradeShader,
             bloomPass->Texture());
@@ -220,6 +219,7 @@ namespace sage
         const auto renderViewportOffset = settings->GetRenderViewportOffset();
 
         BeginShaderMode(colorGradeShader);
+        SetSceneOcclusionUniforms(colorGradeShader, renderTexture, *scene->ActiveCamera());
         SetShaderValueTexture(colorGradeShader, bloomTextureLocation, bloomPass->Texture());
         DrawTextureRec(
             renderTexture.texture,

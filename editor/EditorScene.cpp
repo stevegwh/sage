@@ -2188,9 +2188,15 @@ namespace sage
             ImGui::SeparatorText("Depth of Field");
             changed |= ImGui::Checkbox("Enable Depth of Field", &graphicsSettingsDraft.depthOfField);
             ImGui::BeginDisabled(!graphicsSettingsDraft.depthOfField);
-            changed |= ImGui::SliderFloat("Focus Distance", &graphicsSettingsDraft.focusDistance, 0.5f, 100.0f, "%.1f");
+            changed |= ImGui::Checkbox("Focus Camera Target", &graphicsSettingsDraft.focusCameraTarget);
+            if (graphicsSettingsDraft.focusCameraTarget)
+                ImGui::TextDisabled("Target distance: %.1f", Vector3Distance(ActiveCamera()->position, ActiveCamera()->target));
+            ImGui::BeginDisabled(graphicsSettingsDraft.focusCameraTarget);
+            changed |= ImGui::SliderFloat("Focus Distance", &graphicsSettingsDraft.focusDistance, 0.5f, 500.0f, "%.1f");
+            ImGui::EndDisabled();
+            ImGui::TextDisabled("Focus Range is the sharp half-width in world units.");
             changed |= ImGui::SliderFloat("Focus Range", &graphicsSettingsDraft.focusRange, 0.1f, 50.0f, "%.1f");
-            changed |= ImGui::SliderFloat("Max Blur (pixels)", &graphicsSettingsDraft.maxBlurRadius, 0.0f, 12.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Max Blur (pixels at 720p)", &graphicsSettingsDraft.maxBlurRadius, 0.0f, 12.0f, "%.1f");
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Post Processing");

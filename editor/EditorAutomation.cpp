@@ -1,4 +1,5 @@
 #include "EditorScene.hpp"
+#include "engine/SceneRenderTarget.hpp"
 #include "engine/Colors.hpp"
 #include "engine/Camera.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -321,9 +322,10 @@ namespace sage
         return automationState();
     }
     void EditorScene::CaptureAutomationFrame(
-        Texture2D sceneTexture, Texture2D uiTexture, Shader sceneShader, Texture2D bloomTexture) const
+        RenderTexture sceneTarget, Texture2D uiTexture, Shader sceneShader, Texture2D bloomTexture) const
     {
         if (!automationCapture) return;
+        auto sceneTexture = sceneTarget.texture;
         const auto path = *automationCapture;
         automationCapture.reset();
         if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
@@ -336,6 +338,7 @@ namespace sage
             if (sceneShader.id != 0)
             {
                 BeginShaderMode(sceneShader);
+                SetSceneOcclusionUniforms(sceneShader, sceneTarget, *ActiveCamera());
                 SetShaderValueTexture(sceneShader, GetShaderLocation(sceneShader, "bloomTexture"), bloomTexture);
             }
             DrawTextureRec(

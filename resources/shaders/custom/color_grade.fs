@@ -20,6 +20,8 @@ uniform float saturation;
 uniform float contrast;
 uniform int enableDepthOfField;
 uniform float focusDistance;
+uniform int focusCameraTarget;
+uniform float cameraTargetDistance;
 uniform float focusRange;
 uniform float maxBlurRadius;
 
@@ -88,22 +90,23 @@ vec3 ApplyDepthOfField(vec2 uv, vec3 sharpColor)
     float centerDepth = texture(sceneDepth, uv).r;
     // Skybox pixels retain the far-plane depth and should blur with the background.
     float viewDistance = -ViewPosition(uv).z;
+    float focalDistance = focusCameraTarget != 0 ? cameraTargetDistance : focusDistance;
     float blur = smoothstep(max(focusRange, 0.001), max(focusRange, 0.001) * 2.0,
-                            abs(viewDistance - focusDistance));
-    float radius = blur * max(maxBlurRadius, 0.0);
+                            abs(viewDistance - focalDistance));
+    float radius = blur * max(maxBlurRadius, 0.0) * float(textureSize(texture0, 0).y) / 720.0;
     if (radius < 0.5) return sharpColor;
 
     vec2 texel = 1.0 / vec2(textureSize(texture0, 0));
     vec3 sum = sharpColor;
     float weight = 1.0;
-    const vec2 disk[12] = vec2[12](
-        vec2( 0.35,  0.00), vec2(-0.29,  0.27), vec2( 0.00, -0.45),
-        vec2( 0.45,  0.40), vec2(-0.60, -0.08), vec2( 0.20, -0.65),
-        vec2(-0.44,  0.57), vec2( 0.72,  0.10), vec2(-0.05, -0.80),
-        vec2(-0.77, -0.32), vec2( 0.55, -0.67), vec2( 0.35,  0.88));
-    for (int i = 0; i < 12; ++i)
+    // A dense sunflower disk avoids the visible repeated edges of the old 12 taps.
+    const int SAMPLE_COUNT = 48;
+    const float GOLDEN_ANGLE = 2.39996323;
+    for (int i = 0; i < SAMPLE_COUNT; ++i)
     {
-        vec2 sampleUv = clamp(uv + disk[i] * texel * radius, texel * 0.5, vec2(1.0) - texel * 0.5);
+        float angle = float(i) * GOLDEN_ANGLE;
+        vec2 disk = vec2(cos(angle), sin(angle)) * sqrt((float(i) + 0.5) / float(SAMPLE_COUNT));
+        vec2 sampleUv = clamp(uv + disk * texel * radius, texel * 0.5, vec2(1.0) - texel * 0.5);
         float sampleDepth = texture(sceneDepth, sampleUv).r;
         // A sharp foreground object must not smear into blurred scenery behind it.
         if (sampleDepth < centerDepth && sampleDepth < 0.99999 &&
