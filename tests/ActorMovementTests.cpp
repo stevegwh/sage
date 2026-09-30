@@ -6,6 +6,8 @@
 #include "engine/systems/TransformSystem.hpp"
 
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 
@@ -274,6 +276,27 @@ namespace
         Require(world.grid.AStarPathfind(actor, world.Position(actor), destination, {300, 300}, {200, 200}).empty(),
                 "inverted search window was accepted");
     }
+
+    void TestLargeBlockedDestination()
+    {
+        World world(200);
+        const auto actor = world.Actor(Point(-70.5f));
+        world.ActorData(actor).pathfindingBounds = 250;
+        world.Tick();
+        const auto destination = Point(70.5f);
+        world.Wall(destination);
+
+        const auto started = std::chrono::steady_clock::now();
+        const auto route = world.movement.FindRouteToLocation(actor, destination, true);
+        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - started);
+        Require(!route.empty(), "large blocked destination has no fallback route");
+        Require(!Vector3Equals(route.back(), destination), "large blocked destination was accepted");
+        Require(world.grid.CheckEntityAreaUnoccupied(actor, route.back()), "large fallback is occupied");
+        Require(std::fabs(route.back().x - destination.x) + std::fabs(route.back().z - destination.z) == 1.0f,
+                "large fallback did not stop beside the blocked destination");
+        std::cout << "Large blocked destination route: " << elapsed.count() << " ms\n";
+    }
 }
 
 int main()
@@ -291,6 +314,7 @@ int main()
         TestStaticOwnershipAndFootprint();
         TestRouteStartedDuringArrival();
         TestOffsetSearchWindow();
+        TestLargeBlockedDestination();
         std::cout << "Actor movement tests passed\n";
         return 0;
     }

@@ -1024,7 +1024,38 @@ namespace sage
             return {};
         if (minRange.row < 0 || minRange.col < 0 || maxRange.row > slices || maxRange.col > slices ||
             !CheckWithinBounds(start, minRange, maxRange)) return {};
-        if (!findNextBestIfInvalid && !checkFootprint(finish, footprintOffsets, entity)) return {};
+        const bool finishCanStop = checkFootprint(finish, footprintOffsets, entity);
+        if (!findNextBestIfInvalid && !finishCanStop) return {};
+
+        // A blocked destination is common for building roots and occupied actor
+        // positions. Find the nearest free ring first, so the search can finish
+        // as soon as it reaches that ring instead of visiting the whole window.
+        int nearestFreeDistance = 0;
+        if (findNextBestIfInvalid && !finishCanStop)
+        {
+            const int maximumDistance = (maxRange.row - minRange.row) + (maxRange.col - minRange.col);
+            for (int distance = 1; distance <= maximumDistance; ++distance)
+            {
+                bool foundFree = false;
+                for (int rowOffset = -distance; rowOffset <= distance; ++rowOffset)
+                {
+                    const int colOffset = distance - std::abs(rowOffset);
+                    for (const int sign : {-1, 1})
+                    {
+                        if (colOffset == 0 && sign == 1) continue;
+                        const GridSquare candidate{finish.row + rowOffset, finish.col + sign * colOffset};
+                        if (CheckWithinBounds(candidate, minRange, maxRange) &&
+                            checkFootprint(candidate, footprintOffsets, entity))
+                            foundFree = true;
+                    }
+                }
+                if (foundFree)
+                {
+                    nearestFreeDistance = distance;
+                    break;
+                }
+            }
+        }
 
         struct FrontierNode
         {
@@ -1072,6 +1103,8 @@ namespace sage
             {
                 const double distance = heuristic(current, finish);
                 const double pathCost = costs[currentIndex.row][currentIndex.col];
+                if (nearestFreeDistance > 0 && distance == nearestFreeDistance)
+                    return tracebackPath(cameFrom, start, current, minRange);
                 if (distance < closestDistance || (distance == closestDistance && pathCost < closestPathCost))
                 {
                     closestReachable = current;
