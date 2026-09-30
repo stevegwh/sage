@@ -43,9 +43,32 @@ namespace sage
         bool colorGrading = true;
         float saturation = 1.04f;
         float contrast = 1.04f;
+        bool depthOfField = false;
+        float focusDistance = 12.0f;
+        float focusRange = 5.0f;
+        float maxBlurRadius = 6.0f;
 
         template <class Archive>
-        void serialize(Archive& archive)
+        void save(Archive& archive) const
+        {
+            archive(cereal::make_nvp("shadows", shadows),
+                    cereal::make_nvp("bloom", bloom),
+                    cereal::make_nvp("bloom_strength", bloomStrength),
+                    cereal::make_nvp("ambient_occlusion", ambientOcclusion),
+                    cereal::make_nvp("occlusion_radius", occlusionRadius),
+                    cereal::make_nvp("occlusion_strength", occlusionStrength),
+                    cereal::make_nvp("fxaa", fxaa),
+                    cereal::make_nvp("color_grading", colorGrading),
+                    cereal::make_nvp("saturation", saturation),
+                    cereal::make_nvp("contrast", contrast),
+                    cereal::make_nvp("depth_of_field", depthOfField),
+                    cereal::make_nvp("focus_distance", focusDistance),
+                    cereal::make_nvp("focus_range", focusRange),
+                    cereal::make_nvp("max_blur_radius", maxBlurRadius));
+        }
+
+        template <class Archive>
+        void load(Archive& archive)
         {
             archive(cereal::make_nvp("shadows", shadows),
                     cereal::make_nvp("bloom", bloom),
@@ -57,6 +80,21 @@ namespace sage
                     cereal::make_nvp("color_grading", colorGrading),
                     cereal::make_nvp("saturation", saturation),
                     cereal::make_nvp("contrast", contrast));
+            // Existing project settings have no depth-of-field fields.
+            try
+            {
+                archive(cereal::make_nvp("depth_of_field", depthOfField),
+                        cereal::make_nvp("focus_distance", focusDistance),
+                        cereal::make_nvp("focus_range", focusRange),
+                        cereal::make_nvp("max_blur_radius", maxBlurRadius));
+            }
+            catch (const cereal::Exception&)
+            {
+                depthOfField = false;
+                focusDistance = 12.0f;
+                focusRange = 5.0f;
+                maxBlurRadius = 6.0f;
+            }
         }
     };
 

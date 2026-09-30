@@ -2185,6 +2185,14 @@ namespace sage
             changed |= ImGui::SliderFloat("Occlusion Strength", &graphicsSettingsDraft.occlusionStrength, 0.0f, 1.5f, "%.2f");
             ImGui::EndDisabled();
 
+            ImGui::SeparatorText("Depth of Field");
+            changed |= ImGui::Checkbox("Enable Depth of Field", &graphicsSettingsDraft.depthOfField);
+            ImGui::BeginDisabled(!graphicsSettingsDraft.depthOfField);
+            changed |= ImGui::SliderFloat("Focus Distance", &graphicsSettingsDraft.focusDistance, 0.5f, 100.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Focus Range", &graphicsSettingsDraft.focusRange, 0.1f, 50.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Max Blur (pixels)", &graphicsSettingsDraft.maxBlurRadius, 0.0f, 12.0f, "%.1f");
+            ImGui::EndDisabled();
+
             ImGui::SeparatorText("Post Processing");
             changed |= ImGui::Checkbox("FXAA", &graphicsSettingsDraft.fxaa);
             changed |= ImGui::Checkbox("Color Grading", &graphicsSettingsDraft.colorGrading);

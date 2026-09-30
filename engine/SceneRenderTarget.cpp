@@ -67,5 +67,9 @@ namespace sage
         setToggle("enableColorGrading", settings.colorGrading);
         setFloat("saturation", settings.saturation);
         setFloat("contrast", settings.contrast);
+        setToggle("enableDepthOfField", settings.depthOfField);
+        setFloat("focusDistance", settings.focusDistance);
+        setFloat("focusRange", settings.focusRange);
+        setFloat("maxBlurRadius", settings.maxBlurRadius);
     }
 } // namespace sage

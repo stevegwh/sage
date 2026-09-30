@@ -18,6 +18,10 @@ uniform int enableFxaa;
 uniform int enableColorGrading;
 uniform float saturation;
 uniform float contrast;
+uniform int enableDepthOfField;
+uniform float focusDistance;
+uniform float focusRange;
+uniform float maxBlurRadius;
 
 out vec4 finalColor;
 
@@ -79,6 +83,37 @@ vec3 SampleScene(vec2 uv, vec2 texel)
     return texture(texture0, clamp(uv, texel * 0.5, vec2(1.0) - texel * 0.5)).rgb;
 }
 
+vec3 ApplyDepthOfField(vec2 uv, vec3 sharpColor)
+{
+    float centerDepth = texture(sceneDepth, uv).r;
+    // Skybox pixels retain the far-plane depth and should blur with the background.
+    float viewDistance = -ViewPosition(uv).z;
+    float blur = smoothstep(max(focusRange, 0.001), max(focusRange, 0.001) * 2.0,
+                            abs(viewDistance - focusDistance));
+    float radius = blur * max(maxBlurRadius, 0.0);
+    if (radius < 0.5) return sharpColor;
+
+    vec2 texel = 1.0 / vec2(textureSize(texture0, 0));
+    vec3 sum = sharpColor;
+    float weight = 1.0;
+    const vec2 disk[12] = vec2[12](
+        vec2( 0.35,  0.00), vec2(-0.29,  0.27), vec2( 0.00, -0.45),
+        vec2( 0.45,  0.40), vec2(-0.60, -0.08), vec2( 0.20, -0.65),
+        vec2(-0.44,  0.57), vec2( 0.72,  0.10), vec2(-0.05, -0.80),
+        vec2(-0.77, -0.32), vec2( 0.55, -0.67), vec2( 0.35,  0.88));
+    for (int i = 0; i < 12; ++i)
+    {
+        vec2 sampleUv = clamp(uv + disk[i] * texel * radius, texel * 0.5, vec2(1.0) - texel * 0.5);
+        float sampleDepth = texture(sceneDepth, sampleUv).r;
+        // A sharp foreground object must not smear into blurred scenery behind it.
+        if (sampleDepth < centerDepth && sampleDepth < 0.99999 &&
+            -ViewPosition(sampleUv).z < viewDistance - max(focusRange * 0.25, 0.1)) continue;
+        sum += SampleScene(sampleUv, texel);
+        weight += 1.0;
+    }
+    return mix(sharpColor, sum / weight, blur);
+}
+
 vec3 ApplyFxaa(vec2 uv)
 {
     vec2 texel = 1.0 / vec2(textureSize(texture0, 0));
@@ -114,9 +149,12 @@ vec3 ApplyFxaa(vec2 uv)
 
 void main()
 {
-    vec4 scene = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
-    vec3 color = enableFxaa != 0
-        ? ApplyFxaa(fragTexCoord) * colDiffuse.rgb * fragColor.rgb : scene.rgb;
+    vec4 sceneSample = texture(texture0, fragTexCoord);
+    vec4 scene = sceneSample * colDiffuse * fragColor;
+    vec3 color = enableFxaa != 0 ? ApplyFxaa(fragTexCoord) : sceneSample.rgb;
+    if (enableDepthOfField != 0)
+        color = ApplyDepthOfField(fragTexCoord, color);
+    color *= colDiffuse.rgb * fragColor.rgb;
     if (enableAmbientOcclusion != 0) color *= AmbientOcclusion(fragTexCoord);
     if (enableBloom != 0) color += texture(bloomTexture, fragTexCoord).rgb * bloomStrength;
     color = clamp(color, 0.0, 1.0);
