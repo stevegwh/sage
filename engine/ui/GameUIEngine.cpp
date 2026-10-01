@@ -121,7 +121,11 @@ namespace sage
         for (const auto& window : windows)
         {
             if (!window->hidden)
+            {
+                // Drawing also works before the first input update (paused previews and captures).
+                window->Layout(*settings);
                 window->Draw(hovered.cell, pressed.cell, settings->GetCurrentScaleFactor());
+            }
         }
     }
 

@@ -58,6 +58,8 @@ namespace sage
 
     struct CellStyle
     {
+        Texture backgroundTexture{};
+        Rectangle backgroundSource{};
         Color background = sage::colors::BLANK_COLOR;
         Color hoveredBackground = sage::colors::BLANK_COLOR;
         Color pressedBackground = sage::colors::BLANK_COLOR;
@@ -75,6 +77,7 @@ namespace sage
     {
         Color background = sage::colors::BLANK_COLOR;
         Texture backgroundTexture{};
+        Rectangle backgroundSource{};
         Padding padding{};
     };
 

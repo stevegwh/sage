@@ -128,6 +128,13 @@ namespace sage
 
         void ConfigureThumbnailLighting(const Shader shader, const Camera3D& camera, const Vector3 center)
         {
+            // Previews have no shadow pass. Keep the cubemap sampler off the diffuse
+            // texture unit: mixing sampler types on unit zero invalidates the draw.
+            constexpr int NO_SHADOW_LIGHT = -1;
+            constexpr int SHADOW_TEXTURE_SLOT = 15;
+            SetShaderValue(shader, GetShaderLocation(shader, "shadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
+            SetShaderValue(shader, GetShaderLocation(shader, "sunShadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
+            SetShaderValue(shader, GetShaderLocation(shader, "pointShadowMap"), &SHADOW_TEXTURE_SLOT, SHADER_UNIFORM_INT);
             const float ambient[4] = {0.6f, 0.2f, 0.8f, 1.0f};
             SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient, SHADER_UNIFORM_VEC4);
 
@@ -179,7 +186,9 @@ namespace sage
             if (!transform || !renderable || !renderable->active || !model || model->GetMeshCount() == 0) continue;
 
             const auto entityBounds =
-                TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), transform->GetMatrix());
+                TransformBoundingBoxByCorners(
+                    model->CalcLocalBoundingBox(),
+                    MatrixMultiply(model->GetRlModel().transform, transform->GetMatrix()));
             if (bounds)
                 ExpandBounds(*bounds, entityBounds);
             else

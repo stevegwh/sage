@@ -230,7 +230,7 @@ namespace sage
             DrawTexturePro(
                 image,
                 {0,
-                 imageContent.flipVertically ? static_cast<float>(image.height) : 0.0f,
+                 0.0f,
                  static_cast<float>(image.width),
                  imageContent.flipVertically ? -static_cast<float>(image.height)
                                              : static_cast<float>(image.height)},
@@ -256,7 +256,16 @@ namespace sage
                     else if (cell.get() == hovered && cell->style.hoveredBackground.a > 0)
                         background = cell->style.hoveredBackground;
 
-                    if (background.a > 0) DrawRectangleRec(cell->bounds, background);
+                    if (cell->style.backgroundTexture.id != 0)
+                    {
+                        const auto texture = cell->style.backgroundTexture;
+                        auto source = cell->style.backgroundSource;
+                        if (source.width <= 0 || source.height <= 0)
+                            source = {0, 0, float(texture.width), float(texture.height)};
+                        DrawTexturePro(texture, source, cell->bounds, {}, 0,
+                                       background.a > 0 ? background : sage::colors::WHITE_COLOR);
+                    }
+                    else if (background.a > 0) DrawRectangleRec(cell->bounds, background);
                     if (cell->style.borderWidth > 0 && cell->style.border.a > 0)
                         DrawRectangleLinesEx(cell->bounds, cell->style.borderWidth * scale, cell->style.border);
 
@@ -448,11 +457,12 @@ namespace sage
         if (style.background.a > 0) DrawRectangleRec(bounds, style.background);
         if (style.backgroundTexture.id != 0)
         {
+            auto source = style.backgroundSource;
+            if (source.width <= 0 || source.height <= 0)
+                source = {0, 0, float(style.backgroundTexture.width), float(style.backgroundTexture.height)};
             DrawTexturePro(
                 style.backgroundTexture,
-                {0, 0,
-                 static_cast<float>(style.backgroundTexture.width),
-                 static_cast<float>(style.backgroundTexture.height)},
+                source,
                 bounds,
                 {},
                 0,
