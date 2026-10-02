@@ -16,18 +16,13 @@
 // Its default C-style #line filenames are rejected by our GLSL compiler.
 #define STB_INCLUDE_LINE_NONE
 
-#include "external/cgltf.h"
-
 #include <algorithm>
 #include <ranges>
-#include <stdexcept>
-extern "C"
-{
-#include "raylib/src/external/tinyobj_loader_c.h"
-}
 #include <stb_include.h>
+#include <stdexcept>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -40,7 +35,6 @@ namespace sage
 {
     namespace
     {
-        constexpr const char* DEFAULT_MATERIAL_NAME = "Default";
 
         void RegisterSourcePath(
             std::unordered_map<std::string, std::string>& sources,
@@ -80,186 +74,6 @@ namespace sage
             return key;
         }
 
-        std::string FallbackMaterialName(const std::string& sourcePath, int materialIndex)
-        {
-            return sourcePath + "#Material" + std::to_string(materialIndex);
-        }
-
-        std::string Trim(const std::string& value)
-        {
-            const size_t begin = value.find_first_not_of(" \t\r\n");
-            if (begin == std::string::npos) return "";
-
-            const size_t end = value.find_last_not_of(" \t\r\n");
-            return value.substr(begin, end - begin + 1);
-        }
-
-        bool IsAbsolutePath(const std::string& path)
-        {
-            return !path.empty() &&
-                   (path.at(0) == '/' || path.at(0) == '\\' || (path.size() > 1 && path.at(1) == ':'));
-        }
-
-        std::string ResolveObjMaterialPath(const char* objFileName, const std::string& materialFileName)
-        {
-            if (IsAbsolutePath(materialFileName)) return materialFileName;
-
-            std::string directory = GetDirectoryPath(objFileName);
-            if (directory.empty()) return materialFileName;
-
-            if (directory.back() != '/' && directory.back() != '\\')
-            {
-                directory += '/';
-            }
-
-            return directory + materialFileName;
-        }
-
-        std::string FindObjMaterialLibrary(const char* fileName)
-        {
-            std::ifstream objFile(fileName);
-            if (!objFile.is_open()) return "";
-
-            std::string materialFileName;
-            std::string line;
-            while (std::getline(objFile, line))
-            {
-                const std::string trimmed = Trim(line);
-                if (trimmed.empty() || trimmed.at(0) == '#') continue;
-
-                constexpr const char* keyword = "mtllib";
-                constexpr size_t keywordLength = 6;
-                if (trimmed.compare(0, keywordLength, keyword) != 0) continue;
-                if (trimmed.size() == keywordLength ||
-                    (trimmed.at(keywordLength) != ' ' && trimmed.at(keywordLength) != '\t'))
-                {
-                    continue;
-                }
-
-                // raylib's tinyobj C loader keeps the last mtllib declaration it sees.
-                materialFileName = Trim(trimmed.substr(keywordLength));
-            }
-
-            return materialFileName;
-        }
-
-        std::vector<std::string> LoadObjMaterialNames(const char* fileName)
-        {
-            const std::string materialFileName = FindObjMaterialLibrary(fileName);
-            if (materialFileName.empty()) return {};
-
-            tinyobj_material_t* materials = nullptr;
-            unsigned int materialCount = 0;
-            const std::string materialPath = ResolveObjMaterialPath(fileName, materialFileName);
-            const int result = tinyobj_parse_mtl_file(&materials, &materialCount, materialPath.c_str());
-            if (result != TINYOBJ_SUCCESS)
-            {
-                TraceLog(
-                    LOG_WARNING,
-                    "MODEL: [%s] Failed to parse OBJ material file: %s",
-                    fileName,
-                    materialPath.c_str());
-                return {};
-            }
-
-            std::vector<std::string> names;
-            names.reserve(materialCount);
-            for (unsigned int i = 0; i < materialCount; ++i)
-            {
-                const char* name = materials[i].name;
-                names.emplace_back(
-                    (name != nullptr && name[0] != '\0') ? name
-                                                         : FallbackMaterialName(fileName, static_cast<int>(i)));
-            }
-
-            tinyobj_materials_free(materials, materialCount);
-            return names;
-        }
-
-        std::vector<std::string> LoadGltfMaterialNames(const char* fileName)
-        {
-            int dataSize = 0;
-            const std::unique_ptr<unsigned char, decltype(&UnloadFileData)> fileData(
-                LoadFileData(fileName, &dataSize), UnloadFileData);
-            if (!fileData) return {};
-
-            cgltf_options options{};
-            cgltf_data* parsed = nullptr;
-            const cgltf_result result = cgltf_parse(&options, fileData.get(), dataSize, &parsed);
-            const std::unique_ptr<cgltf_data, decltype(&cgltf_free)> gltf(parsed, cgltf_free);
-            if (result != cgltf_result_success)
-            {
-                TraceLog(LOG_WARNING, "MODEL: [%s] Failed to parse glTF material names", fileName);
-                return {};
-            }
-
-            std::vector<std::string> names;
-            names.reserve(gltf->materials_count + 1);
-            names.emplace_back(DEFAULT_MATERIAL_NAME);
-
-            // raylib's glTF loader reserves material slot 0 for its default material.
-            for (size_t i = 0; i < gltf->materials_count; ++i)
-            {
-                const char* name = gltf->materials[i].name;
-                names.emplace_back(
-                    (name != nullptr && name[0] != '\0')
-                        ? name
-                        : FallbackMaterialName(fileName, static_cast<int>(i + 1)));
-            }
-
-            return names;
-        }
-
-        std::vector<std::string> LoadMaterialNames(const char* fileName)
-        {
-            if (fileName == nullptr || fileName[0] == '\0') return {};
-
-            if (IsFileExtension(fileName, ".obj"))
-            {
-                return LoadObjMaterialNames(fileName);
-            }
-
-            if (IsFileExtension(fileName, ".gltf") || IsFileExtension(fileName, ".glb"))
-            {
-                return LoadGltfMaterialNames(fileName);
-            }
-
-            return {};
-        }
-
-        void NormalizeMaterialNames(
-            Model& model, std::vector<std::string>& materialNames, const std::string& sourcePath)
-        {
-            if (model.materialCount <= 0)
-            {
-                materialNames.clear();
-                return;
-            }
-
-            if (std::cmp_greater(materialNames.size(), model.materialCount))
-            {
-                materialNames.resize(model.materialCount);
-            }
-
-            const size_t originalSize = materialNames.size();
-            materialNames.resize(model.materialCount);
-
-            for (int i = 0; i < model.materialCount; ++i)
-            {
-                if (!materialNames.at(i).empty()) continue;
-
-                // With no extractor data, a single raylib material is the default material.
-                // With old glTF-packed data, slot 0 may be empty because raylib reserves it.
-                if ((originalSize == 0 && model.materialCount == 1) || (originalSize > 0 && i == 0))
-                {
-                    materialNames.at(i) = DEFAULT_MATERIAL_NAME;
-                }
-                else
-                {
-                    materialNames.at(i) = FallbackMaterialName(sourcePath, i);
-                }
-            }
-        }
     } // namespace
 
     Shader ResourceManager::gpuShaderLoad(const char* vs, const char* fs)
@@ -274,39 +88,6 @@ namespace sage
         }
 
         return shaders[concat];
-    }
-
-    // Replaces a freshly-loaded model's materials with shared singletons in materialMap.
-    // raylib-allocated materials that get displaced are released via UnloadMaterial.
-    // Materials whose names are not yet pooled are donated to materialMap (first-write wins).
-    void ResourceManager::dedupeAndShareMaterials(
-        Model& model, std::vector<std::string>& materialNames, const std::string& sourcePath)
-    {
-        NormalizeMaterialNames(model, materialNames, sourcePath);
-
-        for (int i = 0; i < model.materialCount; ++i)
-        {
-            const auto& name = materialNames.at(i);
-            if (!materialMap.contains(name))
-            {
-                // First sighting of this name: donate the freshly-loaded material to the shared pool.
-                materialMap[name] = model.materials[i];
-                materialSourcePaths[name] = sourcePath;
-            }
-            else
-            {
-                if (name != DEFAULT_MATERIAL_NAME && !sourcePath.empty() &&
-                    materialSourcePaths[name] != sourcePath && reportedSharedMaterials.insert(name).second)
-                {
-                    std::cerr << "ResourcePacker: Material name '" << name << "' appears in both '"
-                              << materialSourcePaths[name] << "' and '" << sourcePath
-                              << "'; the first loaded material is shared.\n";
-                }
-                // Already pooled: release raylib's freshly-allocated copy, swap in the shared one.
-                UnloadMaterial(model.materials[i]);
-                model.materials[i] = materialMap.at(name);
-            }
-        }
     }
 
     Music ResourceManager::GetMusic(const std::string& path)
@@ -407,9 +188,11 @@ namespace sage
     Texture ResourceManager::TextureLoad(const std::string& path)
     {
         const auto requestedKey = AssetKeyForPath(path);
-        const auto key = requestedKey.find('/') != std::string::npos || images.contains(requestedKey)
+        const auto key = requestedKey.find('/') != std::string::npos || images.contains(requestedKey) ||
+                                 packedImageKeys.contains(requestedKey)
                              ? requestedKey
                              : ResolveImageKey(StripPath(path));
+        if (packedImageKeys.contains(key)) return LoadPackedTexture(packedImageKeys.at(key));
         if (!nonModelTextures.contains(key))
         {
             if (!images.contains(key))
@@ -450,6 +233,11 @@ namespace sage
     void ResourceManager::ImageUnload(const std::string& key)
     {
         const auto resolved = ResolveImageKey(key);
+        if (packedImageKeys.erase(resolved))
+        {
+            RebuildAssetAliases();
+            return;
+        }
         if (images.contains(resolved))
         {
             UnloadImage(images.at(resolved));
@@ -462,6 +250,8 @@ namespace sage
     ImageSafe ResourceManager::GetImage(const std::string& key)
     {
         const auto resolved = ResolveImageKey(key);
+        if (packedImageKeys.contains(resolved))
+            return ImageSafe(packedImages.at(packedTextureData.at(packedImageKeys.at(resolved)).image), false);
         assert(images.contains(resolved));
         return ImageSafe(images.at(resolved), false);
     }
@@ -484,23 +274,6 @@ namespace sage
         }
     }
 
-    void ResourceManager::ImageLoadFromFile(const std::string& path)
-    {
-        const auto key = AssetKeyForPath(path);
-        assert(FileExists(path.c_str()));
-        registerImageKey(key, path);
-        images[key] = LoadImage(path.c_str());
-    }
-
-    void ResourceManager::ImageLoadFromFile(const std::string& path, Image image)
-    {
-        auto key = StripPath(path); // Will either be a mesh alias (MDL_GOBLIN) or a mesh name (e.g., QUEST_BONE
-        // from QUEST_BONE.obj)
-        registerImageKey(key, path);
-        images[key] = image;
-        image = {};
-    }
-
     void ResourceManager::registerImageKey(const std::string& key, const std::string& sourcePath)
     {
         RegisterSourcePath(imageSourcePaths, "Image", key, sourcePath);
@@ -512,40 +285,13 @@ namespace sage
         imageSourcePaths.emplace(key, sourcePath);
     }
 
-    void ResourceManager::ModelLoadFromFile(const std::string& path)
-    {
-        ModelLoadFromFile(path, AssetKeyForPath(path));
-    }
-
-    void ResourceManager::ModelLoadFromFile(const std::string& path, const std::string& key)
-    {
-        assert(!key.empty());
-        if (const auto existing = modelCopies.find(key); existing != modelCopies.end())
-        {
-            if (existing->second.sourcePath != path)
-                throw std::runtime_error(
-                    "Model resource key collision for '" + key + "': '" + existing->second.sourcePath + "' and '" +
-                    path + "'");
-            return;
-        }
-        assert(FileExists(path.c_str()));
-
-        auto materialNames = LoadMaterialNames(path.c_str());
-        Model model = LoadModel(path.c_str());
-        dedupeAndShareMaterials(model, materialNames, path);
-        modelCopies.emplace(
-            key, ModelInfo{.model = model, .materialNames = std::move(materialNames), .sourcePath = path});
-    }
-
-    void ResourceManager::StoreModel(const ModelInfo& modelInfo, const std::string& key)
-    {
-        modelCopies.emplace(key, modelInfo);
-    }
-
     void ResourceManager::RebuildAssetAliases()
     {
         BuildAliases(modelCopies, modelAliases);
-        BuildAliases(images, imageAliases);
+        auto imageKeys = packedImageKeys;
+        for (const auto& [key, image] : images)
+            imageKeys.emplace(key, 0);
+        BuildAliases(imageKeys, imageAliases);
         BuildAliases(modelAnimations, animationAliases);
     }
 
@@ -557,7 +303,7 @@ namespace sage
 
     std::string ResourceManager::ResolveImageKey(const std::string& key) const
     {
-        if (images.contains(key)) return key;
+        if (images.contains(key) || packedImageKeys.contains(key)) return key;
         return ResolveKey(key, imageAliases);
     }
 
@@ -629,6 +375,123 @@ namespace sage
         }
     } // namespace
 
+    Texture ResourceManager::LoadPackedTexture(const std::size_t id)
+    {
+        auto& texture = packedTextures.at(id);
+        if (texture.id == 0)
+        {
+            const auto& descriptor = packedTextureData.at(id);
+            texture = LoadTextureFromImage(packedImages.at(descriptor.image));
+            if (descriptor.minFilter >= RL_TEXTURE_FILTER_MIP_NEAREST) GenTextureMipmaps(&texture);
+            rlTextureParameters(texture.id, RL_TEXTURE_MIN_FILTER, descriptor.minFilter);
+            rlTextureParameters(texture.id, RL_TEXTURE_MAG_FILTER, descriptor.magFilter);
+            rlTextureParameters(texture.id, RL_TEXTURE_WRAP_S, descriptor.wrapS);
+            rlTextureParameters(texture.id, RL_TEXTURE_WRAP_T, descriptor.wrapT);
+        }
+        return texture;
+    }
+
+    void ResourceManager::LoadPackedAssets(const PackedAssets& assets, const std::function<void()>& progress)
+    {
+        assets.Validate();
+        auto lastUpdate = std::chrono::steady_clock::now();
+        const auto reportProgress = [&] {
+            if (progress && std::chrono::steady_clock::now() - lastUpdate >= std::chrono::milliseconds(50))
+            {
+                progress();
+                lastUpdate = std::chrono::steady_clock::now();
+            }
+        };
+        if (!packedTextureData.empty()) throw std::runtime_error("Packed assets already loaded");
+        for (const auto& source : assets.models)
+            if (modelCopies.contains(source.key)) throw std::runtime_error("Duplicate model key: " + source.key);
+        packedTextureData = assets.textures;
+        packedTextures.resize(assets.textures.size());
+        for (const auto& source : assets.images)
+        {
+            Image image = LoadImageFromMemory(
+                source.extension.c_str(), source.bytes.data(), static_cast<int>(source.bytes.size()));
+            if (!image.data) throw std::runtime_error("Cannot decode packed image");
+            packedImages.push_back(image);
+            reportProgress();
+        }
+        for (const auto& [key, id] : assets.imageKeys)
+            packedImageKeys.emplace(key, id);
+        for (const auto& source : assets.materials)
+        {
+            Material material = LoadMaterialDefault();
+            for (std::size_t i = 0; i < source.maps.size(); ++i)
+            {
+                material.maps[i].color = source.maps[i].color;
+                material.maps[i].value = source.maps[i].value;
+                if (source.maps[i].texture) material.maps[i].texture = LoadPackedTexture(*source.maps[i].texture);
+            }
+            std::ranges::copy(source.params, material.params);
+            materialMap.emplace(source.key, material);
+            reportProgress();
+        }
+        for (const auto& [key, id] : assets.materialKeys)
+            materialAliases.emplace(key, assets.materials.at(id).key);
+        for (const auto& source : assets.models)
+        {
+            Model model{};
+            if (source.primitive)
+            {
+                model = LoadModelFromMesh(PrimitiveGenerators().at(*source.primitive)());
+                for (int i = 0; i < model.materialCount; ++i)
+                    MemFree(model.materials[i].maps);
+                MemFree(model.materials);
+            }
+            else
+            {
+                model.transform = MatrixIdentity();
+                model.meshCount = static_cast<int>(source.meshes.size());
+                model.meshes =
+                    static_cast<Mesh*>(MemAlloc(static_cast<unsigned int>(source.meshes.size() * sizeof(Mesh))));
+                model.meshMaterial =
+                    static_cast<int*>(MemAlloc(static_cast<unsigned int>(source.meshes.size() * sizeof(int))));
+                for (std::size_t i = 0; i < source.meshes.size(); ++i)
+                {
+                    model.meshes[i] = CreatePackedMesh(source.meshes.at(i), source.bones.size());
+                    model.meshMaterial[i] = static_cast<int>(source.meshes.at(i).material);
+                }
+                model.boneCount = static_cast<int>(source.bones.size());
+                if (!source.bones.empty())
+                {
+                    model.bones = static_cast<BoneInfo*>(
+                        MemAlloc(static_cast<unsigned int>(source.bones.size() * sizeof(BoneInfo))));
+                    model.bindPose = static_cast<Transform*>(
+                        MemAlloc(static_cast<unsigned int>(source.bindPose.size() * sizeof(Transform))));
+                    std::ranges::copy(source.bones, model.bones);
+                    std::ranges::copy(source.bindPose, model.bindPose);
+                }
+            }
+            model.materialCount = static_cast<int>(source.materials.size());
+            model.materials = static_cast<Material*>(
+                MemAlloc(static_cast<unsigned int>(source.materials.size() * sizeof(Material))));
+            std::vector<std::string> names;
+            for (std::size_t i = 0; i < source.materials.size(); ++i)
+            {
+                names.push_back(assets.materials.at(source.materials.at(i)).key);
+                model.materials[i] = materialMap.at(names.back());
+            }
+            modelCopies.emplace(
+                source.key,
+                ModelInfo{.model = model, .materialNames = std::move(names), .sourcePath = source.sourcePath});
+            if (!source.animations.empty())
+            {
+                auto* animations = static_cast<ModelAnimation*>(
+                    MemAlloc(static_cast<unsigned int>(source.animations.size() * sizeof(ModelAnimation))));
+                for (std::size_t i = 0; i < source.animations.size(); ++i)
+                    animations[i] = CreatePackedAnimation(source.animations.at(i));
+                modelAnimations.emplace(
+                    source.key, std::make_pair(animations, static_cast<int>(source.animations.size())));
+            }
+            reportProgress();
+        }
+        RebuildAssetAliases();
+    }
+
     /* Non-owning view onto the shared model entry stored under viewKey. Read-only API.
     The returned ModelView's lifetime is independent of RM: it just borrows; the
     underlying entry stays alive until UnloadAll (i.e. scene tear-down). */
@@ -699,6 +562,8 @@ namespace sage
         keys.reserve(materialMap.size());
         for (const auto& [key, material] : materialMap)
             keys.push_back(key);
+        for (const auto& [key, canonical] : materialAliases)
+            if (!materialMap.contains(key)) keys.push_back(key);
         std::ranges::sort(keys);
         return keys;
     }
@@ -706,7 +571,9 @@ namespace sage
     std::vector<std::string> ResourceManager::GetImageKeys(const std::string& prefix) const
     {
         std::vector<std::string> keys;
-        keys.reserve(images.size());
+        keys.reserve(images.size() + packedImageKeys.size());
+        for (const auto& [key, texture] : packedImageKeys)
+            if (prefix.empty() || AssetNameFromKey(key).starts_with(prefix)) keys.push_back(key);
         for (const auto& key : images | std::views::keys)
         {
             if (prefix.empty() || AssetNameFromKey(key).starts_with(prefix)) keys.push_back(key);
@@ -724,16 +591,11 @@ namespace sage
 
     const Material& ResourceManager::GetMaterial(const std::string& key) const
     {
-        assert(materialMap.contains(key));
-        return materialMap.at(key);
+        const auto canonical = materialAliases.contains(key) ? materialAliases.at(key) : key;
+        return materialMap.at(canonical);
     }
 
-    /* Create a new deep-copy entry in the mutable pool from the asset stored under
-    viewKey, and returns a ModelMutable view onto it. The deep copy has private
-    materials, so mutations through the returned view are isolated. Lifetime of
-    the new entry is scene-tied (released at UnloadAll). For models loaded from
-    disk this re-loads via sourcePath; for baked primitives it regenerates via a
-    registered generator function. */
+    // Mutable instances own mesh and material-map allocations, while borrowing pooled textures.
     ModelMutable ResourceManager::CreateModelMutable(const std::string& viewKey)
     {
         const auto key = ResolveModelKey(viewKey);
@@ -743,23 +605,40 @@ namespace sage
         const std::string instanceKey = key + "#mut_" + std::to_string(mutableInstanceCounter++);
         assert(!modelCopies.contains(instanceKey) && "CreateModelMutable: instanceKey collision");
 
-        Model model;
-        const auto& generators = PrimitiveGenerators();
-        if (!info.sourcePath.empty())
+        const Model& shared = info.model;
+        Model model = shared;
+        const auto copy = []<typename T>(const T* source, const std::size_t count) -> T* {
+            if (!source || count == 0) return nullptr; // raylib optional array boundary.
+            auto* destination = static_cast<T*>(MemAlloc(static_cast<unsigned int>(count * sizeof(T))));
+            if (!destination) throw std::bad_alloc();
+            std::copy_n(source, count, destination);
+            return destination;
+        };
+        model.materials = copy(shared.materials, static_cast<std::size_t>(shared.materialCount));
+        for (int i = 0; i < model.materialCount; ++i)
+            model.materials[i].maps = copy(shared.materials[i].maps, MAX_MATERIAL_MAPS);
+        model.meshMaterial = copy(shared.meshMaterial, static_cast<std::size_t>(shared.meshCount));
+        model.bones = copy(shared.bones, static_cast<std::size_t>(shared.boneCount));
+        model.bindPose = copy(shared.bindPose, static_cast<std::size_t>(shared.boneCount));
+        model.meshes = static_cast<Mesh*>(MemAlloc(static_cast<unsigned int>(shared.meshCount * sizeof(Mesh))));
+        const auto capture = []<typename T>(const T* source, const std::size_t count) {
+            return source ? std::vector<T>(source, source + count) : std::vector<T>{};
+        };
+        for (int i = 0; i < shared.meshCount; ++i)
         {
-            // On-disk asset — re-load to get private mesh + material allocations.
-            assert(FileExists(info.sourcePath.c_str()) && "CreateModelMutable: source file missing at runtime");
-            model = LoadModel(info.sourcePath.c_str());
-        }
-        else if (const auto it = generators.find(key); it != generators.end())
-        {
-            // Baked primitive — regenerate mesh, raylib allocates fresh default materials.
-            model = LoadModelFromMesh(it->second());
-        }
-        else
-        {
-            assert(false && "CreateModelMutable: asset has no sourcePath and is not a registered primitive");
-            return {};
+            const auto& mesh = shared.meshes[i];
+            const auto count = static_cast<std::size_t>(mesh.vertexCount);
+            PackedMesh packed;
+            packed.vertices = capture(mesh.vertices, count * 3);
+            packed.normals = capture(mesh.normals, count * 3);
+            packed.texcoords = capture(mesh.texcoords, count * 2);
+            packed.texcoords2 = capture(mesh.texcoords2, count * 2);
+            packed.tangents = capture(mesh.tangents, count * 4);
+            packed.colors = capture(mesh.colors, count * 4);
+            packed.indices = capture(mesh.indices, static_cast<std::size_t>(mesh.triangleCount) * 3);
+            packed.boneIds = capture(mesh.boneIds, count * 4);
+            packed.boneWeights = capture(mesh.boneWeights, count * 4);
+            model.meshes[i] = CreatePackedMesh(packed, static_cast<std::size_t>(shared.boneCount));
         }
 
         modelCopies.emplace(
@@ -775,24 +654,6 @@ namespace sage
         mut.assetKey = key;
         mut.instanceKey = instanceKey;
         return mut;
-    }
-
-    void ResourceManager::ModelAnimationLoadFromFile(const std::string& path)
-    {
-        const auto key = AssetKeyForPath(path);
-        RegisterSourcePath(animationSourcePaths, "Animation", key, path);
-        if (!modelAnimations.contains(key))
-        {
-            int animsCount = 0;
-            auto animations = LoadModelAnimations(path.c_str(), &animsCount);
-            if (animations == nullptr)
-            {
-                std::cout << "ResourceManager: Model does not contain animation data, or was unable to be loaded. "
-                             "Aborting... \n";
-                return;
-            }
-            modelAnimations[key] = std::make_pair(animations, animsCount);
-        }
     }
 
     bool ResourceManager::HasModelAnimation(const std::string& key) const
@@ -821,8 +682,12 @@ namespace sage
             UnloadImage(image);
         }
         images.clear();
+        for (const auto& image : packedImages)
+            UnloadImage(image);
+        packedImages.clear();
+        packedImageKeys.clear();
         imageSourcePaths.clear();
-        imageSourcePaths.clear();
+        RebuildAssetAliases();
     }
 
     void ResourceManager::UnloadShaderFileText()
@@ -859,17 +724,21 @@ namespace sage
         {
             UnloadMusicStream(mus);
         }
+        std::unordered_set<unsigned int> textureIds;
+        const auto releaseTexture = [&textureIds](Texture texture) {
+            if (texture.id != 0 && texture.id != rlGetTextureIdDefault() && textureIds.insert(texture.id).second)
+                UnloadTexture(texture);
+        };
+        for (const auto& texture : packedTextures)
+            releaseTexture(texture);
         for (auto& [key, mat] : materialMap)
         {
             for (int i = 0; i < MAX_MATERIAL_MAPS; i++)
             {
-                if (mat.maps[i].texture.id != rlGetTextureIdDefault()) rlUnloadTexture(mat.maps[i].texture.id);
+                releaseTexture(mat.maps[i].texture);
             }
-            std::cout << "Material key: " << key << std::endl;
-            std::cout << "Material maps address : " << &mat.maps << std::endl;
             MemFree(mat.maps);
         }
-        std::cout << "Unloading models" << std::endl;
         for (auto& info : modelCopies | std::views::values)
         {
             if (info.privateMaterials)
@@ -899,7 +768,7 @@ namespace sage
         }
         for (const auto& tex : nonModelTextures | std::views::values)
         {
-            UnloadTexture(tex);
+            releaseTexture(tex);
         }
         for (const auto& image : images | std::views::values)
         {
@@ -917,11 +786,16 @@ namespace sage
         {
             UnloadFont(font);
         }
+        for (const auto& image : packedImages)
+            UnloadImage(image);
+        packedImages.clear();
+        packedTextureData.clear();
+        packedTextures.clear();
+        packedImageKeys.clear();
+        materialAliases.clear();
         fonts.clear();
         shaders.clear();
         materialMap.clear();
-        materialSourcePaths.clear();
-        reportedSharedMaterials.clear();
         images.clear();
         nonModelTextures.clear();
         modelCopies.clear();
@@ -929,7 +803,6 @@ namespace sage
         modelAliases.clear();
         imageAliases.clear();
         animationAliases.clear();
-        animationSourcePaths.clear();
         vertShaderFileText.clear();
         fragShaderFileText.clear();
         music.clear();

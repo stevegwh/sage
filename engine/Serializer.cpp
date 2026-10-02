@@ -52,9 +52,20 @@ namespace sage::serializer
         assert(destination != nullptr);
         std::cout << "START: Loading asset bin." << std::endl;
 
+        std::ifstream header(path, std::ios::binary);
+        std::array<char, 4> magic{};
+        header.read(magic.data(), magic.size());
+        const bool cpuArchive = magic == ASSET_BIN_MAGIC;
         std::unordered_map<std::uint32_t, entt::entity> idMap;
 
         auto loadArchive = [&](cereal::BinaryInputArchive& input, std::istream& stream) {
+            if (cpuArchive)
+            {
+                PackedAssets assets;
+                input(assets);
+                ResourceManager::GetInstance().LoadPackedAssets(assets, updateLoadingScreen);
+                return;
+            }
             input(ResourceManager::GetInstance());
 
             // Not necessary for asset bin?

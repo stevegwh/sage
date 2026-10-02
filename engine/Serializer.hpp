@@ -22,6 +22,7 @@
 #include <fstream>
 #include <functional>
 #include <sstream>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -163,13 +164,15 @@ namespace sage::serializer
         std::cout << "FINISH: Loading data from file." << std::endl;
     }
 
-    // Per-file-type magic prefixes for compressed binaries. Bumped if on-disk layout changes.
-    inline constexpr std::array<char, 4> ASSET_BIN_MAGIC = {'L', 'Q', 'B', '2'};
+    // Assets use Zstandard; map formats retain their existing DEFLATE payloads.
+    inline constexpr std::array<char, 4> ASSET_BIN_MAGIC = {'L', 'Q', 'B', '4'};
     inline constexpr std::array<char, 4> MAP_BIN_MAGIC = {'L', 'Q', 'M', '2'};
 
-    // Writes a 20-byte header (magic + uncompressed size + compressed size) followed by a
-    // DEFLATE-compressed cereal binary payload. The lambda receives a BinaryOutputArchive and
-    // is free to call output(...) any number of times.
+    // The 20-byte header contains the format magic, raw size, and compressed size.
+    bool WriteCompressedBinaryPayload(
+        const char* path, const std::array<char, 4>& magic, std::string_view payload);
+    std::string ReadCompressedBinaryPayload(const char* path, const std::array<char, 4>& magic);
+
     template <typename ArchiveFn>
     bool WriteCompressedBinary(const char* path, const std::array<char, 4>& magic, ArchiveFn&& archiveFn)
     {
@@ -178,95 +181,7 @@ namespace sage::serializer
             cereal::BinaryOutputArchive output{buf};
             std::forward<ArchiveFn>(archiveFn)(output);
         }
-        const std::string raw = buf.str();
-        const int rawSize = static_cast<int>(raw.size());
-
-        int compSize = 0;
-        unsigned char* compData =
-            CompressData(reinterpret_cast<const unsigned char*>(raw.data()), rawSize, &compSize);
-        if (compData == nullptr || compSize <= 0)
-        {
-            std::cerr << "ERROR: CompressData failed; aborting save of '" << path << "'." << std::endl;
-            if (compData) MemFree(compData);
-            return false;
-        }
-
-        std::ofstream storage(path, std::ios::binary);
-        if (!storage.is_open())
-        {
-            std::cerr << "ERROR: Unable to open '" << path << "' for writing." << std::endl;
-            MemFree(compData);
-            return false;
-        }
-
-        const auto uncompressedSize = static_cast<uint64_t>(rawSize);
-        const auto compressedSize = static_cast<uint64_t>(compSize);
-        storage.write(magic.data(), static_cast<std::streamsize>(magic.size()));
-        storage.write(reinterpret_cast<const char*>(&uncompressedSize), sizeof(uncompressedSize));
-        storage.write(reinterpret_cast<const char*>(&compressedSize), sizeof(compressedSize));
-        storage.write(reinterpret_cast<const char*>(compData), compSize);
-
-        MemFree(compData);
-        storage.close();
-        std::cout << "  (raw=" << rawSize << "B compressed=" << compSize
-                  << "B ratio=" << (rawSize > 0 ? (static_cast<double>(compSize) / rawSize) : 0.0) << ")"
-                  << std::endl;
-        return true;
-    }
-
-    // Reads a header-prefixed DEFLATE-compressed cereal payload, then invokes the lambda with
-    // both a BinaryInputArchive and the underlying istream (so callers that use peek-until-EOF
-    // loops still work).
-    inline std::string ReadCompressedBinaryPayload(const char* path, const std::array<char, 4>& magic)
-    {
-        std::ifstream storage(path, std::ios::binary);
-        if (!storage.is_open())
-        {
-            std::cerr << "ERROR: Unable to open file for reading." << std::endl;
-            throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
-        }
-
-        std::array<char, 4> fileMagic{};
-        uint64_t uncompressedSize = 0;
-        uint64_t compressedSize = 0;
-        storage.read(fileMagic.data(), static_cast<std::streamsize>(fileMagic.size()));
-        storage.read(reinterpret_cast<char*>(&uncompressedSize), sizeof(uncompressedSize));
-        storage.read(reinterpret_cast<char*>(&compressedSize), sizeof(compressedSize));
-
-        if (fileMagic != magic)
-        {
-            std::cerr << "ERROR: file magic mismatch at " << path << " (got '"
-                      << std::string(fileMagic.data(), fileMagic.size()) << "', expected '"
-                      << std::string(magic.data(), magic.size()) << "')." << std::endl;
-            throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
-        }
-
-        constexpr std::uint64_t MAX_COMPRESSED_ASSET_BYTES = 512ull * 1024 * 1024;
-        if (!storage || compressedSize == 0 || compressedSize > MAX_COMPRESSED_ASSET_BYTES ||
-            uncompressedSize > MAX_COMPRESSED_ASSET_BYTES)
-            throw std::runtime_error(std::string("Invalid compressed asset size: ") + path);
-        const auto payloadStart = storage.tellg();
-        storage.seekg(0, std::ios::end);
-        if (std::cmp_not_equal(storage.tellg() - payloadStart, compressedSize))
-            throw std::runtime_error(std::string("Truncated compressed asset: ") + path);
-        storage.seekg(payloadStart);
-        std::vector<unsigned char> compBuf(compressedSize);
-        storage.read(reinterpret_cast<char*>(compBuf.data()), static_cast<std::streamsize>(compressedSize));
-        storage.close();
-
-        int decompSize = 0;
-        unsigned char* decompData = DecompressData(compBuf.data(), static_cast<int>(compressedSize), &decompSize);
-        if (decompData == nullptr || std::cmp_not_equal(decompSize, uncompressedSize))
-        {
-            std::cerr << "ERROR: DecompressData failed (got " << decompSize << ", expected " << uncompressedSize
-                      << ")." << std::endl;
-            if (decompData) MemFree(decompData);
-            throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
-        }
-
-        std::string decompStr(reinterpret_cast<const char*>(decompData), uncompressedSize);
-        MemFree(decompData);
-        return decompStr;
+        return WriteCompressedBinaryPayload(path, magic, buf.str());
     }
 
     template <typename ArchiveFn>

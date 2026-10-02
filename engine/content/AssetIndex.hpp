@@ -6,18 +6,14 @@
 
 namespace sage::content
 {
-    // Export once while packed resources are loaded; all subsequent checks are GPU-free.
-    inline json::Document CaptureAssetIndex()
+    inline json::Document BuildAssetIndex(
+        const std::vector<std::pair<std::string, std::vector<std::string>>>& groups)
     {
-        auto& resources = ResourceManager::GetInstance();
         json::Document result(rapidjson::kObjectType);
         auto& allocator = result.GetAllocator();
         json::Put(result, "format", "sage-asset-index", allocator);
         json::Put(result, "version", static_cast<std::uint64_t>(1), allocator);
-        for (const auto& [name, keys] : std::vector<std::pair<std::string, std::vector<std::string>>>{
-                 {"models", resources.GetModelKeys(true)},
-                 {"materials", resources.GetMaterialKeys()},
-                 {"images", resources.GetImageKeys()}})
+        for (const auto& [name, keys] : groups)
         {
             json::Value values(rapidjson::kArrayType);
             for (const auto& key : keys)
@@ -25,6 +21,29 @@ namespace sage::content
             json::Put(result, name.c_str(), values, allocator);
         }
         return result;
+    }
+    inline json::Document CaptureAssetIndex()
+    {
+        auto& resources = ResourceManager::GetInstance();
+        return BuildAssetIndex(
+            {{"models", resources.GetModelKeys(true)},
+             {"materials", resources.GetMaterialKeys()},
+             {"images", resources.GetImageKeys()}});
+    }
+    inline void WriteAssetIndex(const std::filesystem::path& path, const PackedAssets& assets)
+    {
+        std::vector<std::string> models, materials, images;
+        for (const auto& model : assets.models)
+            models.push_back(model.key);
+        for (const auto& [key, id] : assets.materialKeys)
+            materials.push_back(key);
+        for (const auto& [key, id] : assets.imageKeys)
+            images.push_back(key);
+        std::ranges::sort(models);
+        std::ofstream output(path);
+        output << json::Stringify(
+            BuildAssetIndex({{"models", models}, {"materials", materials}, {"images", images}}));
+        if (!output) throw std::runtime_error("Cannot write asset index: " + path.string());
     }
     inline void WriteAssetIndex(const std::filesystem::path& path)
     {

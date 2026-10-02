@@ -117,6 +117,7 @@ target_link_libraries(engine
         raylib
         EnTT::EnTT
         PRIVATE
+        libzstd_static
         "${SAGE_NETHOST_LIBRARY}"
         ${CMAKE_DL_LIBS}
 )
@@ -141,6 +142,9 @@ configure_file(ShaderPaths.hpp.in generated/ShaderPaths.hpp @ONLY)
 target_include_directories(engine PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 if (BUILD_TESTING)
+    add_executable(compressed_binary_tests "${SAGE_ROOT_DIR}/tests/CompressedBinaryTests.cpp")
+    target_link_libraries(compressed_binary_tests PRIVATE engine)
+    add_test(NAME compressed_binary_tests COMMAND compressed_binary_tests)
     add_executable(canvas_tests "${SAGE_ROOT_DIR}/tests/CanvasTests.cpp")
     target_link_libraries(canvas_tests PRIVATE engine)
     add_test(NAME canvas_tests COMMAND canvas_tests "${CMAKE_SOURCE_DIR}/resources")

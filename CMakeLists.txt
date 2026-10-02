@@ -7,8 +7,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SAGE_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Dependencies
+include(FetchContent)
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+set(ZSTD_BUILD_DICTBUILDER OFF CACHE BOOL "" FORCE)
+set(ZSTD_LEGACY_SUPPORT OFF CACHE BOOL "" FORCE)
+set(ZSTD_MULTITHREAD_SUPPORT ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+        zstd
+        URL https://codeload.github.com/facebook/zstd/tar.gz/refs/tags/v1.5.7
+        URL_HASH SHA256=37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3
+        SOURCE_SUBDIR build/cmake
+        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(zstd)
+
 if (NOT TARGET EnTT::EnTT)
-    include(FetchContent)
     FetchContent_Declare(
             entt
             GIT_REPOSITORY "https://github.com/skypjack/entt.git"

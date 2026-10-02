@@ -4,7 +4,9 @@
 #pragma once
 
 // #include "common_types.hpp"
+#include "PackedAssets.hpp"
 #include "slib.hpp"
+#include <functional>
 
 #include "magic_enum/magic_enum.hpp"
 #include "raylib.h"
@@ -61,8 +63,6 @@ namespace sage
         std::unordered_map<std::string, Font> fonts{};
         std::unordered_map<std::string, Shader> shaders{};
         std::unordered_map<std::string, Material> materialMap;
-        std::unordered_map<std::string, std::string> materialSourcePaths;
-        std::unordered_set<std::string> reportedSharedMaterials;
         std::unordered_map<std::string, Image> images{};                 // Image (CPU) data
         std::unordered_map<std::string, std::string> imageSourcePaths{}; // transient collision diagnostics
         std::unordered_map<std::string, Texture> nonModelTextures{}; // Textures loaded outside of model loading
@@ -77,23 +77,21 @@ namespace sage
         std::unordered_map<std::string, Sound> sfx;
         std::unordered_map<std::string, std::string> musicSourcePaths;
         std::unordered_map<std::string, std::string> sfxSourcePaths;
-        std::unordered_map<std::string, std::string> animationSourcePaths;
         std::unordered_map<std::string, std::string> modelAliases;
         std::unordered_map<std::string, std::string> imageAliases;
         std::unordered_map<std::string, std::string> animationAliases;
 
+        std::vector<Image> packedImages;
+        std::vector<PackedTexture> packedTextureData;
+        std::vector<Texture> packedTextures;
+        std::unordered_map<std::string, std::size_t> packedImageKeys;
+        std::unordered_map<std::string, std::string> materialAliases;
+        Texture LoadPackedTexture(std::size_t id);
+
         Shader gpuShaderLoad(const char* vs, const char* fs);
-        void dedupeAndShareMaterials(
-            Model& model, std::vector<std::string>& materialNames, const std::string& sourcePath);
         void init();
         void FontLoadFromFile(const std::string& path);
-        void ImageLoadFromFile(const std::string& path);
-        void ImageLoadFromFile(const std::string& path, Image image);
         void registerImageKey(const std::string& key, const std::string& sourcePath);
-        void ModelLoadFromFile(const std::string& path);
-        void ModelLoadFromFile(const std::string& path, const std::string& key);
-        void StoreModel(const ModelInfo& modelInfo, const std::string& key);
-        void ModelAnimationLoadFromFile(const std::string& path);
         void RebuildAssetAliases();
         [[nodiscard]] std::string ResolveModelKey(const std::string& key) const;
         [[nodiscard]] std::string ResolveAnimationKey(const std::string& key) const;
@@ -134,6 +132,7 @@ namespace sage
         [[nodiscard]] ModelMutable CreateModelMutable(const std::string& viewKey);
         [[nodiscard]] ModelAnimation* GetModelAnimation(const std::string& key, int* animsCount) const;
         [[nodiscard]] bool HasModelAnimation(const std::string& key) const;
+        void LoadPackedAssets(const PackedAssets& assets, const std::function<void()>& progress = {});
         void UnloadImages();
         void UnloadShaderFileText();
 
@@ -248,7 +247,5 @@ namespace sage
             }
             RebuildAssetAliases();
         }
-
-        friend class ResourcePacker;
     };
 } // namespace sage
