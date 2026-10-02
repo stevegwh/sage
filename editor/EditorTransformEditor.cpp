@@ -7,12 +7,12 @@
 
 #include "EditorTransformMath.hpp"
 #include "engine/Camera.hpp"
-#include "engine/EngineSystems.hpp"
-#include "engine/Settings.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/EngineSystems.hpp"
+#include "engine/Settings.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
 
 #include "raymath.h"
@@ -63,11 +63,11 @@ namespace sage::editor
             {
                 const auto& transform = registry.get<sgTransform>(entity);
                 const auto& renderable = registry.get<Renderable>(entity);
-                if (const auto* model = renderable.GetModel(); model != nullptr)
+                if (const auto model = renderable.GetModel(); model.has_value())
                 {
                     const Matrix entityMatrix = BuildRenderableEntityMatrix(
                         transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-                    return TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), entityMatrix);
+                    return TransformBoundingBoxByCorners(model->get().CalcLocalBoundingBox(), entityMatrix);
                 }
             }
 
@@ -121,12 +121,12 @@ namespace sage::editor
             {
                 const auto& transform = registry.get<sgTransform>(entity);
                 const auto& renderable = registry.get<Renderable>(entity);
-                if (const auto* model = renderable.GetModel(); model != nullptr)
+                if (const auto model = renderable.GetModel(); model.has_value())
                 {
                     const Matrix matrix = BuildRenderableEntityMatrix(
                         transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
                     const BoundingBox bounds =
-                        TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), matrix);
+                        TransformBoundingBoxByCorners(model->get().CalcLocalBoundingBox(), matrix);
                     if (renderBounds.has_value())
                         ExpandBounds(*renderBounds, bounds);
                     else
@@ -238,14 +238,13 @@ namespace sage::editor
 
         switch (mode)
         {
-        case EditGizmo::Mode::Translate:
-        {
+        case EditGizmo::Mode::Translate: {
             // Convert the projected screen-pixel delta back into world units by
             // walking the same screen-axis-length the gizmo used for projection.
             const Vector3 axisVector = EditGizmo::AxisVector(sample.axis);
             const float size = EditGizmo::SizeForCamera(camera.position, origin);
-            const Vector2 screenStart = GetWorldToScreenEx(
-                origin, camera, static_cast<int>(viewport.x), static_cast<int>(viewport.y));
+            const Vector2 screenStart =
+                GetWorldToScreenEx(origin, camera, static_cast<int>(viewport.x), static_cast<int>(viewport.y));
             const Vector2 screenEnd = GetWorldToScreenEx(
                 Vector3Add(origin, Vector3Scale(axisVector, size)),
                 camera,
@@ -263,8 +262,7 @@ namespace sage::editor
 
                     // Keep sub-grid drag motion between frames, then commit only when the
                     // accumulated bounds min crosses a drawn grid line.
-                    dragUnsnappedBoundsMinPosition =
-                        Vector3Add(dragUnsnappedBoundsMinPosition, worldDelta);
+                    dragUnsnappedBoundsMinPosition = Vector3Add(dragUnsnappedBoundsMinPosition, worldDelta);
                     const Vector3 appliedDelta =
                         DeltaForBoundsMinSnap(bounds->min, dragUnsnappedBoundsMinPosition, worldDelta);
                     if (!Vector3Equals(appliedDelta, Vector3Zero()))
@@ -394,12 +392,13 @@ namespace sage::editor
         }
 
         const auto& renderable = sys->registry->get<Renderable>(entity);
-        const auto* model = renderable.GetModel();
-        if (model == nullptr) return transform.GetWorldPos();
+        const auto model = renderable.GetModel();
+        if (!model) return transform.GetWorldPos();
 
-        const Matrix entityMatrix = BuildRenderableEntityMatrix(
-            transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
-        const BoundingBox worldBounds = TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), entityMatrix);
+        const Matrix entityMatrix =
+            BuildRenderableEntityMatrix(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+        const BoundingBox worldBounds =
+            TransformBoundingBoxByCorners(model->get().CalcLocalBoundingBox(), entityMatrix);
         return BoundingBoxCenter(worldBounds);
     }
 
@@ -433,8 +432,7 @@ namespace sage::editor
         return Vector3Zero();
     }
 
-    void EditorTransformEditor::AdjustPosition(
-        const std::vector<entt::entity>& entities, const Vector3 worldDelta)
+    void EditorTransformEditor::AdjustPosition(const std::vector<entt::entity>& entities, const Vector3 worldDelta)
     {
         if (!HasValidTransform(*sys->registry, entities)) return;
 
@@ -454,8 +452,7 @@ namespace sage::editor
         applyPositionDelta(entities, appliedDelta);
     }
 
-    void EditorTransformEditor::SnapToFloor(
-        const std::vector<entt::entity>& entities, const float floorY)
+    void EditorTransformEditor::SnapToFloor(const std::vector<entt::entity>& entities, const float floorY)
     {
         entt::entity notifiedEntity = entt::null;
         for (const auto entity : entities)
@@ -499,8 +496,10 @@ namespace sage::editor
         }
 
         auto wrapDegrees = [](float degrees) {
-            while (degrees >= 360.0f) degrees -= 360.0f;
-            while (degrees < 0.0f) degrees += 360.0f;
+            while (degrees >= 360.0f)
+                degrees -= 360.0f;
+            while (degrees < 0.0f)
+                degrees += 360.0f;
             return degrees;
         };
 
@@ -576,7 +575,7 @@ namespace sage::editor
             transform.position.world = Vector3Add(pivot, newOffset);
 
             const float entityScale = std::max(MIN_SCALE, UniformScale(transform.GetScale()) * scaleFactor);
-            transform.scale.world = {entityScale, entityScale, entityScale};
+            transform.scale.world = {.x = entityScale, .y = entityScale, .z = entityScale};
             updateEntityCollisionBounds(entity);
             if (notifiedEntity == entt::null) notifiedEntity = entity;
         }
@@ -605,9 +604,9 @@ namespace sage::editor
             if (collideable.shape == ColliderShape::RenderMesh && sys->registry->any_of<Renderable>(entity))
             {
                 const auto& renderable = sys->registry->get<Renderable>(entity);
-                if (const auto* model = renderable.GetModel(); model != nullptr)
+                if (const auto model = renderable.GetModel(); model.has_value())
                 {
-                    collideable.localBoundingBox = model->CalcLocalBoundingBox();
+                    collideable.localBoundingBox = model->get().CalcLocalBoundingBox();
                 }
             }
             collideable.worldBoundingBox =
@@ -720,8 +719,8 @@ namespace sage::editor
 
         // Recompute the world box from the edited local box immediately so the
         // face handles and navigation occupancy track the drag.
-        const Matrix entityMatrix = BuildRenderableEntityMatrix(
-            transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+        const Matrix entityMatrix =
+            BuildRenderableEntityMatrix(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
         collideable.worldBoundingBox = TransformBoundingBoxByCorners(box, entityMatrix);
 
         if (navigationObstacle)

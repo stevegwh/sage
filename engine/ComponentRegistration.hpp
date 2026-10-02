@@ -3,15 +3,21 @@
 #include "Flatpack.hpp"
 #include "scripting/ScriptApi.hpp"
 
+#include <functional>
+#include <optional>
 #include <string>
 #include <type_traits>
+#include <variant>
 
 namespace sage
 {
     struct ComponentPersistence
     {
         std::string persistenceKey;
-        void key(std::string value) { persistenceKey = std::move(value); }
+        void key(std::string value)
+        {
+            persistenceKey = std::move(value);
+        }
     };
 
     // The same component list can populate runtime/codegen or editor services.
@@ -19,8 +25,10 @@ namespace sage
     template <class Inspector = void>
     struct ComponentRegistration
     {
-        ScriptApiRegistry* scripts = nullptr;
-        Inspector* inspector = nullptr;
+        std::optional<std::reference_wrapper<ScriptApiRegistry>> scripts;
+        using InspectorReference =
+            std::conditional_t<std::is_void_v<Inspector>, std::monostate, std::reference_wrapper<Inspector>>;
+        std::optional<InspectorReference> inspector;
 
         template <class T>
         void Register(const std::string& scriptName, const std::string& displayName = {})
@@ -33,7 +41,7 @@ namespace sage
             }
 
             if constexpr (requires(ScriptApiBinder<T>& api) { T::define_script_api(api); })
-                if (scripts) scripts->RegisterComponent<T>(scriptName);
+                if (scripts) scripts->get().template RegisterComponent<T>(scriptName);
 
             if constexpr (!std::is_void_v<Inspector>)
             {
@@ -42,9 +50,9 @@ namespace sage
                     if (!inspector) return;
                     const auto& label = displayName.empty() ? scriptName : displayName;
                     if constexpr (requires { T::define_persistence(persistence); })
-                        inspector->template RegisterPersistent<T>(label, persistence.persistenceKey);
+                        inspector->get().template RegisterPersistent<T>(label, persistence.persistenceKey);
                     else
-                        inspector->template Register<T>(label);
+                        inspector->get().template Register<T>(label);
                 }
             }
         }

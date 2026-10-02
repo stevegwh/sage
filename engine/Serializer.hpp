@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include <array>
 #include <stdexcept>
 
 #include "ViewSerializer.hpp"
@@ -21,6 +22,7 @@
 #include <fstream>
 #include <functional>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 namespace sage::serializer
@@ -162,26 +164,26 @@ namespace sage::serializer
     }
 
     // Per-file-type magic prefixes for compressed binaries. Bumped if on-disk layout changes.
-    inline constexpr char ASSET_BIN_MAGIC[4] = {'L', 'Q', 'B', '2'};
-    inline constexpr char MAP_BIN_MAGIC[4] = {'L', 'Q', 'M', '2'};
+    inline constexpr std::array<char, 4> ASSET_BIN_MAGIC = {'L', 'Q', 'B', '2'};
+    inline constexpr std::array<char, 4> MAP_BIN_MAGIC = {'L', 'Q', 'M', '2'};
 
     // Writes a 20-byte header (magic + uncompressed size + compressed size) followed by a
     // DEFLATE-compressed cereal binary payload. The lambda receives a BinaryOutputArchive and
     // is free to call output(...) any number of times.
     template <typename ArchiveFn>
-    bool WriteCompressedBinary(const char* path, const char (&magic)[4], ArchiveFn&& archiveFn)
+    bool WriteCompressedBinary(const char* path, const std::array<char, 4>& magic, ArchiveFn&& archiveFn)
     {
         std::ostringstream buf(std::ios::binary);
         {
             cereal::BinaryOutputArchive output{buf};
-            archiveFn(output);
+            std::forward<ArchiveFn>(archiveFn)(output);
         }
         const std::string raw = buf.str();
         const int rawSize = static_cast<int>(raw.size());
 
         int compSize = 0;
-        unsigned char* compData = CompressData(
-            reinterpret_cast<const unsigned char*>(raw.data()), rawSize, &compSize);
+        unsigned char* compData =
+            CompressData(reinterpret_cast<const unsigned char*>(raw.data()), rawSize, &compSize);
         if (compData == nullptr || compSize <= 0)
         {
             std::cerr << "ERROR: CompressData failed; aborting save of '" << path << "'." << std::endl;
@@ -197,9 +199,9 @@ namespace sage::serializer
             return false;
         }
 
-        const uint64_t uncompressedSize = static_cast<uint64_t>(rawSize);
-        const uint64_t compressedSize = static_cast<uint64_t>(compSize);
-        storage.write(magic, sizeof(magic));
+        const auto uncompressedSize = static_cast<uint64_t>(rawSize);
+        const auto compressedSize = static_cast<uint64_t>(compSize);
+        storage.write(magic.data(), static_cast<std::streamsize>(magic.size()));
         storage.write(reinterpret_cast<const char*>(&uncompressedSize), sizeof(uncompressedSize));
         storage.write(reinterpret_cast<const char*>(&compressedSize), sizeof(compressedSize));
         storage.write(reinterpret_cast<const char*>(compData), compSize);
@@ -215,7 +217,7 @@ namespace sage::serializer
     // Reads a header-prefixed DEFLATE-compressed cereal payload, then invokes the lambda with
     // both a BinaryInputArchive and the underlying istream (so callers that use peek-until-EOF
     // loops still work).
-    inline std::string ReadCompressedBinaryPayload(const char* path, const char (&magic)[4])
+    inline std::string ReadCompressedBinaryPayload(const char* path, const std::array<char, 4>& magic)
     {
         std::ifstream storage(path, std::ios::binary);
         if (!storage.is_open())
@@ -224,27 +226,28 @@ namespace sage::serializer
             throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
         }
 
-        char fileMagic[4]{};
+        std::array<char, 4> fileMagic{};
         uint64_t uncompressedSize = 0;
         uint64_t compressedSize = 0;
-        storage.read(fileMagic, sizeof(fileMagic));
+        storage.read(fileMagic.data(), static_cast<std::streamsize>(fileMagic.size()));
         storage.read(reinterpret_cast<char*>(&uncompressedSize), sizeof(uncompressedSize));
         storage.read(reinterpret_cast<char*>(&compressedSize), sizeof(compressedSize));
 
-        if (std::memcmp(fileMagic, magic, sizeof(magic)) != 0)
+        if (fileMagic != magic)
         {
             std::cerr << "ERROR: file magic mismatch at " << path << " (got '"
-                      << std::string(fileMagic, 4) << "', expected '" << std::string(magic, 4) << "')."
-                      << std::endl;
+                      << std::string(fileMagic.data(), fileMagic.size()) << "', expected '"
+                      << std::string(magic.data(), magic.size()) << "')." << std::endl;
             throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
         }
 
-        constexpr std::uint64_t maxBytes = 512ull * 1024 * 1024;
-        if (!storage || compressedSize == 0 || compressedSize > maxBytes || uncompressedSize > maxBytes)
+        constexpr std::uint64_t MAX_COMPRESSED_ASSET_BYTES = 512ull * 1024 * 1024;
+        if (!storage || compressedSize == 0 || compressedSize > MAX_COMPRESSED_ASSET_BYTES ||
+            uncompressedSize > MAX_COMPRESSED_ASSET_BYTES)
             throw std::runtime_error(std::string("Invalid compressed asset size: ") + path);
         const auto payloadStart = storage.tellg();
         storage.seekg(0, std::ios::end);
-        if (static_cast<std::uint64_t>(storage.tellg() - payloadStart) != compressedSize)
+        if (std::cmp_not_equal(storage.tellg() - payloadStart, compressedSize))
             throw std::runtime_error(std::string("Truncated compressed asset: ") + path);
         storage.seekg(payloadStart);
         std::vector<unsigned char> compBuf(compressedSize);
@@ -252,12 +255,11 @@ namespace sage::serializer
         storage.close();
 
         int decompSize = 0;
-        unsigned char* decompData =
-            DecompressData(compBuf.data(), static_cast<int>(compressedSize), &decompSize);
-        if (decompData == nullptr || static_cast<uint64_t>(decompSize) != uncompressedSize)
+        unsigned char* decompData = DecompressData(compBuf.data(), static_cast<int>(compressedSize), &decompSize);
+        if (decompData == nullptr || std::cmp_not_equal(decompSize, uncompressedSize))
         {
-            std::cerr << "ERROR: DecompressData failed (got " << decompSize << ", expected "
-                      << uncompressedSize << ")." << std::endl;
+            std::cerr << "ERROR: DecompressData failed (got " << decompSize << ", expected " << uncompressedSize
+                      << ")." << std::endl;
             if (decompData) MemFree(decompData);
             throw std::runtime_error(std::string("Cannot read compressed asset: ") + path);
         }
@@ -268,12 +270,12 @@ namespace sage::serializer
     }
 
     template <typename ArchiveFn>
-    void ReadCompressedBinary(const char* path, const char (&magic)[4], ArchiveFn&& archiveFn)
+    void ReadCompressedBinary(const char* path, const std::array<char, 4>& magic, ArchiveFn&& archiveFn)
     {
         std::istringstream inBuf(ReadCompressedBinaryPayload(path, magic), std::ios::binary);
         {
             cereal::BinaryInputArchive input(inBuf);
-            archiveFn(input, inBuf);
+            std::forward<ArchiveFn>(archiveFn)(input, inBuf);
         }
     }
 
@@ -281,9 +283,8 @@ namespace sage::serializer
     bool SaveClassBinary(const char* path, const T& toSave)
     {
         std::cout << "START: Saving class data to binary file." << std::endl;
-        const bool ok = WriteCompressedBinary(path, ASSET_BIN_MAGIC, [&](cereal::BinaryOutputArchive& output) {
-            output(toSave);
-        });
+        const bool ok = WriteCompressedBinary(
+            path, ASSET_BIN_MAGIC, [&](cereal::BinaryOutputArchive& output) { output(toSave); });
         std::cout << "FINISH: Saving class data to binary file." << std::endl;
         return ok;
     }

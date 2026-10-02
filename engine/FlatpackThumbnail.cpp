@@ -1,4 +1,5 @@
 #include "FlatpackThumbnail.hpp"
+#include <array>
 
 #include "components/Collideable.hpp"
 #include "components/Renderable.hpp"
@@ -23,12 +24,12 @@ namespace sage
         constexpr int PREVIEW_LIGHT_DIRECTIONAL = 0;
         constexpr int PREVIEW_LIGHT_POINT = 1;
         constexpr float PREVIEW_GAMMA = 1.9f;
-        constexpr Color PREVIEW_LIGHT_COLOR = {255, 244, 214, 255};
+        constexpr Color PREVIEW_LIGHT_COLOR = {.r = 255, .g = 244, .b = 214, .a = 255};
 
         Shader LoadThumbnailShader()
         {
             auto shader = ResourceManager::GetInstance().ShaderLoadUnique(
-                ShaderPath("custom/ubershader.vs").c_str(), ShaderPath("custom/ubershader.fs").c_str());
+                ShaderPath("custom/ubershader.vs"), ShaderPath("custom/ubershader.fs"));
             shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
             return shader;
         }
@@ -71,9 +72,9 @@ namespace sage
             constexpr float constant = 1.0f;
             constexpr float linear = 0.0f;
             constexpr float quadratic = 0.0f;
-            const float positionValue[3] = {position.x, position.y, position.z};
-            const float targetValue[3] = {target.x, target.y, target.z};
-            const float colorValue[4] = {
+            const std::array<float, 3> positionValue = {position.x, position.y, position.z};
+            const std::array<float, 3> targetValue = {target.x, target.y, target.z};
+            const std::array<float, 4> colorValue = {
                 static_cast<float>(color.r) / 255.0f,
                 static_cast<float>(color.g) / 255.0f,
                 static_cast<float>(color.b) / 255.0f,
@@ -92,17 +93,17 @@ namespace sage
             SetShaderValue(
                 shader,
                 GetShaderLocation(shader, TextFormat("lights[%i].position", index)),
-                positionValue,
+                positionValue.data(),
                 SHADER_UNIFORM_VEC3);
             SetShaderValue(
                 shader,
                 GetShaderLocation(shader, TextFormat("lights[%i].target", index)),
-                targetValue,
+                targetValue.data(),
                 SHADER_UNIFORM_VEC3);
             SetShaderValue(
                 shader,
                 GetShaderLocation(shader, TextFormat("lights[%i].color", index)),
-                colorValue,
+                colorValue.data(),
                 SHADER_UNIFORM_VEC4);
             SetShaderValue(
                 shader,
@@ -132,27 +133,30 @@ namespace sage
             // texture unit: mixing sampler types on unit zero invalidates the draw.
             constexpr int NO_SHADOW_LIGHT = -1;
             constexpr int SHADOW_TEXTURE_SLOT = 15;
-            SetShaderValue(shader, GetShaderLocation(shader, "shadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
-            SetShaderValue(shader, GetShaderLocation(shader, "sunShadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
-            SetShaderValue(shader, GetShaderLocation(shader, "pointShadowMap"), &SHADOW_TEXTURE_SLOT, SHADER_UNIFORM_INT);
-            const float ambient[4] = {0.6f, 0.2f, 0.8f, 1.0f};
-            SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient, SHADER_UNIFORM_VEC4);
+            SetShaderValue(
+                shader, GetShaderLocation(shader, "shadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
+            SetShaderValue(
+                shader, GetShaderLocation(shader, "sunShadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
+            SetShaderValue(
+                shader, GetShaderLocation(shader, "pointShadowMap"), &SHADOW_TEXTURE_SLOT, SHADER_UNIFORM_INT);
+            const std::array<float, 4> ambient = {0.6f, 0.2f, 0.8f, 1.0f};
+            SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient.data(), SHADER_UNIFORM_VEC4);
 
             constexpr int lightCount = 2;
             SetShaderValue(shader, GetShaderLocation(shader, "lightsCount"), &lightCount, SHADER_UNIFORM_INT);
             SetShaderValue(shader, GetShaderLocation(shader, "gamma"), &PREVIEW_GAMMA, SHADER_UNIFORM_FLOAT);
 
-            const float viewPosition[3] = {camera.position.x, camera.position.y, camera.position.z};
-            SetShaderValue(shader, GetShaderLocation(shader, "viewPos"), viewPosition, SHADER_UNIFORM_VEC3);
+            const std::array<float, 3> viewPosition = {camera.position.x, camera.position.y, camera.position.z};
+            SetShaderValue(shader, GetShaderLocation(shader, "viewPos"), viewPosition.data(), SHADER_UNIFORM_VEC3);
 
             SetThumbnailLight(shader, 0, PREVIEW_LIGHT_POINT, camera.position, center, PREVIEW_LIGHT_COLOR, 1.17f);
             SetThumbnailLight(
                 shader,
                 1,
                 PREVIEW_LIGHT_DIRECTIONAL,
-                Vector3Add(center, {-3.0f, 4.0f, -4.0f}),
+                Vector3Add(center, {.x = -3.0f, .y = 4.0f, .z = -4.0f}),
                 center,
-                Color{172, 202, 255, 255},
+                Color{.r = 172, .g = 202, .b = 255, .a = 255},
                 0.23f);
         }
 
@@ -182,13 +186,13 @@ namespace sage
         {
             const auto* transform = previewRegistry.try_get<sgTransform>(entity);
             const auto* renderable = previewRegistry.try_get<Renderable>(entity);
-            const auto* model = renderable ? renderable->GetModel() : nullptr;
-            if (!transform || !renderable || !renderable->active || !model || model->GetMeshCount() == 0) continue;
+            const auto model = renderable ? renderable->GetModel() : std::nullopt;
+            if (!transform || !renderable || !renderable->active || !model || model->get().GetMeshCount() == 0)
+                continue;
 
-            const auto entityBounds =
-                TransformBoundingBoxByCorners(
-                    model->CalcLocalBoundingBox(),
-                    MatrixMultiply(model->GetRlModel().transform, transform->GetMatrix()));
+            const auto entityBounds = TransformBoundingBoxByCorners(
+                model->get().CalcLocalBoundingBox(),
+                MatrixMultiply(model->get().GetRlModel().transform, transform->GetMatrix()));
             if (bounds)
                 ExpandBounds(*bounds, entityBounds);
             else
@@ -202,9 +206,9 @@ namespace sage
             std::max({std::fabs(boundsSize.x), std::fabs(boundsSize.y), std::fabs(boundsSize.z), 1.0f});
 
         Camera3D camera{};
-        camera.position = Vector3Add(center, {radius * 1.35f, radius * 0.85f, radius * 1.65f});
+        camera.position = Vector3Add(center, {.x = radius * 1.35f, .y = radius * 0.85f, .z = radius * 1.65f});
         camera.target = center;
-        camera.up = {0.0f, 1.0f, 0.0f};
+        camera.up = {.x = 0.0f, .y = 1.0f, .z = 0.0f};
         camera.fovy = 32.0f;
         camera.projection = CAMERA_PERSPECTIVE;
 
@@ -218,23 +222,24 @@ namespace sage
         {
             const auto* transform = previewRegistry.try_get<sgTransform>(entity);
             auto* renderable = previewRegistry.try_get<Renderable>(entity);
-            auto* model = renderable ? renderable->GetModel() : nullptr;
-            if (!transform || !renderable || !renderable->active || !model || model->GetMeshCount() == 0) continue;
+            auto model = renderable ? renderable->GetModel() : std::nullopt;
+            if (!transform || !renderable || !renderable->active || !model || model->get().GetMeshCount() == 0)
+                continue;
 
-            auto uber = CreateThumbnailUberComponent(*model, shader);
+            auto uber = CreateThumbnailUberComponent(model->get(), shader);
             std::vector<Shader> originalShaders;
-            originalShaders.reserve(static_cast<std::size_t>(model->GetMaterialCount()));
-            for (int material = 0; material < model->GetMaterialCount(); ++material)
-                originalShaders.push_back(model->GetShader(material));
-            model->SetShader(shader);
-            model->DrawUber(
+            originalShaders.reserve(static_cast<std::size_t>(model->get().GetMaterialCount()));
+            for (int material = 0; material < model->get().GetMaterialCount(); ++material)
+                originalShaders.push_back(model->get().GetShader(material));
+            model->get().SetShader(shader);
+            model->get().DrawUber(
                 &uber,
                 transform->GetWorldPos(),
                 transform->GetWorldRot(),
                 transform->GetScale(),
                 renderable->hint);
-            for (int material = 0; material < model->GetMaterialCount(); ++material)
-                model->SetShader(originalShaders[static_cast<std::size_t>(material)], material);
+            for (int material = 0; material < model->get().GetMaterialCount(); ++material)
+                model->get().SetShader(originalShaders.at(static_cast<std::size_t>(material)), material);
         }
         EndMode3D();
         EndTextureMode();

@@ -103,14 +103,14 @@ namespace sage
             a = static_cast<unsigned char>((timer.GetCurrentTime() / fadeIn) * 255);
         }
 
-        auto bgCol = Color{0, 0, 0, 255};
+        auto bgCol = Color{.r = 0, .g = 0, .b = 0, .a = 255};
         if (last)
         {
             bgCol.a = a;
         }
-        DrawRectangle(0, 0, width, height, bgCol);
+        DrawRectangle(0, 0, static_cast<int>(width), static_cast<int>(height), bgCol);
 
-        auto textCol = Color{255, 255, 255, a};
+        auto textCol = Color{.r = 255, .g = 255, .b = 255, .a = a};
 
         float baseSpacing = 48.0f;
         float baseFontSize = 64.0f;
@@ -124,7 +124,7 @@ namespace sage
         {
             allTextHeight += MeasureTextEx(font, str.c_str(), scaledFontSize, 1.5f).y;
         }
-        allTextHeight += (scaledSpacing * (size - 1));
+        allTextHeight += (scaledSpacing * static_cast<float>(size > 0 ? size - 1 : 0));
 
         float startY = (height - allTextHeight) / 2;
 
@@ -133,7 +133,9 @@ namespace sage
             const char* text = overlayText.at(currentTextIdx).first.at(i).c_str();
             auto textSize = MeasureTextEx(font, text, scaledFontSize, 1.5f);
 
-            Vector2 unscaledPos{(width - textSize.x) / 2, startY + (i * (textSize.y + scaledSpacing))};
+            Vector2 unscaledPos{
+                .x = (width - textSize.x) / 2,
+                .y = startY + (static_cast<float>(i) * (textSize.y + scaledSpacing))};
 
             DrawTextEx(
                 font,
@@ -146,9 +148,7 @@ namespace sage
     }
 
     FullscreenTextOverlayManager::FullscreenTextOverlayManager(EngineSystems* _sys)
-        : font(
-              ResourceManager::GetInstance().FontLoad(
-                  "resources/fonts/FiraCode/FiraCode-Bold.ttf")),
+        : font(ResourceManager::GetInstance().FontLoad("resources/fonts/FiraCode/FiraCode-Bold.ttf")),
           timer({}),
           sys(_sys)
     {

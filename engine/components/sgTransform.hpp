@@ -10,6 +10,8 @@
 #include "raylib.h"
 
 #include <cstdint>
+#include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -21,7 +23,7 @@ namespace sage
     class sgTransform
     {
         entt::entity m_entity = entt::null;
-        TransformSystem* m_transformSystem = nullptr;
+        std::optional<std::reference_wrapper<TransformSystem>> m_transformSystem;
         entt::entity m_parent = entt::null;
         std::vector<entt::entity> m_children{};
 
@@ -46,10 +48,10 @@ namespace sage
 
         using Writer = void (sgTransform::*)(const Vector3&);
 
-        void Bind(TransformSystem* transformSystem, entt::entity entity);
+        void Bind(TransformSystem& transformSystem, entt::entity entity);
         void rebindProxies();
         void assignStateFrom(const sgTransform& rhs);
-        void stealStateFrom(sgTransform&& rhs);
+        void stealStateFrom(sgTransform& rhs);
 
       public:
         // As the transform is the only required component to exist in the scene graph, the transform also stores
@@ -63,25 +65,39 @@ namespace sage
         class VectorField
         {
             Vector3 value{};
-            sgTransform* owner_ = nullptr;
+            std::optional<std::reference_wrapper<sgTransform>> owner_;
             friend class sgTransform;
             friend class TransformSystem;
 
           public:
             struct Axis
             {
-                VectorField* parent = nullptr;
-                float Vector3::* axis = nullptr;
+                std::reference_wrapper<VectorField> parent;
+                float Vector3::* axis;
+
+                Axis(std::reference_wrapper<VectorField> boundParent, float Vector3::* boundAxis)
+                    : parent(boundParent), axis(boundAxis)
+                {
+                }
+                ~Axis() = default;
+                Axis(const Axis&) = default;
+                Axis(Axis&&) = default;
+                // Proxy assignment updates the hierarchy and may allocate or call subscribers.
+                // NOLINTNEXTLINE(cppcoreguidelines-noexcept-move-operations)
+                Axis& operator=(Axis&& rhs)
+                {
+                    return *this = static_cast<const Axis&>(rhs);
+                }
 
                 operator float() const
                 {
-                    return parent->value.*axis;
+                    return parent.get().value.*axis;
                 }
                 Axis& operator=(float v)
                 {
-                    Vector3 next = parent->value;
+                    Vector3 next = parent.get().value;
                     next.*axis = v;
-                    (parent->owner_->*Write)(next);
+                    (parent.get().owner_->get().*Write)(next);
                     return *this;
                 }
                 Axis& operator=(const Axis& rhs)
@@ -90,11 +106,12 @@ namespace sage
                 }
             };
 
-            Axis x{this, &Vector3::x};
-            Axis y{this, &Vector3::y};
-            Axis z{this, &Vector3::z};
+            Axis x{std::ref(*this), &Vector3::x};
+            Axis y{std::ref(*this), &Vector3::y};
+            Axis z{std::ref(*this), &Vector3::z};
 
             VectorField() = default;
+            ~VectorField() = default;
             VectorField(const VectorField&) = delete;
             VectorField(VectorField&&) = delete;
             VectorField& operator=(VectorField&&) = delete;
@@ -109,7 +126,7 @@ namespace sage
             }
             VectorField& operator=(const Vector3& v)
             {
-                (owner_->*Write)(v);
+                (owner_->get().*Write)(v);
                 return *this;
             }
             VectorField& operator=(const VectorField& rhs)
@@ -221,6 +238,7 @@ namespace sage
         [[nodiscard]] const std::vector<entt::entity>& GetChildren() const;
 
         sgTransform();
+        ~sgTransform() = default;
         sgTransform(const sgTransform& rhs);
         sgTransform& operator=(const sgTransform& rhs);
         sgTransform(sgTransform&& rhs) noexcept;

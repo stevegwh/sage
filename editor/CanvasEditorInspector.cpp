@@ -2,19 +2,25 @@
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
+#include <array>
+
 namespace sage::editor
 {
     namespace
     {
         void editColor(const char* label, Color& color)
         {
-            float value[]{color.r / 255.f, color.g / 255.f, color.b / 255.f, color.a / 255.f};
-            if (!ImGui::ColorEdit4(label, value)) return;
+            std::array<float, 4> value{
+                static_cast<float>(color.r) / 255.f,
+                static_cast<float>(color.g) / 255.f,
+                static_cast<float>(color.b) / 255.f,
+                static_cast<float>(color.a) / 255.f};
+            if (!ImGui::ColorEdit4(label, value.data())) return;
             color = {
-                static_cast<unsigned char>(value[0] * 255),
-                static_cast<unsigned char>(value[1] * 255),
-                static_cast<unsigned char>(value[2] * 255),
-                static_cast<unsigned char>(value[3] * 255)};
+                .r = static_cast<unsigned char>(value.at(0) * 255),
+                .g = static_cast<unsigned char>(value.at(1) * 255),
+                .b = static_cast<unsigned char>(value.at(2) * 255),
+                .a = static_cast<unsigned char>(value.at(3) * 255)};
         }
         void assetPicker(const char* label, std::string& value, const std::vector<std::filesystem::path>& assets)
         {
@@ -78,21 +84,21 @@ namespace sage::editor
     void CanvasEditor::drawWindowProperties(CanvasNode& node)
     {
         ImGui::SeparatorText("Window placement");
-        int horizontal = int(node.windowHorizontal);
-        int vertical = int(node.windowVertical);
+        int horizontal = static_cast<int>(node.windowHorizontal);
+        int vertical = static_cast<int>(node.windowVertical);
         // Keep the displayed position when switching an axis back to manual placement.
-        const auto bounds = node.WindowBounds({document.width, document.height});
+        const auto bounds = node.WindowBounds({.x = document.width, .y = document.height});
         if (ImGui::Combo("Horizontal", &horizontal, "Left\0Centre\0Right\0Free\0"))
         {
-            node.windowHorizontal = WindowHorizontalAlignment(horizontal);
+            node.windowHorizontal = static_cast<WindowHorizontalAlignment>(horizontal);
             if (node.windowHorizontal == WindowHorizontalAlignment::FREE) node.rectangle.x = bounds.x;
         }
         if (ImGui::Combo("Vertical", &vertical, "Top\0Middle\0Bottom\0Free\0"))
         {
-            node.windowVertical = WindowVerticalAlignment(vertical);
+            node.windowVertical = static_cast<WindowVerticalAlignment>(vertical);
             if (node.windowVertical == WindowVerticalAlignment::FREE) node.rectangle.y = bounds.y;
         }
-        auto position = node.WindowBounds({document.width, document.height});
+        auto position = node.WindowBounds({.x = document.width, .y = document.height});
         ImGui::BeginDisabled(node.windowHorizontal != WindowHorizontalAlignment::FREE);
         if (ImGui::DragFloat("X", &position.x, 1)) node.rectangle.x = position.x;
         ImGui::EndDisabled();
@@ -135,11 +141,11 @@ namespace sage::editor
         assetPicker("Font", node.font, fonts);
         ImGui::DragFloat("Font size", &node.fontSize, 0.5f, 1, 256);
         editColor("Text colour", node.foreground);
-        int horizontal = int(node.horizontal), vertical = int(node.vertical);
+        int horizontal = static_cast<int>(node.horizontal), vertical = static_cast<int>(node.vertical);
         if (ImGui::Combo("Horizontal", &horizontal, "Left\0Centre\0Right\0"))
-            node.horizontal = HorizontalAlignment(horizontal);
+            node.horizontal = static_cast<HorizontalAlignment>(horizontal);
         if (ImGui::Combo("Vertical", &vertical, "Top\0Middle\0Bottom\0"))
-            node.vertical = VerticalAlignment(vertical);
+            node.vertical = static_cast<VerticalAlignment>(vertical);
         ImGui::SeparatorText("Interaction and border");
         editColor("Hover", node.hover);
         editColor("Pressed", node.pressed);

@@ -120,15 +120,15 @@ namespace sage
     // Particle describes one particle in a particle system.
     struct Particle
     {
-        float size;
-        Vector3 origin;               // The origin of the particle
-        Vector3 position;             // Position of the particle in 2d space.
-        Vector3 velocity;             // Velocity vector in 2d space.
-        Vector3 externalAcceleration; // Acceleration vector in 2d space.
-        float originAcceleration;     // Accelerates velocity vector
-        float age;                    // Age is measured in seconds.
-        float ttl;                    // Ttl is the time to live in seconds.
-        bool active;                  // Inactive particles are neither updated nor drawn.
+        float size = 0.0f;
+        Vector3 origin;                  // The origin of the particle
+        Vector3 position;                // Position of the particle in 2d space.
+        Vector3 velocity;                // Velocity vector in 2d space.
+        Vector3 externalAcceleration;    // Acceleration vector in 2d space.
+        float originAcceleration = 0.0f; // Accelerates velocity vector
+        float age = 0.0f;                // Age is measured in seconds.
+        float ttl = 0.0f;                // Ttl is the time to live in seconds.
+        bool active = false;             // Inactive particles are neither updated nor drawn.
 
         std::function<bool(Particle*)> particle_Deactivator; // Pointer to a function that determines
         // when a particle is deactivated.
@@ -145,9 +145,9 @@ namespace sage
     struct Emitter
     {
         EmitterConfig config;
-        float mustEmit;   // Amount of particles to be emitted within next update call.
-        Vector2 offset{}; // Offset holds half the width and height of the texture.
-        bool isEmitting;
+        float mustEmit = 0.0f; // Amount of particles to be emitted within next update call.
+        Vector2 offset{};      // Offset holds half the width and height of the texture.
+        bool isEmitting = false;
         std::vector<std::unique_ptr<Particle>> particles; // Array of all particles (by pointer).
 
         explicit Emitter(EmitterConfig cfg);
@@ -174,14 +174,14 @@ namespace sage
     class ParticleSystem
     {
       public:
-        Camera3D* const camera;
-        bool active;
-        size_t length;
-        size_t capacity;
-        Vector3 origin;
+        std::reference_wrapper<Camera3D> camera;
+        bool active = false;
+        size_t length = 0;
+        size_t capacity = 1;
+        Vector3 origin{};
         std::vector<std::unique_ptr<Emitter>> emitters;
 
-        explicit ParticleSystem(Camera3D* _camera);
+        explicit ParticleSystem(Camera3D& _camera);
         void Update(float dt);
         bool Register(std::unique_ptr<Emitter> emitter);
         bool Deregister(Emitter* emitter);

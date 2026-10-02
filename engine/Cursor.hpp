@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "Event.hpp"
 #include "engine/Colors.hpp"
+#include "Event.hpp"
 #include "systems/CollisionSystem.hpp"
 
 #include "entt/entt.hpp"
@@ -23,7 +23,7 @@ namespace sage
     {
         entt::entity target = entt::null;
         double beginHoverTime = 0.0;
-        const float hoverTimeThreshold = 0.75f;
+        static constexpr float HOVER_TIME_THRESHOLD = 0.75f;
     };
 
     class Cursor

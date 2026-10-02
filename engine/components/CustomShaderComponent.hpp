@@ -7,6 +7,8 @@
 #include "cereal/types/string.hpp"
 #include "raylib.h"
 
+#include <optional>
+#include <span>
 #include <string>
 
 namespace sage
@@ -25,13 +27,19 @@ namespace sage
         void Update(Renderable& renderable);
         void RebindOnNextUpdate()
         {
-            appliedMaterials = nullptr;
+            appliedMaterials = std::nullopt;
         }
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(cereal::make_nvp("vertexShaderPath", vertexShaderPath), cereal::make_nvp("fragmentShaderPath", fragmentShaderPath), cereal::make_nvp("timeUniform", timeUniform), cereal::make_nvp("secondTextureUniform", secondTextureUniform), cereal::make_nvp("texture0Key", texture0Key), cereal::make_nvp("texture1Key", texture1Key));
+            archive(
+                cereal::make_nvp("vertexShaderPath", vertexShaderPath),
+                cereal::make_nvp("fragmentShaderPath", fragmentShaderPath),
+                cereal::make_nvp("timeUniform", timeUniform),
+                cereal::make_nvp("secondTextureUniform", secondTextureUniform),
+                cereal::make_nvp("texture0Key", texture0Key),
+                cereal::make_nvp("texture1Key", texture1Key));
         }
 
         template <class Inspector>
@@ -55,7 +63,7 @@ namespace sage
         std::string appliedTexture1Key;
         Shader shader{};
         int timeLocation = -1;
-        const Material* appliedMaterials = nullptr;
+        std::optional<std::span<const Material>> appliedMaterials;
         Texture originalTexture0{};
         Texture originalTexture1{};
     };

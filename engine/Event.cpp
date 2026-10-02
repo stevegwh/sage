@@ -16,17 +16,14 @@ namespace sage
     void Subscription::UnSubscribe()
     {
         if (!IsActive()) return;
-        event->unSubscribe(id);
+        event->get().unSubscribe(id);
         id = -1;
-        event = nullptr;
+        event = std::nullopt;
     }
 
-    Subscription::~Subscription()
-    {
-        // UnSubscribe();
-    }
+    Subscription::~Subscription() = default;
 
-    Subscription::Subscription(EventBase* _event, SubscriberId _id) : event(_event), id(_id)
+    Subscription::Subscription(EventBase& _event, SubscriberId _id) : event(std::ref(_event)), id(_id)
     {
     }
 } // namespace sage

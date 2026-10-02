@@ -52,12 +52,12 @@ namespace sage
                 RegisterFlatpackComponent<ParticleEmitterComponent>("sage.ParticleEmitter");
                 return true;
             }();
-            (void)registered;
+            static_cast<void>(registered);
         }
-    }
+    } // namespace
 
-    bool RestoreRegisteredComponent(entt::registry& registry, entt::entity entity,
-        const std::string& key, const std::string& data)
+    bool RestoreRegisteredComponent(
+        entt::registry& registry, entt::entity entity, const std::string& key, const std::string& data)
     {
         EnsureEngineComponentOperations();
         const auto& registrations = ComponentOperationsRegistry();
@@ -67,11 +67,12 @@ namespace sage
         return true;
     }
 
-    void ResolveRegisteredComponentReferences(entt::registry& registry, entt::entity entity,
-        const std::unordered_map<std::uint32_t, entt::entity>& ids)
+    void ResolveRegisteredComponentReferences(
+        entt::registry& registry, entt::entity entity, const std::unordered_map<std::uint32_t, entt::entity>& ids)
     {
         EnsureEngineComponentOperations();
-        for (const auto& operations : ComponentOperationsRegistry()) operations.resolveReferences(registry, entity, ids);
+        for (const auto& operations : ComponentOperationsRegistry())
+            operations.resolveReferences(registry, entity, ids);
     }
 
     bool IsFlatpackFile(const char* path)
@@ -108,7 +109,7 @@ namespace sage
             const auto document = content::ReadDocument(path);
             if (json::String(document, "kind") != "flatpack") throw std::runtime_error("Expected a flatpack");
             auto result = content::Instantiate(destination, document, anchorWorldPos, true);
-            return {result.root, std::move(result.entities)};
+            return {.root = result.root, .entities = std::move(result.entities)};
         }
         catch (const std::exception& error)
         {
@@ -131,9 +132,8 @@ namespace sage
             entries.push_back({.displayName = path.stem().string(), .path = path});
         }
 
-        std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
-            return lhs.displayName < rhs.displayName;
-        });
+        std::ranges::sort(
+            entries, [](const auto& lhs, const auto& rhs) { return lhs.displayName < rhs.displayName; });
         return entries;
     }
 
@@ -165,7 +165,7 @@ namespace sage
                     !destination.any_of<UberShaderComponent, CustomShaderComponent>(entity))
                 {
                     auto& uber = destination.emplace<UberShaderComponent>(
-                        entity, renderable->GetModel()->GetMaterialCount());
+                        entity, renderable->GetModel()->get().GetMaterialCount());
                     uber.SetFlagAll(UberShaderComponent::Flags::Lit);
                     if (destination.any_of<Animation>(entity))
                     {
@@ -188,7 +188,7 @@ namespace sage
                     if (const auto* renderable = destination.try_get<Renderable>(entity);
                         renderable && renderable->GetModel())
                     {
-                        collideable->localBoundingBox = renderable->GetModel()->CalcLocalBoundingBox();
+                        collideable->localBoundingBox = renderable->GetModel()->get().CalcLocalBoundingBox();
                     }
                 }
                 const auto& transform = destination.get<sgTransform>(entity);

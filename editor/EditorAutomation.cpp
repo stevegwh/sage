@@ -1,13 +1,13 @@
 #include "EditorScene.hpp"
-#include "engine/SceneRenderTarget.hpp"
-#include "engine/Colors.hpp"
 #include "engine/Camera.hpp"
+#include "engine/Colors.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/content/ContentDocument.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Flatpack.hpp"
 #include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneRenderTarget.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include <set>
 
@@ -33,8 +33,8 @@ namespace sage
             a);
         json::Put(state, "playing", IsPlaying(), a);
         json::Value camera(rapidjson::kObjectType);
-        const char* modes[] = {"game", "free", "focused"};
-        json::Put(camera, "mode", modes[static_cast<int>(editorCamera.mode)], a);
+        constexpr std::array<const char*, 3> CAMERA_MODE_NAMES = {"game", "free", "focused"};
+        json::Put(camera, "mode", CAMERA_MODE_NAMES.at(static_cast<std::size_t>(editorCamera.mode)), a);
         json::Put(camera, "position", json::Encode(sys->camera->getRaylibCam()->position), a);
         json::Put(camera, "target", json::Encode(sys->camera->getRaylibCam()->target), a);
         json::Put(state, "camera", camera, a);
@@ -50,8 +50,10 @@ namespace sage
     {
         const auto command = json::String(request, "command");
         if (command == "inspect") return automationState();
-        if (command == "canvas") {
-            if (gameRuntime || flatpackSession->IsActive()) throw std::runtime_error("Stop Play and close the flatpack before editing a canvas");
+        if (command == "canvas")
+        {
+            if (gameRuntime || flatpackSession->IsActive())
+                throw std::runtime_error("Stop Play and close the flatpack before editing a canvas");
             return canvasEditor->Command(request);
         }
         if (command == "schema")
@@ -59,7 +61,8 @@ namespace sage
             if (!request.HasMember("entity")) return content::DescribeComponents();
             const auto state = automationState();
             for (const auto& node : state["document"]["entities"].GetArray())
-                if (json::Id(node, "id") == json::Id(request, "entity")) return content::DescribeComponents(&node);
+                if (json::Id(node, "id") == json::Id(request, "entity"))
+                    return content::DescribeComponents(std::cref(node));
             throw std::runtime_error("Unknown entity");
         }
         if (command == "validate")
@@ -69,7 +72,8 @@ namespace sage
             json::Put(state, "valid", errors.empty(), state.GetAllocator());
             return state;
         }
-        if (canvasEditor->IsActive() && command != "quit") throw std::runtime_error("Close the canvas editor before changing the world");
+        if (canvasEditor->IsActive() && command != "quit")
+            throw std::runtime_error("Close the canvas editor before changing the world");
         const auto state = automationState();
         if (json::String(request, "revision") != json::String(state, "revision"))
             throw std::runtime_error("Document revision changed; inspect the session again");
@@ -77,7 +81,8 @@ namespace sage
             throw std::runtime_error("An inspector or transform edit is in progress");
         if (command == "quit")
         {
-            if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges() || canvasEditor->IsDirty())
+            if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges() ||
+                canvasEditor->IsDirty())
                 throw std::runtime_error("Save unsaved changes before quitting");
             sys->settings->ExitProgram();
             return automationState();
@@ -120,7 +125,8 @@ namespace sage
             if (gameRuntime) throw std::runtime_error("Stop play before changing source content");
             if (command == "open")
             {
-                if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges() || canvasEditor->IsDirty())
+                if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges() ||
+                    canvasEditor->IsDirty())
                     throw std::runtime_error("Save or explicitly discard unsaved edits before opening content");
                 const std::filesystem::path path = json::String(request, "path");
                 auto document = content::ReadDocument(path);
@@ -164,7 +170,7 @@ namespace sage
             {
                 const auto entity = content::FindEntityById(*sys->registry, json::Id(request, "entity"));
                 if (entity == entt::null) throw std::runtime_error("Unknown entity");
-                (void)selection->Select(entity);
+                static_cast<void>(selection->Select(entity));
             }
             else if (command == "place")
             {
@@ -178,14 +184,17 @@ namespace sage
                 if (request.HasMember("mode"))
                 {
                     const auto mode = json::String(request, "mode");
-                    if (mode == "free") setCameraMode(editor::CameraMode::Free);
-                    else if (mode == "game") setCameraMode(editor::CameraMode::Game);
+                    if (mode == "free")
+                        setCameraMode(editor::CameraMode::Free);
+                    else if (mode == "game")
+                        setCameraMode(editor::CameraMode::Game);
                     else if (mode == "focused")
                     {
                         if (selection->Selected().empty()) throw std::runtime_error("Select an object to focus");
                         setCameraMode(editor::CameraMode::Focused);
                     }
-                    else throw std::runtime_error("Unknown camera mode");
+                    else
+                        throw std::runtime_error("Unknown camera mode");
                 }
                 if (request.HasMember("position") || (!request.HasMember("mode") && !request.HasMember("wheel")))
                 {
@@ -196,7 +205,7 @@ namespace sage
                 }
                 if (request.HasMember("wheel"))
                 {
-                    float wheel;
+                    float wheel = 0.0f;
                     json::Decode(request["wheel"], wheel);
                     editorCamera.Zoom(*sys->camera->getRaylibCam(), wheel);
                 }
@@ -235,7 +244,7 @@ namespace sage
                 if (entity == entt::null) throw std::runtime_error("Unknown entity");
                 if (op == "model")
                 {
-                    (void)selection->Select(entity);
+                    static_cast<void>(selection->Select(entity));
                     changeSelectedModels(json::String(operation, "value"));
                     return automationState();
                 }
@@ -275,25 +284,25 @@ namespace sage
                         else if (op == "set" || op == "add" || op == "remove")
                         {
                             const auto key = json::String(operation, "component");
-                            const detail::ComponentOperations* operations = nullptr;
+                            std::optional<std::reference_wrapper<const detail::ComponentOperations>> operations;
                             for (const auto& c : detail::RegisteredComponentOperations())
                                 if (c.key == key)
                                 {
-                                    operations = &c;
+                                    operations = std::cref(c);
                                     break;
                                 }
                             if (!operations)
                                 throw std::runtime_error("Component has no registered edit operations");
                             if (op == "set")
-                                operations->edit(
+                                operations->get().edit(
                                     *sys->registry,
                                     entity,
                                     json::String(operation, "field"),
                                     json::Stringify(operation["value"]));
                             else if (op == "remove")
-                                operations->remove(*sys->registry, entity);
+                                operations->get().remove(*sys->registry, entity);
                             else
-                                operations->restoreJson(
+                                operations->get().restoreJson(
                                     *sys->registry, entity, json::Stringify(operation["value"]));
                             if (key == "sage.Light" && op == "set" &&
                                 json::String(operation, "field") == "position")
@@ -347,10 +356,23 @@ namespace sage
                 SetShaderValueTexture(sceneShader, GetShaderLocation(sceneShader, "bloomTexture"), bloomTexture);
             }
             DrawTextureRec(
-                sceneTexture, {0, 0, float(sceneTexture.width), -float(sceneTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
+                sceneTexture,
+                {.x = 0,
+                 .y = 0,
+                 .width = static_cast<float>(sceneTexture.width),
+                 .height = -static_cast<float>(sceneTexture.height)},
+                {.x = 0, .y = 0},
+                sage::colors::WHITE_COLOR);
             if (sceneShader.id != 0) EndShaderMode();
             if (uiTexture.id != 0)
-                DrawTextureRec(uiTexture, {0, 0, float(uiTexture.width), -float(uiTexture.height)}, {0, 0}, sage::colors::WHITE_COLOR);
+                DrawTextureRec(
+                    uiTexture,
+                    {.x = 0,
+                     .y = 0,
+                     .width = static_cast<float>(uiTexture.width),
+                     .height = -static_cast<float>(uiTexture.height)},
+                    {.x = 0, .y = 0},
+                    sage::colors::WHITE_COLOR);
             EndTextureMode();
             sceneTexture = composite.texture;
         }

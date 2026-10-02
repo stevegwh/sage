@@ -125,7 +125,7 @@ namespace sage::editor
             s.assetKey = asset->assetKey;
         }
         auto document = content::Capture(reg, {entity}, "map", entt::null, true);
-        s.contentJson = json::Stringify(document["entities"][0]);
+        s.contentJson = json::Stringify(json::At(json::Require(document, "entities"), 0));
         return s;
     }
 
@@ -253,9 +253,9 @@ namespace sage::editor
         const auto count = std::min(before.size(), after.size());
         for (std::size_t i = 0; i < count; ++i)
         {
-            if (!statesEqual(before[i], after[i]))
+            if (!statesEqual(before.at(i), after.at(i)))
             {
-                entry.deltas.push_back({.before = std::move(before[i]), .after = std::move(after[i])});
+                entry.deltas.push_back({.before = std::move(before.at(i)), .after = std::move(after.at(i))});
             }
         }
         if (entry.deltas.empty()) return; // no-op edit
@@ -393,7 +393,7 @@ namespace sage::editor
     {
         auto& reg = registry();
 
-        entt::entity entity;
+        entt::entity entity = entt::null;
         if (const auto it = idMap.find(target.persistentId); it != idMap.end() && reg.valid(it->second))
         {
             entity = it->second;

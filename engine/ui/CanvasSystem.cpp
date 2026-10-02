@@ -1,20 +1,21 @@
 #include "CanvasSystem.hpp"
 #include "CanvasRenderer.hpp"
 #include "engine/components/ScriptComponent.hpp"
+#include <algorithm>
 #include <utility>
 
 namespace sage
 {
     CanvasSystem::CanvasSystem(entt::registry& value) : registry(value)
     {
-        registry.ctx().emplace<std::reference_wrapper<CanvasSystem>>(*this);
+        registry.get().ctx().emplace<std::reference_wrapper<CanvasSystem>>(*this);
     }
     CanvasSystem::~CanvasSystem()
     {
         for (const auto& instance : instances)
             pendingDestroy.push_back(instance.root);
         flushDestroy();
-        registry.ctx().erase<std::reference_wrapper<CanvasSystem>>();
+        registry.get().ctx().erase<std::reference_wrapper<CanvasSystem>>();
     }
     entt::entity CanvasSystem::Instantiate(const std::string& path)
     {
@@ -23,21 +24,21 @@ namespace sage
             for (const auto& ref : node.references)
                 if (!document.Find(ref.node))
                     throw std::runtime_error(node.name + ": broken script reference " + ref.field);
-        Instance instance{entt::null, {document.width, document.height}, {}};
+        Instance instance{.root = entt::null, .size = {.x = document.width, .y = document.height}, .nodes = {}};
         std::map<unsigned int, entt::entity> refs;
         try
         {
             for (const auto& node : document.nodes)
             {
-                auto entity = registry.create();
+                auto entity = registry.get().create();
                 instance.nodes.push_back(entity);
                 refs[node.id] = entity;
-                registry.emplace<UINode>(entity).data = node;
+                registry.get().emplace<UINode>(entity).data = node;
                 if (node.kind == UINodeKind::Canvas) instance.root = entity;
             }
             for (auto entity : instance.nodes)
             {
-                auto& node = registry.get<UINode>(entity);
+                auto& node = registry.get().get<UINode>(entity);
                 node.canvas = instance.root;
                 if (!node.data.script.empty())
                 {
@@ -46,17 +47,17 @@ namespace sage
                         json::Put(
                             fields,
                             ref.field.c_str(),
-                            std::uint64_t(entt::to_integral(refs.at(ref.node))),
+                            static_cast<std::uint64_t>(entt::to_integral(refs.at(ref.node))),
                             fields.GetAllocator());
-                    registry.emplace<ScriptFields>(entity).json = json::Stringify(fields);
-                    registry.emplace<ScriptComponent>(entity).className = node.data.script;
+                    registry.get().emplace<ScriptFields>(entity).json = json::Stringify(fields);
+                    registry.get().emplace<ScriptComponent>(entity).className = node.data.script;
                 }
             }
         }
         catch (...)
         {
             for (auto e : instance.nodes)
-                if (registry.valid(e)) registry.destroy(e);
+                if (registry.get().valid(e)) registry.get().destroy(e);
             throw;
         }
         auto root = instance.root;
@@ -72,18 +73,17 @@ namespace sage
         auto pending = std::exchange(pendingDestroy, {});
         for (auto root : pending)
         {
-            auto found =
-                std::find_if(instances.begin(), instances.end(), [&](const auto& i) { return i.root == root; });
+            auto found = std::ranges::find_if(instances, [&](const auto& i) { return i.root == root; });
             if (found == instances.end()) continue;
             auto nodes = std::move(found->nodes);
             instances.erase(found);
             for (auto e : nodes)
-                if (registry.valid(e)) registry.remove<ScriptComponent>(e);
+                if (registry.get().valid(e)) registry.get().remove<ScriptComponent>(e);
             for (auto e : nodes)
-                if (registry.valid(e)) registry.destroy(e);
+                if (registry.get().valid(e)) registry.get().destroy(e);
         }
-        if (!registry.valid(hovered)) hovered = entt::null;
-        if (!registry.valid(pressed)) pressed = entt::null;
+        if (!registry.get().valid(hovered)) hovered = entt::null;
+        if (!registry.get().valid(pressed)) pressed = entt::null;
     }
     CanvasDocument CanvasSystem::snapshot(const Instance& instance) const
     {
@@ -93,7 +93,7 @@ namespace sage
         doc.nodes.clear();
         doc.nodes.reserve(instance.nodes.size());
         for (auto entity : instance.nodes)
-            doc.nodes.push_back(registry.get<UINode>(entity).data);
+            doc.nodes.push_back(registry.get().get<UINode>(entity).data);
         for (auto& node : doc.nodes)
         {
             auto parent = node.parent;
@@ -108,7 +108,7 @@ namespace sage
     }
     void CanvasSystem::LoadInitial()
     {
-        if (const auto* initial = registry.ctx().find<InitialCanvases>())
+        if (const auto* initial = registry.get().ctx().find<InitialCanvases>())
             for (const auto& path : initial->assets)
             {
                 try
@@ -124,7 +124,7 @@ namespace sage
     bool CanvasSystem::Update(Rectangle viewport, Vector2 mouse)
     {
         flushDestroy();
-        const bool captured = registry.valid(pressed);
+        const bool captured = registry.get().valid(pressed);
         hovered = entt::null;
         bool blocksWorld = false;
         for (const auto& instance : instances)
@@ -142,17 +142,17 @@ namespace sage
             const auto hit = doc.Find(id);
             if (!hit || !hit->get().enabled) continue;
             for (auto e : instance.nodes)
-                if (registry.get<UINode>(e).data.id == id) hovered = e;
+                if (registry.get().get<UINode>(e).data.id == id) hovered = e;
         }
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) pressed = hovered;
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
         {
             const auto target = pressed;
             pressed = entt::null;
-            if (target == hovered && registry.valid(target))
+            if (target == hovered && registry.get().valid(target))
             {
                 // Event-bearing components have stable storage; destruction is deferred until the next update.
-                auto& node = registry.get<UINode>(target);
+                auto& node = registry.get().get<UINode>(target);
                 if (node.data.enabled) node.clicked.Publish();
             }
         }
@@ -168,7 +168,7 @@ namespace sage
         for (const auto& instance : instances)
         {
             const auto id = [&](entt::entity e) {
-                const auto* n = registry.try_get<UINode>(e);
+                const auto* n = registry.get().try_get<UINode>(e);
                 return n && n->canvas == instance.root ? n->data.id : 0u;
             };
             RenderCanvas(snapshot(instance), viewport, id(hovered), id(pressed));

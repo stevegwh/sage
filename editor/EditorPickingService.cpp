@@ -4,17 +4,17 @@
 #include "EditorTransformMath.hpp"
 #include "engine/Camera.hpp"
 #include "engine/CollisionLayers.hpp"
-#include "engine/EditorLayoutMapFormat.hpp"
-#include "engine/EngineSystems.hpp"
-#include "engine/Settings.hpp"
-#include "engine/TerrainMesh.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
+#include "engine/EditorLayoutMapFormat.hpp"
+#include "engine/EngineSystems.hpp"
 #include "engine/SceneTags.hpp"
+#include "engine/Settings.hpp"
 #include "engine/systems/CollisionSystem.hpp"
+#include "engine/TerrainMesh.hpp"
 
 #include "raymath.h"
 
@@ -30,14 +30,17 @@ namespace sage::editor
     }
 
     std::optional<entt::entity> EditorPickingService::PickSceneEntity(
-        const Vector2 screenPosition,
-        const entt::entity ignoredEntity) const
+        const Vector2 screenPosition, const entt::entity ignoredEntity) const
     {
         if (!sys->settings->IsPointInRenderViewport(screenPosition)) return std::nullopt;
 
         const auto viewport = sys->settings->GetRenderViewPort();
         const auto renderPosition = sys->settings->ScreenToRenderViewportPosition(screenPosition);
-        const auto ray = GetScreenToWorldRayEx(renderPosition, *sys->camera->getRaylibCam(), viewport.x, viewport.y);
+        const auto ray = GetScreenToWorldRayEx(
+            renderPosition,
+            *sys->camera->getRaylibCam(),
+            static_cast<int>(viewport.x),
+            static_cast<int>(viewport.y));
         auto collisions = sys->collisionSystem->GetCollisionsWithRay(ray, CollisionMask{~0ull});
 
         std::vector<CollisionInfo> objectHits;
@@ -55,17 +58,19 @@ namespace sage::editor
             if (sys->registry->all_of<Terrain, DynamicRenderable>(entity))
             {
                 const auto& renderable = sys->registry->get<DynamicRenderable>(entity);
-                const auto* model = renderable.GetModel();
-                if (!renderable.active || model == nullptr) continue;
+                const auto model = renderable.GetModel();
+                if (!renderable.active || !model) continue;
 
                 const auto& transform = sys->registry->get<sgTransform>(entity);
-                const Matrix modelMatrix = MatrixMultiply(model->transform, GetTerrainWorldMatrix(transform));
+                const Matrix modelMatrix =
+                    MatrixMultiply(model->get().transform, GetTerrainWorldMatrix(transform));
                 RayCollision closestMeshHit{};
                 closestMeshHit.distance = std::numeric_limits<float>::max();
 
-                for (int meshIndex = 0; meshIndex < model->meshCount; ++meshIndex)
+                for (int meshIndex = 0; meshIndex < model->get().meshCount; ++meshIndex)
                 {
-                    const auto meshCollision = GetRayCollisionMesh(ray, model->meshes[meshIndex], modelMatrix);
+                    const auto meshCollision =
+                        GetRayCollisionMesh(ray, model->get().meshes[meshIndex], modelMatrix);
                     if (meshCollision.hit && meshCollision.distance < closestMeshHit.distance)
                     {
                         closestMeshHit = meshCollision;
@@ -78,19 +83,19 @@ namespace sage::editor
             else if (sys->registry->any_of<Renderable>(entity))
             {
                 const auto& renderable = sys->registry->get<Renderable>(entity);
-                const auto* model = renderable.GetModel();
-                if (model == nullptr) continue;
+                const auto model = renderable.GetModel();
+                if (!model) continue;
 
                 const auto& transform = sys->registry->get<sgTransform>(entity);
-                const Matrix entityMatrix =
-                    BuildRenderableEntityMatrix(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
+                const Matrix entityMatrix = BuildRenderableEntityMatrix(
+                    transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale());
                 bool meshHit = false;
                 RayCollision closestMeshHit{};
                 closestMeshHit.distance = std::numeric_limits<float>::max();
 
-                for (int meshIndex = 0; meshIndex < model->GetMeshCount(); ++meshIndex)
+                for (int meshIndex = 0; meshIndex < model->get().GetMeshCount(); ++meshIndex)
                 {
-                    const auto meshCollision = model->GetRayMeshCollision(ray, meshIndex, entityMatrix);
+                    const auto meshCollision = model->get().GetRayMeshCollision(ray, meshIndex, entityMatrix);
                     if (meshCollision.hit && meshCollision.distance < closestMeshHit.distance)
                     {
                         closestMeshHit = meshCollision;
@@ -123,7 +128,7 @@ namespace sage::editor
         };
         for (const auto entity : sys->registry->view<sgTransform, MetaData>())
         {
-            if (!HasTag(sys->registry->get<MetaData>(entity), SpawnPointTag)) continue;
+            if (!HasTag(sys->registry->get<MetaData>(entity), SPAWN_POINT_TAG)) continue;
             const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
             considerMarker(entity, GetRayCollisionSphere(ray, position, 0.5f));
         }

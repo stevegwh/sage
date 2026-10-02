@@ -15,8 +15,8 @@ namespace sage::editor
         const auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen |
                            (leaf ? ImGuiTreeNodeFlags_Leaf : 0) |
                            (selected == id ? ImGuiTreeNodeFlags_Selected : 0);
-        const bool open =
-            ImGui::TreeNodeEx(reinterpret_cast<void*>(std::uintptr_t(id)), flags, "%s", label.c_str());
+        const bool open = ImGui::TreeNodeEx(
+            reinterpret_cast<void*>(static_cast<std::uintptr_t>(id)), flags, "%s", label.c_str());
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", label.c_str());
         if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) selected = id;
         if (kind != UINodeKind::Canvas && ImGui::BeginDragDropSource())

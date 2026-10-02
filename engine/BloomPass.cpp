@@ -1,4 +1,6 @@
 #include "BloomPass.hpp"
+#include "engine/Colors.hpp"
+#include <array>
 
 #include "ResourceManager.hpp"
 #include "ShaderPaths.hpp"
@@ -8,9 +10,9 @@
 namespace sage
 {
     BloomPass::BloomPass(const int width, const int height)
+        : blurShader(ResourceManager::GetInstance().ShaderLoad(std::nullopt, ShaderPath("custom/bloom_blur.fs"))),
+          texelStepLocation(GetShaderLocation(blurShader, "texelStep"))
     {
-        blurShader = ResourceManager::GetInstance().ShaderLoad(nullptr, ShaderPath("custom/bloom_blur.fs").c_str());
-        texelStepLocation = GetShaderLocation(blurShader, "texelStep");
         Resize(width, height);
     }
 
@@ -35,24 +37,35 @@ namespace sage
 
     void BloomPass::Blur() const
     {
-        const float horizontalStep[2] = {1.6f / static_cast<float>(mask.texture.width), 0.0f};
+        const std::array<float, 2> horizontalStep = {1.6f / static_cast<float>(mask.texture.width), 0.0f};
         BeginTextureMode(blurTarget);
-        ClearBackground(BLACK);
+        ClearBackground(sage::colors::BLACK_COLOR);
         BeginShaderMode(blurShader);
-        SetShaderValue(blurShader, texelStepLocation, horizontalStep, SHADER_UNIFORM_VEC2);
-        DrawTextureRec(mask.texture, {0, 0, float(mask.texture.width), -float(mask.texture.height)}, {0, 0}, WHITE);
+        SetShaderValue(blurShader, texelStepLocation, horizontalStep.data(), SHADER_UNIFORM_VEC2);
+        DrawTextureRec(
+            mask.texture,
+            {.x = 0,
+             .y = 0,
+             .width = static_cast<float>(mask.texture.width),
+             .height = -static_cast<float>(mask.texture.height)},
+            {.x = 0, .y = 0},
+            sage::colors::WHITE_COLOR);
         EndShaderMode();
         EndTextureMode();
 
-        const float verticalStep[2] = {0.0f, 1.6f / static_cast<float>(mask.texture.height)};
+        const std::array<float, 2> verticalStep = {0.0f, 1.6f / static_cast<float>(mask.texture.height)};
         BeginTextureMode(mask);
-        ClearBackground(BLACK);
+        ClearBackground(sage::colors::BLACK_COLOR);
         BeginShaderMode(blurShader);
-        SetShaderValue(blurShader, texelStepLocation, verticalStep, SHADER_UNIFORM_VEC2);
+        SetShaderValue(blurShader, texelStepLocation, verticalStep.data(), SHADER_UNIFORM_VEC2);
         DrawTextureRec(
             blurTarget.texture,
-            {0, 0, float(blurTarget.texture.width), -float(blurTarget.texture.height)},
-            {0, 0}, WHITE);
+            {.x = 0,
+             .y = 0,
+             .width = static_cast<float>(blurTarget.texture.width),
+             .height = -static_cast<float>(blurTarget.texture.height)},
+            {.x = 0, .y = 0},
+            sage::colors::WHITE_COLOR);
         EndShaderMode();
         EndTextureMode();
     }

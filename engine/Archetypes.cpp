@@ -38,12 +38,13 @@ namespace sage
             {
                 auto& bucket = bucketIt->second;
                 const entt::entity moved = bucket.back();
-                bucket[location.index] = moved;
+                bucket.at(location.index) = moved;
                 bucket.pop_back();
 
                 if (moved != entity)
                 {
-                    entityLocations[moved] = Location{location.archetypeId, location.index};
+                    entityLocations[moved] =
+                        Location{.archetypeId = location.archetypeId, .index = location.index};
                 }
 
                 if (bucket.empty())
@@ -71,7 +72,7 @@ namespace sage
             }
 
             auto& bucket = entitiesByArchetype[archetype.id];
-            entityLocations[entity] = Location{archetype.id, bucket.size()};
+            entityLocations[entity] = Location{.archetypeId = archetype.id, .index = bucket.size()};
             bucket.push_back(entity);
         }
 

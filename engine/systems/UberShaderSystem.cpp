@@ -31,10 +31,10 @@ namespace sage
         uber.grayscaleLoc = grayscaleLoc;
         uber.colEmissiveLoc = colEmissionLoc;
         auto& renderable = registry->get<Renderable>(entity);
-        auto* model = renderable.GetModel();
-        if (model == nullptr) return;
+        auto model = renderable.GetModel();
+        if (!model) return;
 
-        const auto& rlmodel = model->GetRlModel();
+        const auto& rlmodel = model->get().GetRlModel();
         uber.materialMap.resize(static_cast<std::size_t>(rlmodel.materialCount));
         for (int i = 0; i < rlmodel.materialCount; ++i)
         {
@@ -54,7 +54,7 @@ namespace sage
             }
         }
 
-        model->SetShader(shader);
+        model->get().SetShader(shader);
     }
 
     void UberShaderSystem::onComponentRemoved(entt::entity entity)
@@ -68,7 +68,7 @@ namespace sage
         registry->on_destroy<UberShaderComponent>().connect<&UberShaderSystem::onComponentRemoved>(this);
 
         shader = ResourceManager::GetInstance().ShaderLoad(
-            ShaderPath("custom/ubershader.vs").c_str(), ShaderPath("custom/ubershader.fs").c_str());
+            ShaderPath("custom/ubershader.vs"), ShaderPath("custom/ubershader.fs"));
 
         shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
         colEmissionLoc = GetShaderLocation(shader, "colEmission");

@@ -30,6 +30,10 @@ namespace sage
         void SetSkybox(const std::string& imageKey);
         void ClearSkybox();
         explicit RenderSystem(entt::registry* _registry, LightManager* _lightManager);
+        RenderSystem(const RenderSystem&) = delete;
+        RenderSystem& operator=(const RenderSystem&) = delete;
+        RenderSystem(RenderSystem&&) = delete;
+        RenderSystem& operator=(RenderSystem&&) = delete;
         ~RenderSystem();
     };
 } // namespace sage

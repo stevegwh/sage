@@ -16,7 +16,7 @@ namespace sage
 {
     struct LightSettings
     {
-        Vector4 ambient{0.6f, 0.2f, 0.8f, 1.0f};
+        Vector4 ambient{.x = 0.6f, .y = 0.2f, .z = 0.8f, .w = 1.0f};
         float gamma = 1.9f;
 
         template <class Archive>
@@ -52,43 +52,46 @@ namespace sage
         template <class Archive>
         void save(Archive& archive) const
         {
-            archive(cereal::make_nvp("shadows", shadows),
-                    cereal::make_nvp("bloom", bloom),
-                    cereal::make_nvp("bloom_strength", bloomStrength),
-                    cereal::make_nvp("ambient_occlusion", ambientOcclusion),
-                    cereal::make_nvp("occlusion_radius", occlusionRadius),
-                    cereal::make_nvp("occlusion_strength", occlusionStrength),
-                    cereal::make_nvp("fxaa", fxaa),
-                    cereal::make_nvp("color_grading", colorGrading),
-                    cereal::make_nvp("saturation", saturation),
-                    cereal::make_nvp("contrast", contrast),
-                    cereal::make_nvp("focus_camera_target", focusCameraTarget),
-                    cereal::make_nvp("depth_of_field", depthOfField),
-                    cereal::make_nvp("focus_distance", focusDistance),
-                    cereal::make_nvp("focus_range", focusRange),
-                    cereal::make_nvp("max_blur_radius", maxBlurRadius));
+            archive(
+                cereal::make_nvp("shadows", shadows),
+                cereal::make_nvp("bloom", bloom),
+                cereal::make_nvp("bloom_strength", bloomStrength),
+                cereal::make_nvp("ambient_occlusion", ambientOcclusion),
+                cereal::make_nvp("occlusion_radius", occlusionRadius),
+                cereal::make_nvp("occlusion_strength", occlusionStrength),
+                cereal::make_nvp("fxaa", fxaa),
+                cereal::make_nvp("color_grading", colorGrading),
+                cereal::make_nvp("saturation", saturation),
+                cereal::make_nvp("contrast", contrast),
+                cereal::make_nvp("focus_camera_target", focusCameraTarget),
+                cereal::make_nvp("depth_of_field", depthOfField),
+                cereal::make_nvp("focus_distance", focusDistance),
+                cereal::make_nvp("focus_range", focusRange),
+                cereal::make_nvp("max_blur_radius", maxBlurRadius));
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
-            archive(cereal::make_nvp("shadows", shadows),
-                    cereal::make_nvp("bloom", bloom),
-                    cereal::make_nvp("bloom_strength", bloomStrength),
-                    cereal::make_nvp("ambient_occlusion", ambientOcclusion),
-                    cereal::make_nvp("occlusion_radius", occlusionRadius),
-                    cereal::make_nvp("occlusion_strength", occlusionStrength),
-                    cereal::make_nvp("fxaa", fxaa),
-                    cereal::make_nvp("color_grading", colorGrading),
-                    cereal::make_nvp("saturation", saturation),
-                    cereal::make_nvp("contrast", contrast));
+            archive(
+                cereal::make_nvp("shadows", shadows),
+                cereal::make_nvp("bloom", bloom),
+                cereal::make_nvp("bloom_strength", bloomStrength),
+                cereal::make_nvp("ambient_occlusion", ambientOcclusion),
+                cereal::make_nvp("occlusion_radius", occlusionRadius),
+                cereal::make_nvp("occlusion_strength", occlusionStrength),
+                cereal::make_nvp("fxaa", fxaa),
+                cereal::make_nvp("color_grading", colorGrading),
+                cereal::make_nvp("saturation", saturation),
+                cereal::make_nvp("contrast", contrast));
             // Existing project settings have no depth-of-field fields.
             try
             {
-                archive(cereal::make_nvp("depth_of_field", depthOfField),
-                        cereal::make_nvp("focus_distance", focusDistance),
-                        cereal::make_nvp("focus_range", focusRange),
-                        cereal::make_nvp("max_blur_radius", maxBlurRadius));
+                archive(
+                    cereal::make_nvp("depth_of_field", depthOfField),
+                    cereal::make_nvp("focus_distance", focusDistance),
+                    cereal::make_nvp("focus_range", focusRange),
+                    cereal::make_nvp("max_blur_radius", maxBlurRadius));
             }
             catch (const cereal::Exception&)
             {
@@ -116,8 +119,9 @@ namespace sage
         template <class Archive>
         void save(Archive& archive) const
         {
-            archive(cereal::make_nvp("light_settings", lightSettings),
-                    cereal::make_nvp("graphics_settings", graphicsSettings));
+            archive(
+                cereal::make_nvp("light_settings", lightSettings),
+                cereal::make_nvp("graphics_settings", graphicsSettings));
         }
 
         template <class Archive>
@@ -195,17 +199,17 @@ namespace sage
 
         [[nodiscard]] Vector2 GetScreenSize() const
         {
-            return {static_cast<float>(screenWidth), static_cast<float>(screenHeight)};
+            return {.x = static_cast<float>(screenWidth), .y = static_cast<float>(screenHeight)};
         }
 
         [[nodiscard]] Vector2 GetViewPort() const
         {
-            return {static_cast<float>(viewportWidth), static_cast<float>(viewportHeight)};
+            return {.x = static_cast<float>(viewportWidth), .y = static_cast<float>(viewportHeight)};
         }
 
         [[nodiscard]] Vector2 GetRenderViewPort() const
         {
-            return {static_cast<float>(renderViewportWidth), static_cast<float>(renderViewportHeight)};
+            return {.x = static_cast<float>(renderViewportWidth), .y = static_cast<float>(renderViewportHeight)};
         }
 
         void UpdateViewport()
@@ -226,13 +230,13 @@ namespace sage
             {
                 // Screen is wider than target ratio - fit to height
                 viewportHeight = screenHeight;
-                viewportWidth = static_cast<int>(screenHeight * targetAspectRatio);
+                viewportWidth = static_cast<int>(static_cast<float>(screenHeight) * targetAspectRatio);
             }
             else
             {
                 // Screen is taller than target ratio - fit to width
                 viewportWidth = screenWidth;
-                viewportHeight = static_cast<int>(screenWidth / targetAspectRatio);
+                viewportHeight = static_cast<int>(static_cast<float>(screenWidth) / targetAspectRatio);
             }
             ResetRenderViewportToAppViewport();
         }
@@ -241,8 +245,8 @@ namespace sage
         {
             if (useViewportOffsetOverride) return viewportOffsetOverride;
             return {
-                std::floor((static_cast<float>(screenWidth) - static_cast<float>(viewportWidth)) * 0.5f),
-                std::floor((static_cast<float>(screenHeight) - static_cast<float>(viewportHeight)) * 0.5f)};
+                .x = std::floor((static_cast<float>(screenWidth) - static_cast<float>(viewportWidth)) * 0.5f),
+                .y = std::floor((static_cast<float>(screenHeight) - static_cast<float>(viewportHeight)) * 0.5f)};
         }
 
         // Pins the viewport to an explicit screen rectangle (used by play-in-editor
@@ -254,7 +258,7 @@ namespace sage
             viewportWidth = std::max(1, static_cast<int>(screenRect.width));
             viewportHeight = std::max(1, static_cast<int>(screenRect.height));
             useViewportOffsetOverride = true;
-            viewportOffsetOverride = {screenRect.x, screenRect.y};
+            viewportOffsetOverride = {.x = screenRect.x, .y = screenRect.y};
             ResetRenderViewportToAppViewport();
         }
 
@@ -262,10 +266,10 @@ namespace sage
         {
             const auto viewportOffset = GetViewportOffset();
             return {
-                viewportOffset.x,
-                viewportOffset.y,
-                static_cast<float>(viewportWidth),
-                static_cast<float>(viewportHeight)};
+                .x = viewportOffset.x,
+                .y = viewportOffset.y,
+                .width = static_cast<float>(viewportWidth),
+                .height = static_cast<float>(viewportHeight)};
         }
 
         [[nodiscard]] bool IsPointInViewport(const Vector2 point) const
@@ -276,37 +280,38 @@ namespace sage
         [[nodiscard]] Vector2 ScreenToViewportPosition(const Vector2 point) const
         {
             const auto viewportOffset = GetViewportOffset();
-            return {point.x - viewportOffset.x, point.y - viewportOffset.y};
+            return {.x = point.x - viewportOffset.x, .y = point.y - viewportOffset.y};
         }
 
         [[nodiscard]] Vector2 ViewportToScreenPosition(const Vector2 point) const
         {
             const auto viewportOffset = GetViewportOffset();
-            return {point.x + viewportOffset.x, point.y + viewportOffset.y};
+            return {.x = point.x + viewportOffset.x, .y = point.y + viewportOffset.y};
         }
 
         [[nodiscard]] Vector2 GetRenderViewportOffset() const
         {
-            return {static_cast<float>(renderViewportOffsetX), static_cast<float>(renderViewportOffsetY)};
+            return {
+                .x = static_cast<float>(renderViewportOffsetX), .y = static_cast<float>(renderViewportOffsetY)};
         }
 
         [[nodiscard]] Rectangle GetRenderViewportRect() const
         {
             return {
-                static_cast<float>(renderViewportOffsetX),
-                static_cast<float>(renderViewportOffsetY),
-                static_cast<float>(renderViewportWidth),
-                static_cast<float>(renderViewportHeight)};
+                .x = static_cast<float>(renderViewportOffsetX),
+                .y = static_cast<float>(renderViewportOffsetY),
+                .width = static_cast<float>(renderViewportWidth),
+                .height = static_cast<float>(renderViewportHeight)};
         }
 
         [[nodiscard]] Rectangle GetRenderViewportScreenRect() const
         {
             const auto viewportOffset = GetViewportOffset();
             return {
-                viewportOffset.x + static_cast<float>(renderViewportOffsetX),
-                viewportOffset.y + static_cast<float>(renderViewportOffsetY),
-                static_cast<float>(renderViewportWidth),
-                static_cast<float>(renderViewportHeight)};
+                .x = viewportOffset.x + static_cast<float>(renderViewportOffsetX),
+                .y = viewportOffset.y + static_cast<float>(renderViewportOffsetY),
+                .width = static_cast<float>(renderViewportWidth),
+                .height = static_cast<float>(renderViewportHeight)};
         }
 
         [[nodiscard]] bool IsPointInRenderViewport(const Vector2 point) const
@@ -318,8 +323,8 @@ namespace sage
         {
             const auto viewportOffset = GetViewportOffset();
             return {
-                point.x - viewportOffset.x - static_cast<float>(renderViewportOffsetX),
-                point.y - viewportOffset.y - static_cast<float>(renderViewportOffsetY)};
+                .x = point.x - viewportOffset.x - static_cast<float>(renderViewportOffsetX),
+                .y = point.y - viewportOffset.y - static_cast<float>(renderViewportOffsetY)};
         }
 
         void SetRenderViewport(const int width, const int height, const Vector2 offset)
@@ -350,7 +355,7 @@ namespace sage
 
         [[nodiscard]] float GetCurrentScaleFactor() const
         {
-            return GetScreenScaleFactor(viewportWidth, viewportHeight);
+            return GetScreenScaleFactor(static_cast<float>(viewportWidth), static_cast<float>(viewportHeight));
         }
 
         [[nodiscard]] float ScaleValueMaintainRatio(const float toScale) const
@@ -360,19 +365,19 @@ namespace sage
 
         [[nodiscard]] float ScaleValueHeight(const float toScale) const
         {
-            float scaleY = viewportHeight / TARGET_SCREEN_HEIGHT;
+            float scaleY = static_cast<float>(viewportHeight) / TARGET_SCREEN_HEIGHT;
             return toScale * scaleY;
         }
 
         [[nodiscard]] float ScaleValueWidth(const float toScale) const
         {
-            float scaleX = viewportWidth / TARGET_SCREEN_WIDTH;
+            float scaleX = static_cast<float>(viewportWidth) / TARGET_SCREEN_WIDTH;
             return toScale * scaleX;
         }
 
         [[nodiscard]] Vector2 ScalePos(Vector2 toScale) const
         {
-            return {ScaleValueWidth(toScale.x), ScaleValueHeight(toScale.y)};
+            return {.x = ScaleValueWidth(toScale.x), .y = ScaleValueHeight(toScale.y)};
         }
 
         void ResetToUserDefined()

@@ -15,8 +15,8 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
-#include <utility>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -51,7 +51,7 @@ namespace sage::editor
     template <class T>
     struct LeafField
     {
-        T* data = nullptr;
+        std::optional<std::reference_wrapper<T>> data;
         std::function<void(const T&)> setter;
 
         // Multi-selection vector aggregates only (Vector2/Vector3); unused otherwise.
@@ -67,7 +67,6 @@ namespace sage::editor
     // bespoke CollisionLayer overload (options derived from GetCollisionLayers()).
     struct EnumField
     {
-        void* data = nullptr;
         std::vector<std::string> options;
         std::vector<std::string> displayOptions;
         std::function<std::size_t()> getIndex;
@@ -136,7 +135,7 @@ namespace sage::editor
     namespace detail
     {
         template <class T>
-        inline constexpr bool always_false_v = false;
+        inline constexpr bool ALWAYS_FALSE = false;
     }
 
     // Component-side authors declare a templated `define_editor_options(Inspector&)` method
@@ -164,7 +163,7 @@ namespace sage::editor
             const std::string& label, std::string& value, std::vector<std::string> options, bool editable);
         // The entity being described; lets bespoke fields source options from
         // sibling components (e.g. clipDropdown reads the entity's Animation).
-        entt::registry* contextRegistry_ = nullptr;
+        std::optional<std::reference_wrapper<entt::registry>> contextRegistry_;
         entt::entity contextEntity_ = entt::null;
 
         [[nodiscard]] std::string qualified(const std::string& label) const
@@ -175,19 +174,21 @@ namespace sage::editor
         }
 
         template <class T>
-        void addLeaf(std::string label, T* data, const bool editable)
+        void addLeaf(std::string label, T& data, const bool editable)
         {
             fields_.push_back(
-                {.label = qualified(label), .editable = editable && editableScope_, .value = LeafField<T>{data}});
+                {.label = qualified(label),
+                 .editable = editable && editableScope_,
+                 .value = LeafField<T>{std::ref(data)}});
         }
 
         template <class T>
-        void addLeaf(std::string label, T* data, std::function<void(const T&)> setter)
+        void addLeaf(std::string label, T& data, std::function<void(const T&)> setter)
         {
             fields_.push_back(
                 {.label = qualified(label),
                  .editable = editableScope_,
-                 .value = LeafField<T>{.data = data, .setter = std::move(setter)}});
+                 .value = LeafField<T>{.data = std::ref(data), .setter = std::move(setter)}});
         }
 
       public:
@@ -288,7 +289,8 @@ namespace sage::editor
             fields_.push_back(
                 {.label = qualified(label),
                  .editable = editableScope_,
-                 .value = BoundedCollectionField{count, maximum, std::move(add), std::move(remove)}});
+                 .value = BoundedCollectionField{
+                     .count = count, .maximum = maximum, .add = std::move(add), .remove = std::move(remove)}});
         }
 
         void divider(std::string id)
@@ -299,51 +301,51 @@ namespace sage::editor
         // --- Leaf overloads ------------------------------------------------------------
         void field(std::string label, bool& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, bool& v, std::function<void(const bool&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, int& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, int& v, std::function<void(const int&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, unsigned int& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, unsigned int& v, std::function<void(const unsigned int&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, std::uint64_t& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, std::uint64_t& v, std::function<void(const std::uint64_t&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, float& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, float& v, std::function<void(const float&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, std::string& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, std::string& v, std::function<void(const std::string&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void scriptFile(std::string label, std::string& path, bool rw = true)
         {
@@ -351,7 +353,7 @@ namespace sage::editor
                 {.label = qualified(label),
                  .editable = rw && editableScope_,
                  .scriptFile = true,
-                 .value = LeafField<std::string>{&path}});
+                 .value = LeafField<std::string>{.data = std::ref(path)}});
         }
         void shaderFile(std::string label, std::string& path, const ShaderFileSlot slot, const bool rw)
         {
@@ -359,7 +361,7 @@ namespace sage::editor
                 {.label = qualified(label),
                  .editable = rw && editableScope_,
                  .shaderFile = slot,
-                 .value = LeafField<std::string>{&path}});
+                 .value = LeafField<std::string>{.data = std::ref(path)}});
         }
         void vertexShaderFile(std::string label, std::string& path, bool rw = true)
         {
@@ -373,27 +375,27 @@ namespace sage::editor
         void particleTextureDropdown(const std::string& label, std::string& value, bool rw = true);
         void field(std::string label, Vector2& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, Vector2& v, std::function<void(const Vector2&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, Vector3& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, Vector3& v, std::function<void(const Vector3&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
         void field(std::string label, ::Color& v, bool rw = true)
         {
-            addLeaf(std::move(label), &v, rw);
+            addLeaf(std::move(label), v, rw);
         }
         void field(std::string label, ::Color& v, std::function<void(const ::Color&)> setter)
         {
-            addLeaf(std::move(label), &v, std::move(setter));
+            addLeaf(std::move(label), v, std::move(setter));
         }
 
         // Bespoke: dropdown sourced from GetCollisionLayers(). Stored as EnumField.
@@ -421,9 +423,9 @@ namespace sage::editor
         // EnumField.
         void archetypeDropdown(const std::string& label, sage::Archetype& v, bool rw = true);
 
-        void SetContext(entt::registry* registry, const entt::entity entity)
+        void SetContext(entt::registry& registry, const entt::entity entity)
         {
-            contextRegistry_ = registry;
+            contextRegistry_ = std::ref(registry);
             contextEntity_ = entity;
         }
 
@@ -434,10 +436,10 @@ namespace sage::editor
         template <auto Write>
         void field(std::string label, ::sage::sgTransform::VectorField<Write>& proxy, bool rw = true)
         {
-            // `data` points at the cached Vector3 inside the proxy (used for display only).
+            // `data` refers to the cached Vector3 inside the proxy (used for display only).
             // The const_cast is safe because the setter is always provided for proxy fields;
-            // commitField uses the setter, not the data pointer, for writes.
-            auto* data = const_cast<Vector3*>(&proxy.Get());
+            // commitField uses the setter for writes.
+            auto& data = const_cast<Vector3&>(proxy.Get());
             if (!rw || !editableScope_)
             {
                 addLeaf(std::move(label), data, false);
@@ -453,7 +455,7 @@ namespace sage::editor
             requires std::is_enum_v<E>
         void field(std::string label, E& v, bool rw = true)
         {
-            EnumField e{.data = &v};
+            EnumField e;
             constexpr auto entries = magic_enum::enum_entries<E>();
             e.options.reserve(entries.size());
             for (const auto& [val, name] : entries)
@@ -461,7 +463,7 @@ namespace sage::editor
             e.getIndex = [p = &v]() -> std::size_t { return magic_enum::enum_index(*p).value_or(0); };
             e.setIndex = [p = &v](const std::size_t idx) {
                 constexpr auto vals = magic_enum::enum_values<E>();
-                if (idx < vals.size()) *p = vals[idx];
+                if (idx < vals.size()) *p = vals.at(idx);
             };
             fields_.push_back(
                 {.label = qualified(label), .editable = rw && editableScope_, .value = std::move(e)});
@@ -469,7 +471,7 @@ namespace sage::editor
 
         // --- Composite template --------------------------------------------------------
         template <class T>
-            requires (!std::is_array_v<T> && !std::is_enum_v<T>)
+            requires(!std::is_array_v<T> && !std::is_enum_v<T>)
         void field(std::string label, T& v, bool rw = true)
         {
             const auto savedPrefix = labelPrefix_;
@@ -483,7 +485,7 @@ namespace sage::editor
                 define_editor_options(*this, v);
             else
                 static_assert(
-                    detail::always_false_v<T>,
+                    detail::ALWAYS_FALSE<T>,
                     "ComponentInspector::field: type has no leaf overload, member define_editor_options(), or ADL "
                     "define_editor_options()");
 
@@ -568,24 +570,28 @@ namespace sage::editor
             std::function<void(entt::registry&, entt::entity)> remove;
             std::function<std::string(const entt::registry&, entt::entity)> serialize;
             std::function<void(entt::registry&, entt::entity, const std::string&)> deserialize;
-            std::function<void(entt::registry&, entt::entity,
-                const std::unordered_map<std::uint32_t, entt::entity>&)> resolveReferences;
+            std::function<void(
+                entt::registry&, entt::entity, const std::unordered_map<std::uint32_t, entt::entity>&)>
+                resolveReferences;
         };
 
+        // The entry reference is required by every aggregate initializer, so no default state exists.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-member-init)
         struct DescribedEntry
         {
-            const Entry* entry = nullptr;
+            std::reference_wrapper<const Entry> entry;
             ComponentDescription description;
         };
 
         std::vector<Entry> entries_;
 
-        [[nodiscard]] const Entry* findEntry(EditorComponentId componentId) const;
+        [[nodiscard]] std::optional<std::reference_wrapper<const Entry>> findEntry(
+            EditorComponentId componentId) const;
         [[nodiscard]] std::vector<DescribedEntry> describeEntity(
             entt::registry& registry, entt::entity entity) const;
-        [[nodiscard]] static DescribedEntry* findDescribed(
+        [[nodiscard]] static std::optional<std::reference_wrapper<DescribedEntry>> findDescribed(
             std::vector<DescribedEntry>& described, const Entry& entry);
-        [[nodiscard]] static const DescribedEntry* findDescribed(
+        [[nodiscard]] static std::optional<std::reference_wrapper<const DescribedEntry>> findDescribed(
             const std::vector<DescribedEntry>& described, const Entry& entry);
         [[nodiscard]] ComponentRemovalState canRemoveFromDescription(
             const Entry& target, const std::vector<DescribedEntry>& described, bool multiSelection) const;
@@ -594,9 +600,8 @@ namespace sage::editor
 
       public:
         template <class T>
-        static constexpr bool SupportsComponent = requires(T& component, ComponentInspector& inspector) {
-            component.define_editor_options(inspector);
-        };
+        static constexpr bool SupportsComponent =
+            requires(T& component, ComponentInspector& inspector) { component.define_editor_options(inspector); };
 
         template <class T>
         void Register(std::string displayName, bool removable = false, bool addable = false)
@@ -614,7 +619,7 @@ namespace sage::editor
                 .describe =
                     [](entt::registry& r, const entt::entity e) {
                         ComponentInspector ci;
-                        ci.SetContext(&r, e);
+                        ci.SetContext(r, e);
                         r.template get<T>(e).define_editor_options(ci);
                         return std::move(ci).Take();
                     },
@@ -644,11 +649,11 @@ namespace sage::editor
                 archive(r.template get<T>(e));
                 return stream.str();
             };
-            entry.resolveReferences = [](entt::registry& r, entt::entity e,
-                const std::unordered_map<std::uint32_t, entt::entity>& ids) {
-                if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
-                    if (auto* component = r.template try_get<T>(e)) component->ResolveEntityReferences(ids);
-            };
+            entry.resolveReferences =
+                [](entt::registry& r, entt::entity e, const std::unordered_map<std::uint32_t, entt::entity>& ids) {
+                    if constexpr (requires(T& value) { value.ResolveEntityReferences(ids); })
+                        if (auto* component = r.template try_get<T>(e)) component->ResolveEntityReferences(ids);
+                };
             entry.deserialize = [](entt::registry& r, const entt::entity e, const std::string& data) {
                 std::istringstream stream(data, std::ios::binary);
                 T component{};
@@ -659,7 +664,9 @@ namespace sage::editor
             };
         }
 
-        void ResolvePersistentReferences(entt::registry& registry, entt::entity entity,
+        void ResolvePersistentReferences(
+            entt::registry& registry,
+            entt::entity entity,
             const std::unordered_map<std::uint32_t, entt::entity>& ids) const
         {
             for (const auto& entry : entries_)

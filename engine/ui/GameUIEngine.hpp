@@ -26,8 +26,8 @@ namespace sage
       private:
         struct Hit
         {
-            Window* window = nullptr;
-            Cell* cell = nullptr;
+            std::optional<std::reference_wrapper<Window>> window;
+            std::optional<std::reference_wrapper<Cell>> cell;
         };
 
         Settings* settings;
@@ -41,7 +41,7 @@ namespace sage
         Vector2 pressedWindowPosition{};
         bool draggingWindow = false;
 
-        void bringToFront(Window* window);
+        void bringToFront(Window& window);
         [[nodiscard]] Hit hitTest(Vector2 point) const;
     };
 } // namespace sage

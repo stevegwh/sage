@@ -8,5 +8,5 @@
 
 namespace sage
 {
-    inline constexpr std::array<CollisionLayer, 0> CustomCollisionLayers{};
+    inline constexpr std::array<CollisionLayer, 0> CUSTOM_COLLISION_LAYERS{};
 } // namespace sage

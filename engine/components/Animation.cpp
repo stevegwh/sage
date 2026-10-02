@@ -5,6 +5,7 @@
 #include "Animation.hpp"
 
 #include <algorithm>
+#include <utility>
 
 namespace sage
 {
@@ -17,7 +18,7 @@ namespace sage
     const char* Animation::GetClipName(const unsigned int index) const
     {
         if (index >= clipNames.size()) return "";
-        return clipNames[index].c_str();
+        return clipNames.at(index).c_str();
     }
 
     void Animation::ChangeAnimationByParams(AnimationParams params)
@@ -50,7 +51,7 @@ namespace sage
     {
         auto& a = oneShotMode ? prev : current;
 
-        if (a.index == index) return;
+        if (std::cmp_equal(a.index, index)) return;
         // In one-shot mode this only changes the clip restored later, not the visible pose.
         if (!oneShotMode) StartBlend();
         a.speed = _animSpeed;
@@ -140,14 +141,14 @@ namespace sage
             clipIndexByName.emplace(clipNames.back(), i);
         }
         // A saved clip index can outlive a model re-export; fall back to clip 0 rather than read past the array.
-        if (current.index >= static_cast<unsigned int>(animsCount)) current = {};
+        if (std::cmp_greater_equal(current.index, animsCount)) current = {};
         // blendFrom may also point at a clip that no longer exists.
         blending = false;
         blendTimer = 0.0f;
         blendFrom = {};
     }
 
-    Animation::Animation(const std::string& id) : modelKey(id)
+    Animation::Animation(std::string id) : modelKey(std::move(id))
     {
         LoadAnimations();
     }

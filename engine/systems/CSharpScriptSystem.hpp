@@ -45,6 +45,10 @@ namespace sage
         [[nodiscard]] bool IsAvailable() const;
 
         CSharpScriptSystem(entt::registry* registry, EngineSystems* systems, ManagedScriptingConfig config);
+        CSharpScriptSystem(const CSharpScriptSystem&) = delete;
+        CSharpScriptSystem& operator=(const CSharpScriptSystem&) = delete;
+        CSharpScriptSystem(CSharpScriptSystem&&) = delete;
+        CSharpScriptSystem& operator=(CSharpScriptSystem&&) = delete;
         ~CSharpScriptSystem();
     };
 } // namespace sage

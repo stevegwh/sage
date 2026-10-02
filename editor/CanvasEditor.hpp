@@ -48,7 +48,7 @@ namespace sage::editor
         std::vector<std::filesystem::path> textures;
         std::vector<std::filesystem::path> fonts;
         std::map<std::string, std::filesystem::path> scriptSources;
-        std::string state() const;
+        [[nodiscard]] std::string state() const;
         void restore(const std::string& value);
         void scanAssets();
         void beginEditing();
@@ -76,20 +76,24 @@ namespace sage::editor
 
       public:
         explicit CanvasEditor(CSharpScriptEditorConfig config);
+        CanvasEditor(const CanvasEditor&) = delete;
+        CanvasEditor& operator=(const CanvasEditor&) = delete;
+        CanvasEditor(CanvasEditor&&) = delete;
+        CanvasEditor& operator=(CanvasEditor&&) = delete;
         ~CanvasEditor();
-        bool IsActive() const
+        [[nodiscard]] bool IsActive() const
         {
             return active && workspaceVisible;
         }
-        bool IsDirty() const
+        [[nodiscard]] bool IsDirty() const
         {
             return active && state() != saved;
         }
-        bool HasDocument() const
+        [[nodiscard]] bool HasDocument() const
         {
             return active;
         }
-        const std::filesystem::path& Path() const
+        [[nodiscard]] const std::filesystem::path& Path() const
         {
             return path;
         }
@@ -104,7 +108,7 @@ namespace sage::editor
         void New();
         void Open(const std::filesystem::path& file);
         void Draw();
-        json::Document Inspect() const;
+        [[nodiscard]] json::Document Inspect() const;
         json::Document Command(const json::Value& request);
         void RequestClose();
         void DrawSceneMenu(bool enabled);

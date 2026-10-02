@@ -3,6 +3,7 @@
 #include "CanvasDocument.hpp"
 #include "engine/Event.hpp"
 #include "entt/entt.hpp"
+#include <functional>
 #include <map>
 
 namespace sage
@@ -58,16 +59,20 @@ namespace sage
             Vector2 size;
             std::vector<entt::entity> nodes;
         };
-        entt::registry& registry;
+        std::reference_wrapper<entt::registry> registry;
         std::vector<Instance> instances;
         entt::entity hovered = entt::null;
         entt::entity pressed = entt::null;
         std::vector<entt::entity> pendingDestroy;
         void flushDestroy();
-        CanvasDocument snapshot(const Instance& instance) const;
+        [[nodiscard]] CanvasDocument snapshot(const Instance& instance) const;
 
       public:
         explicit CanvasSystem(entt::registry& registry);
+        CanvasSystem(const CanvasSystem&) = delete;
+        CanvasSystem& operator=(const CanvasSystem&) = delete;
+        CanvasSystem(CanvasSystem&&) = delete;
+        CanvasSystem& operator=(CanvasSystem&&) = delete;
         ~CanvasSystem();
         entt::entity Instantiate(const std::string& path);
         void Destroy(entt::entity root);

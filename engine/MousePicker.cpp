@@ -24,7 +24,11 @@ namespace sage
 
         const auto viewport = sys->settings->GetRenderViewPort();
         const auto renderMousePosition = sys->settings->ScreenToRenderViewportPosition(mousePosition);
-        ray = GetScreenToWorldRayEx(renderMousePosition, *sys->camera->getRaylibCam(), viewport.x, viewport.y);
+        ray = GetScreenToWorldRayEx(
+            renderMousePosition,
+            *sys->camera->getRaylibCam(),
+            static_cast<int>(viewport.x),
+            static_cast<int>(viewport.y));
         auto collisions = sys->collisionSystem->GetCollisionsWithRay(ray, CollisionMask{~0ull});
 
         for (auto it = collisions.begin(); it != collisions.end();)
@@ -45,7 +49,7 @@ namespace sage
         if (collisions.empty()) return;
 
         CollisionSystem::SortCollisionsByDistance(collisions);
-        mouseHitInfo = collisions[0];
+        mouseHitInfo = collisions.at(0);
 
         auto isNavigationSurface = [this](const CollisionInfo& coll) {
             const auto* surface = registry->try_get<NavigationSurface>(coll.collidedEntityId);
@@ -58,7 +62,7 @@ namespace sage
         }
         else
         {
-            const auto navIt = std::find_if(collisions.begin(), collisions.end(), isNavigationSurface);
+            const auto navIt = std::ranges::find_if(collisions, isNavigationSurface);
 
             if (navIt != collisions.end())
             {
@@ -88,10 +92,10 @@ namespace sage
 
             RayCollision closest{};
             closest.distance = std::numeric_limits<float>::max();
-            for (int i = 0; i < renderable.GetModel()->GetMeshCount(); ++i)
+            for (int i = 0; i < renderable.GetModel()->get().GetMeshCount(); ++i)
             {
                 if (const auto meshCollision =
-                        renderable.GetModel()->GetRayMeshCollision(ray, i, transform.GetMatrix());
+                        renderable.GetModel()->get().GetRayMeshCollision(ray, i, transform.GetMatrix());
                     meshCollision.hit && meshCollision.distance < closest.distance)
                 {
                     closest = meshCollision;
@@ -110,15 +114,15 @@ namespace sage
         {
             const auto& renderable = registry->get<DynamicRenderable>(hitInfo.collidedEntityId);
             const auto& transform = registry->get<sgTransform>(hitInfo.collidedEntityId);
-            const auto* model = renderable.GetModel();
-            if (model == nullptr) return false;
+            const auto model = renderable.GetModel();
+            if (!model) return false;
 
-            const Matrix worldMatrix = MatrixMultiply(model->transform, transform.GetMatrix());
+            const Matrix worldMatrix = MatrixMultiply(model->get().transform, transform.GetMatrix());
             RayCollision closest{};
             closest.distance = std::numeric_limits<float>::max();
-            for (int i = 0; i < model->meshCount; ++i)
+            for (int i = 0; i < model->get().meshCount; ++i)
             {
-                if (const auto meshCollision = GetRayCollisionMesh(ray, model->meshes[i], worldMatrix);
+                if (const auto meshCollision = GetRayCollisionMesh(ray, model->get().meshes[i], worldMatrix);
                     meshCollision.hit && meshCollision.distance < closest.distance)
                 {
                     closest = meshCollision;

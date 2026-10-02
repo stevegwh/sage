@@ -26,13 +26,20 @@ namespace sage::editor
             int fontSize,
             const Color color)
         {
-            while (fontSize > 12 && MeasureTextEx(font, text.c_str(), fontSize, 1.0f).x > maxWidth)
+            while (fontSize > 12 &&
+                   MeasureTextEx(font, text.c_str(), static_cast<float>(fontSize), 1.0f).x > maxWidth)
             {
                 --fontSize;
             }
 
-            DrawTextEx(font, text.c_str(), {position.x + 1.0f, position.y + 1.0f}, fontSize, 1.0f, sage::colors::BLACK_COLOR);
-            DrawTextEx(font, text.c_str(), position, fontSize, 1.0f, color);
+            DrawTextEx(
+                font,
+                text.c_str(),
+                {.x = position.x + 1.0f, .y = position.y + 1.0f},
+                static_cast<float>(fontSize),
+                1.0f,
+                sage::colors::BLACK_COLOR);
+            DrawTextEx(font, text.c_str(), position, static_cast<float>(fontSize), 1.0f, color);
         }
 
     } // namespace
@@ -253,10 +260,8 @@ namespace sage::editor
             return static_cast<std::size_t>(std::distance(inspectorComponentOrder.begin(), it));
         };
 
-        std::stable_sort(
-            inspectedComponents.begin(),
-            inspectedComponents.end(),
-            [&](const InspectedComponent& lhs, const InspectedComponent& rhs) {
+        std::ranges::stable_sort(
+            inspectedComponents, [&](const InspectedComponent& lhs, const InspectedComponent& rhs) {
                 const auto lhsIndex = orderPosition(lhs.componentId);
                 const auto rhsIndex = orderPosition(rhs.componentId);
                 if (lhsIndex.has_value() && rhsIndex.has_value()) return *lhsIndex < *rhsIndex;
@@ -272,9 +277,7 @@ namespace sage::editor
         if (dragged == target) return;
 
         syncInspectorComponentOrder();
-        inspectorComponentOrder.erase(
-            std::remove(inspectorComponentOrder.begin(), inspectorComponentOrder.end(), dragged),
-            inspectorComponentOrder.end());
+        std::erase(inspectorComponentOrder, dragged);
 
         auto targetIt = std::ranges::find(inspectorComponentOrder, target);
         if (targetIt == inspectorComponentOrder.end())
@@ -306,30 +309,31 @@ namespace sage::editor
             ResourceManager::GetInstance().FontLoad("resources/fonts/FiraCode/FiraCode-SemiBold.ttf");
 
         const std::string title = sceneHasUnsavedChanges ? sceneNameStatus + " *" : sceneNameStatus;
-        DrawTextFit(titleFont, title, {x, y}, maxWidth, titleSize, EDITOR_TEXT);
+        DrawTextFit(titleFont, title, {.x = x, .y = y}, maxWidth, titleSize, EDITOR_TEXT);
         DrawTextFit(
             metaFont,
             "Mode: " + modeStatus + "  |  Cursor: " + cursorStatus,
-            {x, y + settings->ScaleValueHeight(28.0f)},
+            {.x = x, .y = y + settings->ScaleValueHeight(28.0f)},
             maxWidth,
             metaSize,
-            Color{202, 211, 224, 255});
+            Color{.r = 202, .g = 211, .b = 224, .a = 255});
         DrawTextFit(
             metaFont,
             "Camera: " + cameraStatus,
-            {x, y + settings->ScaleValueHeight(56.0f)},
+            {.x = x, .y = y + settings->ScaleValueHeight(56.0f)},
             maxWidth,
             metaSize,
-            Color{202, 211, 224, 255});
+            Color{.r = 202, .g = 211, .b = 224, .a = 255});
         if (!saveStatus.empty())
         {
             DrawTextFit(
                 metaFont,
                 saveStatus,
-                {x, y + settings->ScaleValueHeight(84.0f)},
+                {.x = x, .y = y + settings->ScaleValueHeight(84.0f)},
                 maxWidth,
                 metaSize,
-                sceneHasUnsavedChanges ? Color{252, 211, 77, 255} : Color{134, 239, 172, 255});
+                sceneHasUnsavedChanges ? Color{.r = 252, .g = 211, .b = 77, .a = 255}
+                                       : Color{.r = 134, .g = 239, .b = 172, .a = 255});
         }
     }
 
@@ -387,7 +391,8 @@ namespace sage::editor
                 if (sceneTabs.canvasOpen)
                 {
                     bool keepOpen = true;
-                    const auto flags = sceneTabs.canvasDirty ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None;
+                    const auto flags =
+                        sceneTabs.canvasDirty ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None;
                     const auto label = sceneTabs.canvasLabel + "###canvasTab";
                     if (ImGui::BeginTabItem(label.c_str(), &keepOpen, flags)) ImGui::EndTabItem();
                     if (ImGui::IsItemClicked()) result.canvasSelected = true;
@@ -456,6 +461,7 @@ namespace sage::editor
         ModelDefaultCallbacks callbacks)
         : settings(_settings),
           dockLayout(_dockLayout),
+          assetEntries(assets),
           onAssetSelectedCb(onAssetSelected),
           onAssetRenameCb(onAssetRename),
           onFlatpackSelectedCb(onFlatpackSelected),
@@ -466,7 +472,6 @@ namespace sage::editor
           onHierarchyMoveCb(onHierarchyMove),
           modelDefaultCallbacks(std::move(callbacks))
     {
-        assetEntries = assets;
         assetThumbnails.resize(assetEntries.size());
         auto& resources = ResourceManager::GetInstance();
         materialKeys = resources.GetMaterialKeys();

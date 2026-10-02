@@ -71,7 +71,7 @@ namespace sage
     float GetRandomFloat(float min, float max)
     {
         float range = max - min;
-        float n = (float)GetRandomValue(0, RAND_MAX) / (float)RAND_MAX;
+        float n = static_cast<float>(GetRandomValue(0, RAND_MAX)) / static_cast<float>(RAND_MAX);
         return n * range + min;
     }
 
@@ -79,7 +79,7 @@ namespace sage
     Vector3 RotateV3(const Vector3& vec, float angleX, float angleY, float angleZ)
     {
         // Implement or use existing functions to rotate a Vector3 around the X, Y, and Z axes
-        Matrix rotationMatrix = MatrixRotateXYZ(Vector3{angleX, angleY, angleZ});
+        Matrix rotationMatrix = MatrixRotateXYZ(Vector3{.x = angleX, .y = angleY, .z = angleZ});
         return Vector3Transform(vec, rotationMatrix);
     }
 
@@ -87,12 +87,20 @@ namespace sage
     // The interpolation is linear.
     Color LinearFade(Color c1, Color c2, float fraction)
     {
-        auto newr = (unsigned char)((float)((int)c2.r - (int)c1.r) * fraction + (float)c1.r);
-        auto newg = (unsigned char)((float)((int)c2.g - (int)c1.g) * fraction + (float)c1.g);
-        auto newb = (unsigned char)((float)((int)c2.b - (int)c1.b) * fraction + (float)c1.b);
-        auto newa = (unsigned char)((float)((int)c2.a - (int)c1.a) * fraction + (float)c1.a);
+        auto newr = static_cast<unsigned char>(
+            static_cast<float>(static_cast<int>(c2.r) - static_cast<int>(c1.r)) * fraction +
+            static_cast<float>(c1.r));
+        auto newg = static_cast<unsigned char>(
+            static_cast<float>(static_cast<int>(c2.g) - static_cast<int>(c1.g)) * fraction +
+            static_cast<float>(c1.g));
+        auto newb = static_cast<unsigned char>(
+            static_cast<float>(static_cast<int>(c2.b) - static_cast<int>(c1.b)) * fraction +
+            static_cast<float>(c1.b));
+        auto newa = static_cast<unsigned char>(
+            static_cast<float>(static_cast<int>(c2.a) - static_cast<int>(c1.a)) * fraction +
+            static_cast<float>(c1.a));
 
-        Color c = {newr, newg, newb, newa};
+        Color c = {.r = newr, .g = newg, .b = newb, .a = newa};
 
         return c;
     }
@@ -104,14 +112,10 @@ namespace sage
 
     // Particle constructor
     Particle::Particle(const std::function<bool(Particle*)>& deactivatorFunc)
-        : origin({0, 0, 0}),
-          position({0, 0, 0}),
-          velocity({0, 0, 0}),
-          externalAcceleration({0, 0, 0}),
-          originAcceleration(0),
-          age(0),
-          ttl(0),
-          active(false),
+        : origin({.x = 0, .y = 0, .z = 0}),
+          position({.x = 0, .y = 0, .z = 0}),
+          velocity({.x = 0, .y = 0, .z = 0}),
+          externalAcceleration({.x = 0, .y = 0, .z = 0}),
           particle_Deactivator(deactivatorFunc ? deactivatorFunc : Particle_DeactivatorAge)
     {
     }
@@ -125,9 +129,12 @@ namespace sage
         Vector3 direction = Vector3Normalize(cfg.direction);
 
         // Get a small random angle to find a random velocity direction.
-        float randaX = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
-        float randaY = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
-        float randaZ = GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        float randaX =
+            GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        float randaY =
+            GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        float randaZ =
+            GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
 
         // Rotate base direction with the given angles.
         direction = RotateV3(direction, randaX, randaY, randaZ);
@@ -193,10 +200,10 @@ namespace sage
     }
 
     // Emitter constructor
-    Emitter::Emitter(EmitterConfig cfg) : config(std::move(cfg)), mustEmit(0), isEmitting(false)
+    Emitter::Emitter(EmitterConfig cfg) : config(std::move(cfg))
     {
-        offset.x = config.texture.width / 2;
-        offset.y = config.texture.height / 2;
+        offset.x = static_cast<float>(config.texture.width / 2);
+        offset.y = static_cast<float>(config.texture.height / 2);
         particles.reserve(config.capacity);
         for (size_t i = 0; i < config.capacity; i++)
         {
@@ -221,11 +228,13 @@ namespace sage
         }
 
         config = cfg;
-        offset = {config.texture.width / 2.0f, config.texture.height / 2.0f};
+        offset = {
+            .x = static_cast<float>(config.texture.width) / 2.0f,
+            .y = static_cast<float>(config.texture.height) / 2.0f};
 
         for (size_t i = 0; i < config.capacity; i++)
         {
-            particles[i]->particle_Deactivator = config.particle_Deactivator;
+            particles.at(i)->particle_Deactivator = config.particle_Deactivator;
         }
 
         return true;
@@ -253,14 +262,14 @@ namespace sage
 
         for (size_t i = 0; i < config.capacity; i++)
         {
-            auto& p = particles[i];
+            auto& p = particles.at(i);
             if (!p->active)
             {
                 p->Init(config);
                 p->position = config.origin;
                 emitted++;
             }
-            if (emitted >= amount)
+            if (std::cmp_greater_equal(emitted, amount))
             {
                 return;
             }
@@ -275,14 +284,14 @@ namespace sage
 
         if (isEmitting)
         {
-            mustEmit += dt * (float)config.emissionRate;
+            mustEmit += dt * static_cast<float>(config.emissionRate);
             mustEmit = std::min(mustEmit, static_cast<float>(config.capacity));
-            emitNow = (size_t)mustEmit; // floor
+            emitNow = static_cast<size_t>(mustEmit); // floor
         }
 
         for (size_t i = 0; i < config.capacity; i++)
         {
-            auto& p = particles[i];
+            auto& p = particles.at(i);
             if (p->active)
             {
                 p->Update(dt);
@@ -303,13 +312,13 @@ namespace sage
         std::vector<Particle*> activeParticles;
         for (size_t i = 0; i < config.capacity; i++)
         {
-            if (particles[i]->active)
+            if (particles.at(i)->active)
             {
-                activeParticles.push_back(particles[i].get());
+                activeParticles.push_back(particles.at(i).get());
             }
         }
 
-        std::sort(activeParticles.begin(), activeParticles.end(), [&camera](const Particle* a, const Particle* b) {
+        std::ranges::sort(activeParticles, [&camera](const Particle* a, const Particle* b) {
             return Vector3Distance(a->position, camera->position) < Vector3Distance(b->position, camera->position);
         });
 
@@ -338,15 +347,13 @@ namespace sage
         std::vector<Particle*> activeParticles;
         for (size_t i = 0; i < config.capacity; i++)
         {
-            if (particles[i]->active)
+            if (particles.at(i)->active)
             {
-                activeParticles.push_back(particles[i].get());
+                activeParticles.push_back(particles.at(i).get());
             }
         }
 
-        std::sort(activeParticles.begin(), activeParticles.end(), [](const Particle* a, const Particle* b) {
-            return a->age < b->age;
-        });
+        std::ranges::sort(activeParticles, [](const Particle* a, const Particle* b) { return a->age < b->age; });
 
         BeginBlendMode(config.blendMode);
         for (const auto& p : activeParticles)
@@ -393,8 +400,7 @@ namespace sage
     }
 
     // ParticleSystem constructor
-    ParticleSystem::ParticleSystem(Camera* _camera)
-        : camera(_camera), active(false), length(0), capacity(1), origin(Vector3{0, 0, 0})
+    ParticleSystem::ParticleSystem(Camera& _camera) : camera(_camera)
     {
         emitters.reserve(capacity);
     }
@@ -404,7 +410,7 @@ namespace sage
     {
         for (size_t i = 0; i < length; i++)
         {
-            emitters[i]->Update(dt);
+            emitters.at(i)->Update(dt);
         }
     }
 
@@ -434,11 +440,11 @@ namespace sage
     {
         for (size_t i = 0; i < length; i++)
         {
-            if (emitters[i].get() == emitter)
+            if (emitters.at(i).get() == emitter)
             {
                 // Remove this emitter by replacing its pointer with the
                 // last pointer, if it is not the only Emitter.
-                std::swap(emitters[i], emitters.back());
+                std::swap(emitters.at(i), emitters.back());
                 emitters.pop_back();
                 length--;
                 return true;
@@ -505,15 +511,15 @@ namespace sage
             }
         }
 
-        std::sort(activeEmitters.begin(), activeEmitters.end(), [this](const Emitter* a, const Emitter* b) {
-            return Vector3Distance(a->config.origin, camera->position) <
-                   Vector3Distance(b->config.origin, camera->position);
+        std::ranges::sort(activeEmitters, [this](const Emitter* a, const Emitter* b) {
+            return Vector3Distance(a->config.origin, camera.get().position) <
+                   Vector3Distance(b->config.origin, camera.get().position);
         });
 
         {
             for (auto& emitter : activeEmitters)
             {
-                emitter->Draw(camera);
+                emitter->Draw(&camera.get());
             }
         }
     }
@@ -528,14 +534,14 @@ namespace sage
             }
         }
 
-        std::sort(activeEmitters.begin(), activeEmitters.end(), [this](const Emitter* a, const Emitter* b) {
-            return Vector3Distance(a->config.origin, camera->position) <
-                   Vector3Distance(b->config.origin, camera->position);
+        std::ranges::sort(activeEmitters, [this](const Emitter* a, const Emitter* b) {
+            return Vector3Distance(a->config.origin, camera.get().position) <
+                   Vector3Distance(b->config.origin, camera.get().position);
         });
 
         for (auto& emitter : activeEmitters)
         {
-            emitter->Draw(camera, shader);
+            emitter->Draw(&camera.get(), shader);
         }
     }
 
@@ -544,7 +550,7 @@ namespace sage
 
         for (auto& emitter : emitters)
         {
-            emitter->DrawNearestFirst(camera);
+            emitter->DrawNearestFirst(&camera.get());
         }
     }
 
@@ -559,14 +565,14 @@ namespace sage
             }
         }
 
-        std::sort(activeEmitters.begin(), activeEmitters.end(), [this](const Emitter* a, const Emitter* b) {
-            return Vector3Distance(a->config.origin, camera->position) <
-                   Vector3Distance(b->config.origin, camera->position);
+        std::ranges::sort(activeEmitters, [this](const Emitter* a, const Emitter* b) {
+            return Vector3Distance(a->config.origin, camera.get().position) <
+                   Vector3Distance(b->config.origin, camera.get().position);
         });
 
         for (auto& emitter : activeEmitters)
         {
-            emitter->DrawNearestFirst(camera, shader);
+            emitter->DrawNearestFirst(&camera.get(), shader);
         }
     }
 
@@ -574,7 +580,7 @@ namespace sage
     {
         for (auto& emitter : emitters)
         {
-            emitter->DrawOldestFirst(camera);
+            emitter->DrawOldestFirst(&camera.get());
         }
     }
 
@@ -589,14 +595,14 @@ namespace sage
             }
         }
 
-        std::sort(activeEmitters.begin(), activeEmitters.end(), [this](const Emitter* a, const Emitter* b) {
-            return Vector3Distance(a->config.origin, camera->position) <
-                   Vector3Distance(b->config.origin, camera->position);
+        std::ranges::sort(activeEmitters, [this](const Emitter* a, const Emitter* b) {
+            return Vector3Distance(a->config.origin, camera.get().position) <
+                   Vector3Distance(b->config.origin, camera.get().position);
         });
 
         for (auto& emitter : activeEmitters)
         {
-            emitter->DrawOldestFirst(camera, shader);
+            emitter->DrawOldestFirst(&camera.get(), shader);
         }
     }
 } // namespace sage

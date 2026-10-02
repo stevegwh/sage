@@ -119,7 +119,7 @@ namespace sage
             i.template requiresComponent<Renderable>();
             for (std::size_t n = 0; n < clipNames.size(); ++n)
             {
-                i.field("Clip " + std::to_string(n), clipNames[n], false);
+                i.field("Clip " + std::to_string(n), clipNames.at(n), false);
             }
         }
 
@@ -155,9 +155,12 @@ namespace sage
         }
 
         Animation() = default;
+        ~Animation() = default;
+        Animation(Animation&&) = delete;
+        Animation& operator=(Animation&&) = delete;
         Animation(const Animation&) = delete;
         Animation& operator=(const Animation&) = delete;
-        explicit Animation(const std::string& id);
+        explicit Animation(std::string id);
 
       private:
         void LoadAnimations();

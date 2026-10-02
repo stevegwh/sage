@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ranges>
 #include <utility>
 #include <vector>
 
@@ -28,6 +29,10 @@ namespace sage
                     static_cast<int>(std::max(0.0f, effective.width)),
                     static_cast<int>(std::max(0.0f, effective.height)));
             }
+            ScissorScope(const ScissorScope&) = delete;
+            ScissorScope& operator=(const ScissorScope&) = delete;
+            ScissorScope(ScissorScope&&) = delete;
+            ScissorScope& operator=(ScissorScope&&) = delete;
 
             ~ScissorScope()
             {
@@ -59,33 +64,35 @@ namespace sage
                 const float top = std::max(first.y, second.y);
                 const float right = std::min(first.x + first.width, second.x + second.width);
                 const float bottom = std::min(first.y + first.height, second.y + second.height);
-                return {left, top, std::max(0.0f, right - left), std::max(0.0f, bottom - top)};
+                return {
+                    .x = left,
+                    .y = top,
+                    .width = std::max(0.0f, right - left),
+                    .height = std::max(0.0f, bottom - top)};
             }
         };
 
         Padding scaled(const Padding padding, const float scale)
         {
             return {
-                padding.top * scale,
-                padding.bottom * scale,
-                padding.left * scale,
-                padding.right * scale};
+                .top = padding.top * scale,
+                .bottom = padding.bottom * scale,
+                .left = padding.left * scale,
+                .right = padding.right * scale};
         }
 
         Rectangle inset(const Rectangle rectangle, const Padding padding)
         {
             return {
-                rectangle.x + padding.left,
-                rectangle.y + padding.top,
-                std::max(0.0f, rectangle.width - padding.left - padding.right),
-                std::max(0.0f, rectangle.height - padding.top - padding.bottom)};
+                .x = rectangle.x + padding.left,
+                .y = rectangle.y + padding.top,
+                .width = std::max(0.0f, rectangle.width - padding.left - padding.right),
+                .height = std::max(0.0f, rectangle.height - padding.top - padding.bottom)};
         }
 
         template <typename Item, typename SizeOf>
         std::vector<float> distribute(
-            const std::vector<std::unique_ptr<Item>>& items,
-            const float available,
-            SizeOf sizeOf)
+            const std::vector<std::unique_ptr<Item>>& items, const float available, SizeOf sizeOf)
         {
             float requestedPercent = 0;
             std::size_t fillCount = 0;
@@ -107,9 +114,9 @@ namespace sage
             {
                 const Size size = sizeOf(*item);
                 result.push_back(
-                    size
-                        ? available * (std::clamp(size->value, 0.0f, 100.0f) / 100.0f)
-                        : fillCount > 0 ? remaining / fillCount : 0.0f);
+                    size            ? available * (std::clamp(size->value, 0.0f, 100.0f) / 100.0f)
+                    : fillCount > 0 ? remaining / static_cast<float>(fillCount)
+                                    : 0.0f);
             }
             return result;
         }
@@ -135,8 +142,11 @@ namespace sage
             float x = bounds.x;
             for (std::size_t index = 0; index < row.cells.size(); ++index)
             {
-                layoutCell(*row.cells[index], {x, bounds.y, widths[index], bounds.height}, scale);
-                x += widths[index] + gap;
+                layoutCell(
+                    *row.cells.at(index),
+                    {.x = x, .y = bounds.y, .width = widths.at(index), .height = bounds.height},
+                    scale);
+                x += widths.at(index) + gap;
             }
         }
 
@@ -146,32 +156,37 @@ namespace sage
             const float gap = std::max(0.0f, table.gap * scale);
             const float gaps = gap * static_cast<float>(table.rows.empty() ? 0 : table.rows.size() - 1);
             const float availableHeight = std::max(0.0f, bounds.height - gaps);
-            const auto heights = distribute(table.rows, availableHeight, [](const Row& row) { return row.height; });
+            const auto heights =
+                distribute(table.rows, availableHeight, [](const Row& row) { return row.height; });
 
             float y = bounds.y;
             for (std::size_t index = 0; index < table.rows.size(); ++index)
             {
-                layoutRow(*table.rows[index], {bounds.x, y, bounds.width, heights[index]}, gap, scale);
-                y += heights[index] + gap;
+                layoutRow(
+                    *table.rows.at(index),
+                    {.x = bounds.x, .y = y, .width = bounds.width, .height = heights.at(index)},
+                    gap,
+                    scale);
+                y += heights.at(index) + gap;
             }
         }
 
-        Cell* hitTest(Table& table, const Vector2 point)
+        std::optional<std::reference_wrapper<Cell>> hitTest(Table& table, const Vector2 point)
         {
-            for (auto row = table.rows.rbegin(); row != table.rows.rend(); ++row)
+            for (auto& row : std::views::reverse(table.rows))
             {
-                for (auto cell = (*row)->cells.rbegin(); cell != (*row)->cells.rend(); ++cell)
+                for (const auto& cell : row->cells | std::views::reverse)
                 {
-                    Cell& candidate = **cell;
+                    Cell& candidate = *cell;
                     if (!CheckCollisionPointRec(point, candidate.bounds)) continue;
                     if (auto* table = std::get_if<std::unique_ptr<Table>>(&candidate.content))
                     {
-                        if (Cell* nested = hitTest(**table, point)) return nested;
+                        if (auto nested = hitTest(**table, point)) return nested;
                     }
-                    return &candidate;
+                    return std::ref(candidate);
                 }
             }
-            return nullptr;
+            return std::nullopt;
         }
 
         Rectangle contentBounds(const Cell& cell, const float scale)
@@ -205,7 +220,7 @@ namespace sage
                 y += available.height - measured.y;
 
             const ScissorScope clip{available};
-            DrawTextEx(font, text.c_str(), {x, y}, fontSize, spacing, cell.style.textColor);
+            DrawTextEx(font, text.c_str(), {.x = x, .y = y}, fontSize, spacing, cell.style.textColor);
         }
 
         void drawImage(const CellImage& imageContent, const Cell& cell, const float scale)
@@ -213,7 +228,7 @@ namespace sage
             const Texture image = imageContent.texture;
             if (image.id == 0 || image.width <= 0 || image.height <= 0) return;
             Rectangle destination = contentBounds(cell, scale);
-            const float imageRatio = static_cast<float>(image.width) / image.height;
+            const float imageRatio = static_cast<float>(image.width) / static_cast<float>(image.height);
             const float destinationRatio = destination.height > 0 ? destination.width / destination.height : 0;
             if (destinationRatio > imageRatio)
             {
@@ -229,11 +244,11 @@ namespace sage
             }
             DrawTexturePro(
                 image,
-                {0,
-                 0.0f,
-                 static_cast<float>(image.width),
-                 imageContent.flipVertically ? -static_cast<float>(image.height)
-                                             : static_cast<float>(image.height)},
+                {.x = 0,
+                 .y = 0.0f,
+                 .width = static_cast<float>(image.width),
+                 .height = imageContent.flipVertically ? -static_cast<float>(image.height)
+                                                       : static_cast<float>(image.height)},
                 destination,
                 {},
                 0,
@@ -261,11 +276,21 @@ namespace sage
                         const auto texture = cell->style.backgroundTexture;
                         auto source = cell->style.backgroundSource;
                         if (source.width <= 0 || source.height <= 0)
-                            source = {0, 0, float(texture.width), float(texture.height)};
-                        DrawTexturePro(texture, source, cell->bounds, {}, 0,
-                                       background.a > 0 ? background : sage::colors::WHITE_COLOR);
+                            source = {
+                                .x = 0,
+                                .y = 0,
+                                .width = static_cast<float>(texture.width),
+                                .height = static_cast<float>(texture.height)};
+                        DrawTexturePro(
+                            texture,
+                            source,
+                            cell->bounds,
+                            {},
+                            0,
+                            background.a > 0 ? background : sage::colors::WHITE_COLOR);
                     }
-                    else if (background.a > 0) DrawRectangleRec(cell->bounds, background);
+                    else if (background.a > 0)
+                        DrawRectangleRec(cell->bounds, background);
                     if (cell->style.borderWidth > 0 && cell->style.border.a > 0)
                         DrawRectangleLinesEx(cell->bounds, cell->style.borderWidth * scale, cell->style.border);
 
@@ -301,13 +326,13 @@ namespace sage
 
     UITheme::UITheme()
     {
-        window.background = Color{24, 29, 38, 245};
-        window.padding = {14, 14, 14, 14};
+        window.background = Color{.r = 24, .g = 29, .b = 38, .a = 245};
+        window.padding = {.top = 14, .bottom = 14, .left = 14, .right = 14};
 
-        button.background = Color{246, 248, 251, 255};
-        button.hoveredBackground = Color{236, 242, 252, 255};
-        button.pressedBackground = Color{219, 234, 254, 255};
-        button.border = Color{151, 164, 184, 255};
+        button.background = Color{.r = 246, .g = 248, .b = 251, .a = 255};
+        button.hoveredBackground = Color{.r = 236, .g = 242, .b = 252, .a = 255};
+        button.pressedBackground = Color{.r = 219, .g = 234, .b = 254, .a = 255};
+        button.border = Color{.r = 151, .g = 164, .b = 184, .a = 255};
         button.borderWidth = 1;
         button.horizontalAlignment = HorizontalAlignment::CENTER;
         button.textColor = sage::colors::BLACK_COLOR;
@@ -331,7 +356,7 @@ namespace sage
 
     Cell& Cell::Image(const Texture texture, const bool flipVertically)
     {
-        content = CellImage{texture, flipVertically};
+        content = CellImage{.texture = texture, .flipVertically = flipVertically};
         return *this;
     }
 
@@ -433,10 +458,10 @@ namespace sage
     void Window::Layout(const Settings& settings)
     {
         LayoutAt(
-            {settings.ScaleValueWidth(designBounds.x),
-             settings.ScaleValueHeight(designBounds.y),
-             settings.ScaleValueWidth(designBounds.width),
-             settings.ScaleValueHeight(designBounds.height)},
+            {.x = settings.ScaleValueWidth(designBounds.x),
+             .y = settings.ScaleValueHeight(designBounds.y),
+             .width = settings.ScaleValueWidth(designBounds.width),
+             .height = settings.ScaleValueHeight(designBounds.height)},
             settings.GetCurrentScaleFactor());
     }
 
@@ -453,7 +478,7 @@ namespace sage
         designBounds.y = std::clamp(designBounds.y, 0.0f, Settings::TARGET_SCREEN_HEIGHT - designBounds.height);
     }
 
-    Cell* Window::HitTest(const Vector2 point)
+    std::optional<std::reference_wrapper<Cell>> Window::HitTest(const Vector2 point)
     {
         return hitTest(root, point);
     }
@@ -468,14 +493,12 @@ namespace sage
         {
             auto source = style.backgroundSource;
             if (source.width <= 0 || source.height <= 0)
-                source = {0, 0, float(style.backgroundTexture.width), float(style.backgroundTexture.height)};
-            DrawTexturePro(
-                style.backgroundTexture,
-                source,
-                bounds,
-                {},
-                0,
-                sage::colors::WHITE_COLOR);
+                source = {
+                    .x = 0,
+                    .y = 0,
+                    .width = static_cast<float>(style.backgroundTexture.width),
+                    .height = static_cast<float>(style.backgroundTexture.height)};
+            DrawTexturePro(style.backgroundTexture, source, bounds, {}, 0, sage::colors::WHITE_COLOR);
         }
 
         const ScissorScope clip{bounds};

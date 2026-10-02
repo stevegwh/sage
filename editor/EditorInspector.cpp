@@ -38,10 +38,10 @@ namespace sage::editor
 
             const auto* firstRenderable = registry.try_get<Renderable>(entities.front());
             if (firstRenderable == nullptr) return std::nullopt;
-            const auto* firstModel = firstRenderable->GetModel();
+            const auto firstModel = firstRenderable->GetModel();
 
             ModelPickerField picker{
-                .currentKey = firstModel != nullptr ? firstModel->GetKey() : std::string{},
+                .currentKey = firstModel.has_value() ? firstModel->get().GetKey() : std::string{},
                 .options = ResourceManager::GetInstance().GetModelKeys(),
                 .animationCompatibleOnly = std::ranges::any_of(entities, [&](const entt::entity entity) {
                     return registry.valid(entity) && registry.any_of<Animation>(entity);
@@ -50,8 +50,8 @@ namespace sage::editor
             picker.mixed = std::ranges::any_of(entities, [&](const entt::entity entity) {
                 if (!registry.valid(entity)) return true;
                 const auto* renderable = registry.try_get<Renderable>(entity);
-                const auto* model = renderable ? renderable->GetModel() : nullptr;
-                return model == nullptr || model->GetKey() != picker.currentKey;
+                const auto model = renderable ? renderable->GetModel() : std::nullopt;
+                return !model || model->get().GetKey() != picker.currentKey;
             });
 
             if (picker.animationCompatibleOnly)
@@ -71,13 +71,13 @@ namespace sage::editor
         {
             if (entities.empty() || !registry.valid(entities.front())) return {};
             const auto* first = registry.try_get<Renderable>(entities.front());
-            if (first == nullptr || first->GetModel() == nullptr) return {};
+            if (first == nullptr || !first->GetModel()) return {};
 
             const auto& firstKeys = first->GetMaterialKeys();
             if (std::ranges::any_of(entities, [&](const entt::entity entity) {
                     const auto* renderable =
                         registry.valid(entity) ? registry.try_get<Renderable>(entity) : nullptr;
-                    return renderable == nullptr || renderable->GetModel() == nullptr ||
+                    return renderable == nullptr || !renderable->GetModel() ||
                            renderable->GetMaterialKeys().size() != firstKeys.size();
                 }))
             {
@@ -89,9 +89,9 @@ namespace sage::editor
             pickers.reserve(firstKeys.size());
             for (unsigned int i = 0; i < firstKeys.size(); ++i)
             {
-                MaterialPickerField picker{.materialIndex = i, .currentKey = firstKeys[i], .options = options};
+                MaterialPickerField picker{.materialIndex = i, .currentKey = firstKeys.at(i), .options = options};
                 picker.mixed = std::ranges::any_of(entities, [&](const entt::entity entity) {
-                    return registry.get<Renderable>(entity).GetMaterialKeys()[i] != picker.currentKey;
+                    return registry.get<Renderable>(entity).GetMaterialKeys().at(i) != picker.currentKey;
                 });
                 pickers.push_back(std::move(picker));
             }
@@ -107,27 +107,28 @@ namespace sage::editor
         template <class T>
         bool leafValueEquals(const LeafField<T>& lhs, const LeafField<T>& rhs)
         {
-            if (lhs.data == nullptr || rhs.data == nullptr) return lhs.data == rhs.data;
-            return *lhs.data == *rhs.data;
+            if (!lhs.data || !rhs.data) return lhs.data.has_value() == rhs.data.has_value();
+            return lhs.data->get() == rhs.data->get();
         }
 
         bool leafValueEquals(const LeafField<Vector2>& lhs, const LeafField<Vector2>& rhs)
         {
-            if (lhs.data == nullptr || rhs.data == nullptr) return lhs.data == rhs.data;
-            return lhs.data->x == rhs.data->x && lhs.data->y == rhs.data->y;
+            if (!lhs.data || !rhs.data) return lhs.data.has_value() == rhs.data.has_value();
+            return lhs.data->get().x == rhs.data->get().x && lhs.data->get().y == rhs.data->get().y;
         }
 
         bool leafValueEquals(const LeafField<Vector3>& lhs, const LeafField<Vector3>& rhs)
         {
-            if (lhs.data == nullptr || rhs.data == nullptr) return lhs.data == rhs.data;
-            return lhs.data->x == rhs.data->x && lhs.data->y == rhs.data->y && lhs.data->z == rhs.data->z;
+            if (!lhs.data || !rhs.data) return lhs.data.has_value() == rhs.data.has_value();
+            return lhs.data->get().x == rhs.data->get().x && lhs.data->get().y == rhs.data->get().y &&
+                   lhs.data->get().z == rhs.data->get().z;
         }
 
         bool leafValueEquals(const LeafField<::Color>& lhs, const LeafField<::Color>& rhs)
         {
-            if (lhs.data == nullptr || rhs.data == nullptr) return lhs.data == rhs.data;
-            return lhs.data->r == rhs.data->r && lhs.data->g == rhs.data->g && lhs.data->b == rhs.data->b &&
-                   lhs.data->a == rhs.data->a;
+            if (!lhs.data || !rhs.data) return lhs.data.has_value() == rhs.data.has_value();
+            return lhs.data->get().r == rhs.data->get().r && lhs.data->get().g == rhs.data->get().g &&
+                   lhs.data->get().b == rhs.data->get().b && lhs.data->get().a == rhs.data->get().a;
         }
 
         template <class T>
@@ -135,8 +136,8 @@ namespace sage::editor
         {
             if (field.setter)
                 field.setter(value);
-            else if (field.data != nullptr)
-                *field.data = value;
+            else if (field.data.has_value())
+                field.data->get() = value;
         }
 
         // Fills the per-axis multi-selection data on a vector aggregate: a bitmask of
@@ -151,17 +152,17 @@ namespace sage::editor
         {
             for (std::size_t axis = 0; axis < N; ++axis)
             {
-                const float base = leafFields.front().data ? leafFields.front().data->*axes[axis] : 0.0f;
+                const float base = leafFields.front().data ? leafFields.front().data->get().*axes.at(axis) : 0.0f;
                 const bool differs = std::ranges::any_of(leafFields, [&](const LeafField<VecT>& field) {
-                    return (field.data ? field.data->*axes[axis] : 0.0f) != base;
+                    return (field.data ? field.data->get().*axes.at(axis) : 0.0f) != base;
                 });
                 if (differs) aggregate.mixedComponents |= 1u << axis;
             }
             aggregate.componentSetter = [leafFields, axes](const std::size_t axis, const float value) {
                 for (const auto& field : leafFields)
                 {
-                    VecT v = field.data ? *field.data : VecT{};
-                    v.*axes[axis] = value;
+                    VecT v = field.data ? field.data->get() : VecT{};
+                    v.*axes.at(axis) = value;
                     commitLeaf(field, v);
                 }
             };
@@ -302,7 +303,7 @@ namespace sage::editor
 
     void ComponentInspector::field(const std::string& label, sage::CollisionLayer& v, const bool ed)
     {
-        EnumField e{.data = &v};
+        EnumField e;
         const auto& layers = GetCollisionLayers();
         e.options.reserve(layers.size());
         for (const auto& layer : layers)
@@ -311,13 +312,13 @@ namespace sage::editor
             const auto& list = GetCollisionLayers();
             for (std::size_t i = 0; i < list.size(); ++i)
             {
-                if (list[i].bit == p->bit) return i;
+                if (list.at(i).bit == p->bit) return i;
             }
             return 0;
         };
         e.setIndex = [p = &v](const std::size_t idx) {
             const auto& list = GetCollisionLayers();
-            if (idx < list.size()) *p = list[idx];
+            if (idx < list.size()) *p = list.at(idx);
         };
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
     }
@@ -328,7 +329,7 @@ namespace sage::editor
         // dropdown via EnumField (same path as the CollisionLayer field). Index 0 is
         // "(none)"; the remaining options are the project tags, plus the entity's
         // current tag if it isn't one of them, so saved values stay selectable.
-        EnumField e{.data = &tags};
+        EnumField e;
         e.options.emplace_back("(none)");
         for (const auto& tag : CUSTOM_SCENE_TAGS)
             e.options.emplace_back(tag);
@@ -347,7 +348,7 @@ namespace sage::editor
             if (idx == 0 || idx >= options.size())
                 p->clear();
             else
-                *p = options[idx];
+                *p = options.at(idx);
         };
 
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
@@ -359,14 +360,14 @@ namespace sage::editor
         // (sage::CUSTOM_CURSORS), rendered as a dropdown via EnumField (same path as
         // tagSet). The current value is appended if it isn't one of the known keys,
         // so saved values stay selectable.
-        EnumField e{.data = &value};
+        EnumField e;
         const auto addOption = [&e](const std::string_view key) {
             const auto resolved = ResourceManager::GetInstance().ResolveImageKey(std::string(key));
             if (std::ranges::find(e.options, resolved) == e.options.end()) e.options.push_back(resolved);
         };
-        addOption(cursors::Regular);
-        addOption(cursors::Move);
-        addOption(cursors::Denied);
+        addOption(cursors::REGULAR);
+        addOption(cursors::MOVE);
+        addOption(cursors::DENIED);
         for (const auto& key : CUSTOM_CURSORS)
             addOption(key);
         if (!value.empty()) addOption(value);
@@ -378,7 +379,7 @@ namespace sage::editor
             return it != options.end() ? static_cast<std::size_t>(std::distance(options.begin(), it)) : 0;
         };
         e.setIndex = [options = e.options, p = &value](const std::size_t idx) {
-            if (idx < options.size()) *p = options[idx];
+            if (idx < options.size()) *p = options.at(idx);
         };
 
         fields_.push_back({.label = qualified(label), .editable = ed && editableScope_, .value = std::move(e)});
@@ -388,10 +389,9 @@ namespace sage::editor
         const std::string& label, std::string& value, std::vector<std::string> options, const bool editable)
     {
         options.insert(options.begin(), "(none)");
-        if (!value.empty() && std::ranges::find(options, value) == options.end())
-            options.push_back(value);
+        if (!value.empty() && std::ranges::find(options, value) == options.end()) options.push_back(value);
 
-        EnumField field{.data = &value, .options = std::move(options)};
+        EnumField field{.options = std::move(options)};
         field.displayOptions = AssetLabels(field.options);
         field.getIndex = [&value, options = field.options]() {
             const auto& selected = value.empty() ? options.front() : value;
@@ -399,7 +399,7 @@ namespace sage::editor
             return found == options.end() ? std::size_t{0} : static_cast<std::size_t>(found - options.begin());
         };
         field.setIndex = [&value, options = field.options](const std::size_t index) {
-            if (index < options.size()) value = index == 0 ? std::string{} : options[index];
+            if (index < options.size()) value = index == 0 ? std::string{} : options.at(index);
         };
         fields_.push_back(
             {.label = qualified(label), .editable = editable && editableScope_, .value = std::move(field)});
@@ -413,7 +413,7 @@ namespace sage::editor
     void ComponentInspector::particleTextureDropdown(const std::string& label, std::string& value, const bool rw)
     {
         std::vector<std::string> options;
-        const std::filesystem::path directory{ParticleTextureDirectory};
+        const std::filesystem::path directory{PARTICLE_TEXTURE_DIRECTORY};
         if (std::filesystem::exists(directory))
             for (const auto& entry : std::filesystem::recursive_directory_iterator(directory))
                 if (entry.is_regular_file() && entry.path().extension() == ".png")
@@ -429,26 +429,26 @@ namespace sage::editor
         // field). Index 0 is "(none)" — an unset/invalid id; the rest are the
         // project kinds. Matched and stored by id so the display name need not be
         // persisted on the component.
-        EnumField e{.data = &v};
+        EnumField e;
         e.options.emplace_back("(none)");
-        for (const auto& archetype : CustomArchetypes)
+        for (const auto& archetype : CUSTOM_ARCHETYPES)
             e.options.emplace_back(archetype.name);
 
         e.getIndex = [p = &v]() -> std::size_t {
             if (!p->IsValid()) return 0;
-            for (std::size_t i = 0; i < CustomArchetypes.size(); ++i)
+            for (std::size_t i = 0; i < CUSTOM_ARCHETYPES.size(); ++i)
             {
-                if (CustomArchetypes[i].id == p->id) return i + 1;
+                if (CUSTOM_ARCHETYPES.at(i).id == p->id) return i + 1;
             }
             return 0;
         };
         e.setIndex = [registry = contextRegistry_, entity = contextEntity_, p = &v](const std::size_t idx) {
             const Archetype selected =
-                idx == 0 || idx > CustomArchetypes.size() ? sage::Archetype{} : CustomArchetypes[idx - 1];
-            if (registry != nullptr && entity != entt::null && registry->valid(entity) &&
-                registry->all_of<sage::Archetype>(entity))
+                idx == 0 || idx > CUSTOM_ARCHETYPES.size() ? sage::Archetype{} : CUSTOM_ARCHETYPES.at(idx - 1);
+            if (registry && entity != entt::null && registry->get().valid(entity) &&
+                registry->get().all_of<sage::Archetype>(entity))
             {
-                sage::SetArchetype(*registry, entity, selected);
+                sage::SetArchetype(registry->get(), entity, selected);
                 return;
             }
 
@@ -460,10 +460,10 @@ namespace sage::editor
 
     void ComponentInspector::clipDropdown(const std::string& label, std::string& value, const bool rw)
     {
-        EnumField e{.data = &value};
-        if (contextRegistry_ != nullptr && contextEntity_ != entt::null)
+        EnumField e;
+        if (contextRegistry_.has_value() && contextEntity_ != entt::null)
         {
-            if (const auto* animation = contextRegistry_->try_get<Animation>(contextEntity_))
+            if (const auto* animation = contextRegistry_->get().try_get<Animation>(contextEntity_))
             {
                 e.options = animation->clipNames;
             }
@@ -487,17 +487,19 @@ namespace sage::editor
         };
         e.setIndex = [options = e.options, hasClips, p = &value](const std::size_t idx) {
             if (!hasClips || idx >= options.size()) return;
-            *p = options[idx];
+            *p = options.at(idx);
         };
 
         fields_.push_back({.label = qualified(label), .editable = rw && editableScope_, .value = std::move(e)});
     }
 
-    const InspectorRegistry::Entry* InspectorRegistry::findEntry(const EditorComponentId componentId) const
+    std::optional<std::reference_wrapper<const InspectorRegistry::Entry>> InspectorRegistry::findEntry(
+        const EditorComponentId componentId) const
     {
         const auto it = std::ranges::find_if(
             entries_, [componentId](const Entry& entry) { return entry.componentId == componentId; });
-        return it != entries_.end() ? &*it : nullptr;
+        if (it == entries_.end()) return std::nullopt;
+        return std::cref(*it);
     }
 
     std::vector<InspectorRegistry::DescribedEntry> InspectorRegistry::describeEntity(
@@ -507,25 +509,27 @@ namespace sage::editor
         for (const auto& entry : entries_)
         {
             if (!entry.has(registry, entity)) continue;
-            result.push_back({.entry = &entry, .description = entry.describe(registry, entity)});
+            result.push_back({.entry = std::cref(entry), .description = entry.describe(registry, entity)});
         }
         return result;
     }
 
-    InspectorRegistry::DescribedEntry* InspectorRegistry::findDescribed(
+    std::optional<std::reference_wrapper<InspectorRegistry::DescribedEntry>> InspectorRegistry::findDescribed(
         std::vector<DescribedEntry>& described, const Entry& entry)
     {
         const auto it = std::ranges::find_if(
-            described, [&entry](const DescribedEntry& candidate) { return candidate.entry == &entry; });
-        return it != described.end() ? &*it : nullptr;
+            described, [&entry](const DescribedEntry& candidate) { return &candidate.entry.get() == &entry; });
+        if (it == described.end()) return std::nullopt;
+        return std::ref(*it);
     }
 
-    const InspectorRegistry::DescribedEntry* InspectorRegistry::findDescribed(
-        const std::vector<DescribedEntry>& described, const Entry& entry)
+    std::optional<std::reference_wrapper<const InspectorRegistry::DescribedEntry>> InspectorRegistry::
+        findDescribed(const std::vector<DescribedEntry>& described, const Entry& entry)
     {
         const auto it = std::ranges::find_if(
-            described, [&entry](const DescribedEntry& candidate) { return candidate.entry == &entry; });
-        return it != described.end() ? &*it : nullptr;
+            described, [&entry](const DescribedEntry& candidate) { return &candidate.entry.get() == &entry; });
+        if (it == described.end()) return std::nullopt;
+        return std::ref(*it);
     }
 
     ComponentRemovalState InspectorRegistry::canRemoveFromDescription(
@@ -535,13 +539,13 @@ namespace sage::editor
 
         for (const auto& dependent : described)
         {
-            if (dependent.entry->componentId == target.componentId) continue;
+            if (dependent.entry.get().componentId == target.componentId) continue;
 
-            for (const auto requiredComponentId : dependent.entry->requirements)
+            for (const auto requiredComponentId : dependent.entry.get().requirements)
             {
                 if (requiredComponentId != target.componentId) continue;
 
-                auto reason = "Required by " + dependent.entry->displayName;
+                auto reason = "Required by " + dependent.entry.get().displayName;
                 if (multiSelection)
                 {
                     reason += " on one or more selected entities";
@@ -557,7 +561,7 @@ namespace sage::editor
         const Entry& target, const std::vector<DescribedEntry>& described, const bool multiSelection) const
     {
         auto componentName = [this](const EditorComponentId componentId) {
-            if (const auto* entry = findEntry(componentId)) return entry->displayName;
+            if (const auto entry = findEntry(componentId)) return entry->get().displayName;
             return std::string{"Unknown component"};
         };
         auto withSelectionContext = [multiSelection](std::string reason) {
@@ -566,7 +570,7 @@ namespace sage::editor
         };
         auto hasComponent = [&described](const EditorComponentId componentId) {
             return std::ranges::any_of(described, [componentId](const DescribedEntry& candidate) {
-                return candidate.entry->componentId == componentId;
+                return candidate.entry.get().componentId == componentId;
             });
         };
 
@@ -589,12 +593,13 @@ namespace sage::editor
 
         for (const auto& existing : described)
         {
-            for (const auto incompatibleComponentId : existing.entry->incompatibleComponents)
+            for (const auto incompatibleComponentId : existing.entry.get().incompatibleComponents)
             {
                 if (incompatibleComponentId != target.componentId) continue;
                 return {
                     .allowed = false,
-                    .blockedReason = withSelectionContext("Incompatible with " + existing.entry->displayName)};
+                    .blockedReason =
+                        withSelectionContext("Incompatible with " + existing.entry.get().displayName)};
             }
         }
 
@@ -606,8 +611,8 @@ namespace sage::editor
         const EditorComponentId componentId,
         const std::vector<entt::entity>& entities) const
     {
-        const auto* target = findEntry(componentId);
-        if (target == nullptr) return {.allowed = false, .blockedReason = "Unknown component"};
+        const auto target = findEntry(componentId);
+        if (!target) return {.allowed = false, .blockedReason = "Unknown component"};
 
         bool foundValidEntity = false;
         bool foundEntityToAdd = false;
@@ -615,11 +620,11 @@ namespace sage::editor
         {
             if (!registry.valid(entity)) continue;
             foundValidEntity = true;
-            if (target->has(registry, entity)) continue;
+            if (target->get().has(registry, entity)) continue;
             foundEntityToAdd = true;
 
             const auto described = describeEntity(registry, entity);
-            const auto add = canAddToDescription(*target, described, entities.size() > 1);
+            const auto add = canAddToDescription(target->get(), described, entities.size() > 1);
             if (!add.allowed) return add;
         }
 
@@ -633,7 +638,8 @@ namespace sage::editor
         std::vector<ComponentOption> options;
         for (const auto& entry : entries_)
         {
-            if (entry.addable) options.push_back({entry.componentId, entry.displayName});
+            if (entry.addable)
+                options.push_back({.componentId = entry.componentId, .displayName = entry.displayName});
         }
         return options;
     }
@@ -641,18 +647,18 @@ namespace sage::editor
     bool InspectorRegistry::Add(
         entt::registry& registry, const EditorComponentId componentId, const entt::entity entity) const
     {
-        const auto* entry = findEntry(componentId);
-        if (entry == nullptr || !entry->addable || entry->has(registry, entity)) return false;
-        entry->add(registry, entity);
+        const auto entry = findEntry(componentId);
+        if (!entry || !entry->get().addable || entry->get().has(registry, entity)) return false;
+        entry->get().add(registry, entity);
         return true;
     }
 
     bool InspectorRegistry::Remove(
         entt::registry& registry, const EditorComponentId componentId, const entt::entity entity) const
     {
-        const auto* entry = findEntry(componentId);
-        if (entry == nullptr || !entry->removable || !entry->has(registry, entity)) return false;
-        entry->remove(registry, entity);
+        const auto entry = findEntry(componentId);
+        if (!entry || !entry->get().removable || !entry->get().has(registry, entity)) return false;
+        entry->get().remove(registry, entity);
         return true;
     }
 
@@ -663,7 +669,7 @@ namespace sage::editor
         for (const auto& entry : entries_)
         {
             if (entry.persistenceKey.empty() || !entry.has(registry, entity)) continue;
-            components.push_back({entry.persistenceKey, entry.serialize(registry, entity)});
+            components.push_back({.key = entry.persistenceKey, .data = entry.serialize(registry, entity)});
         }
         return components;
     }
@@ -689,17 +695,17 @@ namespace sage::editor
         const EditorComponentId componentId,
         const std::vector<entt::entity>& entities) const
     {
-        const auto* target = findEntry(componentId);
-        if (target == nullptr) return {.allowed = false, .blockedReason = "Unknown component"};
+        const auto target = findEntry(componentId);
+        if (!target) return {.allowed = false, .blockedReason = "Unknown component"};
 
         bool presentOnAnyEntity = false;
         for (const auto entity : entities)
         {
-            if (!registry.valid(entity) || !target->has(registry, entity)) continue;
+            if (!registry.valid(entity) || !target->get().has(registry, entity)) continue;
             presentOnAnyEntity = true;
 
             const auto described = describeEntity(registry, entity);
-            const auto removal = canRemoveFromDescription(*target, described, entities.size() > 1);
+            const auto removal = canRemoveFromDescription(target->get(), described, entities.size() > 1);
             if (!removal.allowed) return removal;
         }
 
@@ -715,18 +721,18 @@ namespace sage::editor
         result.reserve(described.size());
         for (auto& component : described)
         {
-            const auto removal = canRemoveFromDescription(*component.entry, described, false);
-            const auto modelPicker = component.entry->componentId == ComponentIdOf<Renderable>()
+            const auto removal = canRemoveFromDescription(component.entry.get(), described, false);
+            const auto modelPicker = component.entry.get().componentId == ComponentIdOf<Renderable>()
                                          ? DescribeModelPicker(registry, {entity})
                                          : std::nullopt;
-            const auto materialPickers = component.entry->componentId == ComponentIdOf<Renderable>()
+            const auto materialPickers = component.entry.get().componentId == ComponentIdOf<Renderable>()
                                              ? DescribeMaterialPickers(registry, {entity})
                                              : std::vector<MaterialPickerField>{};
             result.push_back(
-                {.componentId = component.entry->componentId,
-                 .displayName = component.entry->displayName,
+                {.componentId = component.entry.get().componentId,
+                 .displayName = component.entry.get().displayName,
                  .fields = std::move(component.description.fields),
-                 .removable = component.entry->removable,
+                 .removable = component.entry.get().removable,
                  .removeAllowed = removal.allowed,
                  .removeBlockedReason = removal.blockedReason,
                  .modelPicker = modelPicker,
@@ -753,7 +759,7 @@ namespace sage::editor
         for (const auto& entry : entries_)
         {
             if (!std::ranges::all_of(describedByEntity, [&entry](const std::vector<DescribedEntry>& described) {
-                    return findDescribed(described, entry) != nullptr;
+                    return findDescribed(described, entry).has_value();
                 }))
             {
                 continue;
@@ -764,8 +770,8 @@ namespace sage::editor
             ComponentRemovalState removal{.allowed = true};
             for (auto& described : describedByEntity)
             {
-                auto* component = findDescribed(described, entry);
-                describedFields.push_back(std::move(component->description.fields));
+                auto component = findDescribed(described, entry);
+                describedFields.push_back(std::move(component->get().description.fields));
                 if (removal.allowed)
                 {
                     removal = canRemoveFromDescription(entry, described, true);
@@ -795,7 +801,7 @@ namespace sage::editor
                 bool commonField = true;
                 for (std::size_t i = 1; i < describedFields.size(); ++i)
                 {
-                    const auto& fields = describedFields[i];
+                    const auto& fields = describedFields.at(i);
                     const auto it = std::ranges::find_if(fields, [&firstField](const InspectorField& candidate) {
                         return candidate.label == firstField.label &&
                                candidate.value.index() == firstField.value.index();
@@ -833,7 +839,8 @@ namespace sage::editor
         registry.Register<MetaData>("Meta Data");
         registry.Register<Renderable>("Renderable", true, true);
         registry.RegisterPersistent<CustomShaderComponent>("Custom Shader", "sage.CustomShader", true, true);
-        registry.RegisterPersistent<ParticleEmitterComponent>("Particle System", "sage.ParticleEmitter", true, true);
+        registry.RegisterPersistent<ParticleEmitterComponent>(
+            "Particle System", "sage.ParticleEmitter", true, true);
         registry.Register<Collideable>("Collideable", true, true);
         registry.Register<NavigationSurface>("Navigation Surface", true, true);
         registry.Register<NavigationObstacle>("Navigation Obstacle", true, true);

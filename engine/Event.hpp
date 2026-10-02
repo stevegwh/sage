@@ -7,6 +7,7 @@
 #include <cassert>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -20,14 +21,18 @@ namespace sage
     // Wrapper class to track a subscription to an event. Allows easy unsubscribing.
     class Subscription
     {
-        EventBase* event = nullptr;
+        std::optional<std::reference_wrapper<EventBase>> event;
         SubscriberId id = -1;
 
       public:
         bool IsActive();
         void UnSubscribe();
+        Subscription(const Subscription&) = default;
+        Subscription& operator=(const Subscription&) = default;
+        Subscription(Subscription&&) = default;
+        Subscription& operator=(Subscription&&) = default;
         ~Subscription();
-        explicit Subscription(EventBase* _event, SubscriberId _id);
+        explicit Subscription(EventBase& _event, SubscriberId _id);
         Subscription() = default;
     };
 
@@ -37,6 +42,11 @@ namespace sage
         virtual void unSubscribe(SubscriberId id) = 0;
 
       public:
+        EventBase() = default;
+        EventBase(const EventBase&) = default;
+        EventBase& operator=(const EventBase&) = default;
+        EventBase(EventBase&&) = default;
+        EventBase& operator=(EventBase&&) = default;
         virtual ~EventBase() = default;
 
         friend class Subscription;
@@ -74,9 +84,11 @@ namespace sage
 
         void flushPending() const
         {
-            for (const auto id : pendingRemovals) subscriptions.erase(id);
+            for (const auto id : pendingRemovals)
+                subscriptions.erase(id);
             pendingRemovals.clear();
-            for (auto& [key, callback] : pendingAdds) subscriptions.insert_or_assign(key, std::move(callback));
+            for (auto& [key, callback] : pendingAdds)
+                subscriptions.insert_or_assign(key, std::move(callback));
             pendingAdds.clear();
         }
 
@@ -91,7 +103,7 @@ namespace sage
             else
                 subscriptions.emplace(key, std::move(func));
 
-            return Subscription(this, key);
+            return Subscription(*this, key);
         }
 
         void Publish(Args... args) const
@@ -115,7 +127,7 @@ namespace sage
         Event() = default;
         Event(const Event&) = delete;
         Event& operator=(const Event&) = delete;
-        // Non-movable by design: a Subscription holds a raw EventBase* back-pointer, so
+        // Non-movable by design: a Subscription holds an EventBase reference, so
         // moving an Event would dangle every outstanding Subscription. Components that own an
         // Event (Animation, MoveableActor, …) are therefore non-movable too and must be
         // swapped via remove + emplace rather than reassigned.

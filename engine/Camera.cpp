@@ -1,6 +1,6 @@
-#include "engine/SimulationClock.hpp"
 #include "engine/Colors.hpp"
 #include "engine/MathConstants.hpp"
+#include "engine/SimulationClock.hpp"
 //
 // Created by Steve Wheeler on 12/02/2024.
 //
@@ -25,6 +25,13 @@
 
 namespace sage
 {
+    namespace
+    {
+        constexpr Vector3 DEFAULT_CAMERA_POSITION{.x = -40.0f, .y = 85.0f, .z = 20.0f};
+        constexpr Vector3 DEFAULT_CAMERA_TARGET{.x = -30.0f, .y = 8.0f, .z = -50.0f};
+        constexpr float DEFAULT_CAMERA_FOV = 45.0f;
+    } // namespace
+
     /*
      * Smooths out variations in the camera's height
      */
@@ -33,7 +40,8 @@ namespace sage
         GridSquare square{};
         if (!sys->navigationGridSystem->WorldToGridSpace(rlCamera.target, square)) return;
 
-        float floorHeight = sys->navigationGridSystem->GetGridSquare(square.row, square.col)->heightMap.GetHeight();
+        float floorHeight =
+            sys->navigationGridSystem->GetGridSquare(square.row, square.col)->heightMap.GetHeight();
         const float targetOffsetY = 8.0f; // Offset from the floor
 
         float idealTargetY = floorHeight + floorYOffset + targetOffsetY;
@@ -107,8 +115,7 @@ namespace sage
 
     void Camera::handleInput()
     {
-        if (lockInput || IsMetaKeyDown() || IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT))
-            return;
+        if (lockInput || IsMetaKeyDown() || IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT)) return;
 
         const float deltaTime = sage::FrameTime();
         handleMouseScroll(deltaTime);
@@ -118,7 +125,7 @@ namespace sage
         if (backKeyDown)
         {
             auto right = GetCameraRight(&rlCamera);
-            right = Vector3RotateByAxisAngle(right, {0, 1, 0}, sage::math::DEGREES_TO_RADIANS * 90);
+            right = Vector3RotateByAxisAngle(right, {.x = 0, .y = 1, .z = 0}, sage::math::DEGREES_TO_RADIANS * 90);
             auto newPos = Vector3MultiplyByValue(right, moveStep);
             rlCamera.position = Vector3Subtract(rlCamera.position, newPos);
             rlCamera.target = Vector3Subtract(rlCamera.target, newPos);
@@ -127,7 +134,7 @@ namespace sage
         if (forwardKeyDown)
         {
             auto right = GetCameraRight(&rlCamera);
-            right = Vector3RotateByAxisAngle(right, {0, 1, 0}, sage::math::DEGREES_TO_RADIANS * 90);
+            right = Vector3RotateByAxisAngle(right, {.x = 0, .y = 1, .z = 0}, sage::math::DEGREES_TO_RADIANS * 90);
             auto newPos = Vector3MultiplyByValue(right, moveStep);
             rlCamera.position = Vector3Add(newPos, rlCamera.position);
             rlCamera.target = Vector3Add(newPos, rlCamera.target);
@@ -222,16 +229,22 @@ namespace sage
 
     void Camera::CutscenePose(const sgTransform& location, const Vector3& localOffset)
     {
-        cameraSave = CameraSave{rlCamera, verticalSmoothingTargetY, verticalSmoothingCurrentY};
+        cameraSave = CameraSave{
+            .rlCamera = rlCamera,
+            .currentTargetY = verticalSmoothingTargetY,
+            .currentPositionY = verticalSmoothingCurrentY};
 
         rlCamera.position.y = rlCamera.target.y;
 
         auto [rotx, roty, rotz] = location.GetWorldRot();
-        const Matrix rotationMatrix = MatrixRotateXYZ({rotx * sage::math::DEGREES_TO_RADIANS, roty * sage::math::DEGREES_TO_RADIANS, rotz * sage::math::DEGREES_TO_RADIANS});
+        const Matrix rotationMatrix = MatrixRotateXYZ(
+            {.x = rotx * sage::math::DEGREES_TO_RADIANS,
+             .y = roty * sage::math::DEGREES_TO_RADIANS,
+             .z = rotz * sage::math::DEGREES_TO_RADIANS});
 
         const Vector3 rotatedOffset = Vector3Transform(localOffset, rotationMatrix);
         const Vector3 cameraPosition = Vector3Add(location.GetWorldPos(), rotatedOffset);
-        const Vector3 cameraTarget = Vector3Add(location.GetWorldPos(), {0.0f, 1.0f, 0.0f});
+        const Vector3 cameraTarget = Vector3Add(location.GetWorldPos(), {.x = 0.0f, .y = 1.0f, .z = 0.0f});
 
         rlCamera.position = cameraPosition;
         rlCamera.target = cameraTarget;
@@ -289,7 +302,7 @@ namespace sage
         {
             const float currentDistance = Vector3Length(diff);
             diff = currentDistance > 0.0001f ? Vector3Scale(Vector3Normalize(diff), distance)
-                                             : Vector3{0.0f, distance, distance};
+                                             : Vector3{.x = 0.0f, .y = distance, .z = distance};
         }
 
         SetCamera(Vector3Add(target, diff), target);
@@ -326,20 +339,21 @@ namespace sage
     void Camera::Update()
     {
         handleInput();
-        UpdateCameraPro(&rlCamera, {0, 0, 0}, {0, 0, 0}, 0);
+        UpdateCameraPro(&rlCamera, {.x = 0, .y = 0, .z = 0}, {.x = 0, .y = 0, .z = 0}, 0);
     }
 
     Camera::Camera(entt::registry* _registry, UserInput* userInput, EngineSystems* _sys)
-        : registry(_registry), sys(_sys), rlCamera({0})
+        : registry(_registry),
+          sys(_sys),
+          rlCamera{
+              .position = DEFAULT_CAMERA_POSITION,
+              .target = DEFAULT_CAMERA_TARGET,
+              .up = {.x = 0.0f, .y = 1.0f, .z = 0.0f},
+              .fovy = DEFAULT_CAMERA_FOV,
+              .projection = CAMERA_PERSPECTIVE},
+          verticalSmoothingTargetY(rlCamera.target.y),
+          verticalSmoothingCurrentY(rlCamera.position.y)
     {
-        rlCamera.position = {-40.0f, 85.0f, 20.0f};
-        rlCamera.target = {-30.0f, 8.0f, -50.0f};
-        rlCamera.up = {0.0f, 1.0f, 0.0f};
-        rlCamera.fovy = 45.0f;
-        rlCamera.projection = CAMERA_PERSPECTIVE;
-        verticalSmoothingCurrentY = rlCamera.position.y;
-        verticalSmoothingTargetY = rlCamera.target.y;
-
         userInput->keyWPressed.Subscribe([this]() { forwardKeyDown = true; });
         userInput->keySPressed.Subscribe([this]() { backKeyDown = true; });
         userInput->keyAPressed.Subscribe([this]() { leftKeyDown = true; });

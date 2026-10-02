@@ -1,9 +1,6 @@
-#include "engine/ui/CanvasSystem.hpp"
 #include "ContentDocument.hpp"
 #include "ContentInspector.hpp"
 #include "engine/Archetypes.hpp"
-#include "engine/Flatpack.hpp"
-#include "engine/Light.hpp"
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
@@ -17,8 +14,12 @@
 #include "engine/components/Terrain.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/EditorLayoutMapFormat.hpp"
+#include "engine/Flatpack.hpp"
+#include "engine/Light.hpp"
 #include "engine/systems/TransformSystem.hpp"
+#include "engine/ui/CanvasSystem.hpp"
 #include "StoredRenderableRecord.hpp"
+#include <algorithm>
 #include <chrono>
 #include <set>
 
@@ -30,8 +31,8 @@ namespace sage::content
         struct StoredTransform
         {
             std::string name;
-            Vector3 position{}, rotation{}, scale{1, 1, 1};
-            Vector3 localPosition{}, localRotation{}, localScale{1, 1, 1};
+            Vector3 position{}, rotation{}, scale{.x = 1, .y = 1, .z = 1};
+            Vector3 localPosition{}, localRotation{}, localScale{.x = 1, .y = 1, .z = 1};
             std::uint32_t parent = NULL_ID;
             template <class Archive>
             void serialize(Archive& archive)
@@ -42,12 +43,13 @@ namespace sage::content
         using MapEntity =
             editor_layout::BasicEntityRecord<StoredTransform, content_binary::StoredRenderableRecord>;
         using MapTerrain = editor_layout::BasicTerrainRecord<StoredTransform>;
-        const detail::ComponentOperations* FindComponentOperations(const std::string& key)
+        std::optional<std::reference_wrapper<const detail::ComponentOperations>> FindComponentOperations(
+            const std::string& key)
         {
             EnsureEngineComponentsRegistered();
             for (const auto& operations : detail::RegisteredComponentOperations())
-                if (operations.key == key) return &operations;
-            return nullptr;
+                if (operations.key == key) return std::cref(operations);
+            return std::nullopt;
         }
         std::string ComponentKey(entt::id_type type)
         {
@@ -59,12 +61,12 @@ namespace sage::content
         }
         std::string Hex(const std::string& bytes)
         {
-            static constexpr char digits[] = "0123456789abcdef";
+            static constexpr std::string_view HEX_DIGITS = "0123456789abcdef";
             std::string result;
             for (unsigned char byte : bytes)
             {
-                result += digits[byte >> 4];
-                result += digits[byte & 15];
+                result += HEX_DIGITS.at(byte >> 4);
+                result += HEX_DIGITS.at(byte & 15);
             }
             return result;
         }
@@ -88,7 +90,7 @@ namespace sage::content
             json::Document doc(rapidjson::kObjectType);
             auto& a = doc.GetAllocator();
             json::Put(doc, "format", "sage-content", a);
-            json::Put(doc, "version", std::uint64_t(DOCUMENT_VERSION), a);
+            json::Put(doc, "version", static_cast<std::uint64_t>(DOCUMENT_VERSION), a);
             json::Put(doc, "kind", kind, a);
             json::Put(doc, "entities", json::Value(rapidjson::kArrayType), a);
             return doc;
@@ -103,12 +105,12 @@ namespace sage::content
             json::Allocator& a)
         {
             json::Value node(rapidjson::kObjectType), transform(rapidjson::kObjectType);
-            json::Put(node, "id", std::uint64_t(id), a);
+            json::Put(node, "id", static_cast<std::uint64_t>(id), a);
             json::Put(node, "name", name, a);
             if (parent == NULL_ID)
                 json::Put(node, "parent", json::Value(), a);
             else
-                json::Put(node, "parent", std::uint64_t(parent), a);
+                json::Put(node, "parent", static_cast<std::uint64_t>(parent), a);
             json::Put(transform, "position", json::Encode(position), a);
             json::Put(transform, "rotation", json::Encode(rotation), a);
             json::Put(transform, "scale", json::Encode(scale), a);
@@ -119,7 +121,7 @@ namespace sage::content
         void Component(json::Value& node, const std::string& key, const json::Value& data, json::Allocator& a)
         {
             json::Value wrapper(rapidjson::kObjectType);
-            json::Put(wrapper, "version", std::uint64_t(1), a);
+            json::Put(wrapper, "version", static_cast<std::uint64_t>(1), a);
             json::Put(wrapper, "data", data, a);
             json::Put(node["components"], key.c_str(), wrapper, a);
         }
@@ -130,12 +132,12 @@ namespace sage::content
         }
         void Opaque(json::Value& node, const std::string& key, const std::string& bytes, json::Allocator& a)
         {
-            if (const auto* operations = FindComponentOperations(key))
-                Component(node, key, json::Parse(operations->toJson(bytes)), a);
+            if (const auto operations = FindComponentOperations(key))
+                Component(node, key, json::Parse(operations->get().toJson(bytes)), a);
             else
             {
                 json::Value wrapper(rapidjson::kObjectType);
-                json::Put(wrapper, "version", std::uint64_t(1), a);
+                json::Put(wrapper, "version", static_cast<std::uint64_t>(1), a);
                 json::Put(wrapper, "encoding", "binary-hex", a);
                 json::Put(wrapper, "data", Hex(bytes), a);
                 json::Put(node["components"], key.c_str(), wrapper, a);
@@ -164,11 +166,11 @@ namespace sage::content
                 for (auto& m : node["components"].GetObject())
                 {
                     if (m.value.HasMember("encoding") || json::Id(m.value, "version") != 1) continue;
-                    if (const auto* operations = FindComponentOperations(m.name.GetString()))
+                    if (const auto operations = FindComponentOperations(m.name.GetString()))
                         json::Put(
                             m.value,
                             "data",
-                            json::Parse(operations->remapJson(json::Stringify(m.value["data"]), ids)),
+                            json::Parse(operations->get().remapJson(json::Stringify(m.value["data"]), ids)),
                             a);
                 }
         }
@@ -226,7 +228,7 @@ namespace sage::content
             {
                 // Legacy map loaders always enabled saved lights; the binary payload has no enabled field.
                 light.enabled = true;
-                auto n = Node(next++, "Light", light.position, {}, {1, 1, 1}, NULL_ID, a);
+                auto n = Node(next++, "Light", light.position, {}, {.x = 1, .y = 1, .z = 1}, NULL_ID, a);
                 Add(n, "sage.Light", light, a);
                 doc["entities"].PushBack(n, a);
             }
@@ -307,7 +309,7 @@ namespace sage::content
             RegisterFlatpackComponent<MoveableActor>("sage.MoveableActor");
             return true;
         }();
-        (void)initialized;
+        static_cast<void>(initialized);
     }
     bool IsDocument(const std::filesystem::path& path, const std::string& kind)
     {
@@ -346,12 +348,14 @@ namespace sage::content
                 throw std::runtime_error("Unsupported document version");
             const auto kind = json::String(doc, "kind");
             if (kind != "map" && kind != "flatpack") throw std::runtime_error("Expected map or flatpack document");
-            if (doc.HasMember("initialCanvases")) {
+            if (doc.HasMember("initialCanvases"))
+            {
                 const auto& canvases = doc["initialCanvases"];
                 if (!canvases.IsArray()) throw std::runtime_error("initialCanvases must be an array");
                 std::set<std::string> unique;
                 for (const auto& asset : canvases.GetArray())
-                    if (!asset.IsString() || std::string(asset.GetString()).empty() || !unique.insert(asset.GetString()).second)
+                    if (!asset.IsString() || std::string(asset.GetString()).empty() ||
+                        !unique.insert(asset.GetString()).second)
                         throw std::runtime_error("Initial canvases must be unique nonempty asset paths");
             }
             const auto& nodes = json::Require(doc, "entities");
@@ -394,35 +398,35 @@ namespace sage::content
                         continue;
                     }
                     if (version != 1) continue;
-                    const auto* operations = FindComponentOperations(m.name.GetString());
+                    const auto operations = FindComponentOperations(m.name.GetString());
                     if (operations)
                     {
-                        for (auto type : operations->requirements)
+                        for (auto type : operations->get().requirements)
                         {
                             const auto key = ComponentKey(type);
                             if (key != "sage.Transform" && !components.HasMember(key.c_str()))
                                 errors.push_back(std::string(m.name.GetString()) + " requires " + key);
                         }
-                        for (auto type : operations->incompatible)
+                        for (auto type : operations->get().incompatible)
                         {
                             const auto key = ComponentKey(type);
                             if (components.HasMember(key.c_str()))
                                 errors.push_back(std::string(m.name.GetString()) + " is incompatible with " + key);
                         }
-                        if (!operations->validateJson(json::Stringify(m.value["data"]), references))
+                        if (!operations->get().validateJson(json::Stringify(m.value["data"]), references))
                             errors.push_back("Invalid entity reference in " + std::string(m.name.GetString()));
                     }
                     if (std::string(m.name.GetString()) == "sage.Animation")
                     {
                         json::String(m.value["data"], "modelKey");
                         if (!components.HasMember("sage.Renderable"))
-                            errors.push_back("sage.Animation requires sage.Renderable");
+                            errors.emplace_back("sage.Animation requires sage.Renderable");
                     }
                     if (std::string(m.name.GetString()) == "sage.Renderable")
                     {
                         content_binary::StoredRenderableRecord r;
                         json::Decode(m.value["data"], r);
-                        if (r.kind > 2) errors.push_back("Invalid renderable kind");
+                        if (r.kind > 2) errors.emplace_back("Invalid renderable kind");
                     }
                 }
                 const auto supported = [&](const char* key) {
@@ -430,7 +434,7 @@ namespace sage::content
                            !components[key].HasMember("encoding");
                 };
                 if (supported("sage.NavigationSurface") && supported("sage.NavigationObstacle"))
-                    errors.push_back("Entity cannot have both navigation surface and obstacle");
+                    errors.emplace_back("Entity cannot have both navigation surface and obstacle");
                 for (const char* aspect :
                      {"sage.NavigationSurface",
                       "sage.NavigationObstacle",
@@ -445,31 +449,31 @@ namespace sage::content
                     if (!t.IsValid()) errors.push_back("Invalid terrain on entity " + std::to_string(id));
                 }
                 std::set<std::uint32_t> visited{id};
-                auto* current = &n;
-                while (current->HasMember("parent") && (*current)["parent"].IsUint())
+                std::optional<std::reference_wrapper<const json::Value>> current = std::cref(n);
+                while (current->get().HasMember("parent") && current->get()["parent"].IsUint())
                 {
-                    const auto p = (*current)["parent"].GetUint();
+                    const auto p = current->get()["parent"].GetUint();
                     if (!visited.insert(p).second)
                     {
-                        errors.push_back("Hierarchy cycle");
+                        errors.emplace_back("Hierarchy cycle");
                         break;
                     }
-                    current = nullptr;
+                    current = std::nullopt;
                     for (const auto& candidate : nodes.GetArray())
                         if (json::Id(candidate, "id") == p)
                         {
-                            current = &candidate;
+                            current = std::cref(candidate);
                             break;
                         }
                     if (!current) break;
                 }
             }
             if (kind == "flatpack" && !ids.contains(json::Id(doc, "root")))
-                errors.push_back("Flatpack root does not exist");
+                errors.emplace_back("Flatpack root does not exist");
         }
         catch (const std::exception& error)
         {
-            errors.push_back(error.what());
+            errors.emplace_back(error.what());
         }
         return errors;
     }
@@ -522,7 +526,8 @@ namespace sage::content
             }
         };
         if (document.HasMember("initialCanvases") && document["initialCanvases"].IsArray())
-            for (const auto& asset : document["initialCanvases"].GetArray()) if (asset.IsString()) result.insert(asset.GetString());
+            for (const auto& asset : document["initialCanvases"].GetArray())
+                if (asset.IsString()) result.insert(asset.GetString());
         visit(visit, document);
         return {result.begin(), result.end()};
     }
@@ -536,9 +541,11 @@ namespace sage::content
         EnsureEngineComponentsRegistered();
         auto doc = Empty(kind);
         auto& a = doc.GetAllocator();
-        if (kind == "map") {
+        if (kind == "map")
+        {
             const auto* settings = registry.ctx().find<InitialCanvases>();
-            json::Put(doc, "initialCanvases", json::Encode(settings ? settings->assets : std::vector<std::string>{}), a);
+            json::Put(
+                doc, "initialCanvases", json::Encode(settings ? settings->assets : std::vector<std::string>{}), a);
         }
         std::uint32_t next = 1;
         for (auto e : registry.view<PersistentEntityId>())
@@ -574,9 +581,9 @@ namespace sage::content
             auto n = Node(
                 static_cast<std::uint32_t>(registry.get<PersistentEntityId>(e).id),
                 t ? t->name : "Light",
-                {position.x - origin.x, position.y - origin.y, position.z - origin.z},
+                {.x = position.x - origin.x, .y = position.y - origin.y, .z = position.z - origin.z},
                 t ? t->GetWorldRot() : Vector3{},
-                t ? t->GetScale() : Vector3{1, 1, 1},
+                t ? t->GetScale() : Vector3{.x = 1, .y = 1, .z = 1},
                 parent,
                 a);
             json::Put(n, "order", order++, a);
@@ -586,7 +593,8 @@ namespace sage::content
             if (light && t)
             {
                 auto sourceLight = *light;
-                sourceLight.position = {position.x - origin.x, position.y - origin.y, position.z - origin.z};
+                sourceLight.position = {
+                    .x = position.x - origin.x, .y = position.y - origin.y, .z = position.z - origin.z};
                 Add(n, "sage.Light", sourceLight, a);
             }
             if (const auto* r = registry.try_get<Renderable>(e); r && r->serializable)
@@ -616,8 +624,7 @@ namespace sage::content
                         json::Put(n["components"], key.c_str(), json::Parse(value), a);
             doc["entities"].PushBack(n, a);
         }
-        if (kind == "flatpack")
-            json::Put(doc, "root", std::uint64_t(registry.get<PersistentEntityId>(root).id), a);
+        if (kind == "flatpack") json::Put(doc, "root", (registry.get<PersistentEntityId>(root).id), a);
         // Stable IDs keep diffs canonical; order preserves saved sibling ordering.
         std::sort(doc["entities"].Begin(), doc["entities"].End(), [](const auto& l, const auto& r) {
             return json::Id(l, "id") < json::Id(r, "id");
@@ -676,12 +683,12 @@ namespace sage::content
                 registry.remove<Animation>(e);
                 registry.emplace<Animation>(e, model);
             }
-            else if (const auto* operations = FindComponentOperations(key))
+            else if (const auto operations = FindComponentOperations(key))
             {
                 if (wrapper.HasMember("encoding"))
-                    operations->deserialize(registry, e, Unhex(json::String(wrapper, "data")));
+                    operations->get().deserialize(registry, e, Unhex(json::String(wrapper, "data")));
                 else
-                    operations->restoreJson(registry, e, json::Stringify(data));
+                    operations->get().restoreJson(registry, e, json::Stringify(data));
             }
             else
                 registry.get_or_emplace<UnknownContentComponents>(e).values[key] = json::Stringify(wrapper);
@@ -739,14 +746,14 @@ namespace sage::content
                 json::Decode(n["transform"]["position"], p);
                 json::Decode(n["transform"]["rotation"], r);
                 json::Decode(n["transform"]["scale"], s);
-                t.position.world = Vector3{p.x + anchor.x, p.y + anchor.y, p.z + anchor.z};
+                t.position.world = Vector3{.x = p.x + anchor.x, .y = p.y + anchor.y, .z = p.z + anchor.z};
                 t.rotation.world = r;
                 t.scale.world = s;
             }
             std::vector<const json::Value*> ordered;
             for (const auto& n : doc["entities"].GetArray())
                 ordered.push_back(&n);
-            std::stable_sort(ordered.begin(), ordered.end(), [](const auto* left, const auto* right) {
+            std::ranges::stable_sort(ordered, [](const auto* left, const auto* right) {
                 const auto order = [](const auto& node) -> std::uint64_t {
                     return node.HasMember("order") ? node["order"].GetUint64() : 0;
                 };
@@ -778,14 +785,15 @@ namespace sage::content
                 if (registry.valid(e)) registry.destroy(e);
             throw;
         }
-        if (json::String(doc, "kind") == "map") {
+        if (json::String(doc, "kind") == "map")
+        {
             InitialCanvases settings;
             if (doc.HasMember("initialCanvases")) json::Decode(doc["initialCanvases"], settings.assets);
             registry.ctx().insert_or_assign<InitialCanvases>(std::move(settings));
         }
         return result;
     }
-    json::Document DescribeComponents(const json::Value* node)
+    json::Document DescribeComponents(std::optional<std::reference_wrapper<const json::Value>> node)
     {
         EnsureEngineComponentsRegistered();
         json::Document result(rapidjson::kObjectType);
@@ -794,11 +802,11 @@ namespace sage::content
         {
             json::Value description(rapidjson::kObjectType), required(rapidjson::kArrayType),
                 incompatible(rapidjson::kArrayType);
-            json::Put(description, "version", std::uint64_t(1), a);
+            json::Put(description, "version", static_cast<std::uint64_t>(1), a);
             std::string data;
-            if (node && (*node)["components"].HasMember(operations.key.c_str()))
+            if (node && node->get()["components"].HasMember(operations.key.c_str()))
             {
-                const auto& wrapper = (*node)["components"][operations.key.c_str()];
+                const auto& wrapper = node->get()["components"][operations.key.c_str()];
                 if (json::Id(wrapper, "version") == 1 && !wrapper.HasMember("encoding"))
                     data = json::Stringify(wrapper["data"]);
             }
@@ -830,7 +838,7 @@ namespace sage::content
                     operation.HasMember("name") ? json::String(operation, "name") : "Entity",
                     position,
                     {},
-                    {1, 1, 1},
+                    {.x = 1, .y = 1, .z = 1},
                     operation.HasMember("parent") && !operation["parent"].IsNull() ? json::Id(operation, "parent")
                                                                                    : NULL_ID,
                     a);
@@ -896,10 +904,10 @@ namespace sage::content
             if (!node["components"].HasMember(component.c_str()))
                 throw std::runtime_error("Component does not exist");
             auto& wrapper = node["components"][component.c_str()];
-            const auto* operations = FindComponentOperations(component);
+            const auto operations = FindComponentOperations(component);
             if (!operations || json::Id(wrapper, "version") != 1 || wrapper.HasMember("encoding"))
                 throw std::runtime_error("Component cannot be edited by this executable");
-            const auto value = operations->editJson(
+            const auto value = operations->get().editJson(
                 json::Stringify(wrapper["data"]),
                 json::String(operation, "field"),
                 json::Stringify(json::Require(operation, "value")));

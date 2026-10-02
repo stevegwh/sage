@@ -1,4 +1,5 @@
 #include "CanvasDocument.hpp"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -137,10 +138,11 @@ namespace sage
             if (n.percent < 0 || n.percent > 100 || n.gap < 0 || n.fontSize <= 0 || n.borderWidth < 0 ||
                 n.rectangle.width < 0 || n.rectangle.height < 0)
                 throw std::runtime_error("Invalid canvas size/style");
-            if (int(n.horizontal) < 0 || int(n.horizontal) > 2 || int(n.vertical) < 0 || int(n.vertical) > 2)
+            if (static_cast<int>(n.horizontal) < 0 || static_cast<int>(n.horizontal) > 2 ||
+                static_cast<int>(n.vertical) < 0 || static_cast<int>(n.vertical) > 2)
                 throw std::runtime_error("Invalid text alignment");
-            if (int(n.windowHorizontal) < 0 || int(n.windowHorizontal) > 3 || int(n.windowVertical) < 0 ||
-                int(n.windowVertical) > 3)
+            if (static_cast<int>(n.windowHorizontal) < 0 || static_cast<int>(n.windowHorizontal) > 3 ||
+                static_cast<int>(n.windowVertical) < 0 || static_cast<int>(n.windowVertical) > 3)
                 throw std::runtime_error("Invalid window alignment");
             std::set<std::string> fields;
             for (const auto& ref : n.references)
@@ -162,11 +164,11 @@ namespace sage
         {
             if (!node.IsObject()) throw std::runtime_error("Canvas node must be an object");
             for (const auto& [field, alignment] :
-                 {std::pair{"windowHorizontal", int(WindowHorizontalAlignment::FREE)},
-                  std::pair{"windowVertical", int(WindowVerticalAlignment::FREE)}})
+                 {std::pair{"windowHorizontal", static_cast<int>(WindowHorizontalAlignment::FREE)},
+                  std::pair{"windowVertical", static_cast<int>(WindowVerticalAlignment::FREE)}})
             {
                 if (!node.HasMember(field))
-                    json::Put(node, field, std::uint64_t(alignment), source.GetAllocator());
+                    json::Put(node, field, static_cast<std::uint64_t>(alignment), source.GetAllocator());
                 if (!node[field].IsInt() || node[field].GetInt() < 0 || node[field].GetInt() > 3)
                     throw std::runtime_error("Invalid window alignment");
             }
@@ -218,7 +220,7 @@ namespace sage
         n.parent = parent;
         n.kind = kind;
         n.name = UINodeKindName(kind);
-        if (kind == UINodeKind::Window) n.background = {24, 29, 38, 245};
+        if (kind == UINodeKind::Window) n.background = {.r = 24, .g = 29, .b = 38, .a = 245};
         if (kind == UINodeKind::Cell) n.text = "Label";
         nodes.push_back(n);
         if (kind == UINodeKind::Window) Add(id, UINodeKind::Table);
@@ -249,9 +251,8 @@ namespace sage
         auto copy = n->get();
         copy.parent = parent;
         std::erase_if(nodes, [&](const auto& item) { return item.id == id; });
-        auto pos = std::find_if(nodes.begin(), nodes.end(), [&](const auto& item) {
-            return item.id == before && item.parent == parent;
-        });
+        auto pos = std::ranges::find_if(
+            nodes, [&](const auto& item) { return item.id == before && item.parent == parent; });
         nodes.insert(pos, copy);
         try
         {

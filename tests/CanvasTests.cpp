@@ -55,16 +55,16 @@ int main(int argc, char** argv)
             "Canvas round trip changed data");
         std::filesystem::remove(temporary);
         auto invalid = doc;
-        invalid.nodes[1].parent = invalid.nodes[1].id;
+        invalid.nodes.at(1).parent = invalid.nodes.at(1).id;
         rejects(invalid);
         invalid = doc;
-        invalid.nodes[1].id = invalid.nodes[0].id;
+        invalid.nodes.at(1).id = invalid.nodes.at(0).id;
         rejects(invalid);
         invalid = doc;
-        invalid.nodes[0].references.front().node = 99999;
+        invalid.nodes.at(0).references.front().node = 99999;
         invalid.Save(temporary);
         require(
-            sage::CanvasDocument::Load(temporary).nodes[0].references.front().node == 99999,
+            sage::CanvasDocument::Load(temporary).nodes.at(0).references.front().node == 99999,
             "Unfinished binding did not survive saving");
         {
             entt::registry draftRegistry;
@@ -85,13 +85,13 @@ int main(int argc, char** argv)
         }
         std::filesystem::remove(temporary);
         invalid = doc;
-        invalid.nodes[1].kind = sage::UINodeKind::Row;
+        invalid.nodes.at(1).kind = sage::UINodeKind::Row;
         rejects(invalid);
         invalid = doc;
         invalid.width = 0;
         rejects(invalid);
-        const auto layout = sage::RenderCanvas(doc, {0, 0, 1920, 1080}, 0, 0, false);
-        const auto scaled = sage::RenderCanvas(doc, {0, 0, 960, 540}, 0, 0, false);
+        const auto layout = sage::RenderCanvas(doc, {.x = 0, .y = 0, .width = 1920, .height = 1080}, 0, 0, false);
+        const auto scaled = sage::RenderCanvas(doc, {.x = 0, .y = 0, .width = 960, .height = 540}, 0, 0, false);
         for (const auto& [id, b] : layout.bounds)
             require(std::abs(scaled.bounds.at(id).width * 2 - b.width) < .01f, "Layout scale mismatch");
         // Alignment passes through the renderer, including scale, letterboxing and hit testing.
@@ -101,31 +101,36 @@ int main(int argc, char** argv)
         const auto alignedCell =
             aligned.Add(aligned.Add(alignedTable, sage::UINodeKind::Row), sage::UINodeKind::Cell);
         auto& placement = aligned.Find(alignedWindow)->get();
-        placement.rectangle = {71, 93, 600, 180};
+        placement.rectangle = {.x = 71, .y = 93, .width = 600, .height = 180};
         placement.windowHorizontal = sage::WindowHorizontalAlignment::CENTER;
         placement.windowVertical = sage::WindowVerticalAlignment::MIDDLE;
-        const auto centred = sage::RenderCanvas(aligned, {100, 50, 960, 720}, 0, 0, false);
+        const auto centred =
+            sage::RenderCanvas(aligned, {.x = 100, .y = 50, .width = 960, .height = 720}, 0, 0, false);
         const auto centredBounds = centred.bounds.at(alignedWindow);
         require(
             centredBounds.x == 430 && centredBounds.y == 365 && centredBounds.width == 300 &&
                 centredBounds.height == 90,
             "Centred window ignored viewport origin, scale or letterboxing");
-        require(centred.Hit({580, 410}) == alignedCell, "Centred window hit testing used its old position");
+        require(
+            centred.Hit({.x = 580, .y = 410}) == alignedCell, "Centred window hit testing used its old position");
         placement.rectangle.width = 800;
         placement.rectangle.height = 240;
-        const auto resized = sage::RenderCanvas(aligned, {0, 0, 1920, 1080}, 0, 0, false);
+        const auto resized =
+            sage::RenderCanvas(aligned, {.x = 0, .y = 0, .width = 1920, .height = 1080}, 0, 0, false);
         require(
             resized.bounds.at(alignedWindow).x == 560 && resized.bounds.at(alignedWindow).y == 420,
             "Changing window size did not recalculate alignment");
         placement.windowHorizontal = sage::WindowHorizontalAlignment::RIGHT;
         placement.windowVertical = sage::WindowVerticalAlignment::BOTTOM;
-        const auto bottomRight = sage::RenderCanvas(aligned, {0, 0, 1920, 1080}, 0, 0, false);
+        const auto bottomRight =
+            sage::RenderCanvas(aligned, {.x = 0, .y = 0, .width = 1920, .height = 1080}, 0, 0, false);
         require(
             bottomRight.bounds.at(alignedWindow).x == 1120 && bottomRight.bounds.at(alignedWindow).y == 840,
             "Right/bottom window alignment failed");
         placement.windowHorizontal = sage::WindowHorizontalAlignment::LEFT;
         placement.windowVertical = sage::WindowVerticalAlignment::TOP;
-        const auto topLeft = sage::RenderCanvas(aligned, {0, 0, 1920, 1080}, 0, 0, false);
+        const auto topLeft =
+            sage::RenderCanvas(aligned, {.x = 0, .y = 0, .width = 1920, .height = 1080}, 0, 0, false);
         require(
             topLeft.bounds.at(alignedWindow).x == 0 && topLeft.bounds.at(alignedWindow).y == 0,
             "Left/top window alignment failed");
@@ -136,20 +141,21 @@ int main(int argc, char** argv)
             "Window alignment did not survive saving");
         std::filesystem::remove(temporary);
         auto oldJson = sage::json::Encode(aligned);
-        for (auto& item : oldJson["nodes"].GetArray())
+        for (auto& item : sage::json::Require(oldJson, "nodes").GetArray())
         {
             item.RemoveMember("windowHorizontal");
             item.RemoveMember("windowVertical");
         }
         const auto oldDocument = sage::CanvasDocument::FromJson(oldJson);
-        const auto freeBounds = sage::RenderCanvas(oldDocument, {0, 0, 1920, 1080}, 0, 0, false);
+        const auto freeBounds =
+            sage::RenderCanvas(oldDocument, {.x = 0, .y = 0, .width = 1920, .height = 1080}, 0, 0, false);
         require(
             freeBounds.bounds.at(alignedWindow).x == 71 && freeBounds.bounds.at(alignedWindow).y == 93,
             "Existing canvas positions changed when alignment fields were absent");
         invalid = aligned;
-        invalid.Find(alignedWindow)->get().windowHorizontal = sage::WindowHorizontalAlignment(99);
+        invalid.Find(alignedWindow)->get().windowHorizontal = static_cast<sage::WindowHorizontalAlignment>(99);
         rejects(invalid);
-        auto refs = doc.nodes[0].references;
+        auto refs = doc.nodes.at(0).references;
         entt::registry registry;
         sage::CanvasSystem canvases(registry);
         auto first = canvases.Instantiate(asset.string());
@@ -157,19 +163,25 @@ int main(int argc, char** argv)
         require(first != second, "Canvas instances share identity");
         auto firstRefs = sage::json::Parse(registry.get<sage::ScriptFields>(first).json);
         auto secondRefs = sage::json::Parse(registry.get<sage::ScriptFields>(second).json);
-        const auto firstWood = static_cast<entt::entity>(firstRefs["WoodCount"].GetUint());
-        const auto secondWood = static_cast<entt::entity>(secondRefs["WoodCount"].GetUint());
+        const auto firstWood = static_cast<entt::entity>(sage::json::Require(firstRefs, "WoodCount").GetUint());
+        const auto secondWood = static_cast<entt::entity>(sage::json::Require(secondRefs, "WoodCount").GetUint());
         require(firstWood != secondWood, "References were not remapped per instance");
         const auto window = std::ranges::find_if(
             doc.nodes, [](const auto& node) { return node.kind == sage::UINodeKind::Window; });
         const auto bounds = scaled.bounds.at(window->id);
-        const Vector2 point{bounds.x + bounds.width / 2, bounds.y + bounds.height / 2};
-        require(canvases.Update({0, 0, 960, 540}, point), "Runtime canvas lost its reference dimensions");
+        const Vector2 point{.x = bounds.x + bounds.width / 2, .y = bounds.y + bounds.height / 2};
+        require(
+            canvases.Update({.x = 0, .y = 0, .width = 960, .height = 540}, point),
+            "Runtime canvas lost its reference dimensions");
         registry.get<sage::UINode>(first).data.visible = false;
         registry.get<sage::UINode>(second).data.visible = false;
-        require(!canvases.Update({0, 0, 960, 540}, point), "Runtime canvas ignored changed node visibility");
+        require(
+            !canvases.Update({.x = 0, .y = 0, .width = 960, .height = 540}, point),
+            "Runtime canvas ignored changed node visibility");
         registry.get<sage::UINode>(second).data.visible = true;
-        require(canvases.Update({0, 0, 960, 540}, point), "Runtime canvas did not restore node visibility");
+        require(
+            canvases.Update({.x = 0, .y = 0, .width = 960, .height = 540}, point),
+            "Runtime canvas did not restore node visibility");
         registry.get<sage::UINode>(firstWood).data.text = "99";
         require(registry.get<sage::UINode>(secondWood).data.text == "0", "Instance state leaked");
         require(registry.view<sage::sgTransform>().empty(), "Canvas leaked into world transforms");

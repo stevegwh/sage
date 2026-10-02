@@ -196,7 +196,7 @@ namespace sage::editor
     {
         if (index >= assets.size()) return;
 
-        auto& placeable = assets[index];
+        auto& placeable = assets.at(index);
         placeable.displayName = DisplayNameFromModelKey(modelKey);
         placeable.modelKey = modelKey;
         placeable.labelStem = LabelStemFromModelKey(modelKey);
@@ -312,10 +312,10 @@ namespace sage::editor
         for (const auto& placeable : assets)
         {
             entries.push_back(
-                {placeable.displayName,
-                 placeable.modelKey,
-                 ResourceManager::GetInstance().GetModelSourcePath(placeable.modelKey),
-                 assetDefaultsPath(placeable)});
+                {.displayName = placeable.displayName,
+                 .modelKey = placeable.modelKey,
+                 .sourcePath = ResourceManager::GetInstance().GetModelSourcePath(placeable.modelKey),
+                 .defaultsPath = assetDefaultsPath(placeable)});
         }
         return entries;
     }

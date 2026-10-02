@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "entt/entt.hpp"
 #include "engine/Colors.hpp"
+#include "entt/entt.hpp"
 #include "raylib.h"
 #include <compare>
 
@@ -23,7 +23,7 @@ namespace sage
 
         GridSquare operator-(const GridSquare& other) const
         {
-            return {row - other.row, col - other.col};
+            return {.row = row - other.row, .col = col - other.col};
         }
 
         void operator-=(const GridSquare& other)
@@ -34,7 +34,7 @@ namespace sage
 
         GridSquare operator+(const GridSquare& other) const
         {
-            return {row + other.row, col + other.col};
+            return {.row = row + other.row, .col = col + other.col};
         }
 
         void operator+=(const GridSquare& other)
@@ -47,7 +47,7 @@ namespace sage
     class TerrainTile
     {
         float height = -1;
-        Vector3 normal = Vector3{0, 1, 0};
+        Vector3 normal = Vector3{.x = 0, .y = 1, .z = 0};
         entt::entity surface = entt::null;
         bool isSet = false;
 
@@ -81,11 +81,11 @@ namespace sage
         int pathfindingCost = 1;
         bool drawDebug = false;
         Color debugColor = sage::colors::RED_COLOR;
-        GridSquare gridSquareIndex;
-        Vector3 worldPosMin; // Top Left
-        Vector3 worldPosMax; // Bottom Right
-        Vector3 worldPosCentre;
-        Vector3 debugBox;
+        GridSquare gridSquareIndex{};
+        Vector3 worldPosMin{}; // Top Left
+        Vector3 worldPosMax{}; // Bottom Right
+        Vector3 worldPosCentre{};
+        Vector3 debugBox{};
         entt::entity occupant = entt::null;
         bool occupied = false;
 
@@ -95,7 +95,10 @@ namespace sage
               worldPosMin(_worldPosMin),
               worldPosMax(_worldPosMax),
               worldPosCentre(_worldPosCentre),
-              debugBox({fabsf(worldPosMax.x - worldPosMin.x), 0.1f, fabsf(worldPosMax.z - worldPosMin.z)})
+              debugBox(
+                  {.x = fabsf(worldPosMax.x - worldPosMin.x),
+                   .y = 0.1f,
+                   .z = fabsf(worldPosMax.z - worldPosMin.z)})
         {
         }
         // Used for vector resize

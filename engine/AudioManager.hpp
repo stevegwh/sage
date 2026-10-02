@@ -21,6 +21,10 @@ namespace sage
         Music PlayMusic(const std::string& name);
         Sound PlaySFX(const std::string& name);
         void Update() const;
+        AudioManager(const AudioManager&) = delete;
+        AudioManager& operator=(const AudioManager&) = delete;
+        AudioManager(AudioManager&&) = delete;
+        AudioManager& operator=(AudioManager&&) = delete;
         ~AudioManager();
         AudioManager();
     };

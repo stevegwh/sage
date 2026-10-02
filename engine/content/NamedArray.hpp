@@ -1,6 +1,7 @@
 #pragma once
 #include "cereal/archives/json.hpp"
 #include "cereal/types/array.hpp"
+#include <functional>
 #include <stdexcept>
 
 namespace sage::content
@@ -10,7 +11,7 @@ namespace sage::content
     template <class Array>
     struct ArrayValue
     {
-        Array& values;
+        std::reference_wrapper<Array> values;
         template <class Archive>
         void serialize(Archive& archive)
         {
@@ -18,19 +19,19 @@ namespace sage::content
                 std::is_same_v<Archive, cereal::JSONInputArchive> ||
                 std::is_same_v<Archive, cereal::JSONOutputArchive>)
             {
-                cereal::size_type size = values.size();
+                cereal::size_type size = values.get().size();
                 archive(cereal::make_size_tag(size));
-                if (size != values.size()) throw std::runtime_error("Invalid fixed array length");
-                for (auto& value : values)
+                if (size != values.get().size()) throw std::runtime_error("Invalid fixed array length");
+                for (auto& value : values.get())
                     archive(value);
             }
             else
-                archive(values);
+                archive(values.get());
         }
     };
     template <class Array>
     ArrayValue<Array> NamedArray(Array& values)
     {
-        return {values};
+        return {std::ref(values)};
     }
 } // namespace sage::content

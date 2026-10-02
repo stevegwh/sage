@@ -9,8 +9,8 @@
 #include "engine/EngineSystems.hpp"
 #include "engine/KeyMapping.hpp"
 #include "engine/ResourceManager.hpp"
-#include "engine/Serializer.hpp"
 #include "engine/SceneRenderTarget.hpp"
+#include "engine/Serializer.hpp"
 #include "engine/Settings.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/UserInput.hpp"
@@ -38,7 +38,9 @@ namespace sage
             editor::ClampEditorDockLayout(dockLayout);
             const Rectangle viewport = editor::CalculateEditorSceneViewport(settings, dockLayout, fullscreen);
             settings.SetRenderViewport(
-                static_cast<int>(viewport.width), static_cast<int>(viewport.height), {viewport.x, viewport.y});
+                static_cast<int>(viewport.width),
+                static_cast<int>(viewport.height),
+                {.x = viewport.x, .y = viewport.y});
         }
 
         RenderTexture LoadFilteredRenderTexture(const int width, const int height)
@@ -99,16 +101,27 @@ namespace sage
         const int barX = (width - barWidth) / 2;
         const int barY = height / 2 + 50;
         const int markerWidth = std::max(20, barWidth / 5);
-        const float travel = static_cast<float>(std::max(0, barWidth - markerWidth));
-        const float phase = static_cast<float>(std::fmod(GetTime() * 0.8, 2.0));
+        const auto travel = static_cast<float>(std::max(0, barWidth - markerWidth));
+        const auto phase = static_cast<float>(std::fmod(GetTime() * 0.8, 2.0));
         const float position = phase <= 1.0f ? phase : 2.0f - phase;
 
         BeginDrawing();
-        ClearBackground({24, 27, 34, 255});
-        DrawText(title, (width - MeasureText(title, titleSize)) / 2, height / 2 - 65, titleSize, RAYWHITE);
-        DrawText(stage, (width - MeasureText(stage, stageSize)) / 2, height / 2 - 10, stageSize, LIGHTGRAY);
-        DrawRectangle(barX, barY, barWidth, 8, {55, 61, 72, 255});
-        DrawRectangle(barX + static_cast<int>(position * travel), barY, markerWidth, 8, SKYBLUE);
+        ClearBackground({.r = 24, .g = 27, .b = 34, .a = 255});
+        DrawText(
+            title,
+            (width - MeasureText(title, titleSize)) / 2,
+            height / 2 - 65,
+            titleSize,
+            sage::colors::RAY_WHITE_COLOR);
+        DrawText(
+            stage,
+            (width - MeasureText(stage, stageSize)) / 2,
+            height / 2 - 10,
+            stageSize,
+            sage::colors::LIGHT_GRAY_COLOR);
+        DrawRectangle(barX, barY, barWidth, 8, {.r = 55, .g = 61, .b = 72, .a = 255});
+        DrawRectangle(
+            barX + static_cast<int>(position * travel), barY, markerWidth, 8, sage::colors::SKY_BLUE_COLOR);
         EndDrawing();
     }
 
@@ -123,8 +136,8 @@ namespace sage
         serializer::LoadAssetBinFile(
             registry.get(), "resources/assets.bin", [this]() { drawLoadingScreen("Loading packed assets..."); });
         drawLoadingScreen("Preparing scene...");
-        colorGradeShader = ResourceManager::GetInstance().ShaderLoad(
-            nullptr, ShaderPath("custom/color_grade.fs").c_str());
+        colorGradeShader =
+            ResourceManager::GetInstance().ShaderLoad(std::nullopt, ShaderPath("custom/color_grade.fs"));
         bloomTextureLocation = GetShaderLocation(colorGradeShader, "bloomTexture");
         SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
         if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
@@ -144,13 +157,14 @@ namespace sage
             });
 
         const auto renderViewport = settings->GetRenderViewPort();
-        renderTexture = LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        renderTexture =
+            LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         // Game UI shares the (docked) render viewport so it scales to and centres
         // in the same area as the game's 3D view.
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
-        bloomPass = std::make_unique<BloomPass>(
-            static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        bloomPass =
+            std::make_unique<BloomPass>(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
         rlImGuiSetup(true);
         imguiReady = true;
 
@@ -206,10 +220,7 @@ namespace sage
 
         SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
         scene->CaptureAutomationFrame(
-            renderTexture,
-            playing ? gameUiTexture.texture : Texture2D{},
-            colorGradeShader,
-            bloomPass->Texture());
+            renderTexture, playing ? gameUiTexture.texture : Texture2D{}, colorGradeShader, bloomPass->Texture());
 
         BeginDrawing();
         ClearBackground(sage::colors::BLACK_COLOR);
@@ -223,8 +234,8 @@ namespace sage
         SetShaderValueTexture(colorGradeShader, bloomTextureLocation, bloomPass->Texture());
         DrawTextureRec(
             renderTexture.texture,
-            {0, 0, renderViewport.x, -renderViewport.y},
-            {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
+            {.x = 0, .y = 0, .width = renderViewport.x, .height = -renderViewport.y},
+            {.x = appViewportOffset.x + renderViewportOffset.x, .y = appViewportOffset.y + renderViewportOffset.y},
             sage::colors::WHITE_COLOR);
         EndShaderMode();
 
@@ -232,8 +243,9 @@ namespace sage
         {
             DrawTextureRec(
                 gameUiTexture.texture,
-                {0, 0, renderViewport.x, -renderViewport.y},
-                {appViewportOffset.x + renderViewportOffset.x, appViewportOffset.y + renderViewportOffset.y},
+                {.x = 0, .y = 0, .width = renderViewport.x, .height = -renderViewport.y},
+                {.x = appViewportOffset.x + renderViewportOffset.x,
+                 .y = appViewportOffset.y + renderViewportOffset.y},
                 sage::colors::WHITE_COLOR);
         }
 
@@ -292,7 +304,8 @@ namespace sage
 
         UnloadRenderTexture(renderTexture);
         const auto renderViewport = settings->GetRenderViewPort();
-        renderTexture = LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        renderTexture =
+            LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
 
         UnloadRenderTexture(gameUiTexture);
         gameUiTexture =
@@ -342,7 +355,7 @@ namespace sage
         while (!exitWindow)
         {
             if (WindowShouldClose()) exitWindowRequested = true;
-            if (IsKeyPressed(KEY_ESCAPE)) (void)scene->HandleEscapePressed();
+            if (IsKeyPressed(KEY_ESCAPE)) static_cast<void>(scene->HandleEscapePressed());
 
             handleWindowResize();
             handleViewportFullscreenToggle();

@@ -4,8 +4,8 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/DoorBehaviorComponent.hpp"
 #include "engine/components/Renderable.hpp"
-#include "engine/components/SpatialAudioComponent.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/components/SpatialAudioComponent.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
@@ -61,7 +61,7 @@ namespace sage::editor
         if (sys->registry->any_of<DoorBehaviorComponent>(entity)) return ICON_FA_DOOR_OPEN;
         if (sys->registry->any_of<SpatialAudioComponent>(entity)) return ICON_FA_VOLUME_HIGH;
         if (const auto* meta = sys->registry->try_get<MetaData>(entity);
-            meta != nullptr && HasTag(*meta, SpawnPointTag))
+            meta != nullptr && HasTag(*meta, SPAWN_POINT_TAG))
         {
             return ICON_FA_LOCATION_DOT;
         }

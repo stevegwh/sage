@@ -202,7 +202,7 @@ namespace sage::editor
         }
 
         if (callbacks.prepareForLoad) callbacks.prepareForLoad();
-        if (!editor::LoadMap(sys->registry, pathString.c_str(), components, updateLoadingScreen)) return;
+        if (!editor::LoadMap(*sys->registry, pathString.c_str(), updateLoadingScreen)) return;
         currentMapPath = selectedPath;
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();
@@ -243,7 +243,7 @@ namespace sage::editor
 
         const auto outputPath = ensureMapExtension(path);
         const auto pathString = outputPath.string();
-        if (!editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder, components)) return;
+        if (!editor::SaveMap(*sys->registry, pathString.c_str(), hierarchyOrder)) return;
         currentMapPath = outputPath;
         if (callbacks.setSceneName) callbacks.setSceneName(sceneNameFromPath(currentMapPath));
         rememberCurrentMapPath();

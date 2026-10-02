@@ -9,7 +9,7 @@ namespace sage
     {
         std::map<unsigned int, Rectangle> bounds;
         std::vector<unsigned int> cells; // Back-to-front paint order.
-        unsigned int Hit(Vector2 point) const;
+        [[nodiscard]] unsigned int Hit(Vector2 point) const;
     };
 
     // Uses the same retained table layout and drawing code as existing game UI.

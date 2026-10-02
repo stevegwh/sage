@@ -1,7 +1,7 @@
-#include "RaylibMemory.hpp"
+#include "TerrainMesh.hpp"
 #include "engine/MathConstants.hpp"
 #include "engine/SimulationClock.hpp"
-#include "TerrainMesh.hpp"
+#include "RaylibMemory.hpp"
 
 #include "components/Collideable.hpp"
 #include "components/CollisionIntent.hpp"
@@ -23,7 +23,7 @@ namespace sage
     namespace
     {
         constexpr int TERRAIN_CHUNK_QUADS = 64;
-        constexpr Color TERRAIN_TINT = {92, 142, 74, 255};
+        constexpr Color TERRAIN_TINT = {.r = 92, .g = 142, .b = 74, .a = 255};
         // Minimum half-thickness so a freshly created flat terrain still has a
         // pickable bounding box.
         constexpr float TERRAIN_BOUNDS_PADDING = 0.05f;
@@ -58,10 +58,10 @@ namespace sage
             const int firstRow = chunkRow * TERRAIN_CHUNK_QUADS;
             const int firstCol = chunkCol * TERRAIN_CHUNK_QUADS;
             return {
-                firstRow,
-                std::min(firstRow + TERRAIN_CHUNK_QUADS, terrain.resolution - 1),
-                firstCol,
-                std::min(firstCol + TERRAIN_CHUNK_QUADS, terrain.resolution - 1)};
+                .firstRow = firstRow,
+                .lastRow = std::min(firstRow + TERRAIN_CHUNK_QUADS, terrain.resolution - 1),
+                .firstCol = firstCol,
+                .lastCol = std::min(firstCol + TERRAIN_CHUNK_QUADS, terrain.resolution - 1)};
         }
 
         void fillChunkVertexData(const Terrain& terrain, const ChunkRange& range, Mesh& mesh)
@@ -99,8 +99,7 @@ namespace sage
             mesh.vertices = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
             mesh.normals = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
             mesh.texcoords = static_cast<float*>(MemAlloc(vertexCount * 2 * sizeof(float)));
-            mesh.indices =
-                static_cast<unsigned short*>(MemAlloc(mesh.triangleCount * 3 * sizeof(unsigned short)));
+            mesh.indices = static_cast<unsigned short*>(MemAlloc(mesh.triangleCount * 3 * sizeof(unsigned short)));
 
             fillChunkVertexData(terrain, range, mesh);
 
@@ -187,19 +186,25 @@ namespace sage
 
                 auto& mesh = model.meshes[chunkRow * chunks + chunkCol];
                 fillChunkVertexData(terrain, range, mesh);
-                UpdateMeshBuffer(mesh, vboPositionSlot, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
-                UpdateMeshBuffer(mesh, vboNormalSlot, mesh.normals, mesh.vertexCount * 3 * sizeof(float), 0);
+                UpdateMeshBuffer(
+                    mesh,
+                    vboPositionSlot,
+                    mesh.vertices,
+                    static_cast<int>(mesh.vertexCount * 3 * sizeof(float)),
+                    0);
+                UpdateMeshBuffer(
+                    mesh, vboNormalSlot, mesh.normals, static_cast<int>(mesh.vertexCount * 3 * sizeof(float)), 0);
             }
         }
     }
 
     BoundingBox GetTerrainLocalBounds(const Terrain& terrain)
     {
-        const auto [minHeight, maxHeight] = std::minmax_element(terrain.heights.begin(), terrain.heights.end());
+        const auto [minHeight, maxHeight] = std::ranges::minmax_element(terrain.heights);
         const float worldSize = terrain.WorldSize();
         return {
-            {0.0f, *minHeight - TERRAIN_BOUNDS_PADDING, 0.0f},
-            {worldSize, *maxHeight + TERRAIN_BOUNDS_PADDING, worldSize}};
+            .min = {.x = 0.0f, .y = *minHeight - TERRAIN_BOUNDS_PADDING, .z = 0.0f},
+            .max = {.x = worldSize, .y = *maxHeight + TERRAIN_BOUNDS_PADDING, .z = worldSize}};
     }
 
     Matrix GetTerrainWorldMatrix(const sgTransform& transform)
@@ -208,7 +213,8 @@ namespace sage
         const auto scale = transform.GetScale();
         return MatrixMultiply(
             MatrixMultiply(
-                MatrixScale(scale.x, scale.y, scale.z), MatrixRotateY(transform.GetWorldRot().y * sage::math::DEGREES_TO_RADIANS)),
+                MatrixScale(scale.x, scale.y, scale.z),
+                MatrixRotateY(transform.GetWorldRot().y * sage::math::DEGREES_TO_RADIANS)),
             MatrixTranslate(position.x, position.y, position.z));
     }
 
@@ -218,13 +224,12 @@ namespace sage
         TerrainRegion brushRegion(const Terrain& terrain, const Vector2 center, const float radius)
         {
             return {
-                std::max(0, static_cast<int>(std::floor((center.y - radius) / terrain.cellSize))),
-                std::max(0, static_cast<int>(std::floor((center.x - radius) / terrain.cellSize))),
-                std::min(
+                .minRow = std::max(0, static_cast<int>(std::floor((center.y - radius) / terrain.cellSize))),
+                .minCol = std::max(0, static_cast<int>(std::floor((center.x - radius) / terrain.cellSize))),
+                .maxRow = std::min(
                     terrain.resolution - 1, static_cast<int>(std::ceil((center.y + radius) / terrain.cellSize))),
-                std::min(
-                    terrain.resolution - 1,
-                    static_cast<int>(std::ceil((center.x + radius) / terrain.cellSize)))};
+                .maxCol = std::min(
+                    terrain.resolution - 1, static_cast<int>(std::ceil((center.x + radius) / terrain.cellSize)))};
         }
 
         float smoothstepFalloff(const float distance, const float radius)
@@ -271,7 +276,8 @@ namespace sage
         // the region edge (so brush borders blend into untouched terrain).
         const auto sample = [&](const int row, const int col) -> float {
             if (row >= region.minRow && row <= region.maxRow && col >= region.minCol && col <= region.maxCol)
-                return snapshot[static_cast<std::size_t>(row - region.minRow) * snapCols + (col - region.minCol)];
+                return snapshot.at(
+                    static_cast<std::size_t>(row - region.minRow) * snapCols + (col - region.minCol));
             return terrain.GetHeight(row, col);
         };
 
@@ -299,20 +305,18 @@ namespace sage
                 case TerrainBrushMode::Flatten:
                     next = height + (reference - height) * std::clamp(amount, 0.0f, 1.0f) * falloff;
                     break;
-                case TerrainBrushMode::Smooth:
-                {
-                    const float avg = 0.25f * (sample(row - 1, col) + sample(row + 1, col) +
-                                               sample(row, col - 1) + sample(row, col + 1));
+                case TerrainBrushMode::Smooth: {
+                    const float avg = 0.25f * (sample(row - 1, col) + sample(row + 1, col) + sample(row, col - 1) +
+                                               sample(row, col + 1));
                     next = height + (avg - height) * std::clamp(amount, 0.0f, 1.0f) * falloff;
                     break;
                 }
                 case TerrainBrushMode::Noise:
                     next = height + noiseAt(row, col, seed) * amount * falloff;
                     break;
-                case TerrainBrushMode::Erosion:
-                {
-                    const float avg = 0.25f * (sample(row - 1, col) + sample(row + 1, col) +
-                                               sample(row, col - 1) + sample(row, col + 1));
+                case TerrainBrushMode::Erosion: {
+                    const float avg = 0.25f * (sample(row - 1, col) + sample(row + 1, col) + sample(row, col - 1) +
+                                               sample(row, col + 1));
                     const float diff = avg - height;
                     // Peaks (diff < 0) wear faster than pits fill, so the field
                     // loses material overall — the thermal-erosion look.
@@ -335,22 +339,18 @@ namespace sage
         Terrain& terrain, const Vector2 localStart, const Vector2 localEnd, const float halfWidth)
     {
         const TerrainRegion region{
-            std::max(
+            .minRow = std::max(
                 0,
-                static_cast<int>(
-                    std::floor((std::min(localStart.y, localEnd.y) - halfWidth) / terrain.cellSize))),
-            std::max(
+                static_cast<int>(std::floor((std::min(localStart.y, localEnd.y) - halfWidth) / terrain.cellSize))),
+            .minCol = std::max(
                 0,
-                static_cast<int>(
-                    std::floor((std::min(localStart.x, localEnd.x) - halfWidth) / terrain.cellSize))),
-            std::min(
+                static_cast<int>(std::floor((std::min(localStart.x, localEnd.x) - halfWidth) / terrain.cellSize))),
+            .maxRow = std::min(
                 terrain.resolution - 1,
-                static_cast<int>(
-                    std::ceil((std::max(localStart.y, localEnd.y) + halfWidth) / terrain.cellSize))),
-            std::min(
+                static_cast<int>(std::ceil((std::max(localStart.y, localEnd.y) + halfWidth) / terrain.cellSize))),
+            .maxCol = std::min(
                 terrain.resolution - 1,
-                static_cast<int>(
-                    std::ceil((std::max(localStart.x, localEnd.x) + halfWidth) / terrain.cellSize)))};
+                static_cast<int>(std::ceil((std::max(localStart.x, localEnd.x) + halfWidth) / terrain.cellSize)))};
 
         const Vector2 axis = Vector2Subtract(localEnd, localStart);
         const float axisLenSq = Vector2LengthSqr(axis);
@@ -364,7 +364,8 @@ namespace sage
             for (int col = region.minCol; col <= region.maxCol; ++col)
             {
                 const Vector2 point = {
-                    static_cast<float>(col) * terrain.cellSize, static_cast<float>(row) * terrain.cellSize};
+                    .x = static_cast<float>(col) * terrain.cellSize,
+                    .y = static_cast<float>(row) * terrain.cellSize};
                 const float t = std::clamp(
                     Vector2DotProduct(Vector2Subtract(point, localStart), axis) / axisLenSq, 0.0f, 1.0f);
                 const Vector2 projected = Vector2Add(localStart, Vector2Scale(axis, t));
@@ -393,7 +394,7 @@ namespace sage
         const Vector3 localDirection = Vector3Subtract(localRayPoint, localOrigin);
         if (Vector3LengthSqr(localDirection) < 1e-8f) return std::nullopt;
 
-        const Ray localRay = {localOrigin, Vector3Normalize(localDirection)};
+        const Ray localRay = {.position = localOrigin, .direction = Vector3Normalize(localDirection)};
         const auto bounds = GetTerrainLocalBounds(terrain);
         const auto entry = GetRayCollisionBox(localRay, bounds);
         if (!entry.hit) return std::nullopt;
@@ -428,7 +429,8 @@ namespace sage
                     }
                 }
                 const Vector3 hit = Vector3Scale(Vector3Add(high, low), 0.5f);
-                return Vector3Transform(Vector3{hit.x, terrain.SampleHeight(hit.x, hit.z), hit.z}, terrainToWorld);
+                return Vector3Transform(
+                    Vector3{.x = hit.x, .y = terrain.SampleHeight(hit.x, hit.z), .z = hit.z}, terrainToWorld);
             }
             previous = point;
             previousAbove = above;
@@ -448,7 +450,7 @@ namespace sage
         renderable.hint = TERRAIN_TINT;
 
         Shader lighting = ResourceManager::GetInstance().ShaderLoad(
-            ShaderPath("custom/lighting.vs").c_str(), ShaderPath("custom/lighting.fs").c_str());
+            ShaderPath("custom/lighting.vs"), ShaderPath("custom/lighting.fs"));
         lightManager.LinkShaderToLights(lighting);
         renderable.SetShader(lighting);
 
@@ -461,7 +463,7 @@ namespace sage
         auto& surface = registry.get_or_emplace<NavigationSurface>(entity);
         surface.heightSource = NavigationHeightSource::TerrainHeightField;
         auto& cursorTarget = registry.get_or_emplace<CursorTarget>(entity);
-        cursorTarget.cursor = cursors::Move;
+        cursorTarget.cursor = cursors::MOVE;
         cursorTarget.allowNavigationClickThrough = true;
         UpdateTerrainCollideableBounds(registry, entity);
     }

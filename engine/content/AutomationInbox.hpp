@@ -34,16 +34,20 @@ namespace sage::content
             std::filesystem::create_directories(directory);
             json::Document session(rapidjson::kObjectType);
             auto& a = session.GetAllocator();
-            json::Put(session, "protocol", std::uint64_t(1), a);
+            json::Put(session, "protocol", static_cast<std::uint64_t>(1), a);
             json::Put(session, "directory", std::filesystem::absolute(directory).string(), a);
             Write(directory / "session.json", session);
         }
+        AutomationInbox(const AutomationInbox&) = delete;
+        AutomationInbox& operator=(const AutomationInbox&) = delete;
+        AutomationInbox(AutomationInbox&&) = delete;
+        AutomationInbox& operator=(AutomationInbox&&) = delete;
         ~AutomationInbox()
         {
             std::error_code error;
             std::filesystem::remove(directory / "session.json", error);
         }
-        const std::filesystem::path& Directory() const
+        [[nodiscard]] const std::filesystem::path& Directory() const
         {
             return directory;
         }

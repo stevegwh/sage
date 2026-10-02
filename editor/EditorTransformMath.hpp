@@ -6,8 +6,8 @@
 
 #pragma once
 
-#include "raylib.h"
 #include "engine/MathConstants.hpp"
+#include "raylib.h"
 #include "raymath.h"
 
 #include <algorithm>
@@ -25,20 +25,20 @@ namespace sage::editor
 
     inline Vector3 SnapToGridLines(const Vector3 worldPos)
     {
-        return {SnapGridCoord(worldPos.x), worldPos.y, SnapGridCoord(worldPos.z)};
+        return {.x = SnapGridCoord(worldPos.x), .y = worldPos.y, .z = SnapGridCoord(worldPos.z)};
     }
 
     inline BoundingBox TransformBoundingBoxByCorners(const BoundingBox& bounds, const Matrix& transform)
     {
         const std::array<Vector3, 8> corners = {
-            Vector3{bounds.min.x, bounds.min.y, bounds.min.z},
-            Vector3{bounds.min.x, bounds.min.y, bounds.max.z},
-            Vector3{bounds.min.x, bounds.max.y, bounds.min.z},
-            Vector3{bounds.min.x, bounds.max.y, bounds.max.z},
-            Vector3{bounds.max.x, bounds.min.y, bounds.min.z},
-            Vector3{bounds.max.x, bounds.min.y, bounds.max.z},
-            Vector3{bounds.max.x, bounds.max.y, bounds.min.z},
-            Vector3{bounds.max.x, bounds.max.y, bounds.max.z},
+            Vector3{.x = bounds.min.x, .y = bounds.min.y, .z = bounds.min.z},
+            Vector3{.x = bounds.min.x, .y = bounds.min.y, .z = bounds.max.z},
+            Vector3{.x = bounds.min.x, .y = bounds.max.y, .z = bounds.min.z},
+            Vector3{.x = bounds.min.x, .y = bounds.max.y, .z = bounds.max.z},
+            Vector3{.x = bounds.max.x, .y = bounds.min.y, .z = bounds.min.z},
+            Vector3{.x = bounds.max.x, .y = bounds.min.y, .z = bounds.max.z},
+            Vector3{.x = bounds.max.x, .y = bounds.max.y, .z = bounds.min.z},
+            Vector3{.x = bounds.max.x, .y = bounds.max.y, .z = bounds.max.z},
         };
 
         BoundingBox transformed{};
@@ -61,7 +61,9 @@ namespace sage::editor
     inline Matrix BuildRenderableEntityMatrix(const Vector3 position, const Vector3 rotation, const Vector3 scale)
     {
         const Matrix rotationMatrix = MatrixMultiply(
-            MatrixMultiply(MatrixRotateZ(rotation.z * sage::math::DEGREES_TO_RADIANS), MatrixRotateY(rotation.y * sage::math::DEGREES_TO_RADIANS)),
+            MatrixMultiply(
+                MatrixRotateZ(rotation.z * sage::math::DEGREES_TO_RADIANS),
+                MatrixRotateY(rotation.y * sage::math::DEGREES_TO_RADIANS)),
             MatrixRotateX(rotation.x * sage::math::DEGREES_TO_RADIANS));
         return MatrixMultiply(
             MatrixMultiply(MatrixScale(scale.x, scale.y, scale.z), rotationMatrix),

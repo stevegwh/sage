@@ -1,6 +1,6 @@
-#include "engine/ui/CanvasSystem.hpp"
 #include "EditorScene.hpp"
 #include "engine/Colors.hpp"
+#include "engine/ui/CanvasSystem.hpp"
 
 #include <iterator>
 
@@ -18,6 +18,7 @@
 #include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
+#include "engine/components/ParticleEmitterComponent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -27,8 +28,6 @@
 #include "engine/EditorLayoutMapFormat.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Flatpack.hpp"
-#include "engine/components/ParticleEmitterComponent.hpp"
-#include "engine/systems/ParticleEmitterSystem.hpp"
 #include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
 #include "engine/LightManager.hpp"
@@ -36,6 +35,7 @@
 #include "engine/SceneTags.hpp"
 #include "engine/systems/CollisionSystem.hpp"
 #include "engine/systems/NavigationGridSystem.hpp"
+#include "engine/systems/ParticleEmitterSystem.hpp"
 #include "engine/systems/RenderSystem.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include "engine/systems/UberShaderSystem.hpp"
@@ -53,8 +53,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <format>
 #include <fstream>
 #include <iostream>
@@ -99,15 +99,15 @@ namespace sage
                     capitalizeNext = true;
                     continue;
                 }
-                result += capitalizeNext ? static_cast<char>(std::toupper(character))
-                                         : static_cast<char>(character);
+                result +=
+                    capitalizeNext ? static_cast<char>(std::toupper(character)) : static_cast<char>(character);
                 capitalizeNext = false;
             }
             return result;
         }
         constexpr float DEFAULT_COMPONENT_LIGHT_BRIGHTNESS = 3.0f;
-        constexpr Color DEFAULT_COMPONENT_LIGHT_COLOR = {255, 244, 214, 255};
-        constexpr Color SPAWN_POINT_MARKER_COLOR = {80, 180, 255, 255};
+        constexpr Color DEFAULT_COMPONENT_LIGHT_COLOR = {.r = 255, .g = 244, .b = 214, .a = 255};
+        constexpr Color SPAWN_POINT_MARKER_COLOR = {.r = 80, .g = 180, .b = 255, .a = 255};
 
         bool modelKeyAvailable(const std::string& key)
         {
@@ -139,8 +139,7 @@ namespace sage
                 if (launcher == 0)
                 {
                     setsid();
-                    execlp(
-                        "code", "code", "--reuse-window", path.c_str(), static_cast<char*>(nullptr));
+                    execlp("code", "code", "--reuse-window", path.c_str(), static_cast<char*>(nullptr));
                     execlp("xdg-open", "xdg-open", path.c_str(), static_cast<char*>(nullptr));
                     _exit(127);
                 }
@@ -149,8 +148,8 @@ namespace sage
 
             if (child < 0)
             {
-                std::cerr << "EditorScene: could not start the default application for '"
-                          << file.string() << "'.\n";
+                std::cerr << "EditorScene: could not start the default application for '" << file.string()
+                          << "'.\n";
                 return;
             }
 
@@ -217,7 +216,7 @@ namespace sage
         for (const auto entity : sys->registry->view<Renderable>())
         {
             auto& renderable = sys->registry->get<Renderable>(entity);
-            if (renderable.GetModel() == nullptr) continue;
+            if (!renderable.GetModel()) continue;
             if (sys->registry->any_of<CustomShaderComponent>(entity))
             {
                 if (sys->registry->any_of<UberShaderComponent>(entity))
@@ -226,8 +225,8 @@ namespace sage
             }
             if (!sys->registry->any_of<UberShaderComponent>(entity))
             {
-                auto& uber =
-                    sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
+                auto& uber = sys->registry->emplace<UberShaderComponent>(
+                    entity, renderable.GetModel()->get().GetMaterialCount());
                 uber.SetFlagAll(UberShaderComponent::Flags::Lit);
             }
             // Undo/redo restores Animation and the Renderable independently of the
@@ -265,7 +264,7 @@ namespace sage
         gui->SetOverlayStatus(
             editorModes->GetStateName(),
             describeCursorPosition(),
-            CAMERA_MODE_NAMES[static_cast<int>(editorCamera.mode)]);
+            CAMERA_MODE_NAMES.at(static_cast<int>(editorCamera.mode)));
         const bool flatpackOpen = flatpackSession && flatpackSession->IsActive();
         if (flatpackOpen)
         {
@@ -325,7 +324,8 @@ namespace sage
         if (!target) return;
 
         const auto viewport = gameViewportScreenRect();
-        editorCamera.Focus(*sys->camera->getRaylibCam(), *target, viewport.width / std::max(1.0f, viewport.height));
+        editorCamera.Focus(
+            *sys->camera->getRaylibCam(), *target, viewport.width / std::max(1.0f, viewport.height));
         middleCameraDrag = rightCameraDrag = false;
     }
 
@@ -436,8 +436,10 @@ namespace sage
             sys->camera->UnlockInput();
         }
 
-        if (!cameraInputBlocked) handleMouseCameraControls(!uiBlocksScroll && inViewport);
-        else middleCameraDrag = rightCameraDrag = false;
+        if (!cameraInputBlocked)
+            handleMouseCameraControls(!uiBlocksScroll && inViewport);
+        else
+            middleCameraDrag = rightCameraDrag = false;
 
         if (editorCamera.mode == editor::CameraMode::Game)
             sys->camera->Update();
@@ -447,11 +449,12 @@ namespace sage
             if (editorCamera.mode == editor::CameraMode::Focused)
             {
                 const auto target = editor::ComputeFocusTarget(*sys->registry, selection->SelectedWithChildren());
-                if (target) editorCamera.Follow(camera, *target);
-                else setCameraMode(editor::CameraMode::Free);
+                if (target)
+                    editorCamera.Follow(camera, *target);
+                else
+                    setCameraMode(editor::CameraMode::Free);
             }
-            if (!cameraInputBlocked && !IsMetaKeyDown() &&
-                !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
+            if (!cameraInputBlocked && !IsMetaKeyDown() && !IsKeyDown(KEY_LEFT_ALT) && !IsKeyDown(KEY_RIGHT_ALT))
             {
                 if (inViewport || rightCameraDrag || middleCameraDrag)
                 {
@@ -460,17 +463,23 @@ namespace sage
                         const int rotationInput = IsKeyDown(KEY_E) - IsKeyDown(KEY_Q);
                         if (rotationInput != 0)
                             editorCamera.Yaw(
-                                camera, rotationInput * FOCUSED_CAMERA_KEY_ROTATION_SPEED * GetFrameTime());
+                                camera,
+                                static_cast<float>(rotationInput) * FOCUSED_CAMERA_KEY_ROTATION_SPEED *
+                                    GetFrameTime());
                         const int heightInput = IsKeyDown(KEY_S) - IsKeyDown(KEY_W);
                         if (heightInput != 0)
                             editorCamera.Pitch(
-                                camera, heightInput * FOCUSED_CAMERA_KEY_ROTATION_SPEED * GetFrameTime());
+                                camera,
+                                static_cast<float>(heightInput) * FOCUSED_CAMERA_KEY_ROTATION_SPEED *
+                                    GetFrameTime());
                     }
-                    editorCamera.Move(camera,
-                        {float(IsKeyDown(KEY_D) - IsKeyDown(KEY_A)),
-                         float(IsKeyDown(KEY_E) - IsKeyDown(KEY_Q)),
-                         float(IsKeyDown(KEY_W) - IsKeyDown(KEY_S))},
-                        GetFrameTime(), IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+                    editorCamera.Move(
+                        camera,
+                        {.x = static_cast<float>(IsKeyDown(KEY_D) - IsKeyDown(KEY_A)),
+                         .y = static_cast<float>(IsKeyDown(KEY_E) - IsKeyDown(KEY_Q)),
+                         .z = static_cast<float>(IsKeyDown(KEY_W) - IsKeyDown(KEY_S))},
+                        GetFrameTime(),
+                        IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
                 }
                 if (!uiBlocksScroll && inViewport) editorCamera.Zoom(camera, GetMouseWheelMove());
             }
@@ -519,7 +528,7 @@ namespace sage
         // Marker entities have no mesh, so draw a stand-in sphere for tagged spawn points.
         for (const auto entity : sys->registry->view<sgTransform, MetaData>())
         {
-            if (!HasTag(sys->registry->get<MetaData>(entity), editor::SpawnPointTag)) continue;
+            if (!HasTag(sys->registry->get<MetaData>(entity), editor::SPAWN_POINT_TAG)) continue;
             const auto& transform = sys->registry->get<sgTransform>(entity);
             const auto position = transform.GetWorldPos();
             const auto color = SPAWN_POINT_MARKER_COLOR;
@@ -549,19 +558,23 @@ namespace sage
                 rlEnableWireMode();
                 if (sys->registry->any_of<Renderable>(entity))
                 {
-                    if (auto* model = sys->registry->get<Renderable>(entity).GetModel(); model != nullptr)
+                    if (auto model = sys->registry->get<Renderable>(entity).GetModel(); model.has_value())
                     {
-                        model->Draw(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), sage::colors::GREEN_COLOR);
+                        model->get().Draw(
+                            transform.GetWorldPos(),
+                            transform.GetWorldRot(),
+                            transform.GetScale(),
+                            sage::colors::GREEN_COLOR);
                     }
                 }
                 else if (sys->registry->any_of<DynamicRenderable>(entity))
                 {
                     const auto& renderable = sys->registry->get<DynamicRenderable>(entity);
-                    if (renderable.GetModel() != nullptr)
+                    if (renderable.GetModel().has_value())
                     {
                         renderable.Draw(
                             transform.GetWorldPos(),
-                            {0.0f, 1.0f, 0.0f},
+                            {.x = 0.0f, .y = 1.0f, .z = 0.0f},
                             transform.GetWorldRot().y,
                             transform.GetScale(),
                             sage::colors::GREEN_COLOR);
@@ -635,7 +648,8 @@ namespace sage
             return;
         }
         gui->StartImGui();
-        if (canvasEditor->IsActive()) {
+        if (canvasEditor->IsActive())
+        {
             canvasEditor->Draw();
             if (!canvasEditor->IsActive()) gui->RefreshResourceBrowser();
             drawExitConfirmationModal(exitRequested, exitConfirmed);
@@ -643,8 +657,10 @@ namespace sage
             return;
         }
         gui->SetCanvasEditCallback([this](const std::filesystem::path& path) {
-            if (path.empty()) canvasEditor->New();
-            else canvasEditor->Open(path);
+            if (path.empty())
+                canvasEditor->New();
+            else
+                canvasEditor->Open(path);
         });
         drawMainMenuBar(exitRequested);
 
@@ -945,7 +961,8 @@ namespace sage
                     }
                     else if constexpr (std::is_same_v<Component, Collideable>)
                     {
-                        constexpr BoundingBox localBounds{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
+                        constexpr BoundingBox localBounds{
+                            .min = {.x = -1.0f, .y = -1.0f, .z = -1.0f}, .max = {.x = 1.0f, .y = 1.0f, .z = 1.0f}};
                         const auto* transform = sys->registry->try_get<sgTransform>(entity);
                         sys->registry->emplace<Collideable>(
                             entity,
@@ -968,7 +985,7 @@ namespace sage
                     }
                     else if constexpr (std::is_same_v<Component, CustomShaderComponent>)
                     {
-                        (void)sys->registry->get<Renderable>(entity).EnsureMutable();
+                        static_cast<void>(sys->registry->get<Renderable>(entity).EnsureMutable());
                         if (sys->registry->any_of<UberShaderComponent>(entity))
                             sys->registry->remove<UberShaderComponent>(entity);
                         sys->registry->emplace<CustomShaderComponent>(entity);
@@ -1011,7 +1028,8 @@ namespace sage
                         if (availability.allowed)
                             openScriptBrowser();
                         else if (!availability.blockedReason.empty())
-                            std::cout << "EditorScene: cannot add component: " << availability.blockedReason << '\n';
+                            std::cout << "EditorScene: cannot add component: " << availability.blockedReason
+                                      << '\n';
                     }
                 }
                 else if (requestedComponent == editor::ComponentIdOf<Animation>())
@@ -1063,9 +1081,10 @@ namespace sage
                 if (active.has_value() && sys->registry->valid(*active))
                 {
                     if (const auto* renderable = sys->registry->try_get<Renderable>(*active);
-                        renderable != nullptr && renderable->GetModel() != nullptr)
+                        renderable != nullptr && renderable->GetModel().has_value())
                     {
-                        if (const auto index = assetCatalog->FindByModelKey(renderable->GetModel()->GetKey()))
+                        if (const auto index =
+                                assetCatalog->FindByModelKey(renderable->GetModel()->get().GetKey()))
                         {
                             editorModes->SelectPlaceable(*index);
                         }
@@ -1133,10 +1152,10 @@ namespace sage
                         {
                             sys->registry->remove<CustomShaderComponent>(entity);
                             if (const auto* renderable = sys->registry->try_get<Renderable>(entity);
-                                renderable != nullptr && renderable->GetModel() != nullptr)
+                                renderable != nullptr && renderable->GetModel().has_value())
                             {
                                 auto& uber = sys->registry->emplace<UberShaderComponent>(
-                                    entity, renderable->GetModel()->GetMaterialCount());
+                                    entity, renderable->GetModel()->get().GetMaterialCount());
                                 uber.SetFlagAll(UberShaderComponent::Flags::Lit);
                             }
                             continue;
@@ -1242,8 +1261,7 @@ namespace sage
         scriptBrowser->Open();
     }
 
-    std::optional<std::string> EditorScene::managedClassForSource(
-        const std::filesystem::path& sourceFile) const
+    std::optional<std::string> EditorScene::managedClassForSource(const std::filesystem::path& sourceFile) const
     {
         if (!csharpScripts.IsConfigured() || sourceFile.extension() != ".cs") return std::nullopt;
 
@@ -1298,8 +1316,7 @@ namespace sage
         if (typeName.empty() || !isIdentifierStart(typeName.front()) ||
             !std::ranges::all_of(typeName.substr(1), isIdentifierPart))
         {
-            std::cout << "EditorScene: C# script name must be a valid identifier: '"
-                      << typeName << "'.\n";
+            std::cout << "EditorScene: C# script name must be a valid identifier: '" << typeName << "'.\n";
             return false;
         }
 
@@ -1415,8 +1432,8 @@ namespace sage
         {
             if (reg.any_of<Animation>(entity)) continue;
             const auto* renderable = reg.try_get<Renderable>(entity);
-            if (renderable == nullptr || renderable->GetModel() == nullptr) continue;
-            if (!resources.HasModelAnimation(renderable->GetModel()->GetKey())) continue;
+            if (renderable == nullptr || !renderable->GetModel()) continue;
+            if (!resources.HasModelAnimation(renderable->GetModel()->get().GetKey())) continue;
             targets.push_back(entity);
         }
         if (targets.empty())
@@ -1429,11 +1446,11 @@ namespace sage
         for (const auto entity : targets)
         {
             auto& renderable = reg.get<Renderable>(entity);
-            const auto key = renderable.GetModel()->GetKey();
+            const auto key = renderable.GetModel()->get().GetKey();
 
             // Skinned animation writes the animated pose into the mesh data each
             // frame, so the shared ModelView must become this entity's own copy.
-            if (renderable.GetMutable() == nullptr)
+            if (!renderable.GetMutable())
             {
                 auto mutableModel = resources.CreateModelMutable(key);
                 mutableModel.SetTransform(renderable.initialTransform);
@@ -1467,12 +1484,12 @@ namespace sage
             // Return to the shared view only when the private copy existed solely
             // for skinning. Material overrides also require private storage.
             if (auto* renderable = reg.try_get<Renderable>(entity);
-                renderable != nullptr && renderable->GetMutable() != nullptr)
+                renderable != nullptr && renderable->GetMutable().has_value())
             {
-                const auto& defaults = resources.GetModelMaterialKeys(renderable->GetModel()->GetKey());
+                const auto& defaults = resources.GetModelMaterialKeys(renderable->GetModel()->get().GetKey());
                 if (renderable->GetMaterialKeys() == defaults)
                 {
-                    auto view = resources.GetModelView(renderable->GetModel()->GetKey());
+                    auto view = resources.GetModelView(renderable->GetModel()->get().GetKey());
                     view.SetTransform(renderable->initialTransform);
                     renderable->SetModel(std::move(view));
                 }
@@ -1512,7 +1529,7 @@ namespace sage
         for (const auto entity : targets)
         {
             auto& renderable = registry.get<Renderable>(entity);
-            if (renderable.GetModel() != nullptr && renderable.GetModel()->GetKey() == modelKey) continue;
+            if (renderable.GetModel().has_value() && renderable.GetModel()->get().GetKey() == modelKey) continue;
 
             const auto* oldAnimation = registry.try_get<Animation>(entity);
             const bool animated = oldAnimation != nullptr;
@@ -1525,7 +1542,7 @@ namespace sage
             if (const auto* uber = registry.try_get<UberShaderComponent>(entity))
             {
                 wasLit = std::ranges::any_of(uber->materialMap, [](const auto flags) {
-                    return (flags & UberShaderComponent::Flags::Lit) != 0;
+                    return (flags & static_cast<std::uint32_t>(UberShaderComponent::Flags::Lit)) != 0;
                 });
                 registry.remove<UberShaderComponent>(entity);
             }
@@ -1541,7 +1558,7 @@ namespace sage
                 auto& animation = registry.emplace<Animation>(entity, modelKey);
                 animation.blendDuration = blendDuration;
                 animation.current.speed = oldSpeed;
-                if (!oldClip.empty()) (void)animation.ChangeAnimationByName(oldClip, oldSpeed);
+                if (!oldClip.empty()) static_cast<void>(animation.ChangeAnimationByName(oldClip, oldSpeed));
             }
             else
             {
@@ -1558,7 +1575,7 @@ namespace sage
             if (hadUberShader)
             {
                 auto& uber = registry.emplace<UberShaderComponent>(
-                    entity, static_cast<unsigned int>(renderable.GetModel()->GetMaterialCount()));
+                    entity, static_cast<unsigned int>(renderable.GetModel()->get().GetMaterialCount()));
                 if (wasLit) uber.SetFlagAll(UberShaderComponent::Flags::Lit);
                 if (animated) uber.SetFlagAll(UberShaderComponent::Flags::Skinned);
             }
@@ -1577,8 +1594,8 @@ namespace sage
         for (const auto entity : selection->Selected())
         {
             const auto* renderable = registry.valid(entity) ? registry.try_get<Renderable>(entity) : nullptr;
-            if (renderable == nullptr || renderable->GetModel() == nullptr ||
-                materialIndex >= static_cast<unsigned int>(renderable->GetModel()->GetMaterialCount()))
+            if (renderable == nullptr || !renderable->GetModel() ||
+                std::cmp_greater_equal(materialIndex, renderable->GetModel()->get().GetMaterialCount()))
             {
                 continue;
             }
@@ -1660,7 +1677,7 @@ namespace sage
 
         if (selection)
         {
-            (void)selection->ReplaceWith(restored);
+            static_cast<void>(selection->ReplaceWith(restored));
         }
 
         refreshSceneWindows();
@@ -1710,7 +1727,7 @@ namespace sage
 
         if (selection)
         {
-            (void)selection->ReplaceWith(newRoots);
+            static_cast<void>(selection->ReplaceWith(newRoots));
             if (const auto active = selection->Active(); active.has_value() && gui)
             {
                 gui->FocusHierarchyOnEntity(*active);
@@ -1941,21 +1958,24 @@ namespace sage
         }
         if (ImGui::BeginMenu("Camera", !IsPlaying()))
         {
-            if (ImGui::MenuItem(CAMERA_MODE_NAMES[0], nullptr, editorCamera.mode == editor::CameraMode::Game))
+            if (ImGui::MenuItem(CAMERA_MODE_NAMES.at(0), nullptr, editorCamera.mode == editor::CameraMode::Game))
                 setCameraMode(editor::CameraMode::Game);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("Existing WASD/QE movement, MMB orbit, RMB ground pan");
 
-            if (ImGui::MenuItem(CAMERA_MODE_NAMES[1], nullptr, editorCamera.mode == editor::CameraMode::Free))
+            if (ImGui::MenuItem(CAMERA_MODE_NAMES.at(1), nullptr, editorCamera.mode == editor::CameraMode::Free))
                 setCameraMode(editor::CameraMode::Free);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("WASD fly, Q/E down/up, Shift faster, RMB look, MMB pan");
 
             if (ImGui::MenuItem(
-                    CAMERA_MODE_NAMES[2], "F", editorCamera.mode == editor::CameraMode::Focused,
+                    CAMERA_MODE_NAMES.at(2),
+                    "F",
+                    editorCamera.mode == editor::CameraMode::Focused,
                     !selection->Selected().empty()))
                 setCameraMode(editor::CameraMode::Focused);
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Q/E orbit sideways, W/S orbit up/down, RMB/MMB drag, wheel zoom; Esc returns to In-game");
+                ImGui::SetTooltip(
+                    "Q/E orbit sideways, W/S orbit up/down, RMB/MMB drag, wheel zoom; Esc returns to In-game");
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Add"))
@@ -1967,17 +1987,17 @@ namespace sage
                     const char* label;
                     const char* key;
                 };
-                constexpr PrimitiveMenuItem primitives[] = {
-                    {"Sphere", "primitive_sphere"},
-                    {"Hemisphere", "primitive_hemisphere"},
-                    {"Plane", "primitive_plane"},
-                    {"Cube", "primitive_cube"},
-                    {"Cylinder", "primitive_cylinder"},
-                    {"Cone", "primitive_cone"},
-                    {"Torus", "primitive_torus"},
-                    {"Knot", "primitive_knot"},
-                    {"Polygon", "primitive_poly"},
-                };
+                constexpr std::array<PrimitiveMenuItem, 9> primitives = {{
+                    {.label = "Sphere", .key = "primitive_sphere"},
+                    {.label = "Hemisphere", .key = "primitive_hemisphere"},
+                    {.label = "Plane", .key = "primitive_plane"},
+                    {.label = "Cube", .key = "primitive_cube"},
+                    {.label = "Cylinder", .key = "primitive_cylinder"},
+                    {.label = "Cone", .key = "primitive_cone"},
+                    {.label = "Torus", .key = "primitive_torus"},
+                    {.label = "Knot", .key = "primitive_knot"},
+                    {.label = "Polygon", .key = "primitive_poly"},
+                }};
                 for (const auto& primitive : primitives)
                 {
                     if (ImGui::MenuItem(primitive.label)) addMesh(primitive.key, primitive.label);
@@ -2015,8 +2035,8 @@ namespace sage
         }
         if (ImGui::BeginMenu("Project"))
         {
-            if (ImGui::MenuItem("Graphics Settings", nullptr, graphicsSettingsWindowOpen,
-                                !graphicsSettingsWindowOpen))
+            if (ImGui::MenuItem(
+                    "Graphics Settings", nullptr, graphicsSettingsWindowOpen, !graphicsSettingsWindowOpen))
             {
                 graphicsSettingsWindowOpen = true;
                 lightSettingsBeforeEdit = sys->settings->GetLightSettings();
@@ -2099,7 +2119,7 @@ namespace sage
                     "", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoHeaderLabel);
                 for (int c = 0; c < count; ++c)
                 {
-                    const std::string header{layers[count - 1 - c].layerName};
+                    const std::string header{layers.at(count - 1 - c).layerName};
                     ImGui::TableSetupColumn(
                         header.c_str(), ImGuiTableColumnFlags_AngledHeader | ImGuiTableColumnFlags_WidthFixed);
                 }
@@ -2109,13 +2129,13 @@ namespace sage
                 bool changed = false;
                 for (int r = 0; r < count; ++r)
                 {
-                    const auto rowLayer = layers[r];
+                    const auto rowLayer = layers.at(r);
                     ImGui::TableNextRow();
                     ImGui::TableSetColumnIndex(0);
                     ImGui::TextUnformatted(std::string{rowLayer.layerName}.c_str());
                     for (int c = 0; c < count - r; ++c)
                     {
-                        const auto colLayer = layers[count - 1 - c];
+                        const auto colLayer = layers.at(count - 1 - c);
                         if (!ImGui::TableSetColumnIndex(c + 1)) continue;
                         ImGui::PushID(r * MAX_COLLISION_LAYERS + c);
                         bool collides = matrix.GetPair(rowLayer, colLayer);
@@ -2196,14 +2216,17 @@ namespace sage
             ImGui::SeparatorText("Bloom");
             changed |= ImGui::Checkbox("Enable Bloom", &graphicsSettingsDraft.bloom);
             ImGui::BeginDisabled(!graphicsSettingsDraft.bloom);
-            changed |= ImGui::SliderFloat("Bloom Strength", &graphicsSettingsDraft.bloomStrength, 0.0f, 2.0f, "%.2f");
+            changed |=
+                ImGui::SliderFloat("Bloom Strength", &graphicsSettingsDraft.bloomStrength, 0.0f, 2.0f, "%.2f");
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Ambient Occlusion");
             changed |= ImGui::Checkbox("Enable Ambient Occlusion", &graphicsSettingsDraft.ambientOcclusion);
             ImGui::BeginDisabled(!graphicsSettingsDraft.ambientOcclusion);
-            changed |= ImGui::SliderFloat("Occlusion Radius", &graphicsSettingsDraft.occlusionRadius, 0.1f, 4.0f, "%.2f");
-            changed |= ImGui::SliderFloat("Occlusion Strength", &graphicsSettingsDraft.occlusionStrength, 0.0f, 1.5f, "%.2f");
+            changed |=
+                ImGui::SliderFloat("Occlusion Radius", &graphicsSettingsDraft.occlusionRadius, 0.1f, 4.0f, "%.2f");
+            changed |= ImGui::SliderFloat(
+                "Occlusion Strength", &graphicsSettingsDraft.occlusionStrength, 0.0f, 1.5f, "%.2f");
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Depth of Field");
@@ -2211,13 +2234,16 @@ namespace sage
             ImGui::BeginDisabled(!graphicsSettingsDraft.depthOfField);
             changed |= ImGui::Checkbox("Focus Camera Target", &graphicsSettingsDraft.focusCameraTarget);
             if (graphicsSettingsDraft.focusCameraTarget)
-                ImGui::TextDisabled("Target distance: %.1f", Vector3Distance(ActiveCamera()->position, ActiveCamera()->target));
+                ImGui::TextDisabled(
+                    "Target distance: %.1f", Vector3Distance(ActiveCamera()->position, ActiveCamera()->target));
             ImGui::BeginDisabled(graphicsSettingsDraft.focusCameraTarget);
-            changed |= ImGui::SliderFloat("Focus Distance", &graphicsSettingsDraft.focusDistance, 0.5f, 500.0f, "%.1f");
+            changed |=
+                ImGui::SliderFloat("Focus Distance", &graphicsSettingsDraft.focusDistance, 0.5f, 500.0f, "%.1f");
             ImGui::EndDisabled();
             ImGui::TextDisabled("Focus Range is the sharp half-width in world units.");
             changed |= ImGui::SliderFloat("Focus Range", &graphicsSettingsDraft.focusRange, 0.1f, 50.0f, "%.1f");
-            changed |= ImGui::SliderFloat("Max Blur (pixels at 720p)", &graphicsSettingsDraft.maxBlurRadius, 0.0f, 12.0f, "%.1f");
+            changed |= ImGui::SliderFloat(
+                "Max Blur (pixels at 720p)", &graphicsSettingsDraft.maxBlurRadius, 0.0f, 12.0f, "%.1f");
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Post Processing");
@@ -2266,10 +2292,10 @@ namespace sage
         if (ImGui::Begin("Terrain Brush"))
         {
             // Order must match TerrainBrushMode (engine/TerrainMesh.hpp).
-            static const char* const modeNames[] = {
+            static constexpr std::array<const char*, 6> BRUSH_MODE_NAMES = {
                 "Raise / Lower", "Smooth", "Flatten", "Noise", "Erosion", "Ramp"};
             int mode = static_cast<int>(sculpt->brushMode);
-            if (ImGui::Combo("Brush", &mode, modeNames, std::size(modeNames)))
+            if (ImGui::Combo("Brush", &mode, BRUSH_MODE_NAMES.data(), static_cast<int>(BRUSH_MODE_NAMES.size())))
             {
                 sculpt->brushMode = static_cast<TerrainBrushMode>(mode);
             }
@@ -2310,12 +2336,12 @@ namespace sage
 
     void EditorScene::addLight() const
     {
-        Vector3 position =
-            Vector3Add(sys->camera->getRaylibCam()->target, {0.0f, DEFAULT_LIGHT_HEIGHT_OFFSET, 0.0f});
+        Vector3 position = Vector3Add(
+            sys->camera->getRaylibCam()->target, {.x = 0.0f, .y = DEFAULT_LIGHT_HEIGHT_OFFSET, .z = 0.0f});
         if (const auto snappedPosition = placementController->SnappedPlacementPosition();
             snappedPosition.has_value())
         {
-            position = Vector3Add(*snappedPosition, {0.0f, DEFAULT_LIGHT_HEIGHT_OFFSET, 0.0f});
+            position = Vector3Add(*snappedPosition, {.x = 0.0f, .y = DEFAULT_LIGHT_HEIGHT_OFFSET, .z = 0.0f});
         }
 
         const auto entity = entityOperations->CreateLight(position);
@@ -2397,7 +2423,8 @@ namespace sage
     {
         const auto selected = selection->Active();
         if (!selected || !sys->registry->valid(*selected) ||
-            !sys->registry->all_of<ParticleEmitterComponent, sgTransform>(*selected)) return;
+            !sys->registry->all_of<ParticleEmitterComponent, sgTransform>(*selected))
+            return;
         if (!ImGui::Begin("Particle Preview"))
         {
             ImGui::End();
@@ -2484,10 +2511,10 @@ namespace sage
             }
             if (!sys->registry->any_of<editor::AssetReference>(entity))
             {
-                if (const auto* model = renderable.GetModel(); model != nullptr)
+                if (const auto model = renderable.GetModel(); model.has_value())
                 {
                     sys->registry->emplace<editor::AssetReference>(
-                        entity, editor::AssetReference{.assetKey = model->GetKey()});
+                        entity, editor::AssetReference{.assetKey = model->get().GetKey()});
                 }
             }
             auto& collideable = existingBaseView.get<Collideable>(entity);
@@ -2513,7 +2540,7 @@ namespace sage
             entity, editor::AssetReference{.assetKey = DEFAULT_MAP_BASE_MODEL_KEY});
 
         auto& transform = sys->registry->emplace<sgTransform>(entity);
-        transform.scale.world = {DEFAULT_MAP_BASE_SIZE, 1.0f, DEFAULT_MAP_BASE_SIZE};
+        transform.scale.world = {.x = DEFAULT_MAP_BASE_SIZE, .y = 1.0f, .z = DEFAULT_MAP_BASE_SIZE};
         transform.name = DEFAULT_MAP_BASE_NAME;
 
         auto model = ResourceManager::GetInstance().GetModelView(DEFAULT_MAP_BASE_MODEL_KEY);
@@ -2521,7 +2548,8 @@ namespace sage
         renderable.active = false;
 
         const BoundingBox localBounds = {
-            {-0.5f, -DEFAULT_MAP_BASE_HALF_HEIGHT, -0.5f}, {0.5f, DEFAULT_MAP_BASE_HALF_HEIGHT, 0.5f}};
+            .min = {.x = -0.5f, .y = -DEFAULT_MAP_BASE_HALF_HEIGHT, .z = -0.5f},
+            .max = {.x = 0.5f, .y = DEFAULT_MAP_BASE_HALF_HEIGHT, .z = 0.5f}};
         auto& collideable = sys->registry->emplace<Collideable>(entity, localBounds, transform.GetMatrixNoRot());
         collideable.isStatic = true;
         collideable.active = false;
@@ -2710,10 +2738,10 @@ namespace sage
         // runtime loads into its own registry. collectMapHierarchyOrder() also
         // ensures the default map base exists before serialising.
         const auto hierarchyOrder = collectMapHierarchyOrder();
-        if (!editor::SaveMap(*sys->registry, PLAY_SESSION_MAP_PATH, hierarchyOrder, &inspectorRegistry)) return;
+        if (!editor::SaveMap(*sys->registry, PLAY_SESSION_MAP_PATH, hierarchyOrder)) return;
 
         GameRuntimeContext context;
-        context.audioManager = sys->audioManager;
+        context.audioManager = std::ref(*sys->audioManager);
         context.windowSize = sys->settings->GetScreenSize();
         context.viewportScreenRect = gameViewportScreenRect();
         context.mapPath = PLAY_SESSION_MAP_PATH;
@@ -2723,7 +2751,8 @@ namespace sage
         };
         gameRuntime = CreateGameRuntime(context);
         if (gameRuntime)
-            gameRuntime->ApplyProjectSettings(sys->settings->GetLightSettings(), sys->settings->GetGraphicsSettings());
+            gameRuntime->ApplyProjectSettings(
+                sys->settings->GetLightSettings(), sys->settings->GetGraphicsSettings());
         if (!gameRuntime)
         {
             TraceLog(LOG_WARNING, "Play: failed to create game runtime; staying in edit mode.");
@@ -2745,7 +2774,11 @@ namespace sage
         const auto offset = sys->settings->GetViewportOffset();
         const auto renderOffset = sys->settings->GetRenderViewportOffset();
         const auto renderSize = sys->settings->GetRenderViewPort();
-        return {offset.x + renderOffset.x, offset.y + renderOffset.y, renderSize.x, renderSize.y};
+        return {
+            .x = offset.x + renderOffset.x,
+            .y = offset.y + renderOffset.y,
+            .width = renderSize.x,
+            .height = renderSize.y};
     }
 
     bool EditorScene::ConsumeDockLayoutChanged() const
@@ -2859,7 +2892,8 @@ namespace sage
                 .clearScene = [this]() { clearCurrentMap(); },
                 .loadFlatpack =
                     [this](const std::filesystem::path& path) {
-                        return PlaceFlatpackAt(path, Vector3{0.0f, 0.0f, 0.0f}).value_or(entt::null);
+                        return PlaceFlatpackAt(path, Vector3{.x = 0.0f, .y = 0.0f, .z = 0.0f})
+                            .value_or(entt::null);
                     },
                 // The flatpack scene needs the same fixups as a freshly loaded
                 // map: default base (placement raycast target), shaders, light

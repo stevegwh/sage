@@ -18,15 +18,17 @@
 #include "cereal/types/vector.hpp"
 #include "raylib-cereal.hpp"
 
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace sage
 {
     struct ModelInfo
     {
-        Model model;
+        Model model{};
         std::vector<std::string>
             materialNames;      // names of this mesh's materials (at the same index in model.materials)
         std::string sourcePath; // path used by raylib LoadModel; required by CreateModelMutable at runtime
@@ -69,8 +71,8 @@ namespace sage
         // Monotonic counter used to mint unique instance keys for mutable-pool entries
         // returned by CreateModelMutable. Not serialized.
         std::uint64_t mutableInstanceCounter = 0;
-        std::unordered_map<std::string, char*> vertShaderFileText{};
-        std::unordered_map<std::string, char*> fragShaderFileText{};
+        std::unordered_map<std::string, std::optional<std::string>> vertShaderFileText{};
+        std::unordered_map<std::string, std::optional<std::string>> fragShaderFileText{};
         std::unordered_map<std::string, Music> music;
         std::unordered_map<std::string, Sound> sfx;
         std::unordered_map<std::string, std::string> musicSourcePaths;
@@ -97,6 +99,8 @@ namespace sage
         [[nodiscard]] std::string ResolveAnimationKey(const std::string& key) const;
 
       public:
+        ResourceManager(ResourceManager&&) = delete;
+        ResourceManager& operator=(ResourceManager&&) = delete;
         static ResourceManager& GetInstance()
         {
             static ResourceManager instance;
@@ -105,10 +109,12 @@ namespace sage
 
         [[nodiscard]] Music GetMusic(const std::string& path);
         [[nodiscard]] Sound GetSFX(const std::string& path);
-        [[nodiscard]] Shader ShaderLoad(const char* vsFileName, const char* fsFileName);
+        [[nodiscard]] Shader ShaderLoad(
+            const std::optional<std::string>& vsFileName, const std::optional<std::string>& fsFileName);
         // Compiles a separate GPU program from the same preprocessed sources as
         // ShaderLoad. The caller owns it and must call UnloadShader.
-        [[nodiscard]] Shader ShaderLoadUnique(const char* vsFileName, const char* fsFileName);
+        [[nodiscard]] Shader ShaderLoadUnique(
+            const std::optional<std::string>& vsFileName, const std::optional<std::string>& fsFileName);
         [[nodiscard]] Texture TextureLoad(const std::string& path);
         [[nodiscard]] Texture TextureLoadFromImage(const std::string& name, Image image);
         Font FontLoad(const std::string& path);
@@ -210,7 +216,7 @@ namespace sage
                     continue;
                 }
 
-                if (static_cast<int>(model.materialNames.size()) > model.model.materialCount)
+                if (std::cmp_greater(model.materialNames.size(), model.model.materialCount))
                 {
                     model.materialNames.resize(model.model.materialCount);
                 }
@@ -219,26 +225,26 @@ namespace sage
 
                 for (int i = 0; i < model.model.materialCount; ++i)
                 {
-                    if (model.materialNames[i].empty())
+                    if (model.materialNames.at(i).empty())
                     {
                         const bool singleDefault =
                             originalMaterialNamesSize == 0 && model.model.materialCount == 1;
                         const bool oldGltfDefaultSlot = originalMaterialNamesSize > 0 && i == 0;
-                        model.materialNames[i] = (singleDefault || oldGltfDefaultSlot)
-                                                     ? "Default"
-                                                     : model.sourcePath + "#Material" + std::to_string(i);
+                        model.materialNames.at(i) = (singleDefault || oldGltfDefaultSlot)
+                                                        ? "Default"
+                                                        : model.sourcePath + "#Material" + std::to_string(i);
                     }
 
-                    const auto& mat = model.materialNames[i];
+                    const auto& mat = model.materialNames.at(i);
                     model.model.materials[i] = materialMap[mat];
                 }
             }
             for (int i = 0; i < animatedModelKeys.size(); ++i)
             {
-                auto count = modelAnimCounts[i];
+                auto count = modelAnimCounts.at(i);
                 auto* animations = static_cast<ModelAnimation*>(MemAlloc(count * sizeof(ModelAnimation)));
-                std::memcpy(animations, modelAnimationsData[i].data(), count * sizeof(ModelAnimation));
-                modelAnimations.emplace(animatedModelKeys[i], std::make_pair(animations, count));
+                std::memcpy(animations, modelAnimationsData.at(i).data(), count * sizeof(ModelAnimation));
+                modelAnimations.emplace(animatedModelKeys.at(i), std::make_pair(animations, count));
             }
             RebuildAssetAliases();
         }

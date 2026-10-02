@@ -19,7 +19,7 @@ namespace sage
 
         Texture2D texture;
         Shader shader{};
-        const entt::entity entity;
+        entt::entity entity;
         GridSquare lastHit{};
         bool initialised = false;
         bool m_active = false;
@@ -27,9 +27,9 @@ namespace sage
         float radius{};
 
         void updateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
-        Model generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
+        [[nodiscard]] Model generateTerrainPolygon(const GridSquare& minRange, const GridSquare& maxRange) const;
         void updateMeshData(Mesh& mesh, const GridSquare& minRange, const GridSquare& maxRange) const;
-        Mesh createInitialMesh(const GridSquare& minRange, const GridSquare& maxRange) const;
+        [[nodiscard]] Mesh createInitialMesh(const GridSquare& minRange, const GridSquare& maxRange) const;
         void updateVertexData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const;
         void updateNormalData(Mesh& mesh, int vertexIndex, int gridRow, int gridCol) const;
         static void updateTexCoordData(Mesh& mesh, int vertexIndex, int row, int col, int maxRow, int maxCol);
@@ -42,6 +42,10 @@ namespace sage
         void Init(Vector3 startPos, float _radius = 10);
         [[nodiscard]] bool IsActive() const;
         void Update(Vector3 pos);
+        TextureTerrainOverlay(const TextureTerrainOverlay&) = delete;
+        TextureTerrainOverlay& operator=(const TextureTerrainOverlay&) = delete;
+        TextureTerrainOverlay(TextureTerrainOverlay&&) = delete;
+        TextureTerrainOverlay& operator=(TextureTerrainOverlay&&) = delete;
         ~TextureTerrainOverlay();
         TextureTerrainOverlay(
             entt::registry* _registry,

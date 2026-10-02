@@ -2,18 +2,18 @@
 
 #include "EditorAssetCatalog.hpp"
 #include "EditorComponents.hpp"
-#include "engine/components/Renderable.hpp"
+#include "engine/AssetKey.hpp"
 #include "engine/components/Animation.hpp"
+#include "engine/components/Renderable.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/content/Json.hpp"
 #include "engine/ResourceManager.hpp"
-#include "engine/AssetKey.hpp"
 #include "engine/slib.hpp"
 
 #include <cctype>
 #include <filesystem>
-#include <fstream>
 #include <format>
+#include <fstream>
 #include <optional>
 #include <regex>
 #include <system_error>
@@ -50,7 +50,7 @@ namespace sage::editor
             if (base.size() == 4)
             {
                 const auto prefix = base.substr(0, 3);
-                const auto suffix = base[3];
+                const auto suffix = base.at(3);
                 return (prefix == "COM" || prefix == "LPT") && suffix >= '1' && suffix <= '9';
             }
 
@@ -105,8 +105,7 @@ namespace sage::editor
         }
 
         std::optional<std::string> CheckTargetCollision(
-            const std::filesystem::path& source,
-            const std::filesystem::path& target)
+            const std::filesystem::path& source, const std::filesystem::path& target)
         {
             std::error_code ec;
             if (std::filesystem::exists(target, ec) && !EquivalentPath(source, target))
@@ -121,9 +120,7 @@ namespace sage::editor
         }
 
         std::filesystem::path BuildRenameTargetPath(
-            const std::filesystem::path& sourcePath,
-            const std::string& requestedFileName,
-            std::string& error)
+            const std::filesystem::path& sourcePath, const std::string& requestedFileName, std::string& error)
         {
             if (const auto validationError = ValidatePortableFileName(requestedFileName);
                 validationError.has_value())
@@ -139,15 +136,15 @@ namespace sage::editor
             {
                 finalFileName += requiredExtension;
             }
-            else if (!requiredExtension.empty() &&
-                     !EqualsIgnoreAsciiCase(requestedPath.extension().string(), requiredExtension))
+            else if (
+                !requiredExtension.empty() &&
+                !EqualsIgnoreAsciiCase(requestedPath.extension().string(), requiredExtension))
             {
                 error = std::format("File extension must stay {}.", requiredExtension);
                 return {};
             }
 
-            if (const auto validationError = ValidatePortableFileName(finalFileName);
-                validationError.has_value())
+            if (const auto validationError = ValidatePortableFileName(finalFileName); validationError.has_value())
             {
                 error = *validationError;
                 return {};
@@ -175,23 +172,29 @@ namespace sage::editor
                 if (extension != ".map" && extension != ".flatpack") continue;
 
                 std::ifstream input(entry.path(), std::ios::binary);
-                const std::string original{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+                const std::string original{
+                    std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
                 if (original.find(oldKey) == std::string::npos) continue;
 
                 std::string updated;
                 auto last = original.cbegin();
-                for (std::sregex_iterator match(original.begin(), original.end(), reference), end; match != end; ++match)
+                for (std::sregex_iterator match(original.begin(), original.end(), reference), end; match != end;
+                     ++match)
                 {
                     updated.append(last, match->prefix().second);
-                    updated += (*match)[1].str();
-                    updated += (*match)[2].str() == oldKey ? newKey : (*match)[2].str();
-                    updated += (*match)[3].str();
+                    updated += match->str(1);
+                    updated += match->str(2) == oldKey ? newKey : match->str(2);
+                    updated += match->str(3);
                     last = match->suffix().first;
                 }
                 updated.append(last, original.cend());
                 if (updated == original) continue;
                 json::Parse(updated);
-                edits.push_back({entry.path(), entry.path().string() + ".asset-rename-tmp", original, updated});
+                edits.push_back(
+                    {.path = entry.path(),
+                     .stagedPath = entry.path().string() + ".asset-rename-tmp",
+                     .original = original,
+                     .updated = updated});
             }
             return edits;
         }
@@ -223,7 +226,7 @@ namespace sage::editor
             return {.message = "Asset no longer exists."};
         }
 
-        const auto& entry = entries[index];
+        const auto& entry = entries.at(index);
         if (entry.sourcePath.empty())
         {
             return {.message = "This asset has no source model file to rename."};
@@ -327,15 +330,15 @@ namespace sage::editor
         std::size_t committed = 0;
         for (; committed < documentEdits.size(); ++committed)
         {
-            std::filesystem::rename(documentEdits[committed].stagedPath, documentEdits[committed].path, ec);
+            std::filesystem::rename(documentEdits.at(committed).stagedPath, documentEdits.at(committed).path, ec);
             if (ec) break;
         }
         if (ec)
         {
             for (std::size_t i = 0; i < committed; ++i)
             {
-                std::ofstream restore(documentEdits[i].path, std::ios::binary | std::ios::trunc);
-                restore << documentEdits[i].original;
+                std::ofstream restore(documentEdits.at(i).path, std::ios::binary | std::ios::trunc);
+                restore << documentEdits.at(i).original;
             }
             RemoveStagedEdits(documentEdits);
             ResourceManager::GetInstance().RenameModelAsset(newKey, oldKey, oldSourcePath.string());
@@ -365,8 +368,8 @@ namespace sage::editor
         for (const auto entity : registry.view<Renderable>())
         {
             auto& renderable = registry.get<Renderable>(entity);
-            const auto* model = renderable.GetModel();
-            if (model == nullptr || model->GetKey() != oldKey) continue;
+            const auto model = renderable.GetModel();
+            if (!model || model->get().GetKey() != oldKey) continue;
 
             auto replacement = ResourceManager::GetInstance().GetModelView(newKey);
             replacement.SetTransform(renderable.initialTransform);
@@ -374,9 +377,9 @@ namespace sage::editor
             if (registry.any_of<UberShaderComponent>(entity))
             {
                 auto& uber = registry.get<UberShaderComponent>(entity);
-                if (auto* replacementModel = renderable.GetModel(); replacementModel != nullptr)
+                if (auto replacementModel = renderable.GetModel(); replacementModel.has_value())
                 {
-                    replacementModel->SetShader(uber.shader);
+                    replacementModel->get().SetShader(uber.shader);
                 }
             }
         }

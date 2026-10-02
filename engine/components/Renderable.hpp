@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "engine/raylib-cereal.hpp"
 #include "engine/Colors.hpp"
+#include "engine/raylib-cereal.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/slib.hpp"
 
@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -42,20 +43,20 @@ namespace sage
         std::function<void(entt::entity)> reqShaderUpdate;
         bool serializable = true;
 
-        // Returns the underlying view (ModelView pointer; also valid when holding a
-        // ModelMutable, since it derives from ModelView). Returns nullptr if the
+        // Returns the underlying view (also valid when holding a ModelMutable,
+        // since it derives from ModelView). Returns std::nullopt if the
         // Renderable has no model (default-constructed / monostate).
-        [[nodiscard]] ModelView* GetModel();
-        [[nodiscard]] const ModelView* GetModel() const;
+        [[nodiscard]] std::optional<std::reference_wrapper<ModelView>> GetModel();
+        [[nodiscard]] std::optional<std::reference_wrapper<const ModelView>> GetModel() const;
 
-        // Returns a pointer to the mutable view if this Renderable holds one,
-        // otherwise nullptr. Use when you need to call mutating methods
+        // Returns a reference to the mutable view if this Renderable holds one,
+        // otherwise std::nullopt. Use when you need to call mutating methods
         // (SetTexture, SetMaterial) that don't exist on ModelView.
-        [[nodiscard]] ModelMutable* GetMutable();
-        [[nodiscard]] const ModelMutable* GetMutable() const;
+        [[nodiscard]] std::optional<std::reference_wrapper<ModelMutable>> GetMutable();
+        [[nodiscard]] std::optional<std::reference_wrapper<const ModelMutable>> GetMutable() const;
         // Promotes a shared model view to an entity-local copy before changing
         // materials, textures, or shaders.
-        [[nodiscard]] ModelMutable* EnsureMutable();
+        [[nodiscard]] std::optional<std::reference_wrapper<ModelMutable>> EnsureMutable();
 
         void SetModel(ModelView _model);
         void SetModel(ModelMutable _model);
@@ -130,7 +131,7 @@ namespace sage
             ResetMaterialKeys();
             for (unsigned int i = 0; i < loadedMaterialKeys.size() && i < materialKeys.size(); ++i)
             {
-                if (loadedMaterialKeys[i] != materialKeys[i]) SetMaterialKey(i, loadedMaterialKeys[i]);
+                if (loadedMaterialKeys.at(i) != materialKeys.at(i)) SetMaterialKey(i, loadedMaterialKeys.at(i));
             }
         }
 

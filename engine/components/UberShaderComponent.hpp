@@ -14,7 +14,7 @@ namespace sage
     struct UberShaderComponent
     {
 
-        enum Flags
+        enum class Flags : std::uint32_t
         {
             Skinned = 1 << 0,
             Lit = 1 << 1,
@@ -38,14 +38,14 @@ namespace sage
         {
             auto setBool = [&](int loc, Flags flag) {
                 int value = HasFlag(materialIdx, flag) ? 1 : 0;
-                SetShaderValue(shader, loc, &value, RL_SHADER_UNIFORM_INT);
+                SetShaderValue(shader, loc, &value, SHADER_UNIFORM_INT);
             };
 
-            setBool(skinnedLoc, Skinned);
-            setBool(litLoc, Lit);
-            setBool(hasEmissiveTexLoc, EmissiveTexture);
-            setBool(hasEmissiveColLoc, EmissiveCol);
-            setBool(grayscaleLoc, Grayscale);
+            setBool(skinnedLoc, Flags::Skinned);
+            setBool(litLoc, Flags::Lit);
+            setBool(hasEmissiveTexLoc, Flags::EmissiveTexture);
+            setBool(hasEmissiveColLoc, Flags::EmissiveCol);
+            setBool(grayscaleLoc, Flags::Grayscale);
         }
 
         void SetShaderBools() const
@@ -58,24 +58,24 @@ namespace sage
 
         [[nodiscard]] bool HasFlag(unsigned int idx, Flags flag) const
         {
-            return materialMap.at(idx) & flag;
+            return materialMap.at(idx) & static_cast<std::uint32_t>(flag);
         }
 
         void SetFlag(unsigned int idx, Flags flag)
         {
-            materialMap.at(idx) |= flag;
+            materialMap.at(idx) |= static_cast<std::uint32_t>(flag);
         }
 
         void ClearFlag(unsigned int idx, Flags flag)
         {
-            materialMap.at(idx) &= ~flag;
+            materialMap.at(idx) &= ~static_cast<std::uint32_t>(flag);
         }
 
         void SetFlagAll(Flags flag)
         {
             for (unsigned int& i : materialMap)
             {
-                i |= flag;
+                i |= static_cast<std::uint32_t>(flag);
             }
         }
 
@@ -83,7 +83,7 @@ namespace sage
         {
             for (unsigned int& i : materialMap)
             {
-                i &= ~flag;
+                i &= ~static_cast<std::uint32_t>(flag);
             }
         }
 

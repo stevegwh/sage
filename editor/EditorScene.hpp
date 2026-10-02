@@ -1,9 +1,9 @@
 #pragma once
 
-#include "EditorAssetCatalog.hpp"
 #include "CanvasEditor.hpp"
-#include "EditorCamera.hpp"
 #include "CSharpScriptEditorConfig.hpp"
+#include "EditorAssetCatalog.hpp"
+#include "EditorCamera.hpp"
 #include "EditorEntityOperations.hpp"
 #include "EditorFlatpackEditSession.hpp"
 #include "EditorGui.hpp"
@@ -19,8 +19,8 @@
 #include "EditorSettings.hpp"
 #include "EditorTransformEditor.hpp"
 
-#include "engine/Settings.hpp"
 #include "engine/content/AutomationInbox.hpp"
+#include "engine/Settings.hpp"
 
 #include "entt/entt.hpp"
 
@@ -184,7 +184,10 @@ namespace sage
       public:
         void Update() const;
         void CaptureAutomationFrame(
-            RenderTexture sceneTarget, Texture2D uiTexture = {}, Shader sceneShader = {}, Texture2D bloomTexture = {}) const;
+            RenderTexture sceneTarget,
+            Texture2D uiTexture = {},
+            Shader sceneShader = {},
+            Texture2D bloomTexture = {}) const;
         void Draw3D() const;
         void DrawBloomMask() const;
         void DrawShadowMap() const;
@@ -225,6 +228,10 @@ namespace sage
             std::function<void(editor::InspectorRegistry&)> registerGameComponents = {},
             editor::CSharpScriptEditorConfig csharpScripts = {},
             std::function<void()> updateLoadingScreen = {});
+        EditorScene(const EditorScene&) = delete;
+        EditorScene& operator=(const EditorScene&) = delete;
+        EditorScene(EditorScene&&) = delete;
+        EditorScene& operator=(EditorScene&&) = delete;
         ~EditorScene();
     };
 } // namespace sage

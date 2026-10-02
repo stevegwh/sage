@@ -45,7 +45,7 @@ namespace sage
                 entt::entity parent = entt::null;
                 std::string displayName;
                 // Font Awesome glyph (from IconsFontAwesome6.h) shown before the name in the hierarchy.
-                const char* icon = nullptr;
+                std::string icon;
                 int depth = 0;
             };
 
@@ -290,8 +290,14 @@ namespace sage
             void DrawHierarchyWindow();
             InspectorEditResult DrawInspectorWindow();
             void DrawAssetDrawerWindow();
-            void RefreshResourceBrowser() { resourceBrowserNeedsRefresh = true; }
-            void SetCanvasEditCallback(std::function<void(std::filesystem::path)> callback) { onCanvasEditCb = std::move(callback); }
+            void RefreshResourceBrowser()
+            {
+                resourceBrowserNeedsRefresh = true;
+            }
+            void SetCanvasEditCallback(std::function<void(std::filesystem::path)> callback)
+            {
+                onCanvasEditCb = std::move(callback);
+            }
             void DrawConsoleWindow();
             void AddConsoleEntry(CSharpLogLevel level, std::string_view message);
             void ClearConsole();
@@ -342,6 +348,10 @@ namespace sage
                 const std::function<void(const SceneSelectionRequest&)>& onSceneObjectSelected,
                 const std::function<void(const HierarchyMoveRequest&)>& onHierarchyMove,
                 ModelDefaultCallbacks callbacks);
+            EditorGui(const EditorGui&) = delete;
+            EditorGui& operator=(const EditorGui&) = delete;
+            EditorGui(EditorGui&&) = delete;
+            EditorGui& operator=(EditorGui&&) = delete;
             ~EditorGui();
         };
     } // namespace editor

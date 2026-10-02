@@ -31,18 +31,18 @@ namespace sage
 
     GameUIEngine::Hit GameUIEngine::hitTest(const Vector2 point) const
     {
-        for (auto window = windows.rbegin(); window != windows.rend(); ++window)
+        for (const auto& window : std::views::reverse(windows))
         {
-            if ((*window)->hidden || !CheckCollisionPointRec(point, (*window)->bounds)) continue;
-            return {window->get(), (*window)->HitTest(point)};
+            if (window->hidden || !CheckCollisionPointRec(point, window->bounds)) continue;
+            return {.window = std::ref(*window), .cell = window->HitTest(point)};
         }
         return {};
     }
 
-    void GameUIEngine::bringToFront(Window* window)
+    void GameUIEngine::bringToFront(Window& window)
     {
         const auto found = std::ranges::find_if(
-            windows, [window](const std::unique_ptr<Window>& candidate) { return candidate.get() == window; });
+            windows, [&window](const std::unique_ptr<Window>& candidate) { return candidate.get() == &window; });
         if (found == windows.end() || std::next(found) == windows.end()) return;
         auto ownedWindow = std::move(*found);
         windows.erase(found);
@@ -56,10 +56,16 @@ namespace sage
             if (!window->hidden) window->Layout(*settings);
         }
 
-        if (!inputEnabled) { hovered = {}; pressed = {}; draggingWindow = false; return; }
+        if (!inputEnabled)
+        {
+            hovered = {};
+            pressed = {};
+            draggingWindow = false;
+            return;
+        }
 
-        if (hovered.window && hovered.window->hidden) hovered = {};
-        if (pressed.window && pressed.window->hidden)
+        if (hovered.window && hovered.window->get().hidden) hovered = {};
+        if (pressed.window && pressed.window->get().hidden)
         {
             pressed = {};
             draggingWindow = false;
@@ -84,22 +90,24 @@ namespace sage
             draggingWindow = false;
             if (pressed.window)
             {
-                const Rectangle designBounds = pressed.window->designBounds;
-                pressedWindowPosition = {designBounds.x, designBounds.y};
-                bringToFront(pressed.window);
+                const Rectangle designBounds = pressed.window->get().designBounds;
+                pressedWindowPosition = {.x = designBounds.x, .y = designBounds.y};
+                bringToFront(pressed.window->get());
             }
         }
 
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && pressed.cell && pressed.cell->dragsWindow)
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && pressed.cell && pressed.cell->get().dragsWindow)
         {
             const Vector2 delta = Vector2Subtract(mouse, pressPosition);
             if (std::abs(delta.x) > 1 || std::abs(delta.y) > 1) draggingWindow = true;
 
             const Vector2 viewport = settings->GetViewPort();
-            pressed.window->MoveTo({
-                pressedWindowPosition.x + delta.x * Settings::TARGET_SCREEN_WIDTH / std::max(1.0f, viewport.x),
-                pressedWindowPosition.y + delta.y * Settings::TARGET_SCREEN_HEIGHT / std::max(1.0f, viewport.y)});
-            pressed.window->Layout(*settings);
+            pressed.window->get().MoveTo(
+                {.x = pressedWindowPosition.x +
+                      delta.x * Settings::TARGET_SCREEN_WIDTH / std::max(1.0f, viewport.x),
+                 .y = pressedWindowPosition.y +
+                      delta.y * Settings::TARGET_SCREEN_HEIGHT / std::max(1.0f, viewport.y)});
+            pressed.window->get().Layout(*settings);
 
             hit = hitTest(mouse);
             hovered = hit;
@@ -108,8 +116,9 @@ namespace sage
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
         {
             std::function<void()> click;
-            if (!draggingWindow && pressed.window == hit.window && pressed.cell == hit.cell && pressed.cell)
-                click = pressed.cell->click;
+            if (!draggingWindow && pressed.window && hit.window && &pressed.window->get() == &hit.window->get() &&
+                pressed.cell && hit.cell && &pressed.cell->get() == &hit.cell->get())
+                click = pressed.cell->get().click;
 
             pressed = {};
             draggingWindow = false;
@@ -128,8 +137,8 @@ namespace sage
                 window->Layout(*settings);
                 std::optional<std::reference_wrapper<const Cell>> hoveredCell;
                 std::optional<std::reference_wrapper<const Cell>> pressedCell;
-                if (hovered.cell) hoveredCell = std::cref(*hovered.cell);
-                if (pressed.cell) pressedCell = std::cref(*pressed.cell);
+                if (hovered.cell) hoveredCell = std::cref(hovered.cell->get());
+                if (pressed.cell) pressedCell = std::cref(pressed.cell->get());
                 window->DrawAt(hoveredCell, pressedCell, settings->GetCurrentScaleFactor());
             }
         }

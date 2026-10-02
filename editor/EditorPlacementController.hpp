@@ -2,6 +2,7 @@
 
 #include "EditorAssetCatalog.hpp"
 #include "engine/components/NavigationGridSquare.hpp"
+#include <functional>
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -19,7 +20,7 @@ namespace sage::editor
     class EditorPlacementController
     {
         EngineSystems* sys;
-        EditorAssetCatalog& assets;
+        std::reference_wrapper<EditorAssetCatalog> assets;
         float gridSurfaceY = 0.0f;
         float gridHalfExtent = 50.0f;
         entt::entity gridPlacementSurfaceEntity = entt::null;

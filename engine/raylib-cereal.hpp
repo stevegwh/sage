@@ -11,6 +11,7 @@
 #include "raylib/src/config.h"
 #include "raymath.h"
 #include "rlgl.h"
+#include <algorithm>
 #include <array>
 #include <cstring>
 
@@ -29,19 +30,42 @@ void serialize(Archive& archive, Vector3& v3)
 template <typename Archive>
 void serialize(Archive& archive, Vector4& v4)
 {
-    archive(cereal::make_nvp("x", v4.x), cereal::make_nvp("y", v4.y), cereal::make_nvp("z", v4.z), cereal::make_nvp("w", v4.w));
+    archive(
+        cereal::make_nvp("x", v4.x),
+        cereal::make_nvp("y", v4.y),
+        cereal::make_nvp("z", v4.z),
+        cereal::make_nvp("w", v4.w));
 };
 
 template <typename Archive>
 void serialize(Archive& archive, Transform& transform)
 {
-    archive(cereal::make_nvp("translation", transform.translation), cereal::make_nvp("rotation", transform.rotation), cereal::make_nvp("scale", transform.scale));
+    archive(
+        cereal::make_nvp("translation", transform.translation),
+        cereal::make_nvp("rotation", transform.rotation),
+        cereal::make_nvp("scale", transform.scale));
 };
 
 template <typename Archive>
 void serialize(Archive& archive, Matrix& m)
 {
-    archive(cereal::make_nvp("m0", m.m0), cereal::make_nvp("m1", m.m1), cereal::make_nvp("m2", m.m2), cereal::make_nvp("m3", m.m3), cereal::make_nvp("m4", m.m4), cereal::make_nvp("m5", m.m5), cereal::make_nvp("m6", m.m6), cereal::make_nvp("m7", m.m7), cereal::make_nvp("m8", m.m8), cereal::make_nvp("m9", m.m9), cereal::make_nvp("m10", m.m10), cereal::make_nvp("m11", m.m11), cereal::make_nvp("m12", m.m12), cereal::make_nvp("m13", m.m13), cereal::make_nvp("m14", m.m14), cereal::make_nvp("m15", m.m15));
+    archive(
+        cereal::make_nvp("m0", m.m0),
+        cereal::make_nvp("m1", m.m1),
+        cereal::make_nvp("m2", m.m2),
+        cereal::make_nvp("m3", m.m3),
+        cereal::make_nvp("m4", m.m4),
+        cereal::make_nvp("m5", m.m5),
+        cereal::make_nvp("m6", m.m6),
+        cereal::make_nvp("m7", m.m7),
+        cereal::make_nvp("m8", m.m8),
+        cereal::make_nvp("m9", m.m9),
+        cereal::make_nvp("m10", m.m10),
+        cereal::make_nvp("m11", m.m11),
+        cereal::make_nvp("m12", m.m12),
+        cereal::make_nvp("m13", m.m13),
+        cereal::make_nvp("m14", m.m14),
+        cereal::make_nvp("m15", m.m15));
 };
 
 template <typename Archive>
@@ -58,11 +82,16 @@ void save(Archive& archive, ModelAnimation const& modelAnimation)
 
     for (int i = 0; i < modelAnimation.frameCount; i++)
     {
-        framePoses[i].assign(
+        framePoses.at(i).assign(
             modelAnimation.framePoses[i], modelAnimation.framePoses[i] + modelAnimation.boneCount);
     }
 
-    archive(cereal::make_nvp("modelAnimation.boneCount", modelAnimation.boneCount), cereal::make_nvp("modelAnimation.frameCount", modelAnimation.frameCount), cereal::make_nvp("bones", bones), cereal::make_nvp("framePoses", framePoses), cereal::make_nvp("modelAnimation.name", modelAnimation.name));
+    archive(
+        cereal::make_nvp("modelAnimation.boneCount", modelAnimation.boneCount),
+        cereal::make_nvp("modelAnimation.frameCount", modelAnimation.frameCount),
+        cereal::make_nvp("bones", bones),
+        cereal::make_nvp("framePoses", framePoses),
+        cereal::make_nvp("modelAnimation.name", modelAnimation.name));
 }
 
 template <typename Archive>
@@ -71,18 +100,22 @@ void load(Archive& archive, ModelAnimation& modelAnimation)
     std::vector<BoneInfo> bones;
     std::vector<std::vector<Transform>> framePoses;
 
-    archive(cereal::make_nvp("modelAnimation.boneCount", modelAnimation.boneCount), cereal::make_nvp("modelAnimation.frameCount", modelAnimation.frameCount), cereal::make_nvp("bones", bones), cereal::make_nvp("framePoses", framePoses), cereal::make_nvp("modelAnimation.name", modelAnimation.name));
+    archive(
+        cereal::make_nvp("modelAnimation.boneCount", modelAnimation.boneCount),
+        cereal::make_nvp("modelAnimation.frameCount", modelAnimation.frameCount),
+        cereal::make_nvp("bones", bones),
+        cereal::make_nvp("framePoses", framePoses),
+        cereal::make_nvp("modelAnimation.name", modelAnimation.name));
 
     modelAnimation.bones = static_cast<BoneInfo*>(MemAlloc(modelAnimation.boneCount * sizeof(BoneInfo)));
-    std::copy(bones.begin(), bones.end(), modelAnimation.bones);
+    std::ranges::copy(bones, modelAnimation.bones);
 
-    modelAnimation.framePoses =
-        static_cast<Transform**>(MemAlloc(modelAnimation.frameCount * sizeof(Transform*)));
+    modelAnimation.framePoses = static_cast<Transform**>(MemAlloc(modelAnimation.frameCount * sizeof(Transform*)));
     for (int i = 0; i < modelAnimation.frameCount; i++)
     {
         modelAnimation.framePoses[i] =
             static_cast<Transform*>(MemAlloc(modelAnimation.boneCount * sizeof(Transform)));
-        std::copy(framePoses[i].begin(), framePoses[i].end(), modelAnimation.framePoses[i]);
+        std::copy(framePoses.at(i).begin(), framePoses.at(i).end(), modelAnimation.framePoses[i]);
     }
 }
 
@@ -139,7 +172,19 @@ void save(Archive& archive, Mesh const& mesh)
         boneWeights.assign(mesh.boneWeights, mesh.boneWeights + mesh.vertexCount * 4); // vec4
     }
 
-    archive(cereal::make_nvp("mesh.vertexCount", mesh.vertexCount), cereal::make_nvp("mesh.triangleCount", mesh.triangleCount), cereal::make_nvp("mesh.boneCount", mesh.boneCount), cereal::make_nvp("vertices", vertices), cereal::make_nvp("texcoords", texcoords), cereal::make_nvp("texcoords2", texcoords2), cereal::make_nvp("normals", normals), cereal::make_nvp("tangents", tangents), cereal::make_nvp("colors", colors), cereal::make_nvp("indices", indices), cereal::make_nvp("boneIds", boneIds), cereal::make_nvp("boneWeights", boneWeights));
+    archive(
+        cereal::make_nvp("mesh.vertexCount", mesh.vertexCount),
+        cereal::make_nvp("mesh.triangleCount", mesh.triangleCount),
+        cereal::make_nvp("mesh.boneCount", mesh.boneCount),
+        cereal::make_nvp("vertices", vertices),
+        cereal::make_nvp("texcoords", texcoords),
+        cereal::make_nvp("texcoords2", texcoords2),
+        cereal::make_nvp("normals", normals),
+        cereal::make_nvp("tangents", tangents),
+        cereal::make_nvp("colors", colors),
+        cereal::make_nvp("indices", indices),
+        cereal::make_nvp("boneIds", boneIds),
+        cereal::make_nvp("boneWeights", boneWeights));
 }
 
 template <typename Archive>
@@ -155,7 +200,19 @@ void load(Archive& archive, Mesh& mesh)
     std::vector<unsigned char> boneIds;
     std::vector<float> boneWeights;
 
-    archive(cereal::make_nvp("mesh.vertexCount", mesh.vertexCount), cereal::make_nvp("mesh.triangleCount", mesh.triangleCount), cereal::make_nvp("mesh.boneCount", mesh.boneCount), cereal::make_nvp("vertices", vertices), cereal::make_nvp("texcoords", texcoords), cereal::make_nvp("texcoords2", texcoords2), cereal::make_nvp("normals", normals), cereal::make_nvp("tangents", tangents), cereal::make_nvp("colors", colors), cereal::make_nvp("indices", indices), cereal::make_nvp("boneIds", boneIds), cereal::make_nvp("boneWeights", boneWeights));
+    archive(
+        cereal::make_nvp("mesh.vertexCount", mesh.vertexCount),
+        cereal::make_nvp("mesh.triangleCount", mesh.triangleCount),
+        cereal::make_nvp("mesh.boneCount", mesh.boneCount),
+        cereal::make_nvp("vertices", vertices),
+        cereal::make_nvp("texcoords", texcoords),
+        cereal::make_nvp("texcoords2", texcoords2),
+        cereal::make_nvp("normals", normals),
+        cereal::make_nvp("tangents", tangents),
+        cereal::make_nvp("colors", colors),
+        cereal::make_nvp("indices", indices),
+        cereal::make_nvp("boneIds", boneIds),
+        cereal::make_nvp("boneWeights", boneWeights));
 
     bool animations = !boneIds.empty();
 
@@ -201,7 +258,8 @@ void load(Archive& archive, Mesh& mesh)
         mesh.animNormals = static_cast<float*>(sage::AllocateZeroedMemory(mesh.vertexCount * 3, sizeof(float)));
         std::memcpy(mesh.animNormals, normals.data(), mesh.vertexCount * 3 * sizeof(float));
 
-        mesh.boneIds = static_cast<unsigned char*>(sage::AllocateZeroedMemory(mesh.vertexCount * 4, sizeof(unsigned char)));
+        mesh.boneIds =
+            static_cast<unsigned char*>(sage::AllocateZeroedMemory(mesh.vertexCount * 4, sizeof(unsigned char)));
         std::memcpy(mesh.boneIds, boneIds.data(), mesh.vertexCount * 4 * sizeof(unsigned char));
 
         mesh.boneWeights = static_cast<float*>(sage::AllocateZeroedMemory(mesh.vertexCount * 4, sizeof(float)));
@@ -247,7 +305,13 @@ void save(Archive& archive, Image const& image)
     int len = (image.data != nullptr) ? GetPixelDataSize(image.width, image.height, image.format) : 0;
     std::vector<unsigned char> data(
         static_cast<unsigned char*>(image.data), static_cast<unsigned char*>(image.data) + len);
-    archive(cereal::make_nvp("isEncoded", isEncoded), cereal::make_nvp("image.format", image.format), cereal::make_nvp("image.height", image.height), cereal::make_nvp("image.width", image.width), cereal::make_nvp("image.mipmaps", image.mipmaps), cereal::make_nvp("data", data));
+    archive(
+        cereal::make_nvp("isEncoded", isEncoded),
+        cereal::make_nvp("image.format", image.format),
+        cereal::make_nvp("image.height", image.height),
+        cereal::make_nvp("image.width", image.width),
+        cereal::make_nvp("image.mipmaps", image.mipmaps),
+        cereal::make_nvp("data", data));
 }
 
 template <typename Archive>
@@ -264,7 +328,12 @@ void load(Archive& archive, Image& image)
         return;
     }
     std::vector<unsigned char> data;
-    archive(cereal::make_nvp("image.format", image.format), cereal::make_nvp("image.height", image.height), cereal::make_nvp("image.width", image.width), cereal::make_nvp("image.mipmaps", image.mipmaps), cereal::make_nvp("data", data));
+    archive(
+        cereal::make_nvp("image.format", image.format),
+        cereal::make_nvp("image.height", image.height),
+        cereal::make_nvp("image.width", image.width),
+        cereal::make_nvp("image.mipmaps", image.mipmaps),
+        cereal::make_nvp("data", data));
     int len = GetPixelDataSize(image.width, image.height, image.format);
     image.data = static_cast<unsigned char*>(MemAlloc(len * sizeof(unsigned char)));
     if (len > 0) std::memcpy(image.data, data.data(), len * sizeof(unsigned char));
@@ -289,7 +358,11 @@ void load(Archive& archive, Shader& shader)
 template <typename Archive>
 void serialize(Archive& archive, Color& color)
 {
-    archive(cereal::make_nvp("r", color.r), cereal::make_nvp("g", color.g), cereal::make_nvp("b", color.b), cereal::make_nvp("a", color.a));
+    archive(
+        cereal::make_nvp("r", color.r),
+        cereal::make_nvp("g", color.g),
+        cereal::make_nvp("b", color.b),
+        cereal::make_nvp("a", color.a));
 };
 
 template <typename Archive>
@@ -304,7 +377,10 @@ void save(Archive& archive, MaterialMap const& map)
         image = LoadImageFromTexture(map.texture);
     }
 
-    archive(cereal::make_nvp("image", image), cereal::make_nvp("map.color", map.color), cereal::make_nvp("map.value", map.value));
+    archive(
+        cereal::make_nvp("image", image),
+        cereal::make_nvp("map.color", map.color),
+        cereal::make_nvp("map.value", map.value));
     UnloadImage(image);
 };
 
@@ -312,10 +388,18 @@ template <typename Archive>
 void load(Archive& archive, MaterialMap& map)
 {
     Image image;
-    archive(cereal::make_nvp("image", image), cereal::make_nvp("map.color", map.color), cereal::make_nvp("map.value", map.value));
+    archive(
+        cereal::make_nvp("image", image),
+        cereal::make_nvp("map.color", map.color),
+        cereal::make_nvp("map.value", map.value));
     if (!image.data || (image.width == 0 && image.height == 0) || image.format >= PIXELFORMAT_COMPRESSED_DXT1_RGB)
     {
-        map.texture = Texture2D{rlGetTextureIdDefault(), 1, 1, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+        map.texture = Texture2D{
+            .id = rlGetTextureIdDefault(),
+            .width = 1,
+            .height = 1,
+            .mipmaps = 1,
+            .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
 
         if (image.data)
         {
@@ -337,15 +421,12 @@ void save(Archive& archive, Material const& material)
 
     for (size_t i = 0; i < MAX_MATERIAL_MAPS; i++)
     {
-        if (maps[i].texture.format >= PIXELFORMAT_COMPRESSED_DXT1_RGB ||
-            maps[i].texture.id == rlGetTextureIdDefault())
+        if (maps.at(i).texture.format >= PIXELFORMAT_COMPRESSED_DXT1_RGB ||
+            maps.at(i).texture.id == rlGetTextureIdDefault())
             continue;
-        maps[i] = material.maps[i];
+        maps.at(i) = material.maps[i];
     }
-    for (size_t i = 0; i < 4; i++)
-    {
-        params[i] = material.params[i];
-    }
+    params = {material.params[0], material.params[1], material.params[2], material.params[3]};
     archive(cereal::make_nvp("maps", maps), cereal::make_nvp("params", params));
 };
 
@@ -366,7 +447,8 @@ void load(Archive& archive, Material& material)
 template <typename Archive>
 void serialize(Archive& archive, BoneInfo& boneInfo)
 {
-    archive(cereal::make_nvp("boneInfo.name", boneInfo.name), cereal::make_nvp("boneInfo.parent", boneInfo.parent));
+    archive(
+        cereal::make_nvp("boneInfo.name", boneInfo.name), cereal::make_nvp("boneInfo.parent", boneInfo.parent));
 };
 
 template <typename Archive>

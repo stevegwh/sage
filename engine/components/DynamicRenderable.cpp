@@ -48,25 +48,28 @@ namespace sage
         return model.meshCount > 0 && model.meshes != nullptr;
     }
 
-    Model* DynamicRenderable::GetModel()
+    std::optional<std::reference_wrapper<Model>> DynamicRenderable::GetModel()
     {
-        return const_cast<Model*>(std::as_const(*this).GetModel());
+        if (!HasModel()) return std::nullopt;
+        return std::ref(model);
     }
 
-    const Model* DynamicRenderable::GetModel() const
+    std::optional<std::reference_wrapper<const Model>> DynamicRenderable::GetModel() const
     {
-        return HasModel() ? &model : nullptr;
+        if (!HasModel()) return std::nullopt;
+        return std::cref(model);
     }
 
-    Mesh* DynamicRenderable::GetMesh(int num)
+    std::optional<std::reference_wrapper<Mesh>> DynamicRenderable::GetMesh(int num)
     {
-        return const_cast<Mesh*>(std::as_const(*this).GetMesh(num));
+        if (!HasModel() || num < 0 || num >= model.meshCount) return std::nullopt;
+        return std::ref(model.meshes[num]);
     }
 
-    const Mesh* DynamicRenderable::GetMesh(int num) const
+    std::optional<std::reference_wrapper<const Mesh>> DynamicRenderable::GetMesh(int num) const
     {
-        if (!HasModel() || num < 0 || num >= model.meshCount) return nullptr;
-        return &model.meshes[num];
+        if (!HasModel() || num < 0 || num >= model.meshCount) return std::nullopt;
+        return std::cref(model.meshes[num]);
     }
 
     const std::string& DynamicRenderable::GetName() const

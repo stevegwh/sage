@@ -31,12 +31,12 @@ namespace sage::editor
 
             if (const auto* renderable = registry.try_get<Renderable>(entity))
             {
-                if (const auto* model = renderable->GetModel())
+                if (const auto model = renderable->GetModel())
                 {
                     const Matrix entityMatrix = BuildRenderableEntityMatrix(
                         transform->GetWorldPos(), transform->GetWorldRot(), transform->GetScale());
                     // CalcLocalBoundingBox already includes the model's local transform.
-                    return TransformBoundingBoxByCorners(model->CalcLocalBoundingBox(), entityMatrix);
+                    return TransformBoundingBoxByCorners(model->get().CalcLocalBoundingBox(), entityMatrix);
                 }
             }
 
@@ -67,7 +67,7 @@ namespace sage::editor
 
         if (!combinedBounds.has_value()) return std::nullopt;
         const Vector3 halfSize = Vector3Scale(Vector3Subtract(combinedBounds->max, combinedBounds->min), 0.5f);
-        return FocusTarget{.position = BoundingBoxCenter(*combinedBounds),
-                           .radius = std::max(1.0f, Vector3Length(halfSize))};
+        return FocusTarget{
+            .position = BoundingBoxCenter(*combinedBounds), .radius = std::max(1.0f, Vector3Length(halfSize))};
     }
 } // namespace sage::editor

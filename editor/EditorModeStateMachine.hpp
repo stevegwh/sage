@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <utility>
 #include <variant>
@@ -18,7 +19,7 @@ namespace sage
 {
     class EditorScene;
     class EngineSystems;
-}
+} // namespace sage
 
 namespace sage::editor
 {
@@ -124,16 +125,15 @@ namespace sage::editor
 
     class EditorModeStateMachine final
     {
-        using State =
-            std::variant<EditorSelectState, EditorPlaceState, EditorEditState, EditorTerrainSculptState>;
+        using State = std::variant<EditorSelectState, EditorPlaceState, EditorEditState, EditorTerrainSculptState>;
 
         friend struct EditorSelectState;
         friend struct EditorPlaceState;
         friend struct EditorEditState;
         friend struct EditorTerrainSculptState;
 
-        EditorScene& scene;
-        EditorTransformEditor& transformEditor;
+        std::reference_wrapper<EditorScene> scene;
+        std::reference_wrapper<EditorTransformEditor> transformEditor;
         State currentState = EditorSelectState{};
 
         void refreshOverlay() const;

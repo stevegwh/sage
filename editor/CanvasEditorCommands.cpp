@@ -12,7 +12,7 @@ namespace sage::editor
         json::Put(result, "dirty", IsDirty(), a);
         json::Put(result, "path", path.generic_string(), a);
         json::Put(result, "error", error, a);
-        json::Put(result, "selection", std::uint64_t(selected), a);
+        json::Put(result, "selection", static_cast<std::uint64_t>(selected), a);
         if (active)
         {
             const auto encoded = json::Encode(document);

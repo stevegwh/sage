@@ -1,15 +1,18 @@
-
+#include "engine/Colors.hpp"
+#include "engine/MathConstants.hpp"
+#include <functional>
+#include <optional>
 
 #include "LightManager.hpp"
 
 #include "Camera.hpp"
 #include "components/Renderable.hpp"
 #include "Light.hpp"
+#include "raymath.h"
+#include "rlgl.h"
 #include "Settings.hpp"
 #include "ShaderPaths.hpp"
 #include "systems/RenderSystem.hpp"
-#include "rlgl.h"
-#include "raymath.h"
 
 #include <algorithm>
 #include <array>
@@ -27,15 +30,21 @@ namespace sage
         constexpr float SUN_SHADOW_RADIUS = 100.0f;
         constexpr float SUN_SHADOW_FAR_PLANE = 300.0f;
         constexpr int SUN_SHADOW_TEXTURE_SLOT = 14;
-        constexpr std::array<Vector3, 6> SHADOW_DIRECTIONS{{
-            {1.0f, 0.0f, 0.0f}, {-1.0f, 0.0f, 0.0f},
-            {0.0f, 1.0f, 0.0f}, {0.0f, -1.0f, 0.0f},
-            {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f}}};
-        constexpr std::array<Vector3, 6> SHADOW_UP{{
-            {0.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f},
-            {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, -1.0f},
-            {0.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}}};
-    }
+        constexpr std::array<Vector3, 6> SHADOW_DIRECTIONS{
+            {{.x = 1.0f, .y = 0.0f, .z = 0.0f},
+             {.x = -1.0f, .y = 0.0f, .z = 0.0f},
+             {.x = 0.0f, .y = 1.0f, .z = 0.0f},
+             {.x = 0.0f, .y = -1.0f, .z = 0.0f},
+             {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+             {.x = 0.0f, .y = 0.0f, .z = -1.0f}}};
+        constexpr std::array<Vector3, 6> SHADOW_UP{
+            {{.x = 0.0f, .y = -1.0f, .z = 0.0f},
+             {.x = 0.0f, .y = -1.0f, .z = 0.0f},
+             {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+             {.x = 0.0f, .y = 0.0f, .z = -1.0f},
+             {.x = 0.0f, .y = -1.0f, .z = 0.0f},
+             {.x = 0.0f, .y = -1.0f, .z = 0.0f}}};
+    } // namespace
 
     void LightManager::updateShaderLights(Shader& _shader)
     {
@@ -62,16 +71,16 @@ namespace sage
         SetShaderValue(_shader, lightsCountLoc, &lightsCount, SHADER_UNIFORM_INT);
         auto gammaLoc = GetShaderLocation(_shader, "gamma");
         SetShaderValue(_shader, gammaLoc, &gamma, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(_shader, GetShaderLocation(_shader, "shadowLightIndex"), &shadowLightIndex, SHADER_UNIFORM_INT);
+        SetShaderValue(
+            _shader, GetShaderLocation(_shader, "shadowLightIndex"), &shadowLightIndex, SHADER_UNIFORM_INT);
         const int shadowSlot = SHADOW_TEXTURE_SLOT;
         SetShaderValue(_shader, GetShaderLocation(_shader, "pointShadowMap"), &shadowSlot, SHADER_UNIFORM_INT);
         const float farPlane = SHADOW_FAR_PLANE;
         SetShaderValue(_shader, GetShaderLocation(_shader, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(_shader, GetShaderLocation(_shader, "sunShadowLightIndex"),
-                       &sunShadowLightIndex, SHADER_UNIFORM_INT);
+        SetShaderValue(
+            _shader, GetShaderLocation(_shader, "sunShadowLightIndex"), &sunShadowLightIndex, SHADER_UNIFORM_INT);
         const int sunShadowSlot = SUN_SHADOW_TEXTURE_SLOT;
-        SetShaderValue(_shader, GetShaderLocation(_shader, "sunShadowMap"),
-                       &sunShadowSlot, SHADER_UNIFORM_INT);
+        SetShaderValue(_shader, GetShaderLocation(_shader, "sunShadowMap"), &sunShadowSlot, SHADER_UNIFORM_INT);
         if (sunShadowLightIndex >= 0)
             SetShaderValueMatrix(_shader, GetShaderLocation(_shader, "sunLightMatrix"), sunLightMatrix);
     }
@@ -79,8 +88,8 @@ namespace sage
     void LightManager::updateAmbientLight(Shader& _shader) const
     {
         auto ambientLoc = GetShaderLocation(_shader, "ambient");
-        float ambientValue[4] = {ambient[0], ambient[1], ambient[2], ambient[3]};
-        SetShaderValue(_shader, ambientLoc, ambientValue, SHADER_UNIFORM_VEC4);
+        std::array<float, 4> ambientValue = {ambient.at(0), ambient.at(1), ambient.at(2), ambient.at(3)};
+        SetShaderValue(_shader, ambientLoc, ambientValue.data(), SHADER_UNIFORM_VEC4);
     }
 
     void LightManager::RemoveLight(entt::entity light)
@@ -111,9 +120,8 @@ namespace sage
 
     void LightManager::LinkShaderToLights(Shader& _shader)
     {
-        auto it = std::find_if(shaders.begin(), shaders.end(), [&_shader](const Shader& existingShader) {
-            return existingShader.id == _shader.id;
-        });
+        auto it = std::ranges::find_if(
+            shaders, [&_shader](const Shader& existingShader) { return existingShader.id == _shader.id; });
 
         if (it == shaders.end())
         {
@@ -145,9 +153,9 @@ namespace sage
     void LightManager::LinkRenderableToLight(entt::entity entity) const
     {
         auto& renderable = registry->get<Renderable>(entity);
-        for (int i = 0; i < renderable.GetModel()->GetMaterialCount(); ++i)
+        for (int i = 0; i < renderable.GetModel()->get().GetMaterialCount(); ++i)
         {
-            renderable.GetModel()->SetShader(defaultShader, i);
+            renderable.GetModel()->get().SetShader(defaultShader, i);
         }
     }
 
@@ -166,10 +174,10 @@ namespace sage
     void LightManager::Update() const
     {
         auto [x, y, z] = camera->GetPosition();
-        const float cameraPos[3] = {x, y, z};
+        const std::array<float, 3> cameraPos = {x, y, z};
         for (auto& shader : shaders)
         {
-            SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], cameraPos, SHADER_UNIFORM_VEC3);
+            SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], cameraPos.data(), SHADER_UNIFORM_VEC3);
         }
     }
 
@@ -192,8 +200,8 @@ namespace sage
             RefreshLights();
             return;
         }
-        const Light* sun = nullptr;
-        const Light* point = nullptr;
+        std::optional<std::reference_wrapper<const Light>> sun;
+        std::optional<std::reference_wrapper<const Light>> point;
         int index = 0;
         for (const auto entity : registry->view<Light>())
         {
@@ -202,23 +210,23 @@ namespace sage
             if (index >= MAX_LIGHT_COUNT) break;
             if (light.castsShadows)
             {
-                if (light.type == LightType::Sun && sun == nullptr)
+                if (light.type == LightType::Sun && !sun)
                 {
-                    sun = &light;
+                    sun = std::cref(light);
                     sunShadowLightIndex = index;
                 }
-                else if (light.type == LightType::Point && point == nullptr)
+                else if (light.type == LightType::Point && !point)
                 {
-                    point = &light;
+                    point = std::cref(light);
                     shadowLightIndex = index;
                 }
             }
             ++index;
-            if (sun != nullptr && point != nullptr) break;
+            if (sun.has_value() && point.has_value()) break;
         }
 
-        if (sun != nullptr) drawSunShadowMap(renderer, *sun);
-        if (point != nullptr) drawPointShadowMap(renderer, *point);
+        if (sun.has_value()) drawSunShadowMap(renderer, sun->get());
+        if (point.has_value()) drawPointShadowMap(renderer, point->get());
         RefreshLights();
     }
 
@@ -227,15 +235,20 @@ namespace sage
         if (shadowFramebuffer == 0)
         {
             shadowShader = ResourceManager::GetInstance().ShaderLoad(
-                ShaderPath("custom/point_shadow.vs").c_str(), ShaderPath("custom/point_shadow.fs").c_str());
+                ShaderPath("custom/point_shadow.vs"), ShaderPath("custom/point_shadow.fs"));
             const std::vector<float> clearData(6 * SHADOW_MAP_SIZE * SHADOW_MAP_SIZE, 1.0f);
-            shadowCubemap = rlLoadTextureCubemap(
-                clearData.data(), SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
+            shadowCubemap =
+                rlLoadTextureCubemap(clearData.data(), SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
             shadowFramebuffer = rlLoadFramebuffer();
             const unsigned int depthBuffer = rlLoadTextureDepth(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, true);
-            rlFramebufferAttach(shadowFramebuffer, shadowCubemap, RL_ATTACHMENT_COLOR_CHANNEL0,
-                                RL_ATTACHMENT_CUBEMAP_POSITIVE_X, 0);
-            rlFramebufferAttach(shadowFramebuffer, depthBuffer, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+            rlFramebufferAttach(
+                shadowFramebuffer,
+                shadowCubemap,
+                RL_ATTACHMENT_COLOR_CHANNEL0,
+                RL_ATTACHMENT_CUBEMAP_POSITIVE_X,
+                0);
+            rlFramebufferAttach(
+                shadowFramebuffer, depthBuffer, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
             if (!rlFramebufferComplete(shadowFramebuffer))
             {
                 rlUnloadTexture(shadowCubemap);
@@ -247,13 +260,15 @@ namespace sage
             }
         }
 
-        const float lightPosition[3] = {
-            light.position.x, light.position.y, light.position.z};
-        SetShaderValue(shadowShader, GetShaderLocation(shadowShader, "lightPosition"),
-                       lightPosition, SHADER_UNIFORM_VEC3);
+        const std::array<float, 3> lightPosition = {light.position.x, light.position.y, light.position.z};
+        SetShaderValue(
+            shadowShader,
+            GetShaderLocation(shadowShader, "lightPosition"),
+            lightPosition.data(),
+            SHADER_UNIFORM_VEC3);
         const float farPlane = SHADOW_FAR_PLANE;
-        SetShaderValue(shadowShader, GetShaderLocation(shadowShader, "shadowFarPlane"),
-                       &farPlane, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(
+            shadowShader, GetShaderLocation(shadowShader, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
         const int skinnedLocation = GetShaderLocation(shadowShader, "skinned");
 
         const unsigned int previousFramebuffer = rlGetActiveFramebuffer();
@@ -266,16 +281,17 @@ namespace sage
             rlViewport(0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
             rlSetFramebufferWidth(SHADOW_MAP_SIZE);
             rlSetFramebufferHeight(SHADOW_MAP_SIZE);
-            ClearBackground(WHITE);
+            ClearBackground(sage::colors::WHITE_COLOR);
 
             Camera3D faceCamera{};
             faceCamera.position = light.position;
-            faceCamera.target = Vector3Add(light.position, SHADOW_DIRECTIONS[face]);
-            faceCamera.up = SHADOW_UP[face];
+            faceCamera.target = Vector3Add(light.position, SHADOW_DIRECTIONS.at(face));
+            faceCamera.up = SHADOW_UP.at(face);
             faceCamera.fovy = 90.0f;
             faceCamera.projection = CAMERA_PERSPECTIVE;
             BeginMode3D(faceCamera);
-            rlSetMatrixProjection(MatrixPerspective(90.0 * DEG2RAD, 1.0, 0.1, SHADOW_FAR_PLANE));
+            rlSetMatrixProjection(
+                MatrixPerspective(90.0 * sage::math::DEGREES_TO_RADIANS, 1.0, 0.1, SHADOW_FAR_PLANE));
             renderer.DrawShadowCasters(shadowShader, skinnedLocation);
             EndMode3D();
         }
@@ -290,15 +306,16 @@ namespace sage
         if (sunShadowFramebuffer == 0)
         {
             sunShadowShader = ResourceManager::GetInstance().ShaderLoad(
-                ShaderPath("custom/point_shadow.vs").c_str(), ShaderPath("custom/sun_shadow.fs").c_str());
+                ShaderPath("custom/point_shadow.vs"), ShaderPath("custom/sun_shadow.fs"));
             const std::vector<float> clearData(SUN_SHADOW_MAP_SIZE * SUN_SHADOW_MAP_SIZE, 1.0f);
             sunShadowTexture = rlLoadTexture(
                 clearData.data(), SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
             sunShadowFramebuffer = rlLoadFramebuffer();
             const unsigned int depthBuffer = rlLoadTextureDepth(SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, true);
-            rlFramebufferAttach(sunShadowFramebuffer, sunShadowTexture, RL_ATTACHMENT_COLOR_CHANNEL0,
-                                RL_ATTACHMENT_TEXTURE2D, 0);
-            rlFramebufferAttach(sunShadowFramebuffer, depthBuffer, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+            rlFramebufferAttach(
+                sunShadowFramebuffer, sunShadowTexture, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+            rlFramebufferAttach(
+                sunShadowFramebuffer, depthBuffer, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
             if (!rlFramebufferComplete(sunShadowFramebuffer))
             {
                 rlUnloadTexture(sunShadowTexture);
@@ -313,8 +330,8 @@ namespace sage
         const Vector3 sunDirection = Vector3Normalize(Vector3Subtract(sun.position, sun.target));
         const Vector3 center = camera->getRaylibCam()->target;
         const Vector3 sunPosition = Vector3Add(center, Vector3Scale(sunDirection, SUN_SHADOW_FAR_PLANE * 0.5f));
-        const Vector3 up = std::abs(sunDirection.y) > 0.95f ? Vector3{0.0f, 0.0f, 1.0f}
-                                                             : Vector3{0.0f, 1.0f, 0.0f};
+        const Vector3 up = std::abs(sunDirection.y) > 0.95f ? Vector3{.x = 0.0f, .y = 0.0f, .z = 1.0f}
+                                                            : Vector3{.x = 0.0f, .y = 1.0f, .z = 0.0f};
         Camera3D sunCamera{};
         sunCamera.position = sunPosition;
         sunCamera.target = center;
@@ -329,11 +346,15 @@ namespace sage
         rlViewport(0, 0, SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE);
         rlSetFramebufferWidth(SUN_SHADOW_MAP_SIZE);
         rlSetFramebufferHeight(SUN_SHADOW_MAP_SIZE);
-        ClearBackground(WHITE);
+        ClearBackground(sage::colors::WHITE_COLOR);
         BeginMode3D(sunCamera);
         rlSetMatrixProjection(MatrixOrtho(
-            -SUN_SHADOW_RADIUS, SUN_SHADOW_RADIUS, -SUN_SHADOW_RADIUS, SUN_SHADOW_RADIUS,
-            0.1, SUN_SHADOW_FAR_PLANE));
+            -SUN_SHADOW_RADIUS,
+            SUN_SHADOW_RADIUS,
+            -SUN_SHADOW_RADIUS,
+            SUN_SHADOW_RADIUS,
+            0.1,
+            SUN_SHADOW_FAR_PLANE));
         sunLightMatrix = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
         renderer.DrawShadowCasters(sunShadowShader, GetShaderLocation(sunShadowShader, "skinned"));
         EndMode3D();
@@ -373,13 +394,13 @@ namespace sage
         rlActiveTextureSlot(0);
     }
 
-    LightManager::LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings,
-                               const bool _shadowsEnabled)
+    LightManager::LightManager(
+        entt::registry* _registry, Camera* _camera, const LightSettings& settings, const bool _shadowsEnabled)
         : registry(_registry), camera(_camera), shadowsEnabled(_shadowsEnabled)
     {
         registry->on_construct<Light>().connect<&LightManager::onLightAdded>(this);
         defaultShader = ResourceManager::GetInstance().ShaderLoad(
-            ShaderPath("custom/lighting.vs").c_str(), ShaderPath("custom/lighting.fs").c_str());
+            ShaderPath("custom/lighting.vs"), ShaderPath("custom/lighting.fs"));
 
         ApplyLightSettings(settings);
         LinkShaderToLights(defaultShader);

@@ -1,8 +1,8 @@
 #pragma once
 
+#include "CSharpScriptEditorConfig.hpp"
 #include "EditorDockLayout.hpp"
 #include "EditorSettings.hpp"
-#include "CSharpScriptEditorConfig.hpp"
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -71,6 +71,8 @@ namespace sage
             std::function<void(editor::InspectorRegistry&)> _registerGameComponents = {},
             editor::CSharpScriptEditorConfig _csharpScripts = {},
             std::function<bool()> _prepareAssets = {});
+        EditorApplication(EditorApplication&&) = delete;
+        EditorApplication& operator=(EditorApplication&&) = delete;
         ~EditorApplication();
 
         EditorApplication(const EditorApplication&) = delete;

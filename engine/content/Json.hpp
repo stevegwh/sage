@@ -119,11 +119,21 @@ namespace sage::json
         cereal::JSONInputArchive input(stream);
         input(cereal::make_nvp("data", result));
     }
-    inline const Value& Require(const Value& object, const char* key)
+    template <class JsonValue>
+    auto& Require(JsonValue& object, const char* key)
     {
-        if (!object.IsObject() || !object.HasMember(key))
-            throw std::runtime_error(std::string("Missing field: ") + key);
-        return object[key];
+        if (!object.IsObject()) throw std::runtime_error(std::string("Expected object for field: ") + key);
+        const auto member = object.FindMember(key);
+        if (member == object.MemberEnd()) throw std::runtime_error(std::string("Missing field: ") + key);
+        return member->value;
+    }
+    template <class JsonValue>
+    auto& At(JsonValue& array, const std::size_t index)
+    {
+        if (!array.IsArray() || index >= array.Size()) throw std::out_of_range("JSON array index");
+        // RapidJSON exposes array elements through operator[]; validate its bounds above.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        return array[static_cast<rapidjson::SizeType>(index)];
     }
     inline std::string String(const Value& object, const char* key)
     {

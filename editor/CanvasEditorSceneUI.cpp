@@ -40,8 +40,8 @@ namespace sage::editor
                 ImGui::TableHeadersRow();
                 for (std::size_t i = 0; i < settings->assets.size(); ++i)
                 {
-                    const auto& asset = settings->assets[i];
-                    ImGui::PushID(int(i));
+                    const auto& asset = settings->assets.at(i);
+                    ImGui::PushID(static_cast<int>(i));
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
                     ImGui::Selectable(std::filesystem::path(asset).filename().string().c_str());
@@ -74,14 +74,15 @@ namespace sage::editor
             }
             if (remove)
             {
-                settings->assets.erase(settings->assets.begin() + *remove);
+                settings->assets.erase(settings->assets.begin() + static_cast<std::ptrdiff_t>(*remove));
                 sceneChanged();
             }
             else if (move && move->first != move->second && move->first < settings->assets.size())
             {
-                auto asset = settings->assets[move->first];
-                settings->assets.erase(settings->assets.begin() + move->first);
-                settings->assets.insert(settings->assets.begin() + move->second, std::move(asset));
+                auto asset = settings->assets.at(move->first);
+                settings->assets.erase(settings->assets.begin() + static_cast<std::ptrdiff_t>(move->first));
+                settings->assets.insert(
+                    settings->assets.begin() + static_cast<std::ptrdiff_t>(move->second), std::move(asset));
                 sceneChanged();
             }
             if (!settings || settings->assets.empty()) ImGui::TextDisabled("No canvases added to this scene.");

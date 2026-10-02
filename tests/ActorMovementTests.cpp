@@ -18,7 +18,10 @@ namespace
         if (!condition) throw std::runtime_error(message);
     }
 
-    Vector3 Point(float x, float z = 0.5f) { return {x, -1.0f, z}; }
+    Vector3 Point(float x, float z = 0.5f)
+    {
+        return {.x = x, .y = -1.0f, .z = z};
+    }
 
     struct World
     {
@@ -27,15 +30,21 @@ namespace
         sage::NavigationGridSystem grid{&registry, nullptr};
         sage::ActorMovementSystem movement{&registry, &grid};
 
-        explicit World(int size = 12) { grid.Init(size, 1.0f); }
+        explicit World(int size = 12)
+        {
+            grid.Init(size, 1.0f);
+        }
 
         entt::entity Actor(Vector3 position, float radius = 0.2f)
         {
             const auto entity = registry.create();
             auto& transform = registry.emplace<sage::sgTransform>(entity);
             transforms.SetWorldPos(entity, position);
-            registry.emplace<sage::Collideable>(entity,
-                BoundingBox{{-radius, 0.0f, -radius}, {radius, 1.0f, radius}}, transform.GetMatrixNoRot());
+            registry.emplace<sage::Collideable>(
+                entity,
+                BoundingBox{
+                    .min = {.x = -radius, .y = 0.0f, .z = -radius}, .max = {.x = radius, .y = 1.0f, .z = radius}},
+                transform.GetMatrixNoRot());
             auto& actor = registry.emplace<sage::MoveableActor>(entity);
             actor.turnSpeed = 0.0f;
             actor.movementSpeed = 0.25f;
@@ -46,13 +55,21 @@ namespace
         {
             const auto wall = registry.create();
             grid.MarkSquareAreaOccupied(
-                {{position.x - 0.5f, -1.0f, position.z - 0.5f},
-                 {position.x + 0.5f, 1.0f, position.z + 0.5f}}, true, wall);
+                {.min = {.x = position.x - 0.5f, .y = -1.0f, .z = position.z - 0.5f},
+                 .max = {.x = position.x + 0.5f, .y = 1.0f, .z = position.z + 0.5f}},
+                true,
+                wall);
             return wall;
         }
 
-        sage::MoveableActor& ActorData(entt::entity entity) { return registry.get<sage::MoveableActor>(entity); }
-        Vector3 Position(entt::entity entity) { return registry.get<sage::sgTransform>(entity).GetWorldPos(); }
+        sage::MoveableActor& ActorData(entt::entity entity)
+        {
+            return registry.get<sage::MoveableActor>(entity);
+        }
+        Vector3 Position(entt::entity entity)
+        {
+            return registry.get<sage::sgTransform>(entity).GetWorldPos();
+        }
 
         void Route(entt::entity entity, Vector3 destination)
         {
@@ -60,15 +77,22 @@ namespace
             Require(!route.empty() && movement.SetRoute(entity, route), "route installation failed");
         }
 
-        void Tick() { movement.Update(0.1f); }
-        void Finish(int ticks = 150) { for (int i = 0; i < ticks; ++i) Tick(); }
+        void Tick()
+        {
+            movement.Update(0.1f);
+        }
+        void Finish(int ticks = 150)
+        {
+            for (int i = 0; i < ticks; ++i)
+                Tick();
+        }
 
         bool Overlap(entt::entity a, entt::entity b)
         {
             const auto& lhs = registry.get<sage::Collideable>(a).worldBoundingBox;
             const auto& rhs = registry.get<sage::Collideable>(b).worldBoundingBox;
-            return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x &&
-                   lhs.min.z < rhs.max.z && lhs.max.z > rhs.min.z;
+            return lhs.min.x < rhs.max.x && lhs.max.x > rhs.min.x && lhs.min.z < rhs.max.z &&
+                   lhs.max.z > rhs.min.z;
         }
 
         void RequireUnmarked(entt::entity entity)
@@ -85,7 +109,8 @@ namespace
         // Only a single row is walkable, so routing must pass through the standing actor.
         for (int z = -6; z < 6; ++z)
             if (z != 0)
-                for (int x = -6; x < 6; ++x) world.Wall(Point(x + 0.5f, z + 0.5f));
+                for (int x = -6; x < 6; ++x)
+                    world.Wall(Point(static_cast<float>(x) + 0.5f, static_cast<float>(z) + 0.5f));
         const auto standing = world.Actor(Point(0.5f));
         const auto moving = world.Actor(Point(-3.5f));
         world.Tick();
@@ -93,10 +118,12 @@ namespace
         {
             const auto route = world.movement.FindRouteToLocation(moving, Point(3.5f), astar, false);
             Require(!route.empty() && Vector3Equals(route.back(), Point(3.5f)), "standing NPC blocked transit");
-            Require(world.movement.FindRouteToLocation(moving, Point(0.5f), astar, false).empty(),
-                    "strict route accepted an occupied destination");
+            Require(
+                world.movement.FindRouteToLocation(moving, Point(0.5f), astar, false).empty(),
+                "strict route accepted an occupied destination");
             const auto fallback = world.movement.FindRouteToLocation(moving, Point(0.5f), astar, true);
-            Require(!fallback.empty() && !Vector3Equals(fallback.back(), Point(0.5f)), "no free fallback selected");
+            Require(
+                !fallback.empty() && !Vector3Equals(fallback.back(), Point(0.5f)), "no free fallback selected");
         }
         world.Route(moving, Point(3.5f));
         world.RequireUnmarked(moving);
@@ -108,16 +135,18 @@ namespace
             if (world.Overlap(moving, standing))
             {
                 passedThrough = true;
-                (void)world.movement.FindRouteToLocation(moving, Point(3.5f), true);
-                Require(world.grid.CheckSingleSquareOccupant(Point(0.5f)) == standing,
-                        "route query overwrote a standing actor");
+                static_cast<void>(world.movement.FindRouteToLocation(moving, Point(3.5f), true));
+                Require(
+                    world.grid.CheckSingleSquareOccupant(Point(0.5f)) == standing,
+                    "route query overwrote a standing actor");
             }
         }
         Require(passedThrough && world.movement.ReachedDestination(moving), "NPC did not pass through and arrive");
         Require(Vector3Equals(world.Position(moving), Point(3.5f)), "wrong transit destination");
         world.Wall(Point(1.5f));
-        Require(world.movement.FindRouteToLocation(moving, Point(-3.5f), true, false).empty(),
-                "static wall did not block the route");
+        Require(
+            world.movement.FindRouteToLocation(moving, Point(-3.5f), true, false).empty(),
+            "static wall did not block the route");
     }
 
     void TestMeetingActors(Vector3 startA, Vector3 endA, Vector3 startB, Vector3 endB)
@@ -152,17 +181,20 @@ namespace
         int arrivals = 0;
         auto checkArrival = [&](entt::entity entity) {
             ++arrivals;
-            Require(world.grid.CheckSingleSquareOccupant(world.Position(entity)) == entity,
-                    "arrival published before claiming destination");
-            Require(!world.Overlap(a, b) || world.ActorData(a == entity ? b : a).IsMoving(),
-                    "arrival overlapped another stopped actor");
+            Require(
+                world.grid.CheckSingleSquareOccupant(world.Position(entity)) == entity,
+                "arrival published before claiming destination");
+            Require(
+                !world.Overlap(a, b) || world.ActorData(a == entity ? b : a).IsMoving(),
+                "arrival overlapped another stopped actor");
         };
         auto subA = world.ActorData(a).onDestinationReached.Subscribe(checkArrival);
         auto subB = world.ActorData(b).onDestinationReached.Subscribe(checkArrival);
         world.Finish();
         Require(arrivals == 2 && !world.Overlap(a, b), "shared destination was not adjusted");
-        Require(Vector3Equals(world.Position(a), Point(0.5f)) || Vector3Equals(world.Position(b), Point(0.5f)),
-                "neither actor used the original destination");
+        Require(
+            Vector3Equals(world.Position(a), Point(0.5f)) || Vector3Equals(world.Position(b), Point(0.5f)),
+            "neither actor used the original destination");
         subA.UnSubscribe();
         subB.UnSubscribe();
     }
@@ -176,13 +208,15 @@ namespace
         world.Route(moving, Point(3.5f));
         int arrivals = 0;
         auto sub = world.ActorData(moving).onDestinationReached.Subscribe([&](entt::entity) { ++arrivals; });
-        for (int i = 0; i < 30 && !world.Overlap(moving, standing); ++i) world.Tick();
+        for (int i = 0; i < 30 && !world.Overlap(moving, standing); ++i)
+            world.Tick();
         Require(world.Overlap(moving, standing), "cancellation setup did not overlap");
         world.ActorData(moving).ClearRoute(moving); // Same entry point used by C#.
         world.Finish();
         Require(arrivals == 0, "cancelled route published arrival");
-        Require(!world.Overlap(moving, standing) && world.movement.ReachedDestination(moving),
-                "cancelled actor did not find a stopping place");
+        Require(
+            !world.Overlap(moving, standing) && world.movement.ReachedDestination(moving),
+            "cancelled actor did not find a stopping place");
         Require(Vector3Equals(world.Position(standing), Point(0.5f)), "cancelled actor displaced standing actor");
         sub.UnSubscribe();
     }
@@ -202,11 +236,13 @@ namespace
         world.Finish(10);
         Require(arrivals == 0 && !world.movement.ReachedDestination(moving), "blocked actor reported arrival");
         Require(world.grid.CheckSingleSquareOccupant(Point(0.5f)) == standing, "pending actor stole occupancy");
-        Require(world.movement.FindRouteToLocation(moving, Point(0.5f), true).empty(),
-                "occupied start returned as successful fallback");
+        Require(
+            world.movement.FindRouteToLocation(moving, Point(0.5f), true).empty(),
+            "occupied start returned as successful fallback");
         world.registry.destroy(standing);
         world.Finish(10);
-        Require(arrivals == 1 && world.movement.ReachedDestination(moving), "released destination was not retried");
+        Require(
+            arrivals == 1 && world.movement.ReachedDestination(moving), "released destination was not retried");
         sub.UnSubscribe();
     }
 
@@ -221,7 +257,8 @@ namespace
         const auto large = world.Actor(Point(3.5f), 0.6f);
         world.Tick();
         const auto route = world.movement.FindRouteToLocation(actor, Point(2.5f), true);
-        Require(!route.empty() && !Vector3Equals(route.back(), Point(2.5f)), "destination ignored full NPC footprint");
+        Require(
+            !route.empty() && !Vector3Equals(route.back(), Point(2.5f)), "destination ignored full NPC footprint");
         Require(world.grid.CheckSingleSquareOccupant(Point(2.5f)) == large, "large footprint not marked");
     }
 
@@ -251,30 +288,42 @@ namespace
         world.ActorData(actor).pathfindingBounds = 10;
         world.Tick();
         // This wall forces multiple turns so traceback must read window-relative parents.
-        for (int z = 66; z <= 74; ++z) world.Wall(Point(63.5f, z + 0.5f));
+        for (int z = 66; z <= 74; ++z)
+            world.Wall(Point(63.5f, static_cast<float>(z) + 0.5f));
         const auto destination = Point(66.5f, 70.5f);
         for (bool astar : {false, true})
         {
             const auto route = world.movement.FindRouteToLocation(actor, destination, astar, false);
-            Require(route.size() > 1 && Vector3Equals(route.back(), destination),
-                    "offset search window did not trace a route around the wall");
+            Require(
+                route.size() > 1 && Vector3Equals(route.back(), destination),
+                "offset search window did not trace a route around the wall");
             for (auto point : route)
                 Require(world.grid.CheckEntityAreaUnoccupied(actor, point), "route corner overlaps the wall");
         }
         world.Wall(destination);
         for (bool astar : {false, true})
         {
-            Require(world.movement.FindRouteToLocation(actor, destination, astar, false).empty(),
-                    "offset strict search accepted a blocked destination");
+            Require(
+                world.movement.FindRouteToLocation(actor, destination, astar, false).empty(),
+                "offset strict search accepted a blocked destination");
             const auto route = world.movement.FindRouteToLocation(actor, destination, astar, true);
-            Require(!route.empty() && !Vector3Equals(route.back(), destination) &&
+            Require(
+                !route.empty() && !Vector3Equals(route.back(), destination) &&
                     world.grid.CheckEntityAreaUnoccupied(actor, route.back()),
-                    "offset fallback search did not find a free stopping place");
+                "offset fallback search did not find a free stopping place");
         }
-        Require(world.grid.AStarPathfind(actor, world.Position(actor), destination, {0, 0}, {10, 10}).empty(),
-                "search window excluding the start was accepted");
-        Require(world.grid.AStarPathfind(actor, world.Position(actor), destination, {300, 300}, {200, 200}).empty(),
-                "inverted search window was accepted");
+        Require(
+            world.grid
+                .AStarPathfind(
+                    actor, world.Position(actor), destination, {.row = 0, .col = 0}, {.row = 10, .col = 10})
+                .empty(),
+            "search window excluding the start was accepted");
+        Require(
+            world.grid
+                .AStarPathfind(
+                    actor, world.Position(actor), destination, {.row = 300, .col = 300}, {.row = 200, .col = 200})
+                .empty(),
+            "inverted search window was accepted");
     }
 
     void TestLargeBlockedDestination()
@@ -288,16 +337,17 @@ namespace
 
         const auto started = std::chrono::steady_clock::now();
         const auto route = world.movement.FindRouteToLocation(actor, destination, true);
-        const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - started);
+        const auto elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started);
         Require(!route.empty(), "large blocked destination has no fallback route");
         Require(!Vector3Equals(route.back(), destination), "large blocked destination was accepted");
         Require(world.grid.CheckEntityAreaUnoccupied(actor, route.back()), "large fallback is occupied");
-        Require(std::fabs(route.back().x - destination.x) + std::fabs(route.back().z - destination.z) == 1.0f,
-                "large fallback did not stop beside the blocked destination");
+        Require(
+            std::fabs(route.back().x - destination.x) + std::fabs(route.back().z - destination.z) == 1.0f,
+            "large fallback did not stop beside the blocked destination");
         std::cout << "Large blocked destination route: " << elapsed.count() << " ms\n";
     }
-}
+} // namespace
 
 int main()
 {

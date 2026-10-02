@@ -14,9 +14,9 @@ namespace sage
     Vector3 TransformSystem::divideScale(const Vector3& worldScale, const Vector3& parentWorldScale)
     {
         return {
-            parentWorldScale.x != 0.0f ? worldScale.x / parentWorldScale.x : worldScale.x,
-            parentWorldScale.y != 0.0f ? worldScale.y / parentWorldScale.y : worldScale.y,
-            parentWorldScale.z != 0.0f ? worldScale.z / parentWorldScale.z : worldScale.z};
+            .x = parentWorldScale.x != 0.0f ? worldScale.x / parentWorldScale.x : worldScale.x,
+            .y = parentWorldScale.y != 0.0f ? worldScale.y / parentWorldScale.y : worldScale.y,
+            .z = parentWorldScale.z != 0.0f ? worldScale.z / parentWorldScale.z : worldScale.z};
     }
 
     void TransformSystem::addChild(entt::entity parent, entt::entity child, entt::entity insertBefore) const
@@ -125,7 +125,7 @@ namespace sage
 
     void TransformSystem::SetWorldScale(entt::entity entity, float scale)
     {
-        SetWorldScale(entity, Vector3{scale, scale, scale});
+        SetWorldScale(entity, Vector3{.x = scale, .y = scale, .z = scale});
     }
 
     void TransformSystem::SetLocalPos(entt::entity entity, const Vector3& position)
@@ -152,7 +152,7 @@ namespace sage
 
     void TransformSystem::SetLocalScale(entt::entity entity, float scale)
     {
-        SetLocalScale(entity, Vector3{scale, scale, scale});
+        SetLocalScale(entity, Vector3{.x = scale, .y = scale, .z = scale});
     }
 
     void TransformSystem::SetParent(entt::entity entity, entt::entity newParent)
@@ -203,7 +203,7 @@ namespace sage
     void TransformSystem::onComponentAdded(entt::entity entity)
     {
         auto& transform = registry->get<sgTransform>(entity);
-        transform.Bind(this, entity);
+        transform.Bind(*this, entity);
         if (transform.m_parent != entt::null)
         {
             addChild(transform.m_parent, entity, entt::null);

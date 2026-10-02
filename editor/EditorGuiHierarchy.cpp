@@ -86,9 +86,9 @@ namespace sage::editor
             }
         };
 
-        constexpr ImGuiWindowFlags windowFlags =
-            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+        constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                                                 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
+                                                 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
 
         if (ImGui::Begin("Hierarchy", nullptr, windowFlags))
         {
@@ -102,8 +102,7 @@ namespace sage::editor
             const ImVec2 contentRegion = ImGui::GetContentRegionAvail();
             const ImVec2 treePos = ImGui::GetCursorScreenPos();
             const ImVec2 treeSize{
-                dockLayout ? std::max(1.0f, resizeHandleX - treePos.x)
-                           : std::max(1.0f, contentRegion.x),
+                dockLayout ? std::max(1.0f, resizeHandleX - treePos.x) : std::max(1.0f, contentRegion.x),
                 std::max(1.0f, contentRegion.y)};
 
             if (ImGui::BeginChild("hierarchy_scroll", treeSize, false))
@@ -124,12 +123,7 @@ namespace sage::editor
                     {
                         const auto color = ImGui::GetColorU32(ImVec4{0.36f, 0.58f, 0.92f, 0.85f});
                         ImGui::GetWindowDrawList()->AddRect(
-                            dropMin,
-                            ImVec2{dropMin.x + dropSize.x, dropMin.y + dropSize.y},
-                            color,
-                            4.0f,
-                            0,
-                            2.0f);
+                            dropMin, ImVec2{dropMin.x + dropSize.x, dropMin.y + dropSize.y}, color, 4.0f, 0, 2.0f);
                     }
                 };
 
@@ -142,11 +136,11 @@ namespace sage::editor
                 {
                     auto subtreeContainsEntity = [this](const std::size_t rootIndex, const entt::entity entity) {
                         if (rootIndex >= hierarchyEntries.size()) return false;
-                        const int rootDepth = hierarchyEntries[rootIndex].depth;
+                        const int rootDepth = hierarchyEntries.at(rootIndex).depth;
                         for (std::size_t i = rootIndex; i < hierarchyEntries.size(); ++i)
                         {
-                            if (i != rootIndex && hierarchyEntries[i].depth <= rootDepth) break;
-                            if (hierarchyEntries[i].entity == entity) return true;
+                            if (i != rootIndex && hierarchyEntries.at(i).depth <= rootDepth) break;
+                            if (hierarchyEntries.at(i).entity == entity) return true;
                         }
                         return false;
                     };
@@ -155,17 +149,18 @@ namespace sage::editor
                     // active search filter. Used to keep ancestors of a match visible.
                     auto subtreePassesFilter = [this](const std::size_t rootIndex) {
                         if (rootIndex >= hierarchyEntries.size()) return false;
-                        const int rootDepth = hierarchyEntries[rootIndex].depth;
+                        const int rootDepth = hierarchyEntries.at(rootIndex).depth;
                         for (std::size_t i = rootIndex; i < hierarchyEntries.size(); ++i)
                         {
-                            if (i != rootIndex && hierarchyEntries[i].depth <= rootDepth) break;
-                            if (hierarchyFilter.PassFilter(hierarchyEntries[i].displayName.c_str())) return true;
+                            if (i != rootIndex && hierarchyEntries.at(i).depth <= rootDepth) break;
+                            if (hierarchyFilter.PassFilter(hierarchyEntries.at(i).displayName.c_str()))
+                                return true;
                         }
                         return false;
                     };
 
                     auto drawInsertBeforeTarget = [&](const std::size_t entryIndex) {
-                        const auto& entry = hierarchyEntries[entryIndex];
+                        const auto& entry = hierarchyEntries.at(entryIndex);
                         constexpr float targetHeight = 7.0f;
                         const ImVec2 targetMin = ImGui::GetCursorScreenPos();
                         const float targetWidth = std::max(1.0f, ImGui::GetContentRegionAvail().x);
@@ -183,7 +178,8 @@ namespace sage::editor
 
                         if (targetActive)
                         {
-                            const float indent = static_cast<float>(entry.depth) * ImGui::GetTreeNodeToLabelSpacing();
+                            const float indent =
+                                static_cast<float>(entry.depth) * ImGui::GetTreeNodeToLabelSpacing();
                             const float y = targetMin.y + targetHeight * 0.5f;
                             const auto color = ImGui::GetColorU32(ImVec4{0.36f, 0.58f, 0.92f, 1.00f});
                             ImGui::GetWindowDrawList()->AddLine(
@@ -196,7 +192,7 @@ namespace sage::editor
 
                     auto skipSubtree = [this](std::size_t& index, const int depth) {
                         ++index;
-                        while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > depth)
+                        while (index < hierarchyEntries.size() && hierarchyEntries.at(index).depth > depth)
                         {
                             ++index;
                         }
@@ -206,7 +202,7 @@ namespace sage::editor
                         if (index >= hierarchyEntries.size()) return;
 
                         const std::size_t entryIndex = index;
-                        const auto& entry = hierarchyEntries[entryIndex];
+                        const auto& entry = hierarchyEntries.at(entryIndex);
 
                         if (hierarchyFilter.IsActive() && !subtreePassesFilter(entryIndex))
                         {
@@ -215,17 +211,18 @@ namespace sage::editor
                         }
 
                         const bool hasChildren = entryIndex + 1 < hierarchyEntries.size() &&
-                                                 hierarchyEntries[entryIndex + 1].depth > entry.depth;
+                                                 hierarchyEntries.at(entryIndex + 1).depth > entry.depth;
                         const bool selected =
                             std::ranges::find(selectedSceneEntities, entry.entity) != selectedSceneEntities.end();
 
                         drawInsertBeforeTarget(entryIndex);
 
-                        ImGuiTreeNodeFlags nodeFlags =
-                            ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow |
-                            ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                        ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_SpanAvailWidth |
+                                                       ImGuiTreeNodeFlags_OpenOnArrow |
+                                                       ImGuiTreeNodeFlags_OpenOnDoubleClick;
                         if (selected) nodeFlags |= ImGuiTreeNodeFlags_Selected;
-                        if (!hasChildren) nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                        if (!hasChildren)
+                            nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
 
                         if (hasChildren)
                         {
@@ -241,13 +238,12 @@ namespace sage::editor
                             }
                         }
 
-                        const auto imguiEntityId =
-                            static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
+                        const auto imguiEntityId = static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
                         const bool open = ImGui::TreeNodeEx(
                             reinterpret_cast<void*>(imguiEntityId),
                             nodeFlags,
                             "%s  %s",
-                            entry.icon ? entry.icon : "",
+                            entry.icon.c_str(),
                             entry.displayName.c_str());
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
@@ -306,7 +302,8 @@ namespace sage::editor
                         else if (open)
                         {
                             ++index;
-                            while (index < hierarchyEntries.size() && hierarchyEntries[index].depth > entry.depth)
+                            while (index < hierarchyEntries.size() &&
+                                   hierarchyEntries.at(index).depth > entry.depth)
                             {
                                 drawEntry(index);
                             }
@@ -316,7 +313,6 @@ namespace sage::editor
                         {
                             skipSubtree(index, entry.depth);
                         }
-
                     };
 
                     std::size_t index = 0;
@@ -356,8 +352,8 @@ namespace sage::editor
             }
             else if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             {
-                sceneSelectionRequest = SceneSelectionRequest{
-                    .entity = *pendingHierarchyClick, .mode = SceneSelectionMode::Replace};
+                sceneSelectionRequest =
+                    SceneSelectionRequest{.entity = *pendingHierarchyClick, .mode = SceneSelectionMode::Replace};
                 pendingHierarchyClick.reset();
             }
         }
@@ -372,7 +368,6 @@ namespace sage::editor
         }
     }
 
-
     EditorGui::SceneSelectionRequest EditorGui::makeSceneSelectionRequest(const entt::entity clicked) const
     {
         const ImGuiIO& io = ImGui::GetIO();
@@ -384,7 +379,7 @@ namespace sage::editor
             const auto indexOf = [this](const entt::entity entity) -> std::optional<std::size_t> {
                 for (std::size_t i = 0; i < hierarchyEntries.size(); ++i)
                 {
-                    if (hierarchyEntries[i].entity == entity) return i;
+                    if (hierarchyEntries.at(i).entity == entity) return i;
                 }
                 return std::nullopt;
             };
@@ -398,10 +393,12 @@ namespace sage::editor
                 rangeEntities.reserve(hi - lo + 1);
                 for (std::size_t i = lo; i <= hi; ++i)
                 {
-                    rangeEntities.push_back(hierarchyEntries[i].entity);
+                    rangeEntities.push_back(hierarchyEntries.at(i).entity);
                 }
                 return SceneSelectionRequest{
-                    .entity = clicked, .mode = SceneSelectionMode::Range, .rangeEntities = std::move(rangeEntities)};
+                    .entity = clicked,
+                    .mode = SceneSelectionMode::Range,
+                    .rangeEntities = std::move(rangeEntities)};
             }
         }
 

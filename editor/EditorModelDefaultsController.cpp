@@ -20,56 +20,56 @@ namespace sage::editor
     void EditorModelDefaultsController::AdjustHeight(const float amount)
     {
         if (isActive && !isActive()) return;
-        assets.AdjustSelectedDefaultHeight(amount);
+        assets.get().AdjustSelectedDefaultHeight(amount);
         notifyChanged();
     }
 
     void EditorModelDefaultsController::AdjustRotation(const float amount)
     {
         if (isActive && !isActive()) return;
-        assets.AdjustSelectedDefaultRotation(amount);
+        assets.get().AdjustSelectedDefaultRotation(amount);
         notifyChanged();
     }
 
     void EditorModelDefaultsController::AdjustScale(const float amount)
     {
         if (isActive && !isActive()) return;
-        assets.AdjustSelectedDefaultScale(amount);
+        assets.get().AdjustSelectedDefaultScale(amount);
         notifyChanged();
     }
 
     void EditorModelDefaultsController::SetHeight(const float value)
     {
         if (isActive && !isActive()) return;
-        assets.SetSelectedDefaultHeight(value);
+        assets.get().SetSelectedDefaultHeight(value);
         notifyChanged();
     }
 
     void EditorModelDefaultsController::SetRotation(const float value)
     {
         if (isActive && !isActive()) return;
-        assets.SetSelectedDefaultRotation(value);
+        assets.get().SetSelectedDefaultRotation(value);
         notifyChanged();
     }
 
     void EditorModelDefaultsController::SetScale(const float value)
     {
         if (isActive && !isActive()) return;
-        assets.SetSelectedDefaultScale(value);
+        assets.get().SetSelectedDefaultScale(value);
         notifyChanged();
     }
 
     void EditorModelDefaultsController::Apply()
     {
         if (isActive && !isActive()) return;
-        assets.ApplySelectedDefaults();
+        assets.get().ApplySelectedDefaults();
         notifyChanged();
     }
 
     void EditorModelDefaultsController::Reset()
     {
         if (isActive && !isActive()) return;
-        assets.ResetSelectedDefaults();
+        assets.get().ResetSelectedDefaults();
         notifyChanged();
     }
 
@@ -85,7 +85,7 @@ namespace sage::editor
             };
         }
 
-        const auto& placeable = assets.Selected();
+        const auto& placeable = assets.get().Selected();
         return {
             .assetName = placeable.displayName,
             .height = placeable.modelDefaultHeightOffset,

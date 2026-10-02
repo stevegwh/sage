@@ -104,7 +104,7 @@ namespace sage
 
     namespace collision_layers
     {
-        inline constexpr CollisionLayer Default = MakeCollisionLayer("Default", 0);
+        inline constexpr CollisionLayer DEFAULT = MakeCollisionLayer("Default", 0);
     } // namespace collision_layers
 
     [[nodiscard]] const std::vector<CollisionLayer>& GetCollisionLayers();
@@ -144,9 +144,10 @@ namespace sage
         {
             static std::vector<CollisionLayer> layers = []() {
                 std::vector<CollisionLayer> v = {
-                    collision_layers::Default,
+                    collision_layers::DEFAULT,
                 };
-                for (const auto& l : CustomCollisionLayers) v.push_back(l);
+                for (const auto& l : CUSTOM_COLLISION_LAYERS)
+                    v.push_back(l);
                 return v;
             }();
             return layers;
@@ -188,7 +189,8 @@ namespace sage
     [[nodiscard]] inline int FindFreeCollisionLayerIndex()
     {
         std::uint64_t used = 0;
-        for (const auto& l : GetCollisionLayers()) used |= l.bit;
+        for (const auto& l : GetCollisionLayers())
+            used |= l.bit;
         for (int i = 0; i < MAX_COLLISION_LAYERS; ++i)
         {
             if ((used & (1ull << i)) == 0) return i;

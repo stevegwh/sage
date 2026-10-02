@@ -60,17 +60,17 @@ namespace sage
         [[nodiscard]] std::vector<CollisionInfo> GetMeshCollisionsWithRay(
             const entt::entity& caster, const Ray& ray, CollisionMask mask);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(
-            const entt::entity& caster, const Ray& ray, CollisionLayer layer = sage::collision_layers::Default);
+            const entt::entity& caster, const Ray& ray, CollisionLayer layer = sage::collision_layers::DEFAULT);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(
             const entt::entity& caster, const Ray& ray, CollisionMask mask);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(
-            const Ray& ray, CollisionLayer layer = sage::collision_layers::Default);
+            const Ray& ray, CollisionLayer layer = sage::collision_layers::DEFAULT);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithRay(const Ray& ray, CollisionMask mask);
         [[nodiscard]] bool GetFirstCollisionWithRay(
-            const Ray& ray, CollisionInfo& info, CollisionLayer layer = sage::collision_layers::Default) const;
+            const Ray& ray, CollisionInfo& info, CollisionLayer layer = sage::collision_layers::DEFAULT) const;
         [[nodiscard]] bool GetFirstCollisionWithRay(const Ray& ray, CollisionInfo& info, CollisionMask mask) const;
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithBoundingBox(
-            const BoundingBox& bb, CollisionLayer layer = sage::collision_layers::Default);
+            const BoundingBox& bb, CollisionLayer layer = sage::collision_layers::DEFAULT);
         [[nodiscard]] std::vector<CollisionInfo> GetCollisionsWithBoundingBox(
             const BoundingBox& bb, CollisionMask mask);
         void BoundingBoxDraw(entt::entity entityId, Color color = sage::colors::LIME_COLOR) const;

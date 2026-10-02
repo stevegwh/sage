@@ -9,8 +9,8 @@
 
 #include "raymath.h"
 
-#include <cstdint>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <unordered_set>
 
@@ -42,7 +42,7 @@ namespace sage
             // boneCount equality and aborts the whole game (one bad entity kills
             // every other animation). Skip and warn once per entity instead.
             {
-                const Model& rl = renderable.GetModel()->GetRlModel();
+                const Model& rl = renderable.GetModel()->get().GetRlModel();
                 const int modelBones = (rl.meshCount > 0) ? rl.meshes[0].boneCount : rl.boneCount;
                 if (modelBones != anim.boneCount)
                 {
@@ -50,9 +50,8 @@ namespace sage
                     if (warned.insert(static_cast<std::uint32_t>(entity)).second)
                     {
                         std::cerr << "AnimationSystem: skipping entity " << static_cast<std::uint32_t>(entity)
-                                  << " - model bone count (" << modelBones
-                                  << ") does not match animation '" << animation.GetClipName(animData.index)
-                                  << "' (" << anim.boneCount
+                                  << " - model bone count (" << modelBones << ") does not match animation '"
+                                  << animation.GetClipName(animData.index) << "' (" << anim.boneCount
                                   << "). The animation data is stale for this model; re-pack/re-import it.\n";
                     }
                     continue;
@@ -65,8 +64,8 @@ namespace sage
                 animation.onAnimationStart.Publish(entity);
             }
 
-            const auto frameAdvance = static_cast<unsigned int>(
-                std::max(0.0f, std::round(static_cast<float>(animData.speed) * speed)));
+            const auto frameAdvance =
+                static_cast<unsigned int>(std::max(0.0f, std::round(static_cast<float>(animData.speed) * speed)));
             bool finalFrame = animData.currentFrame + frameAdvance >= static_cast<unsigned int>(anim.frameCount);
             animData.lastFrame = animData.currentFrame;
             animData.currentFrame = (animData.currentFrame + frameAdvance) % anim.frameCount;
@@ -94,7 +93,7 @@ namespace sage
             {
                 // Clamp in case blendDuration was changed (or zeroed) mid-blend.
                 const float t = Clamp(1.0f - animation.blendTimer / animation.blendDuration, 0.0f, 1.0f);
-                renderable.GetModel()->UpdateAnimationBlended(
+                renderable.GetModel()->get().UpdateAnimationBlended(
                     animation.animations[animation.blendFrom.index],
                     animation.blendFrom.currentFrame,
                     anim,
@@ -103,7 +102,7 @@ namespace sage
             }
             else
             {
-                renderable.GetModel()->UpdateAnimation(anim, animData.currentFrame);
+                renderable.GetModel()->get().UpdateAnimation(anim, animData.currentFrame);
             }
 
             if (finalFrame) // Must be at end, as end of death animations can result in entities being destroyed

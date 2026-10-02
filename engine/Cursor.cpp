@@ -1,5 +1,5 @@
-#include "engine/SimulationClock.hpp"
 #include "engine/Colors.hpp"
+#include "engine/SimulationClock.hpp"
 //
 // Created by Steve Wheeler on 04/05/2024.
 //
@@ -177,7 +177,7 @@ namespace sage
                                        !navigationValidityProvider(getFirstNaviCollision().point);
         if (OutOfRange() || invalidNavigation)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Denied});
+            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::DENIED});
             currentIsRegular = false;
             currentColor = invalidColor;
             return;
@@ -189,12 +189,12 @@ namespace sage
         }
         else if (navigationHit)
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Move});
+            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::MOVE});
             currentIsRegular = false;
         }
         else
         {
-            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular});
+            currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::REGULAR});
             currentIsRegular = true;
         }
     }
@@ -222,7 +222,7 @@ namespace sage
     void Cursor::Update()
     {
         sys->picker->Update();
-        currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::Regular});
+        currentTex = ResourceManager::GetInstance().TextureLoad(std::string{cursors::REGULAR});
         currentIsRegular = true;
         currentColor = defaultColor;
 
@@ -254,7 +254,7 @@ namespace sage
         }
         else if (
             !OutOfRange() && m_hoverInfo.has_value() &&
-            sage::Time() >= m_hoverInfo.value().beginHoverTime + m_hoverInfo.value().hoverTimeThreshold)
+            sage::Time() >= m_hoverInfo.value().beginHoverTime + HoverInfo::HOVER_TIME_THRESHOLD)
         {
             onMouseHover();
         }
@@ -294,7 +294,8 @@ namespace sage
         if (hideCursor) return;
         Vector2 pos = sys->settings->ScreenToViewportPosition(GetMousePosition());
 
-        if (m_hoverInfo.has_value() && sage::Time() >= m_hoverInfo->beginHoverTime + m_hoverInfo->hoverTimeThreshold)
+        if (m_hoverInfo.has_value() &&
+            sage::Time() >= m_hoverInfo->beginHoverTime + HoverInfo::HOVER_TIME_THRESHOLD)
         {
             if (const auto* hoverable = registry->try_get<Hoverable>(m_hoverInfo->target);
                 hoverable != nullptr && !hoverable->label.empty())
@@ -307,15 +308,19 @@ namespace sage
                 const Vector2 viewport = sys->settings->GetViewPort();
                 const float width = textSize.x + horizontalPadding * 2.0f;
                 const float height = textSize.y + verticalPadding * 2.0f;
-                Vector2 tooltipPos = {pos.x + 18.0f * scale, pos.y + 18.0f * scale};
+                Vector2 tooltipPos = {.x = pos.x + 18.0f * scale, .y = pos.y + 18.0f * scale};
                 tooltipPos.x = Clamp(tooltipPos.x, 0.0f, std::max(0.0f, viewport.x - width));
                 tooltipPos.y = Clamp(tooltipPos.y, 0.0f, std::max(0.0f, viewport.y - height));
 
-                DrawRectangleRounded({tooltipPos.x, tooltipPos.y, width, height}, 0.2f, 4, Color{20, 24, 28, 230});
+                DrawRectangleRounded(
+                    {.x = tooltipPos.x, .y = tooltipPos.y, .width = width, .height = height},
+                    0.2f,
+                    4,
+                    Color{.r = 20, .g = 24, .b = 28, .a = 230});
                 DrawTextEx(
                     GetFontDefault(),
                     hoverable->label.c_str(),
-                    {tooltipPos.x + horizontalPadding, tooltipPos.y + verticalPadding},
+                    {.x = tooltipPos.x + horizontalPadding, .y = tooltipPos.y + verticalPadding},
                     fontSize,
                     1.0f,
                     sage::colors::RAY_WHITE_COLOR);
@@ -328,7 +333,8 @@ namespace sage
         if (!currentIsRegular)
         {
             pos = Vector2Subtract(
-                pos, {static_cast<float>(currentTex.width / 2), static_cast<float>(currentTex.height / 2)});
+                pos,
+                {.x = static_cast<float>(currentTex.width / 2), .y = static_cast<float>(currentTex.height / 2)});
         }
         DrawTextureEx(currentTex, pos, 0.0, 1.0f, sage::colors::WHITE_COLOR);
     }

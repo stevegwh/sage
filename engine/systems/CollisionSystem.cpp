@@ -29,11 +29,16 @@ namespace sage
             for (const auto view = registry.view<Collideable>(); const auto entity : view)
             {
                 const auto& collideable = view.get<Collideable>(entity);
-                if (!collideable.active || entity == caster || !mask.Contains(collideable.collisionLayer)) continue;
+                if (!collideable.active || entity == caster || !mask.Contains(collideable.collisionLayer))
+                    continue;
 
-                const std::optional<RayCollision> hit = test(entity, collideable);
+                const std::optional<RayCollision> hit = std::forward<Test>(test)(entity, collideable);
                 if (!hit.has_value()) continue;
-                collisions.push_back({entity, collideable.worldBoundingBox, *hit, collideable.collisionLayer});
+                collisions.push_back(
+                    {.collidedEntityId = entity,
+                     .collidedBB = collideable.worldBoundingBox,
+                     .rlCollision = *hit,
+                     .collisionLayer = collideable.collisionLayer});
                 if (firstOnly) break;
             }
             return collisions;
@@ -191,15 +196,15 @@ namespace sage
     std::vector<CollisionInfo> CollisionSystem::GetMeshCollisionsWithRay(
         const entt::entity& caster, const Ray& ray, CollisionMask mask)
     {
-        auto collisions = CollectCollisions(*registry, mask, caster, [&](const entt::entity entity, const Collideable& c) {
-            if (c.shape != ColliderShape::RenderMesh ||
-                !registry->all_of<Renderable, sgTransform>(entity))
-                return std::optional<RayCollision>{};
-            auto& renderable = registry->get<Renderable>(entity);
-            const auto& transform = registry->get<sgTransform>(entity);
-            const auto hit = renderable.GetModel()->GetRayMeshCollision(ray, 0, transform.GetMatrix());
-            return hit.hit ? std::optional{hit} : std::nullopt;
-        });
+        auto collisions =
+            CollectCollisions(*registry, mask, caster, [&](const entt::entity entity, const Collideable& c) {
+                if (c.shape != ColliderShape::RenderMesh || !registry->all_of<Renderable, sgTransform>(entity))
+                    return std::optional<RayCollision>{};
+                auto& renderable = registry->get<Renderable>(entity);
+                const auto& transform = registry->get<sgTransform>(entity);
+                const auto hit = renderable.GetModel()->get().GetRayMeshCollision(ray, 0, transform.GetMatrix());
+                return hit.hit ? std::optional{hit} : std::nullopt;
+            });
         SortCollisionsByDistance(collisions);
         return collisions;
     }
@@ -231,7 +236,7 @@ namespace sage
         Vector3 max = col.worldBoundingBox.max;
 
         // Calculate the center of the bounding box
-        Vector3 center = {(min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2};
+        Vector3 center = {.x = (min.x + max.x) / 2, .y = (min.y + max.y) / 2, .z = (min.z + max.z) / 2};
 
         // Calculate dimensions
         float width = max.x - min.x;
@@ -263,9 +268,8 @@ namespace sage
             mask,
             caller,
             [&](entt::entity, const Collideable& col) {
-                return CheckBoxCollision(bb, col.worldBoundingBox)
-                           ? std::optional{RayCollision{.hit = true}}
-                           : std::nullopt;
+                return CheckBoxCollision(bb, col.worldBoundingBox) ? std::optional{RayCollision{.hit = true}}
+                                                                   : std::nullopt;
             },
             true);
         if (collisions.empty()) return false;

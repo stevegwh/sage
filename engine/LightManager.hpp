@@ -52,12 +52,19 @@ namespace sage
         void DrawDebugLights() const;
         void Update() const;
         void DrawShadowMap(const RenderSystem& renderer);
-        void SetShadowsEnabled(bool enabled) { shadowsEnabled = enabled; }
+        void SetShadowsEnabled(bool enabled)
+        {
+            shadowsEnabled = enabled;
+        }
         void BindShadowMap() const;
         void UnbindShadowMap() const;
         void SetBloomMask(bool enabled) const;
-        explicit LightManager(entt::registry* _registry, Camera* _camera, const LightSettings& settings,
-                              bool shadowsEnabled);
+        explicit LightManager(
+            entt::registry* _registry, Camera* _camera, const LightSettings& settings, bool shadowsEnabled);
+        LightManager(const LightManager&) = delete;
+        LightManager& operator=(const LightManager&) = delete;
+        LightManager(LightManager&&) = delete;
+        LightManager& operator=(LightManager&&) = delete;
         ~LightManager();
     };
 } // namespace sage

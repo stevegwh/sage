@@ -3,8 +3,8 @@
 //
 
 #include "ResourceManager.hpp"
-#include "ShaderPaths.hpp"
 #include "AssetKey.hpp"
+#include "ShaderPaths.hpp"
 
 #include "components/Renderable.hpp"
 
@@ -18,6 +18,7 @@
 
 #include "external/cgltf.h"
 
+#include <algorithm>
 #include <ranges>
 #include <stdexcept>
 extern "C"
@@ -27,10 +28,13 @@ extern "C"
 #include <stb_include.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <sstream>
 #include <unordered_map>
+#include <utility>
 
 namespace sage
 {
@@ -70,8 +74,7 @@ namespace sage
                 if (count != 1) aliases.erase(name);
         }
 
-        std::string ResolveKey(
-            const std::string& key, const std::unordered_map<std::string, std::string>& aliases)
+        std::string ResolveKey(const std::string& key, const std::unordered_map<std::string, std::string>& aliases)
         {
             if (const auto found = aliases.find(key); found != aliases.end()) return found->second;
             return key;
@@ -93,7 +96,8 @@ namespace sage
 
         bool IsAbsolutePath(const std::string& path)
         {
-            return !path.empty() && (path[0] == '/' || path[0] == '\\' || (path.size() > 1 && path[1] == ':'));
+            return !path.empty() &&
+                   (path.at(0) == '/' || path.at(0) == '\\' || (path.size() > 1 && path.at(1) == ':'));
         }
 
         std::string ResolveObjMaterialPath(const char* objFileName, const std::string& materialFileName)
@@ -121,13 +125,13 @@ namespace sage
             while (std::getline(objFile, line))
             {
                 const std::string trimmed = Trim(line);
-                if (trimmed.empty() || trimmed[0] == '#') continue;
+                if (trimmed.empty() || trimmed.at(0) == '#') continue;
 
                 constexpr const char* keyword = "mtllib";
                 constexpr size_t keywordLength = 6;
                 if (trimmed.compare(0, keywordLength, keyword) != 0) continue;
                 if (trimmed.size() == keywordLength ||
-                    (trimmed[keywordLength] != ' ' && trimmed[keywordLength] != '\t'))
+                    (trimmed.at(keywordLength) != ' ' && trimmed.at(keywordLength) != '\t'))
                 {
                     continue;
                 }
@@ -164,42 +168,25 @@ namespace sage
             {
                 const char* name = materials[i].name;
                 names.emplace_back(
-                    (name != nullptr && name[0] != '\0') ? name : FallbackMaterialName(fileName, i));
+                    (name != nullptr && name[0] != '\0') ? name
+                                                         : FallbackMaterialName(fileName, static_cast<int>(i)));
             }
 
             tinyobj_materials_free(materials, materialCount);
             return names;
         }
 
-        struct FileData
-        {
-            unsigned char* bytes = nullptr;
-
-            ~FileData()
-            {
-                if (bytes != nullptr) UnloadFileData(bytes);
-            }
-        };
-
-        struct GltfData
-        {
-            cgltf_data* data = nullptr;
-
-            ~GltfData()
-            {
-                if (data != nullptr) cgltf_free(data);
-            }
-        };
-
         std::vector<std::string> LoadGltfMaterialNames(const char* fileName)
         {
             int dataSize = 0;
-            FileData fileData{LoadFileData(fileName, &dataSize)};
-            if (fileData.bytes == nullptr) return {};
+            const std::unique_ptr<unsigned char, decltype(&UnloadFileData)> fileData(
+                LoadFileData(fileName, &dataSize), UnloadFileData);
+            if (!fileData) return {};
 
             cgltf_options options{};
-            GltfData gltf;
-            const cgltf_result result = cgltf_parse(&options, fileData.bytes, dataSize, &gltf.data);
+            cgltf_data* parsed = nullptr;
+            const cgltf_result result = cgltf_parse(&options, fileData.get(), dataSize, &parsed);
+            const std::unique_ptr<cgltf_data, decltype(&cgltf_free)> gltf(parsed, cgltf_free);
             if (result != cgltf_result_success)
             {
                 TraceLog(LOG_WARNING, "MODEL: [%s] Failed to parse glTF material names", fileName);
@@ -207,15 +194,17 @@ namespace sage
             }
 
             std::vector<std::string> names;
-            names.reserve(gltf.data->materials_count + 1);
+            names.reserve(gltf->materials_count + 1);
             names.emplace_back(DEFAULT_MATERIAL_NAME);
 
             // raylib's glTF loader reserves material slot 0 for its default material.
-            for (size_t i = 0; i < gltf.data->materials_count; ++i)
+            for (size_t i = 0; i < gltf->materials_count; ++i)
             {
-                const char* name = gltf.data->materials[i].name;
+                const char* name = gltf->materials[i].name;
                 names.emplace_back(
-                    (name != nullptr && name[0] != '\0') ? name : FallbackMaterialName(fileName, i + 1));
+                    (name != nullptr && name[0] != '\0')
+                        ? name
+                        : FallbackMaterialName(fileName, static_cast<int>(i + 1)));
             }
 
             return names;
@@ -247,7 +236,7 @@ namespace sage
                 return;
             }
 
-            if (static_cast<int>(materialNames.size()) > model.materialCount)
+            if (std::cmp_greater(materialNames.size(), model.materialCount))
             {
                 materialNames.resize(model.materialCount);
             }
@@ -257,17 +246,17 @@ namespace sage
 
             for (int i = 0; i < model.materialCount; ++i)
             {
-                if (!materialNames[i].empty()) continue;
+                if (!materialNames.at(i).empty()) continue;
 
                 // With no extractor data, a single raylib material is the default material.
                 // With old glTF-packed data, slot 0 may be empty because raylib reserves it.
                 if ((originalSize == 0 && model.materialCount == 1) || (originalSize > 0 && i == 0))
                 {
-                    materialNames[i] = DEFAULT_MATERIAL_NAME;
+                    materialNames.at(i) = DEFAULT_MATERIAL_NAME;
                 }
                 else
                 {
-                    materialNames[i] = FallbackMaterialName(sourcePath, i);
+                    materialNames.at(i) = FallbackMaterialName(sourcePath, i);
                 }
             }
         }
@@ -297,7 +286,7 @@ namespace sage
 
         for (int i = 0; i < model.materialCount; ++i)
         {
-            const auto& name = materialNames[i];
+            const auto& name = materialNames.at(i);
             if (!materialMap.contains(name))
             {
                 // First sighting of this name: donate the freshly-loaded material to the shared pool.
@@ -357,68 +346,62 @@ namespace sage
      * @param fShaderStr
      * @return Shader
     */
-    Shader ResourceManager::ShaderLoad(const char* vsFileName, const char* fsFileName)
+    Shader ResourceManager::ShaderLoad(
+        const std::optional<std::string>& vsFileName, const std::optional<std::string>& fsFileName)
     {
-        const bool noShaderFiles = vsFileName == nullptr && fsFileName == nullptr;
-        const bool vertexShaderMissing = vsFileName != nullptr && !FileExists(vsFileName);
-        const bool fragmentShaderMissing = fsFileName != nullptr && !FileExists(fsFileName);
+        const bool noShaderFiles = !vsFileName && !fsFileName;
+        const bool vertexShaderMissing = vsFileName && !FileExists(vsFileName->c_str());
+        const bool fragmentShaderMissing = fsFileName && !FileExists(fsFileName->c_str());
         if (noShaderFiles || vertexShaderMissing || fragmentShaderMissing)
         {
             std::cout << "WARNING: Requested shader files do not exist. Loading default shader. \n";
             return shaders["DEFAULT"];
         }
 
-        char* vShaderStr = nullptr;
-        char* fShaderStr = nullptr;
-
-        const auto shaderIncludePath = ShaderPath("custom/include");
-
-        if (vsFileName != nullptr)
-        {
-            if (!vertShaderFileText.contains(vsFileName))
+        auto shaderIncludePath = ShaderPath("custom/include");
+        const auto sourceText = [&](const std::optional<std::string>& path,
+                                    auto& cache) -> std::optional<std::reference_wrapper<const std::string>> {
+            if (!path) return std::nullopt;
+            if (!cache.contains(*path))
             {
-                assert(FileExists(vsFileName));
-                // Load and preprocess vertex shader with stb_include
-                char* vertexSource = LoadFileText(vsFileName);
-                char* preprocessed =
-                    stb_include_string(vertexSource, nullptr, const_cast<char*>(shaderIncludePath.c_str()), nullptr, nullptr);
-                free(vertexSource);
-                vertShaderFileText[vsFileName] = preprocessed;
+                // raylib and stb own their respective C allocations; keep each matching deleter.
+                const std::unique_ptr<char, decltype(&UnloadFileText)> source(
+                    LoadFileText(path->c_str()), UnloadFileText);
+                std::optional<std::string> text;
+                if (source)
+                {
+                    const std::unique_ptr<char, decltype(&std::free)> preprocessed(
+                        stb_include_string(source.get(), nullptr, shaderIncludePath.data(), nullptr, nullptr),
+                        std::free);
+                    if (preprocessed) text = preprocessed.get();
+                }
+                cache.emplace(*path, std::move(text));
             }
-            vShaderStr = vertShaderFileText[vsFileName];
-        }
-
-        if (fsFileName != nullptr)
-        {
-            if (!fragShaderFileText.contains(fsFileName))
-            {
-                assert(FileExists(fsFileName));
-                // Load and preprocess fragment shader with stb_include
-                char* fragmentSource = LoadFileText(fsFileName);
-                char* preprocessed =
-                    stb_include_string(fragmentSource, nullptr, const_cast<char*>(shaderIncludePath.c_str()), nullptr, nullptr);
-                free(fragmentSource);
-                fragShaderFileText[fsFileName] = preprocessed;
-            }
-            fShaderStr = fragShaderFileText[fsFileName];
-        }
-
-        return gpuShaderLoad(vShaderStr, fShaderStr);
+            const auto& cached = cache.at(*path);
+            return cached ? std::make_optional(std::cref(*cached)) : std::nullopt;
+        };
+        const auto vertexSource = sourceText(vsFileName, vertShaderFileText);
+        const auto fragmentSource = sourceText(fsFileName, fragShaderFileText);
+        return gpuShaderLoad(
+            vertexSource ? vertexSource->get().c_str() : nullptr,
+            fragmentSource ? fragmentSource->get().c_str() : nullptr);
     }
 
-    Shader ResourceManager::ShaderLoadUnique(const char* vsFileName, const char* fsFileName)
+    Shader ResourceManager::ShaderLoadUnique(
+        const std::optional<std::string>& vsFileName, const std::optional<std::string>& fsFileName)
     {
-        const bool noShaderFiles = vsFileName == nullptr && fsFileName == nullptr;
-        const bool vertexShaderMissing = vsFileName != nullptr && !FileExists(vsFileName);
-        const bool fragmentShaderMissing = fsFileName != nullptr && !FileExists(fsFileName);
+        const bool noShaderFiles = !vsFileName && !fsFileName;
+        const bool vertexShaderMissing = vsFileName && !FileExists(vsFileName->c_str());
+        const bool fragmentShaderMissing = fsFileName && !FileExists(fsFileName->c_str());
         if (noShaderFiles || vertexShaderMissing || fragmentShaderMissing) return {};
 
         // ShaderLoad performs and caches the include preprocessing. Only the GPU
         // program below is unique; source text can remain shared.
         static_cast<void>(ShaderLoad(vsFileName, fsFileName));
-        const char* vertexSource = vsFileName ? vertShaderFileText.at(vsFileName) : nullptr;
-        const char* fragmentSource = fsFileName ? fragShaderFileText.at(fsFileName) : nullptr;
-        return LoadShaderFromMemory(vertexSource, fragmentSource);
+        const auto vertexSource = vsFileName ? vertShaderFileText.at(*vsFileName) : std::nullopt;
+        const auto fragmentSource = fsFileName ? fragShaderFileText.at(*fsFileName) : std::nullopt;
+        return LoadShaderFromMemory(
+            vertexSource ? vertexSource->c_str() : nullptr, fragmentSource ? fragmentSource->c_str() : nullptr);
     }
 
     Texture ResourceManager::TextureLoad(const std::string& path)
@@ -492,7 +475,7 @@ namespace sage
             // Canvas previews and docked Play views can shrink glyphs substantially.
             GenTextureMipmaps(&font.texture);
             SetTextureFilter(font.texture, TEXTURE_FILTER_TRILINEAR);
-            for (size_t i = 0; i < font.glyphCount; i++)
+            for (size_t i = 0; std::cmp_less(i, font.glyphCount); i++)
             {
                 assert(font.glyphs[i].image.data != nullptr);
             }
@@ -550,7 +533,8 @@ namespace sage
         auto materialNames = LoadMaterialNames(path.c_str());
         Model model = LoadModel(path.c_str());
         dedupeAndShareMaterials(model, materialNames, path);
-        modelCopies.emplace(key, ModelInfo{model, std::move(materialNames), path});
+        modelCopies.emplace(
+            key, ModelInfo{.model = model, .materialNames = std::move(materialNames), .sourcePath = path});
     }
 
     void ResourceManager::StoreModel(const ModelInfo& modelInfo, const std::string& key)
@@ -665,7 +649,7 @@ namespace sage
             keys.push_back(key);
         }
 
-        std::sort(keys.begin(), keys.end());
+        std::ranges::sort(keys);
         return keys;
     }
 
@@ -779,7 +763,12 @@ namespace sage
         }
 
         modelCopies.emplace(
-            instanceKey, ModelInfo{model, info.materialNames, info.sourcePath, /*privateMaterials=*/true});
+            instanceKey,
+            ModelInfo{
+                .model = model,
+                .materialNames = info.materialNames,
+                .sourcePath = info.sourcePath,
+                /*privateMaterials=*/.privateMaterials = true});
 
         ModelMutable mut;
         mut.rlmodel = modelCopies.at(instanceKey).model;
@@ -794,7 +783,7 @@ namespace sage
         RegisterSourcePath(animationSourcePaths, "Animation", key, path);
         if (!modelAnimations.contains(key))
         {
-            int animsCount;
+            int animsCount = 0;
             auto animations = LoadModelAnimations(path.c_str(), &animsCount);
             if (animations == nullptr)
             {
@@ -838,14 +827,6 @@ namespace sage
 
     void ResourceManager::UnloadShaderFileText()
     {
-        for (const auto& vs : vertShaderFileText | std::views::values)
-        {
-            UnloadFileText(vs);
-        }
-        for (const auto& fs : fragShaderFileText | std::views::values)
-        {
-            UnloadFileText(fs);
-        }
         vertShaderFileText.clear();
         fragShaderFileText.clear();
     }
@@ -931,14 +912,6 @@ namespace sage
         for (const auto& shader : shaders | std::views::values)
         {
             UnloadShader(shader);
-        }
-        for (const auto& text : vertShaderFileText | std::views::values)
-        {
-            UnloadFileText(text);
-        }
-        for (const auto& text : fragShaderFileText | std::views::values)
-        {
-            UnloadFileText(text);
         }
         for (const auto& font : fonts | std::views::values)
         {

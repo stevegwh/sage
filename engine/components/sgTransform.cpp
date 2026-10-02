@@ -14,73 +14,71 @@ namespace sage
 {
     void sgTransform::SetParent(const entt::entity newParent)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetParent(m_entity, newParent);
+        m_transformSystem->get().SetParent(m_entity, newParent);
     }
 
-    void sgTransform::ResolveSerializedParent(
-        const std::unordered_map<std::uint32_t, entt::entity>& idMap)
+    void sgTransform::ResolveSerializedParent(const std::unordered_map<std::uint32_t, entt::entity>& idMap)
     {
         if (m_savedParentId == serializedNullId()) return;
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
 
         const auto it = idMap.find(m_savedParentId);
         if (it != idMap.end())
         {
-            m_transformSystem->SetParent(m_entity, it->second);
+            m_transformSystem->get().SetParent(m_entity, it->second);
         }
         m_savedParentId = serializedNullId();
     }
 
     void sgTransform::writeLocalPos(const Vector3& v)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetLocalPos(m_entity, v);
+        m_transformSystem->get().SetLocalPos(m_entity, v);
     }
 
     void sgTransform::writeWorldPos(const Vector3& v)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetWorldPos(m_entity, v);
+        m_transformSystem->get().SetWorldPos(m_entity, v);
     }
 
     void sgTransform::writeLocalRot(const Vector3& v)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetLocalRot(m_entity, v);
+        m_transformSystem->get().SetLocalRot(m_entity, v);
     }
 
     void sgTransform::writeWorldRot(const Vector3& v)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetWorldRot(m_entity, v);
+        m_transformSystem->get().SetWorldRot(m_entity, v);
     }
 
     void sgTransform::writeLocalScale(const Vector3& v)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetLocalScale(m_entity, v);
+        m_transformSystem->get().SetLocalScale(m_entity, v);
     }
 
     void sgTransform::writeWorldScale(const Vector3& v)
     {
-        assert(m_transformSystem != nullptr);
+        assert(m_transformSystem.has_value());
         assert(m_entity != entt::null);
-        m_transformSystem->SetWorldScale(m_entity, v);
+        m_transformSystem->get().SetWorldScale(m_entity, v);
     }
 
-    void sgTransform::Bind(TransformSystem* transformSystem, const entt::entity entity)
+    void sgTransform::Bind(TransformSystem& transformSystem, const entt::entity entity)
     {
-        assert(transformSystem != nullptr);
         assert(entity != entt::null);
-        m_transformSystem = transformSystem;
+        m_transformSystem = std::ref(transformSystem);
         m_entity = entity;
         rebindProxies();
     }
@@ -88,10 +86,10 @@ namespace sage
     void sgTransform::rebindProxies()
     {
         auto bindVec = [this](auto& field) {
-            field.owner_ = this;
-            field.x.parent = &field;
-            field.y.parent = &field;
-            field.z.parent = &field;
+            field.owner_ = std::ref(*this);
+            field.x.parent = std::ref(field);
+            field.y.parent = std::ref(field);
+            field.z.parent = std::ref(field);
         };
         bindVec(position.local);
         bindVec(position.world);
@@ -119,7 +117,7 @@ namespace sage
     Vector3 sgTransform::forward() const
     {
         Matrix matrix = GetMatrix();
-        Vector3 forward = {matrix.m8, matrix.m9, matrix.m10};
+        Vector3 forward = {.x = matrix.m8, .y = matrix.m9, .z = matrix.m10};
         return Vector3Normalize(forward);
     }
 
@@ -184,8 +182,8 @@ namespace sage
 
     sgTransform::sgTransform()
     {
-        scale.local.value = {1, 1, 1};
-        scale.world.value = {1, 1, 1};
+        scale.local.value = {.x = 1, .y = 1, .z = 1};
+        scale.world.value = {.x = 1, .y = 1, .z = 1};
         rebindProxies();
     }
 
@@ -207,7 +205,7 @@ namespace sage
         scale.local.value = rhs.scale.local.value;
     }
 
-    void sgTransform::stealStateFrom(sgTransform&& rhs)
+    void sgTransform::stealStateFrom(sgTransform& rhs)
     {
         m_entity = rhs.m_entity;
         m_transformSystem = rhs.m_transformSystem;
@@ -223,7 +221,7 @@ namespace sage
         rotation.local.value = rhs.rotation.local.value;
         scale.world.value = rhs.scale.world.value;
         scale.local.value = rhs.scale.local.value;
-        rhs.m_transformSystem = nullptr;
+        rhs.m_transformSystem = std::nullopt;
         rhs.m_entity = entt::null;
         rhs.m_savedParentId = serializedNullId();
     }
@@ -245,14 +243,14 @@ namespace sage
 
     sgTransform::sgTransform(sgTransform&& rhs) noexcept
     {
-        stealStateFrom(std::move(rhs));
+        stealStateFrom(rhs);
         rebindProxies();
     }
 
     sgTransform& sgTransform::operator=(sgTransform&& rhs) noexcept
     {
         if (this == &rhs) return *this;
-        stealStateFrom(std::move(rhs));
+        stealStateFrom(rhs);
         rebindProxies();
         return *this;
     }

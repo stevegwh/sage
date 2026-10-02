@@ -5,6 +5,7 @@
 #include "magic_enum.hpp"
 #include <cctype>
 #include <functional>
+#include <optional>
 #include <type_traits>
 
 namespace sage::content
@@ -19,7 +20,7 @@ namespace sage::content
         std::vector<entt::id_type> incompatibleComponents;
         bool editableScope = true;
         std::string target;
-        const json::Value* replacement = nullptr;
+        std::optional<std::reference_wrapper<const json::Value>> replacement;
         bool matched = false;
         json::Document fields{rapidjson::kArrayType};
         static std::string Name(const std::string& label)
@@ -34,7 +35,7 @@ namespace sage::content
                 result.pop_back();
             return result;
         }
-        std::string Path(const std::string& label) const
+        [[nodiscard]] std::string Path(const std::string& label) const
         {
             return prefix + (explicitName.empty() ? Name(label) : explicitName);
         }
@@ -72,7 +73,7 @@ namespace sage::content
             if (!replacement || path != target) return;
             if (!editable || !editableScope) throw std::runtime_error("Field is read-only: " + path);
             T next{};
-            json::Decode(*replacement, next);
+            json::Decode(replacement->get(), next);
             if constexpr (std::is_enum_v<T>)
                 if (!magic_enum::enum_contains(next)) throw std::runtime_error("Invalid enum value: " + path);
             if (setter)
@@ -85,7 +86,7 @@ namespace sage::content
       public:
         ContentInspector() = default;
         ContentInspector(std::string field, const json::Value& value)
-            : target(std::move(field)), replacement(&value)
+            : target(std::move(field)), replacement(std::cref(value))
         {
         }
         template <class T, class... Options>
@@ -304,11 +305,11 @@ namespace sage::content
         {
             Leaf(label, value, editable);
         }
-        const auto& Requirements() const
+        [[nodiscard]] const auto& Requirements() const
         {
             return requiredComponents;
         }
-        const auto& Incompatible() const
+        [[nodiscard]] const auto& Incompatible() const
         {
             return incompatibleComponents;
         }

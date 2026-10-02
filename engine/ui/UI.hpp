@@ -127,6 +127,8 @@ namespace sage
         bool dragsWindow = false;
 
         explicit Cell(Size requestedWidth = {});
+        Cell(Cell&&) = delete;
+        Cell& operator=(Cell&&) = delete;
         ~Cell();
         Cell(const Cell&) = delete;
         Cell& operator=(const Cell&) = delete;
@@ -191,7 +193,7 @@ namespace sage
         void Layout(const Settings& settings);
         void MoveTo(Vector2 designPosition);
         void ClampToDesignViewport();
-        [[nodiscard]] Cell* HitTest(Vector2 point);
+        [[nodiscard]] std::optional<std::reference_wrapper<Cell>> HitTest(Vector2 point);
         void DrawDebug() const;
 
         friend class GameUIEngine;

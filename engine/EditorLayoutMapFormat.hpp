@@ -1,13 +1,13 @@
 #pragma once
 
 #include "engine/Archetypes.hpp"
-#include "engine/SceneTags.hpp"
-#include "engine/Serializer.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
+#include "engine/SceneTags.hpp"
+#include "engine/Serializer.hpp"
 
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
@@ -22,7 +22,7 @@
 
 namespace sage::editor_layout
 {
-    inline constexpr char MAP_MAGIC[4] = {'L', 'Q', 'E', '6'};
+    inline constexpr std::array<char, 4> MAP_MAGIC = {'L', 'Q', 'E', '6'};
     inline constexpr std::string_view MAP_BASE_NAME_MARKER = "_MAPBASE_";
 
     [[nodiscard]] inline bool IsMapBaseTransformName(const std::string_view name)

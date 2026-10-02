@@ -113,7 +113,7 @@ namespace sage
             for (std::size_t index = 0; index < method.parameters.size(); ++index)
             {
                 if (index != 0) output << ", ";
-                output << method.parameters[index].managedType << " " << method.parameters[index].name;
+                output << method.parameters.at(index).managedType << " " << method.parameters.at(index).name;
             }
             output << ")\n        {\n            ";
             if (method.returnType == ScriptValueType::None)
@@ -125,7 +125,7 @@ namespace sage
             for (std::size_t index = 0; index < method.parameters.size(); ++index)
             {
                 if (index != 0) output << ", ";
-                const auto& parameter = method.parameters[index];
+                const auto& parameter = method.parameters.at(index);
                 output << ArgumentExpression(parameter.type, parameter.managedType, parameter.name);
             }
             output << "], out var result)";
@@ -155,7 +155,7 @@ namespace sage
                 for (std::size_t index = 0; index < event.parameters.size(); ++index)
                 {
                     if (index != 0) output << ", ";
-                    output << event.parameters[index].managedType;
+                    output << event.parameters.at(index).managedType;
                 }
                 output << ">";
             }
@@ -164,7 +164,7 @@ namespace sage
                    << "EventId";
             for (std::size_t index = 0; index < event.parameters.size(); ++index)
             {
-                const auto& parameter = event.parameters[index];
+                const auto& parameter = event.parameters.at(index);
                 const auto value = "value" + std::to_string(index);
                 output << ", static " << value << " => "
                        << EventValueExpression(parameter.type, parameter.managedType, value);
@@ -185,7 +185,7 @@ namespace sage
             for (std::size_t index = 0; index < method.parameters.size(); ++index)
             {
                 if (index != 0) output << ", ";
-                output << method.parameters[index].managedType << " " << method.parameters[index].name;
+                output << method.parameters.at(index).managedType << " " << method.parameters.at(index).name;
             }
             output << ")\n        {\n            ";
             if (method.returnType == ScriptValueType::None)
@@ -197,7 +197,7 @@ namespace sage
             for (std::size_t index = 0; index < method.parameters.size(); ++index)
             {
                 if (index != 0) output << ", ";
-                const auto& parameter = method.parameters[index];
+                const auto& parameter = method.parameters.at(index);
                 output << ArgumentExpression(parameter.type, parameter.managedType, parameter.name);
             }
             output << "], out var result)";
@@ -222,16 +222,16 @@ namespace sage
                 for (std::size_t index = 0; index < event.parameters.size(); ++index)
                 {
                     if (index != 0) output << ", ";
-                    output << event.parameters[index].managedType;
+                    output << event.parameters.at(index).managedType;
                 }
                 output << ">";
             }
             output << " " << event.name
-                   << " => global::Sage.NativeComponentApi.CreateEvent(global::Sage.Entity.None.Id, "
-                   << systemId << "UL, " << event.name << "EventId";
+                   << " => global::Sage.NativeComponentApi.CreateEvent(global::Sage.Entity.None.Id, " << systemId
+                   << "UL, " << event.name << "EventId";
             for (std::size_t index = 0; index < event.parameters.size(); ++index)
             {
-                const auto& parameter = event.parameters[index];
+                const auto& parameter = event.parameters.at(index);
                 const auto value = "value" + std::to_string(index);
                 output << ", static " << value << " => "
                        << EventValueExpression(parameter.type, parameter.managedType, value);
@@ -253,32 +253,38 @@ namespace sage
         return result;
     }
 
-    ScriptApiRegistry::Component* ScriptApiRegistry::findComponent(const Id componentId)
+    std::optional<std::reference_wrapper<ScriptApiRegistry::Component>> ScriptApiRegistry::findComponent(
+        const Id componentId)
     {
         const auto found = std::ranges::find_if(
             components, [componentId](const Component& value) { return value.id == componentId; });
-        return found != components.end() ? &*found : nullptr;
+        if (found == components.end()) return std::nullopt;
+        return std::ref(*found);
     }
 
-    const ScriptApiRegistry::Component* ScriptApiRegistry::findComponent(const Id componentId) const
+    std::optional<std::reference_wrapper<const ScriptApiRegistry::Component>> ScriptApiRegistry::findComponent(
+        const Id componentId) const
     {
         const auto found = std::ranges::find_if(
             components, [componentId](const Component& value) { return value.id == componentId; });
-        return found != components.end() ? &*found : nullptr;
+        if (found == components.end()) return std::nullopt;
+        return std::ref(*found);
     }
 
-    const ScriptApiRegistry::System* ScriptApiRegistry::findSystem(const Id systemId) const
+    std::optional<std::reference_wrapper<const ScriptApiRegistry::System>> ScriptApiRegistry::findSystem(
+        const Id systemId) const
     {
         const auto found =
             std::ranges::find_if(systems, [systemId](const System& value) { return value.id == systemId; });
-        return found != systems.end() ? &*found : nullptr;
+        if (found == systems.end()) return std::nullopt;
+        return std::cref(*found);
     }
 
     bool ScriptApiRegistry::HasComponent(
         const entt::registry& registry, const entt::entity entity, const Id componentId) const
     {
-        const auto* component = findComponent(componentId);
-        return component != nullptr && component->has(registry, entity);
+        const auto component = findComponent(componentId);
+        return component.has_value() && component->get().has(registry, entity);
     }
 
     std::vector<entt::entity> ScriptApiRegistry::FindEntitiesWithComponents(
@@ -288,8 +294,8 @@ namespace sage
         if (componentIds.empty()) return {};
         for (const auto componentId : componentIds)
         {
-            const auto* component = findComponent(componentId);
-            const auto* storage = component != nullptr ? component->storage(registry) : nullptr;
+            const auto component = findComponent(componentId);
+            const auto* storage = component.has_value() ? component->get().storage(registry) : nullptr;
             if (storage == nullptr) return {};
             view.iterate(*storage);
         }
@@ -303,11 +309,11 @@ namespace sage
         const Id propertyId,
         ScriptValue& destination) const
     {
-        const auto* component = findComponent(componentId);
-        if (component == nullptr) return false;
+        const auto component = findComponent(componentId);
+        if (!component) return false;
         const auto property = std::ranges::find_if(
-            component->properties, [propertyId](const Property& value) { return value.id == propertyId; });
-        return property != component->properties.end() && property->get(registry, entity, destination);
+            component->get().properties, [propertyId](const Property& value) { return value.id == propertyId; });
+        return property != component->get().properties.end() && property->get(registry, entity, destination);
     }
 
     bool ScriptApiRegistry::SetProperty(
@@ -317,11 +323,13 @@ namespace sage
         const Id propertyId,
         const ScriptValue& value) const
     {
-        const auto* component = findComponent(componentId);
-        if (component == nullptr) return false;
-        const auto property = std::ranges::find_if(
-            component->properties, [propertyId](const Property& candidate) { return candidate.id == propertyId; });
-        return property != component->properties.end() && property->writable &&
+        const auto component = findComponent(componentId);
+        if (!component) return false;
+        const auto property =
+            std::ranges::find_if(component->get().properties, [propertyId](const Property& candidate) {
+                return candidate.id == propertyId;
+            });
+        return property != component->get().properties.end() && property->writable &&
                property->set(registry, entity, value);
     }
 
@@ -333,18 +341,20 @@ namespace sage
         const std::span<const ScriptValue> arguments,
         ScriptValue& result) const
     {
-        const auto* component = findComponent(componentId);
-        if (component != nullptr)
+        const auto component = findComponent(componentId);
+        if (component.has_value())
         {
-            const auto method = std::ranges::find_if(
-                component->methods, [methodId](const Method& candidate) { return candidate.id == methodId; });
-            return method != component->methods.end() && method->invoke(registry, entity, arguments, result);
+            const auto method =
+                std::ranges::find_if(component->get().methods, [methodId](const Method& candidate) {
+                    return candidate.id == methodId;
+                });
+            return method != component->get().methods.end() && method->invoke(registry, entity, arguments, result);
         }
-        const auto* system = findSystem(componentId);
-        if (system == nullptr) return false;
+        const auto system = findSystem(componentId);
+        if (!system) return false;
         const auto method = std::ranges::find_if(
-            system->methods, [methodId](const Method& candidate) { return candidate.id == methodId; });
-        return method != system->methods.end() && method->invoke(registry, entity, arguments, result);
+            system->get().methods, [methodId](const Method& candidate) { return candidate.id == methodId; });
+        return method != system->get().methods.end() && method->invoke(registry, entity, arguments, result);
     }
 
     bool ScriptApiRegistry::SubscribeEvent(
@@ -355,19 +365,21 @@ namespace sage
         EventCallback callback,
         Subscription& subscription) const
     {
-        if (const auto* component = findComponent(componentId))
+        if (const auto component = findComponent(componentId))
         {
-            const auto event = std::ranges::find_if(
-                component->events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
-            return event != component->events.end() &&
+            const auto event =
+                std::ranges::find_if(component->get().events, [eventId](const EventDefinition& candidate) {
+                    return candidate.id == eventId;
+                });
+            return event != component->get().events.end() &&
                    event->subscribe(registry, entity, std::move(callback), subscription);
         }
 
-        const auto* system = findSystem(componentId);
-        if (system == nullptr) return false;
+        const auto system = findSystem(componentId);
+        if (!system) return false;
         const auto event = std::ranges::find_if(
-            system->events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
-        return event != system->events.end() &&
+            system->get().events, [eventId](const EventDefinition& candidate) { return candidate.id == eventId; });
+        return event != system->get().events.end() &&
                event->subscribe(registry, entity, std::move(callback), subscription);
     }
 

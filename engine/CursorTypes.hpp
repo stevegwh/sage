@@ -16,8 +16,8 @@ namespace sage
     // Everything else lives in project/CustomCursors.hpp.
     namespace cursors
     {
-        inline constexpr CursorKey Regular = "cursor_regular";
-        inline constexpr CursorKey Move = "cursor_move";
-        inline constexpr CursorKey Denied = "cursor_denied";
+        inline constexpr CursorKey REGULAR = "cursor_regular";
+        inline constexpr CursorKey MOVE = "cursor_move";
+        inline constexpr CursorKey DENIED = "cursor_denied";
     } // namespace cursors
 } // namespace sage

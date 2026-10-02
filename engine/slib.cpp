@@ -5,6 +5,7 @@
 #include "slib.hpp"
 #include "engine/Colors.hpp"
 #include "engine/MathConstants.hpp"
+#include <array>
 
 #include "components/UberShaderComponent.hpp"
 #include "raymath.h"
@@ -14,6 +15,7 @@
 #include <cassert>
 #include <cstring>
 #include <regex>
+#include <utility>
 #include <vector>
 
 namespace sage
@@ -43,7 +45,8 @@ namespace sage
     {
         return MatrixMultiply(
             MatrixMultiply(
-                MatrixRotateZ(eulerDegrees.z * sage::math::DEGREES_TO_RADIANS), MatrixRotateY(eulerDegrees.y * sage::math::DEGREES_TO_RADIANS)),
+                MatrixRotateZ(eulerDegrees.z * sage::math::DEGREES_TO_RADIANS),
+                MatrixRotateY(eulerDegrees.y * sage::math::DEGREES_TO_RADIANS)),
             MatrixRotateX(eulerDegrees.x * sage::math::DEGREES_TO_RADIANS));
     }
 
@@ -144,8 +147,8 @@ namespace sage
         std::vector<float> vertices(mesh.vertices, mesh.vertices + mesh.vertexCount * 3);
 
         BoundingBox bb;
-        bb.min = {0, 0, 0};
-        bb.max = {0, 0, 0};
+        bb.min = {.x = 0, .y = 0, .z = 0};
+        bb.max = {.x = 0, .y = 0, .z = 0};
 
         if (mesh.vertexCount < 3)
         {
@@ -154,11 +157,11 @@ namespace sage
         }
 
         {
-            float x = vertices[0];
-            float y = vertices[1];
-            float z = vertices[2];
+            float x = vertices.at(0);
+            float y = vertices.at(1);
+            float z = vertices.at(2);
 
-            Vector3 v = {x, y, z};
+            Vector3 v = {.x = x, .y = y, .z = z};
             v = Vector3Transform(v, rlmodel.transform);
 
             bb.min = bb.max = v;
@@ -166,11 +169,11 @@ namespace sage
 
         for (size_t i = 0; i < vertices.size(); i += 3)
         {
-            float x = vertices[i];
-            float y = vertices[i + 1];
-            float z = vertices[i + 2];
+            float x = vertices.at(i);
+            float y = vertices.at(i + 1);
+            float z = vertices.at(i + 2);
 
-            Vector3 v = {x, y, z};
+            Vector3 v = {.x = x, .y = y, .z = z};
             v = Vector3Transform(v, rlmodel.transform);
 
             bb.min.x = std::min(bb.min.x, v.x);
@@ -191,7 +194,7 @@ namespace sage
 
         std::optional<BoundingBox> bb;
 
-        for (size_t i = 0; i < rlmodel.meshCount; ++i)
+        for (size_t i = 0; std::cmp_less(i, rlmodel.meshCount); ++i)
         {
             bool success = false;
             auto currentBB = CalcLocalMeshBoundingBox(rlmodel.meshes[i], success);
@@ -204,14 +207,14 @@ namespace sage
             }
 
             bb->min = {
-                std::min(bb->min.x, currentBB.min.x),
-                std::min(bb->min.y, currentBB.min.y),
-                std::min(bb->min.z, currentBB.min.z)};
+                .x = std::min(bb->min.x, currentBB.min.x),
+                .y = std::min(bb->min.y, currentBB.min.y),
+                .z = std::min(bb->min.z, currentBB.min.z)};
 
             bb->max = {
-                std::max(bb->max.x, currentBB.max.x),
-                std::max(bb->max.y, currentBB.max.y),
-                std::max(bb->max.z, currentBB.max.z)};
+                .x = std::max(bb->max.x, currentBB.max.x),
+                .y = std::max(bb->max.y, currentBB.max.y),
+                .z = std::max(bb->max.z, currentBB.max.z)};
         }
 
         assert(bb.has_value());
@@ -238,8 +241,8 @@ namespace sage
         unsigned int frameTo,
         const float t) const
     {
-        if (from.frameCount <= 0 || from.framePoses == nullptr || from.bones == nullptr ||
-            to.frameCount <= 0 || to.framePoses == nullptr || to.bones == nullptr)
+        if (from.frameCount <= 0 || from.framePoses == nullptr || from.bones == nullptr || to.frameCount <= 0 ||
+            to.framePoses == nullptr || to.bones == nullptr)
             return;
         if (from.boneCount != to.boneCount) return;
 
@@ -268,7 +271,7 @@ namespace sage
                 const Vector3 invTranslation =
                     Vector3RotateByQuaternion(Vector3Negate(inTranslation), QuaternionInvert(inRotation));
                 const Quaternion invRotation = QuaternionInvert(inRotation);
-                const Vector3 invScale = Vector3Divide({1.0f, 1.0f, 1.0f}, inScale);
+                const Vector3 invScale = Vector3Divide({.x = 1.0f, .y = 1.0f, .z = 1.0f}, inScale);
 
                 const Vector3 boneTranslation = Vector3Add(
                     Vector3RotateByQuaternion(Vector3Multiply(outScale, invTranslation), outRotation),
@@ -287,7 +290,7 @@ namespace sage
 
     void ModelView::Draw(const Vector3& position, float scale, const Color& tint) const
     {
-        Draw(position, {0, 1, 0}, 0, {scale, scale, scale}, tint);
+        Draw(position, {.x = 0, .y = 1, .z = 0}, 0, {.x = scale, .y = scale, .z = scale}, tint);
     }
 
     void ModelView::Draw(
@@ -332,7 +335,7 @@ namespace sage
         for (int i = 0; i < model.meshCount; i++)
         {
             uber->SetShaderBools(model.meshMaterial[i]);
-            if (uber->HasFlag(model.meshMaterial[i], UberShaderComponent::EmissiveTexture))
+            if (uber->HasFlag(model.meshMaterial[i], UberShaderComponent::Flags::EmissiveTexture))
             {
                 auto emTex = model.materials[model.meshMaterial[i]].maps[MATERIAL_MAP_EMISSION].texture;
                 SetShaderValue(
@@ -341,10 +344,10 @@ namespace sage
                     &emTex,
                     SHADER_UNIFORM_SAMPLER2D);
             }
-            if (uber->HasFlag(model.meshMaterial[i], UberShaderComponent::EmissiveCol))
+            if (uber->HasFlag(model.meshMaterial[i], UberShaderComponent::Flags::EmissiveCol))
             {
                 auto [r, g, b, a] = model.materials[model.meshMaterial[i]].maps[MATERIAL_MAP_EMISSION].color;
-                float values[4] = {
+                std::array<float, 4> values = {
                     static_cast<float>(r) / 255.0f,
                     static_cast<float>(g) / 255.0f,
                     static_cast<float>(b) / 255.0f,
@@ -377,7 +380,7 @@ namespace sage
         {
             const int materialIndex = model.meshMaterial[i];
             uber->SetShaderBools(materialIndex);
-            if (uber->HasFlag(materialIndex, UberShaderComponent::EmissiveTexture))
+            if (uber->HasFlag(materialIndex, UberShaderComponent::Flags::EmissiveTexture))
             {
                 auto emTex = model.materials[materialIndex].maps[MATERIAL_MAP_EMISSION].texture;
                 SetShaderValue(
@@ -386,10 +389,10 @@ namespace sage
                     &emTex,
                     SHADER_UNIFORM_SAMPLER2D);
             }
-            if (uber->HasFlag(materialIndex, UberShaderComponent::EmissiveCol))
+            if (uber->HasFlag(materialIndex, UberShaderComponent::Flags::EmissiveCol))
             {
                 auto [r, g, b, a] = model.materials[materialIndex].maps[MATERIAL_MAP_EMISSION].color;
-                float values[4] = {
+                std::array<float, 4> values = {
                     static_cast<float>(r) / 255.0f,
                     static_cast<float>(g) / 255.0f,
                     static_cast<float>(b) / 255.0f,
@@ -483,7 +486,7 @@ namespace sage
     {
         if (name.empty()) return "";
         std::string vanity = name;
-        if (name[0] == '_') // Remove tag
+        if (name.at(0) == '_') // Remove tag
         {
             if (const auto endPos = name.substr(1).find_first_of('_'); endPos != std::string::npos)
             {
@@ -499,12 +502,14 @@ namespace sage
     std::string TitleCase(const std::string& A)
     {
         std::string lowercased = A;
-        std::ranges::transform(lowercased, lowercased.begin(), ::tolower);
+        std::ranges::transform(lowercased, lowercased.begin(), [](unsigned char value) {
+            return static_cast<char>(std::tolower(value));
+        });
 
         std::string B;
 
-        int pos = 0;
-        int pre_pos = 0;
+        std::size_t pos = 0;
+        std::size_t pre_pos = 0;
 
         pos = lowercased.find(' ', pre_pos);
 
@@ -523,8 +528,8 @@ namespace sage
                 sub = lowercased.substr(pre_pos, 1);
             }
 
-            sub[0] = toupper(sub[0]);
-            B += sub + lowercased[pos];
+            if (!sub.empty()) sub.at(0) = static_cast<char>(std::toupper(static_cast<unsigned char>(sub.at(0))));
+            B += sub + lowercased.at(pos);
 
             if (pos < (lowercased.length() - 1))
             {
@@ -540,7 +545,7 @@ namespace sage
         }
 
         std::string sub = lowercased.substr(pre_pos, std::string::npos);
-        sub[0] = toupper(sub[0]);
+        if (!sub.empty()) sub.at(0) = static_cast<char>(std::toupper(static_cast<unsigned char>(sub.at(0))));
         B += sub;
 
         return B;
@@ -561,22 +566,22 @@ namespace sage
 
     Vector2 Vec3ToVec2(const Vector3& vec3)
     {
-        return {vec3.x, vec3.z};
+        return {.x = vec3.x, .y = vec3.z};
     }
 
     Vector3 NegateVector(const Vector3& vec3)
     {
-        return {-vec3.x, -vec3.y, -vec3.z};
+        return {.x = -vec3.x, .y = -vec3.y, .z = -vec3.z};
     }
 
     Vector3 Vector3MultiplyByValue(const Vector3& vec3, float value)
     {
-        return {vec3.x * value, vec3.y * value, vec3.z * value};
+        return {.x = vec3.x * value, .y = vec3.y * value, .z = vec3.z * value};
     }
 
     Vector2 Vector2MultiplyByValue(const Vector2& vec3, float value)
     {
-        return {vec3.x * value, vec3.y * value};
+        return {.x = vec3.x * value, .y = vec3.y * value};
     }
 
     Matrix ComposeMatrix(Vector3 translation, Quaternion rotation, Vector3 scale)
@@ -624,8 +629,8 @@ namespace sage
                 float dist = hypotf(static_cast<float>(x) - centerX, static_cast<float>(y) - centerY);
                 float factor = (dist - radius * density) / (radius * (1.0f - density));
 
-                factor = (float)fmax(factor, 0.0f);
-                factor = (float)fmin(factor, 1.f);
+                factor = fmax(factor, 0.0f);
+                factor = fmin(factor, 1.f);
 
                 // Calculate alpha first
                 auto alpha = static_cast<unsigned char>(
@@ -634,17 +639,17 @@ namespace sage
                 // Only set color if alpha is not zero
                 if (alpha > 0)
                 {
-                    pixels[y * width + x].r =
-                        (unsigned char)((float)outer.r * factor + (float)inner.r * (1.0f - factor));
-                    pixels[y * width + x].g =
-                        (unsigned char)((float)outer.g * factor + (float)inner.g * (1.0f - factor));
-                    pixels[y * width + x].b =
-                        (unsigned char)((float)outer.b * factor + (float)inner.b * (1.0f - factor));
+                    pixels[y * width + x].r = static_cast<unsigned char>(
+                        static_cast<float>(outer.r) * factor + static_cast<float>(inner.r) * (1.0f - factor));
+                    pixels[y * width + x].g = static_cast<unsigned char>(
+                        static_cast<float>(outer.g) * factor + static_cast<float>(inner.g) * (1.0f - factor));
+                    pixels[y * width + x].b = static_cast<unsigned char>(
+                        static_cast<float>(outer.b) * factor + static_cast<float>(inner.b) * (1.0f - factor));
                     pixels[y * width + x].a = alpha;
                 }
                 else
                 {
-                    pixels[y * width + x] = Color{0, 0, 0, 0}; // Fully transparent
+                    pixels[y * width + x] = Color{.r = 0, .g = 0, .b = 0, .a = 0}; // Fully transparent
                 }
             }
         }

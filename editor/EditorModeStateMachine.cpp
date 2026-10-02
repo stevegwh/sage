@@ -319,7 +319,7 @@ namespace sage::editor
         }
         if (IsKeyPressed(KEY_P))
         {
-            (void)PlaceSelectedMesh(machine);
+            static_cast<void>(PlaceSelectedMesh(machine));
         }
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell())
         {
@@ -338,9 +338,9 @@ namespace sage::editor
         DrawPlacementPreview(machine);
 
         const Vector3 marker = {
-            snappedPlacementPosition->x,
-            snappedPlacementPosition->y + PLACEMENT_MARKER_HEIGHT,
-            snappedPlacementPosition->z};
+            .x = snappedPlacementPosition->x,
+            .y = snappedPlacementPosition->y + PLACEMENT_MARKER_HEIGHT,
+            .z = snappedPlacementPosition->z};
         DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, sage::colors::GOLD_COLOR);
         DrawSphere(marker, 0.08f, sage::colors::GOLD_COLOR);
     }
@@ -373,7 +373,7 @@ namespace sage::editor
         {
             const auto& snap = machine.snappedPlacementPosition();
             if (!snap.has_value()) return false;
-            entity = machine.scene.PlaceFlatpackAt(*flatpackPath, *snap);
+            entity = machine.scene.get().PlaceFlatpackAt(*flatpackPath, *snap);
         }
         else
         {
@@ -383,7 +383,7 @@ namespace sage::editor
 
         machine.adoptIntoFlatpackRoot({*entity});
         machine.history().RecordCreate(EditAction::Place, {*entity});
-        (void)machine.selection().Select(*entity);
+        static_cast<void>(machine.selection().Select(*entity));
         machine.refreshSceneWindows();
         machine.focusHierarchyOnEntity(*entity);
         machine.ChangeState(EditorSelectState{});
@@ -414,7 +414,7 @@ namespace sage::editor
 
     std::string EditorEditState::GetName(const EditorModeStateMachine& machine)
     {
-        return "Edit: " + machine.transformEditor.DescribeMode();
+        return "Edit: " + machine.transformEditor.get().DescribeMode();
     }
 
     void EditorEditState::OnEnter(EditorModeStateMachine& machine)
@@ -424,9 +424,7 @@ namespace sage::editor
             entities = machine.selection().Selected();
         }
 
-        std::erase_if(entities, [&machine](const entt::entity entity) {
-            return !machine.hasTransform(entity);
-        });
+        std::erase_if(entities, [&machine](const entt::entity entity) { return !machine.hasTransform(entity); });
 
         if (entities.empty())
         {
@@ -444,7 +442,7 @@ namespace sage::editor
     void EditorEditState::OnExit(EditorModeStateMachine& machine)
     {
         machine.disableCollideableStaticOverride(entities);
-        machine.transformEditor.ExitEditMode();
+        machine.transformEditor.get().ExitEditMode();
         if (machine.history().HasActiveTransaction())
         {
             machine.history().Commit();
@@ -453,9 +451,7 @@ namespace sage::editor
 
     void EditorEditState::Update(EditorModeStateMachine& machine)
     {
-        std::erase_if(entities, [&machine](const entt::entity entity) {
-            return !machine.hasTransform(entity);
-        });
+        std::erase_if(entities, [&machine](const entt::entity entity) { return !machine.hasTransform(entity); });
 
         if (entities.empty())
         {
@@ -473,23 +469,23 @@ namespace sage::editor
             return;
         }
 
-        if (machine.transformEditor.IsGizmoDragging())
+        if (machine.transformEditor.get().IsGizmoDragging())
         {
-            machine.transformEditor.Update(entities);
+            machine.transformEditor.get().Update(entities);
             return;
         }
 
         if (IsKeyPressed(KEY_T))
         {
-            machine.transformEditor.SetMode(EditGizmo::Mode::Translate);
+            machine.transformEditor.get().SetMode(EditGizmo::Mode::Translate);
         }
         if (IsKeyPressed(KEY_R))
         {
-            machine.transformEditor.SetMode(EditGizmo::Mode::Rotate);
+            machine.transformEditor.get().SetMode(EditGizmo::Mode::Rotate);
         }
         if (IsKeyPressed(KEY_Y))
         {
-            machine.transformEditor.SetMode(EditGizmo::Mode::Scale);
+            machine.transformEditor.get().SetMode(EditGizmo::Mode::Scale);
         }
         if (IsKeyPressed(KEY_B))
         {
@@ -509,19 +505,19 @@ namespace sage::editor
             }
             else
             {
-                machine.transformEditor.SetMode(EditGizmo::Mode::BoxCollider);
+                machine.transformEditor.get().SetMode(EditGizmo::Mode::BoxCollider);
             }
         }
 
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !machine.isMouseOverUiCell())
         {
-            if (machine.transformEditor.TryStartDrag(entities, GetMousePosition())) return;
+            if (machine.transformEditor.get().TryStartDrag(entities, GetMousePosition())) return;
         }
 
         const bool shiftDown = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
         if (!IsMetaKeyDown())
         {
-            switch (machine.transformEditor.Mode())
+            switch (machine.transformEditor.get().Mode())
             {
             case EditGizmo::Mode::Translate: {
                 Vector3 positionDelta{};
@@ -557,29 +553,29 @@ namespace sage::editor
                 }
                 if (positionDelta.x != 0.0f || positionDelta.y != 0.0f || positionDelta.z != 0.0f)
                 {
-                    machine.transformEditor.AdjustPosition(entities, positionDelta);
+                    machine.transformEditor.get().AdjustPosition(entities, positionDelta);
                 }
                 break;
             }
             case EditGizmo::Mode::Rotate: {
                 if (IsKeyPressedOrRepeated(KEY_LEFT))
                 {
-                    machine.transformEditor.AdjustRotationAxis(
+                    machine.transformEditor.get().AdjustRotationAxis(
                         entities, EditGizmo::Axis::Y, -PLACEMENT_ROTATION_STEP);
                 }
                 if (IsKeyPressedOrRepeated(KEY_RIGHT))
                 {
-                    machine.transformEditor.AdjustRotationAxis(
+                    machine.transformEditor.get().AdjustRotationAxis(
                         entities, EditGizmo::Axis::Y, PLACEMENT_ROTATION_STEP);
                 }
                 if (IsKeyPressedOrRepeated(KEY_UP))
                 {
-                    machine.transformEditor.AdjustRotationAxis(
+                    machine.transformEditor.get().AdjustRotationAxis(
                         entities, EditGizmo::Axis::X, PLACEMENT_ROTATION_STEP);
                 }
                 if (IsKeyPressedOrRepeated(KEY_DOWN))
                 {
-                    machine.transformEditor.AdjustRotationAxis(
+                    machine.transformEditor.get().AdjustRotationAxis(
                         entities, EditGizmo::Axis::X, -PLACEMENT_ROTATION_STEP);
                 }
                 break;
@@ -587,11 +583,11 @@ namespace sage::editor
             case EditGizmo::Mode::Scale: {
                 if (IsKeyPressedOrRepeated(KEY_LEFT))
                 {
-                    machine.transformEditor.AdjustScale(entities, -PLACEMENT_SCALE_STEP);
+                    machine.transformEditor.get().AdjustScale(entities, -PLACEMENT_SCALE_STEP);
                 }
                 if (IsKeyPressedOrRepeated(KEY_RIGHT))
                 {
-                    machine.transformEditor.AdjustScale(entities, PLACEMENT_SCALE_STEP);
+                    machine.transformEditor.get().AdjustScale(entities, PLACEMENT_SCALE_STEP);
                 }
                 break;
             }
@@ -613,13 +609,13 @@ namespace sage::editor
         if (!snappedPlacementPosition.has_value()) return;
 
         const Vector3 marker = {
-            snappedPlacementPosition->x,
-            snappedPlacementPosition->y + PLACEMENT_MARKER_HEIGHT,
-            snappedPlacementPosition->z};
+            .x = snappedPlacementPosition->x,
+            .y = snappedPlacementPosition->y + PLACEMENT_MARKER_HEIGHT,
+            .z = snappedPlacementPosition->z};
         DrawCubeWires(marker, 1.0f, PLACEMENT_MARKER_HEIGHT, 1.0f, sage::colors::ORANGE_COLOR);
         DrawSphere(marker, 0.08f, sage::colors::ORANGE_COLOR);
 
-        machine.transformEditor.Draw3D(entities);
+        machine.transformEditor.get().Draw3D(entities);
     }
 
     void EditorEditState::FinishEditSelectedTransform(EditorModeStateMachine& machine)
@@ -647,7 +643,7 @@ namespace sage::editor
             return;
         }
 
-        machine.transformEditor.TogglePivotMode();
+        machine.transformEditor.get().TogglePivotMode();
         SyncPlacementFromEntity(machine, entities.front());
         machine.refreshOverlay();
         machine.refreshSceneWindows();
@@ -787,7 +783,7 @@ namespace sage::editor
             amount /= terrainVerticalScale(transform);
         }
         const auto localHit = terrainLocalPoint(transform, *cursorHit);
-        const Vector2 localCenter = {localHit.x, localHit.z};
+        const Vector2 localCenter = {.x = localHit.x, .y = localHit.z};
         const float localRadius = brushRadius / terrainHorizontalScale(transform);
 
         const auto region =
@@ -802,7 +798,7 @@ namespace sage::editor
         auto& registry = machine.registry();
         const auto& transform = registry.get<sgTransform>(terrain);
         const auto localHit = terrainLocalPoint(transform, *cursorHit);
-        const Vector2 local = {localHit.x, localHit.z};
+        const Vector2 local = {.x = localHit.x, .y = localHit.z};
 
         if (!rampStart.has_value())
         {
@@ -826,9 +822,9 @@ namespace sage::editor
         auto& registry = machine.registry();
         auto& terrainData = registry.get<Terrain>(terrain);
         auto& renderable = registry.get<DynamicRenderable>(terrain);
-        if (auto* model = renderable.GetModel())
+        if (auto model = renderable.GetModel())
         {
-            UpdateTerrainModelRegion(*model, terrainData, region);
+            UpdateTerrainModelRegion(model->get(), terrainData, region);
         }
         UpdateTerrainCollideableBounds(registry, terrain);
     }
@@ -873,19 +869,22 @@ namespace sage::editor
             const float angle = static_cast<float>(i) / segments * 2.0f * sage::math::MATH_PI;
             const float x = localHit.x + std::cos(angle) * localRadius;
             const float z = localHit.z + std::sin(angle) * localRadius;
-            const Vector3 point =
-                Vector3Transform({x, terrainData.SampleHeight(x, z) + localRingLift, z}, terrainToWorld);
+            const Vector3 point = Vector3Transform(
+                {.x = x, .y = terrainData.SampleHeight(x, z) + localRingLift, .z = z}, terrainToWorld);
             if (i > 0) DrawLine3D(previous, point, sage::colors::GOLD_COLOR);
             previous = point;
         }
-        DrawSphere({cursorHit->x, cursorHit->y + ringLift, cursorHit->z}, 0.12f, sage::colors::GOLD_COLOR);
+        DrawSphere(
+            {.x = cursorHit->x, .y = cursorHit->y + ringLift, .z = cursorHit->z}, 0.12f, sage::colors::GOLD_COLOR);
 
         // Ramp preview: a height-conformed line from the placed first endpoint
         // to the cursor, sampled in segments so it hugs the surface.
         if (brushMode == TerrainBrushMode::Ramp && rampStart.has_value())
         {
             const Vector3 start = Vector3Transform(
-                {rampStart->x, terrainData.SampleHeight(rampStart->x, rampStart->y) + localRingLift, rampStart->y},
+                {.x = rampStart->x,
+                 .y = terrainData.SampleHeight(rampStart->x, rampStart->y) + localRingLift,
+                 .z = rampStart->y},
                 terrainToWorld);
             constexpr int rampSegments = 32;
             Vector3 last = start;
@@ -894,8 +893,8 @@ namespace sage::editor
                 const float f = static_cast<float>(i) / rampSegments;
                 const float x = Lerp(rampStart->x, localHit.x, f);
                 const float z = Lerp(rampStart->y, localHit.z, f);
-                const Vector3 point =
-                    Vector3Transform({x, terrainData.SampleHeight(x, z) + localRingLift, z}, terrainToWorld);
+                const Vector3 point = Vector3Transform(
+                    {.x = x, .y = terrainData.SampleHeight(x, z) + localRingLift, .z = z}, terrainToWorld);
                 DrawLine3D(last, point, sage::colors::SKY_BLUE_COLOR);
                 last = point;
             }
@@ -928,65 +927,65 @@ namespace sage::editor
 
     void EditorModeStateMachine::refreshOverlay() const
     {
-        scene.refreshOverlay();
+        scene.get().refreshOverlay();
     }
 
     void EditorModeStateMachine::refreshSceneWindows() const
     {
-        scene.refreshSceneWindows();
+        scene.get().refreshSceneWindows();
     }
 
     void EditorModeStateMachine::RefreshPlacementTarget()
     {
-        scene.placementController->RefreshTarget();
+        scene.get().placementController->RefreshTarget();
     }
 
     void EditorModeStateMachine::AdjustGridSurfaceY(const float amount)
     {
-        scene.placementController->AdjustGridSurfaceY(amount);
+        scene.get().placementController->AdjustGridSurfaceY(amount);
         refreshOverlay();
     }
 
     bool EditorModeStateMachine::isMouseOverUiCell() const
     {
-        return scene.gui->WantsMouseCapture() ||
-               !scene.sys->settings->IsPointInRenderViewport(GetMousePosition());
+        return scene.get().gui->WantsMouseCapture() ||
+               !scene.get().sys->settings->IsPointInRenderViewport(GetMousePosition());
     }
 
     bool EditorModeStateMachine::isKeyboardEditing() const
     {
-        return scene.gui->WantsKeyboardCapture();
+        return scene.get().gui->WantsKeyboardCapture();
     }
 
     bool EditorModeStateMachine::isDeleteConfirmationVisible() const
     {
-        return scene.gui->IsDeleteConfirmationVisible();
+        return scene.get().gui->IsDeleteConfirmationVisible();
     }
 
     EditorGui::DeleteConfirmationAction EditorModeStateMachine::consumeDeleteConfirmationAction()
     {
-        return scene.gui->ConsumeDeleteConfirmationAction();
+        return scene.get().gui->ConsumeDeleteConfirmationAction();
     }
 
     std::optional<entt::entity> EditorModeStateMachine::pickSceneEntityUnderCursor() const
     {
-        return scene.pickingService->PickSceneEntity(
-            GetMousePosition(), scene.placementController->GridSurfaceEntity());
+        return scene.get().pickingService->PickSceneEntity(
+            GetMousePosition(), scene.get().placementController->GridSurfaceEntity());
     }
 
     EditorSelection& EditorModeStateMachine::selection()
     {
-        return *scene.selection;
+        return *scene.get().selection;
     }
 
     void EditorModeStateMachine::hideDeleteConfirmation() const
     {
-        scene.gui->HideDeleteConfirmation();
+        scene.get().gui->HideDeleteConfirmation();
     }
 
     void EditorModeStateMachine::showDeleteConfirmationForSelection() const
     {
-        scene.gui->ShowDeleteConfirmation(scene.describeSelectedSceneEntity());
+        scene.get().gui->ShowDeleteConfirmation(scene.get().describeSelectedSceneEntity());
     }
 
     void EditorModeStateMachine::deleteEntitiesAndChildren(const std::vector<entt::entity>& entities) const
@@ -994,107 +993,108 @@ namespace sage::editor
         auto deletable = entities;
         // The flatpack session root anchors the open flatpack; deleting it would
         // leave nothing to save back, so it is protected while the session runs.
-        if (scene.flatpackSession && scene.flatpackSession->IsActive())
+        if (scene.get().flatpackSession && scene.get().flatpackSession->IsActive())
         {
-            std::erase(deletable, scene.flatpackSession->Root());
+            std::erase(deletable, scene.get().flatpackSession->Root());
         }
         if (deletable.empty()) return;
 
         history().RecordDestroy(EditAction::Delete, deletable);
         for (const auto entity : deletable)
         {
-            scene.entityOperations->DeleteEntityAndChildren(entity);
+            scene.get().entityOperations->DeleteEntityAndChildren(entity);
         }
     }
 
     void EditorModeStateMachine::adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const
     {
-        scene.adoptIntoFlatpackRoot(roots);
+        scene.get().adoptIntoFlatpackRoot(roots);
     }
 
     void EditorModeStateMachine::focusHierarchyOnEntity(const entt::entity entity) const
     {
-        scene.gui->FocusHierarchyOnEntity(entity);
+        scene.get().gui->FocusHierarchyOnEntity(entity);
     }
 
     void EditorModeStateMachine::focusSelectedObject() const
     {
-        scene.focusSelectedObject();
+        scene.get().focusSelectedObject();
     }
 
     void EditorModeStateMachine::focusSelectedObjectInHierarchy() const
     {
-        scene.focusSelectedObjectInHierarchy();
+        scene.get().focusSelectedObjectInHierarchy();
     }
 
     void EditorModeStateMachine::selectPlaceableAsset(const std::size_t index)
     {
-        scene.assetCatalog->Select(index);
+        scene.get().assetCatalog->Select(index);
     }
 
     const std::optional<Vector3>& EditorModeStateMachine::snappedPlacementPosition() const
     {
-        return scene.placementController->SnappedPlacementPosition();
+        return scene.get().placementController->SnappedPlacementPosition();
     }
 
     bool EditorModeStateMachine::hasTransform(const entt::entity entity) const
     {
-        return scene.sys->registry->valid(entity) && scene.sys->registry->any_of<sgTransform>(entity);
+        return scene.get().sys->registry->valid(entity) && scene.get().sys->registry->any_of<sgTransform>(entity);
     }
 
     EditorPlacementController& EditorModeStateMachine::placement()
     {
-        return *scene.placementController;
+        return *scene.get().placementController;
     }
 
     const EditorPlacementController& EditorModeStateMachine::placement() const
     {
-        return *scene.placementController;
+        return *scene.get().placementController;
     }
 
     EditorHistory& EditorModeStateMachine::history() const
     {
-        return *scene.history;
+        return *scene.get().history;
     }
 
     entt::registry& EditorModeStateMachine::registry() const
     {
-        return *scene.sys->registry;
+        return *scene.get().sys->registry;
     }
 
     std::optional<Ray> EditorModeStateMachine::viewportMouseRay() const
     {
         const auto mouse = GetMousePosition();
-        auto* settings = scene.sys->settings;
+        auto* settings = scene.get().sys->settings;
         if (!settings->IsPointInRenderViewport(mouse)) return std::nullopt;
 
         const auto viewport = settings->GetRenderViewPort();
         const auto renderPosition = settings->ScreenToRenderViewportPosition(mouse);
         return GetScreenToWorldRayEx(
-            renderPosition, *scene.sys->camera->getRaylibCam(), viewport.x, viewport.y);
+            renderPosition,
+            *scene.get().sys->camera->getRaylibCam(),
+            static_cast<int>(viewport.x),
+            static_cast<int>(viewport.y));
     }
 
-    void EditorModeStateMachine::enableCollideableStaticOverride(
-        const std::vector<entt::entity>& entities) const
+    void EditorModeStateMachine::enableCollideableStaticOverride(const std::vector<entt::entity>& entities) const
     {
         for (const auto entity : entities)
         {
-            EnableCollideableStaticOverride(*scene.sys->registry, entity);
+            EnableCollideableStaticOverride(*scene.get().sys->registry, entity);
         }
     }
 
-    void EditorModeStateMachine::disableCollideableStaticOverride(
-        const std::vector<entt::entity>& entities) const
+    void EditorModeStateMachine::disableCollideableStaticOverride(const std::vector<entt::entity>& entities) const
     {
         for (const auto entity : entities)
         {
-            DisableCollideableStaticOverride(*scene.sys->registry, entity);
+            DisableCollideableStaticOverride(*scene.get().sys->registry, entity);
         }
     }
 
     void EditorModeStateMachine::SelectPlaceable(const std::size_t index)
     {
-        if (index >= scene.assetCatalog->Size()) return;
+        if (index >= scene.get().assetCatalog->Size()) return;
         ChangeState(EditorPlaceState{.placeableIndex = index});
     }
 
@@ -1139,9 +1139,9 @@ namespace sage::editor
 
     bool EditorModeStateMachine::CanBeginTerrainSculpt() const
     {
-        const auto& selected = scene.selection->Selected();
-        return selected.size() == 1 && scene.sys->registry->valid(selected.front()) &&
-               scene.sys->registry->all_of<Terrain>(selected.front());
+        const auto& selected = scene.get().selection->Selected();
+        return selected.size() == 1 && scene.get().sys->registry->valid(selected.front()) &&
+               scene.get().sys->registry->all_of<Terrain>(selected.front());
     }
 
     void EditorModeStateMachine::BeginTerrainSculptOnSelection()

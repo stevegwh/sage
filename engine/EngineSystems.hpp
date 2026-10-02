@@ -73,6 +73,10 @@ namespace sage
             Settings* _settings,
             AudioManager* _audioManager,
             ManagedScriptingConfig scripting = {});
+        EngineSystems(const EngineSystems&) = delete;
+        EngineSystems& operator=(const EngineSystems&) = delete;
+        EngineSystems(EngineSystems&&) = delete;
+        EngineSystems& operator=(EngineSystems&&) = delete;
         ~EngineSystems();
 
         [[nodiscard]] GameUIEngine& UI();

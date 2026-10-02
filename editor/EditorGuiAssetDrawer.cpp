@@ -1,14 +1,15 @@
 #include "EditorGui.hpp"
 #include "engine/AssetKey.hpp"
 #include "engine/Colors.hpp"
+#include <array>
 
 #include "EditorGuiInternal.hpp"
 #include "engine/components/UberShaderComponent.hpp"
 #include "engine/Flatpack.hpp"
 #include "engine/FlatpackThumbnail.hpp"
 #include "engine/ResourceManager.hpp"
-#include "ShaderPaths.hpp"
 #include "engine/Settings.hpp"
+#include "ShaderPaths.hpp"
 
 #include "extras/IconsFontAwesome6.h"
 #include "imgui.h"
@@ -40,7 +41,7 @@ namespace sage::editor
         constexpr int PREVIEW_LIGHT_DIRECTIONAL = 0;
         constexpr int PREVIEW_LIGHT_POINT = 1;
         constexpr float PREVIEW_GAMMA = 1.9f;
-        constexpr Color PREVIEW_LIGHT_COLOR = {255, 244, 214, 255};
+        constexpr Color PREVIEW_LIGHT_COLOR = {.r = 255, .g = 244, .b = 214, .a = 255};
         constexpr const char* ASSET_RENAME_POPUP = "Rename Asset File";
         constexpr const char* FLATPACK_RENAME_POPUP = "Rename Flatpack";
         constexpr const char* FLATPACK_DELETE_POPUP = "Delete Flatpack";
@@ -85,7 +86,7 @@ namespace sage::editor
         Shader LoadThumbnailShader()
         {
             auto shader = ResourceManager::GetInstance().ShaderLoadUnique(
-                ShaderPath("custom/ubershader.vs").c_str(), ShaderPath("custom/ubershader.fs").c_str());
+                ShaderPath("custom/ubershader.vs"), ShaderPath("custom/ubershader.fs"));
             shader.locs[SHADER_LOC_MAP_EMISSION] = GetShaderLocation(shader, "emissionMap");
             return shader;
         }
@@ -133,9 +134,9 @@ namespace sage::editor
             const float quadratic)
         {
             const int enabledInt = enabled ? 1 : 0;
-            const float positionValue[3] = {position.x, position.y, position.z};
-            const float targetValue[3] = {target.x, target.y, target.z};
-            const float colorValue[4] = {
+            const std::array<float, 3> positionValue = {position.x, position.y, position.z};
+            const std::array<float, 3> targetValue = {target.x, target.y, target.z};
+            const std::array<float, 4> colorValue = {
                 static_cast<float>(color.r) / 255.0f,
                 static_cast<float>(color.g) / 255.0f,
                 static_cast<float>(color.b) / 255.0f,
@@ -154,17 +155,17 @@ namespace sage::editor
             SetShaderValue(
                 shader,
                 GetShaderLocation(shader, TextFormat("lights[%i].position", index)),
-                positionValue,
+                positionValue.data(),
                 SHADER_UNIFORM_VEC3);
             SetShaderValue(
                 shader,
                 GetShaderLocation(shader, TextFormat("lights[%i].target", index)),
-                targetValue,
+                targetValue.data(),
                 SHADER_UNIFORM_VEC3);
             SetShaderValue(
                 shader,
                 GetShaderLocation(shader, TextFormat("lights[%i].color", index)),
-                colorValue,
+                colorValue.data(),
                 SHADER_UNIFORM_VEC4);
             SetShaderValue(
                 shader,
@@ -190,15 +191,15 @@ namespace sage::editor
 
         void ConfigureThumbnailLighting(const Shader shader, const Camera3D& camera, const Vector3& center)
         {
-            const float ambient[4] = {0.6f, 0.2f, 0.8f, 1.0f};
-            SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient, SHADER_UNIFORM_VEC4);
+            const std::array<float, 4> ambient = {0.6f, 0.2f, 0.8f, 1.0f};
+            SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient.data(), SHADER_UNIFORM_VEC4);
 
             const int lightsCount = 2;
             SetShaderValue(shader, GetShaderLocation(shader, "lightsCount"), &lightsCount, SHADER_UNIFORM_INT);
             SetShaderValue(shader, GetShaderLocation(shader, "gamma"), &PREVIEW_GAMMA, SHADER_UNIFORM_FLOAT);
 
-            const float viewPos[3] = {camera.position.x, camera.position.y, camera.position.z};
-            SetShaderValue(shader, GetShaderLocation(shader, "viewPos"), viewPos, SHADER_UNIFORM_VEC3);
+            const std::array<float, 3> viewPos = {camera.position.x, camera.position.y, camera.position.z};
+            SetShaderValue(shader, GetShaderLocation(shader, "viewPos"), viewPos.data(), SHADER_UNIFORM_VEC3);
 
             SetThumbnailLight(
                 shader,
@@ -217,9 +218,9 @@ namespace sage::editor
                 1,
                 PREVIEW_LIGHT_DIRECTIONAL,
                 true,
-                Vector3Add(center, {-3.0f, 4.0f, -4.0f}),
+                Vector3Add(center, {.x = -3.0f, .y = 4.0f, .z = -4.0f}),
                 center,
-                Color{172, 202, 255, 255},
+                Color{.r = 172, .g = 202, .b = 255, .a = 255},
                 0.23f,
                 1.0f,
                 0.0f,
@@ -349,22 +350,28 @@ namespace sage::editor
         const float radius = std::max({std::fabs(size.x), std::fabs(size.y), std::fabs(size.z), 1.0f});
 
         Camera3D camera{};
-        camera.position = Vector3Add(center, {radius * 1.35f, radius * 0.85f, radius * 1.65f});
+        camera.position = Vector3Add(center, {.x = radius * 1.35f, .y = radius * 0.85f, .z = radius * 1.65f});
         camera.target = center;
-        camera.up = {0.0f, 1.0f, 0.0f};
+        camera.up = {.x = 0.0f, .y = 1.0f, .z = 0.0f};
         camera.fovy = 32.0f;
         camera.projection = CAMERA_PERSPECTIVE;
 
         BeginTextureMode(thumbnail);
-        ClearBackground(Color{244, 247, 251, 255});
+        ClearBackground(Color{.r = 244, .g = 247, .b = 251, .a = 255});
         BeginMode3D(camera);
         ConfigureThumbnailLighting(shader, camera, center);
-        model.DrawUber(&uber, Vector3Zero(), {0.0f, 1.0f, 0.0f}, 0.0f, Vector3One(), sage::colors::WHITE_COLOR);
+        model.DrawUber(
+            &uber,
+            Vector3Zero(),
+            {.x = 0.0f, .y = 1.0f, .z = 0.0f},
+            0.0f,
+            Vector3One(),
+            sage::colors::WHITE_COLOR);
         EndMode3D();
         EndTextureMode();
 
         for (int material = 0; material < model.GetMaterialCount(); ++material)
-            model.SetShader(originalShaders[static_cast<std::size_t>(material)], material);
+            model.SetShader(originalShaders.at(static_cast<std::size_t>(material)), material);
 
         return thumbnail;
     }
@@ -375,14 +382,14 @@ namespace sage::editor
         const auto& material = ResourceManager::GetInstance().GetMaterial(key);
         auto sphere = GenMeshSphere(0.75f, 32, 20);
         Camera3D camera{};
-        camera.position = {1.8f, 1.1f, 1.8f};
-        camera.target = {0.0f, 0.0f, 0.0f};
-        camera.up = {0.0f, 1.0f, 0.0f};
+        camera.position = {.x = 1.8f, .y = 1.1f, .z = 1.8f};
+        camera.target = {.x = 0.0f, .y = 0.0f, .z = 0.0f};
+        camera.up = {.x = 0.0f, .y = 1.0f, .z = 0.0f};
         camera.fovy = 45.0f;
         camera.projection = CAMERA_PERSPECTIVE;
 
         BeginTextureMode(thumbnail);
-        ClearBackground(Color{244, 247, 251, 255});
+        ClearBackground(Color{.r = 244, .g = 247, .b = 251, .a = 255});
         BeginMode3D(camera);
         DrawMesh(sphere, material, MatrixIdentity());
         EndMode3D();
@@ -400,19 +407,21 @@ namespace sage::editor
         auto preview = ImageCopy(image);
         const float scale = std::min(
             1.0f, static_cast<float>(THUMBNAIL_SIZE) / static_cast<float>(std::max(image.width, image.height)));
-        const int width = std::max(1, static_cast<int>(image.width * scale));
-        const int height = std::max(1, static_cast<int>(image.height * scale));
+        const int width = std::max(1, static_cast<int>(static_cast<float>(image.width) * scale));
+        const int height = std::max(1, static_cast<int>(static_cast<float>(image.height) * scale));
         if (width != image.width || height != image.height) ImageResize(&preview, width, height);
         const auto texture = LoadTextureFromImage(preview);
         UnloadImage(preview);
 
         auto thumbnail = LoadRenderTexture(THUMBNAIL_SIZE, THUMBNAIL_SIZE);
         BeginTextureMode(thumbnail);
-        ClearBackground(Color{244, 247, 251, 255});
+        ClearBackground(Color{.r = 244, .g = 247, .b = 251, .a = 255});
         for (int y = 0; y < THUMBNAIL_SIZE; y += 16)
             for (int x = 0; x < THUMBNAIL_SIZE; x += 16)
-                if (((x + y) / 16) % 2 == 0) DrawRectangle(x, y, 16, 16, Color{220, 225, 232, 255});
-        DrawTexture(texture, (THUMBNAIL_SIZE - width) / 2, (THUMBNAIL_SIZE - height) / 2, WHITE);
+                if (((x + y) / 16) % 2 == 0)
+                    DrawRectangle(x, y, 16, 16, Color{.r = 220, .g = 225, .b = 232, .a = 255});
+        DrawTexture(
+            texture, (THUMBNAIL_SIZE - width) / 2, (THUMBNAIL_SIZE - height) / 2, sage::colors::WHITE_COLOR);
         EndTextureMode();
         UnloadTexture(texture);
         return thumbnail;
@@ -422,7 +431,7 @@ namespace sage::editor
     {
         if (index >= assetEntries.size()) return;
 
-        const auto& asset = assetEntries[index];
+        const auto& asset = assetEntries.at(index);
         const auto renamePath = !asset.sourcePath.empty() ? asset.sourcePath : asset.defaultsPath;
         renamingAssetIndex = index;
         assetRenameInput = renamePath.filename().string();
@@ -456,7 +465,7 @@ namespace sage::editor
         if (ImGui::BeginPopupModal(ASSET_RENAME_POPUP, &open, ImGuiWindowFlags_AlwaysAutoResize))
         {
             const auto index = *renamingAssetIndex;
-            const auto& asset = assetEntries[index];
+            const auto& asset = assetEntries.at(index);
             const auto renamePath = !asset.sourcePath.empty() ? asset.sourcePath : asset.defaultsPath;
 
             ImGui::TextWrapped("%s", asset.displayName.c_str());
@@ -489,7 +498,7 @@ namespace sage::editor
                 {
                     if (result.updatedEntry.has_value())
                     {
-                        assetEntries[index] = std::move(*result.updatedEntry);
+                        assetEntries.at(index) = std::move(*result.updatedEntry);
                         resourceBrowserNeedsRefresh = true;
                     }
                     clearRename();
@@ -511,7 +520,7 @@ namespace sage::editor
         if (index >= flatpackEntries.size()) return;
 
         renamingFlatpackIndex = index;
-        flatpackRenameInput = flatpackEntries[index].displayName;
+        flatpackRenameInput = flatpackEntries.at(index).displayName;
         flatpackRenameStatus.clear();
         flatpackRenamePopupOpenRequested = true;
     }
@@ -541,7 +550,7 @@ namespace sage::editor
         ImGui::SetNextWindowSize(ImVec2{430.0f, 0.0f}, ImGuiCond_Appearing);
         if (ImGui::BeginPopupModal(FLATPACK_RENAME_POPUP, &open, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            const auto& flatpack = flatpackEntries[*renamingFlatpackIndex];
+            const auto& flatpack = flatpackEntries.at(*renamingFlatpackIndex);
 
             ImGui::TextWrapped("%s", flatpack.displayName.c_str());
             ImGui::TextDisabled("%s", flatpack.path.parent_path().string().c_str());
@@ -619,7 +628,7 @@ namespace sage::editor
         ImGui::SetNextWindowSize(ImVec2{430.0f, 0.0f}, ImGuiCond_Appearing);
         if (ImGui::BeginPopupModal(FLATPACK_DELETE_POPUP, &open, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            const auto& flatpack = flatpackEntries[*deletingFlatpackIndex];
+            const auto& flatpack = flatpackEntries.at(*deletingFlatpackIndex);
 
             ImGui::TextWrapped(
                 "Delete '%s'? The file is removed from disk. Instances already placed in maps are unaffected.",
@@ -737,7 +746,7 @@ namespace sage::editor
 
         for (std::size_t i = 0; i < assetEntries.size(); ++i)
         {
-            const auto relative = RelativeResourcePath(assetEntries[i].sourcePath);
+            const auto relative = RelativeResourcePath(assetEntries.at(i).sourcePath);
             // Keep imported keys visible even when an older pack records a path outside resources.
             const auto path = relative.value_or(std::filesystem::path{"External models"} / std::to_string(i));
             resourceEntries.push_back({.path = path, .modelIndex = i});
@@ -760,8 +769,7 @@ namespace sage::editor
                 if (it->is_regular_file(error) && it->path().extension() == ".png")
                 {
                     const auto name = it->path().stem().string();
-                    if (!ambiguousImageNames.contains(name) &&
-                        !legacyImagePaths.emplace(name, it->path()).second)
+                    if (!ambiguousImageNames.contains(name) && !legacyImagePaths.emplace(name, it->path()).second)
                     {
                         legacyImagePaths.erase(name);
                         ambiguousImageNames.insert(name);
@@ -772,7 +780,7 @@ namespace sage::editor
         }
         for (std::size_t i = 0; i < imageKeys.size(); ++i)
         {
-            const auto& key = imageKeys[i];
+            const auto& key = imageKeys.at(i);
             std::optional<std::filesystem::path> source;
             if (std::filesystem::path{key}.has_parent_path())
                 source = RelativeResourcePath(RESOURCES_DIRECTORY / key);
@@ -780,7 +788,9 @@ namespace sage::editor
                 source = RelativeResourcePath(found->second);
             const auto path = source.value_or(std::filesystem::path{"Unlocated images"} / std::to_string(i));
             resourceEntries.push_back(
-                {.path = path, .imageIndex = i, .sourcePath = source ? RESOURCES_DIRECTORY / *source : std::filesystem::path{}});
+                {.path = path,
+                 .imageIndex = i,
+                 .sourcePath = source ? RESOURCES_DIRECTORY / *source : std::filesystem::path{}});
             addDirectories(path);
         }
 
@@ -794,30 +804,34 @@ namespace sage::editor
         }
         for (std::size_t i = 0; i < flatpackEntries.size(); ++i)
         {
-            const auto relative = RelativeResourcePath(flatpackEntries[i].path);
+            const auto relative = RelativeResourcePath(flatpackEntries.at(i).path);
             if (!relative) continue;
             resourceEntries.push_back({.path = *relative, .flatpackIndex = i});
             addDirectories(*relative);
         }
         if (std::filesystem::exists(RESOURCES_DIRECTORY))
             for (const auto& file : std::filesystem::recursive_directory_iterator(RESOURCES_DIRECTORY))
-                if (file.is_regular_file() && file.path().extension() == ".canvas") {
+                if (file.is_regular_file() && file.path().extension() == ".canvas")
+                {
                     const auto relative = RelativeResourcePath(file.path());
-                    if (relative) { resourceEntries.push_back({.path = *relative, .canvas = true}); addDirectories(*relative); }
+                    if (relative)
+                    {
+                        resourceEntries.push_back({.path = *relative, .canvas = true});
+                        addDirectories(*relative);
+                    }
                 }
         for (const auto& directory : directories)
             resourceEntries.push_back({.path = directory, .directory = true});
-        std::sort(
-            resourceEntries.begin(), resourceEntries.end(), [](const ResourceEntry& a, const ResourceEntry& b) {
-                if (a.directory != b.directory) return a.directory;
-                const auto left = Lowercase(a.path.generic_string());
-                const auto right = Lowercase(b.path.generic_string());
-                if (left != right) return left < right;
-                if (a.path != b.path) return a.path < b.path;
-                if (a.modelIndex != b.modelIndex) return a.modelIndex < b.modelIndex;
-                if (a.materialIndex != b.materialIndex) return a.materialIndex < b.materialIndex;
-                return a.imageIndex < b.imageIndex;
-            });
+        std::ranges::sort(resourceEntries, [](const ResourceEntry& a, const ResourceEntry& b) {
+            if (a.directory != b.directory) return a.directory;
+            const auto left = Lowercase(a.path.generic_string());
+            const auto right = Lowercase(b.path.generic_string());
+            if (left != right) return left < right;
+            if (a.path != b.path) return a.path < b.path;
+            if (a.modelIndex != b.modelIndex) return a.modelIndex < b.modelIndex;
+            if (a.materialIndex != b.materialIndex) return a.materialIndex < b.materialIndex;
+            return a.imageIndex < b.imageIndex;
+        });
         if (!resourceDirectory.empty() &&
             !std::ranges::any_of(resourceEntries, [this](const ResourceEntry& entry) {
                 return entry.directory && entry.path == resourceDirectory;
@@ -865,7 +879,7 @@ namespace sage::editor
         {
             std::vector<FlatpackEntry> flatpacks;
             for (const auto& entry : ListFlatpacks(RESOURCES_DIRECTORY))
-                flatpacks.push_back({entry.displayName, entry.path});
+                flatpacks.push_back({.displayName = entry.displayName, .path = entry.path});
             SetFlatpacks(std::move(flatpacks));
             refreshResourceBrowser();
         }
@@ -917,16 +931,18 @@ namespace sage::editor
         std::vector<std::size_t> visible;
         for (std::size_t i = 0; i < resourceEntries.size(); ++i)
         {
-            const auto& entry = resourceEntries[i];
+            const auto& entry = resourceEntries.at(i);
             if (resourceFilter.IsActive())
             {
                 const bool pathMatches = resourceFilter.PassFilter(entry.path.generic_string().c_str());
-                const bool keyMatches = entry.modelIndex &&
-                                        resourceFilter.PassFilter(assetEntries[*entry.modelIndex].modelKey.c_str());
-                const bool materialMatches = entry.materialIndex &&
-                                             resourceFilter.PassFilter(materialKeys[*entry.materialIndex].c_str());
-                const bool imageMatches = entry.imageIndex &&
-                                          resourceFilter.PassFilter(imageKeys[*entry.imageIndex].c_str());
+                const bool keyMatches =
+                    entry.modelIndex &&
+                    resourceFilter.PassFilter(assetEntries.at(*entry.modelIndex).modelKey.c_str());
+                const bool materialMatches =
+                    entry.materialIndex &&
+                    resourceFilter.PassFilter(materialKeys.at(*entry.materialIndex).c_str());
+                const bool imageMatches =
+                    entry.imageIndex && resourceFilter.PassFilter(imageKeys.at(*entry.imageIndex).c_str());
                 if (!pathMatches && !keyMatches && !materialMatches && !imageMatches) continue;
             }
             else if (entry.path.parent_path() != resourceDirectory)
@@ -967,8 +983,8 @@ namespace sage::editor
                     ImGui::TableSetColumnIndex(static_cast<int>(slot % columns));
                     // Skip offscreen previews rather than rendering every model on startup.
                     if (!ImGui::IsRectVisible(ImVec2{tileWidth, tileHeight})) continue;
-                    const auto entry = resourceEntries[visible[slot]];
-                    ImGui::PushID(static_cast<int>(visible[slot]));
+                    const auto entry = resourceEntries.at(visible.at(slot));
+                    ImGui::PushID(static_cast<int>(visible.at(slot)));
                     if (drawResourceTile(entry, previewSize)) navigateTo = entry.path;
                     ImGui::PopID();
                 }
@@ -991,55 +1007,56 @@ namespace sage::editor
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.23f, 0.34f, 0.50f, 1.00f});
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.25f, 0.42f, 0.68f, 1.00f});
         }
-        RenderTexture2D* thumbnail = nullptr;
+        std::optional<std::reference_wrapper<RenderTexture2D>> thumbnail;
         std::string fallbackLabel = "No Preview";
         if (entry.modelIndex)
         {
             const auto i = *entry.modelIndex;
-            thumbnail = &assetThumbnails[i];
-            if (thumbnail->id == 0) *thumbnail = createAssetThumbnail(assetEntries[i]);
+            thumbnail = std::ref(assetThumbnails.at(i));
+            if (thumbnail->get().id == 0) thumbnail->get() = createAssetThumbnail(assetEntries.at(i));
         }
         else if (entry.materialIndex)
         {
             const auto i = *entry.materialIndex;
-            thumbnail = &materialThumbnails[i];
-            if (thumbnail->id == 0) *thumbnail = createMaterialThumbnail(materialKeys[i]);
+            thumbnail = std::ref(materialThumbnails.at(i));
+            if (thumbnail->get().id == 0) thumbnail->get() = createMaterialThumbnail(materialKeys.at(i));
         }
         else if (entry.imageIndex)
         {
             const auto i = *entry.imageIndex;
-            thumbnail = &imageThumbnails[i];
-            if (thumbnail->id == 0) *thumbnail = createImageThumbnail(imageKeys[i]);
+            thumbnail = std::ref(imageThumbnails.at(i));
+            if (thumbnail->get().id == 0) thumbnail->get() = createImageThumbnail(imageKeys.at(i));
         }
         else if (entry.flatpackIndex)
         {
             const auto i = *entry.flatpackIndex;
-            thumbnail = &flatpackThumbnails[i];
-            if (thumbnail->id == 0) *thumbnail = CreateFlatpackThumbnail(flatpackEntries[i].path, THUMBNAIL_SIZE);
+            thumbnail = std::ref(flatpackThumbnails.at(i));
+            if (thumbnail->get().id == 0)
+                thumbnail->get() = CreateFlatpackThumbnail(flatpackEntries.at(i).path, THUMBNAIL_SIZE);
         }
         else
         {
             fallbackLabel = ICON_FA_FOLDER "\nFolder";
         }
         if (entry.canvas) fallbackLabel = "UI\nCanvas";
-        Texture2D* texture = thumbnail && thumbnail->id != 0 ? &thumbnail->texture : nullptr;
+        std::optional<std::reference_wrapper<Texture2D>> texture;
+        if (thumbnail && thumbnail->get().id != 0) texture = std::ref(thumbnail->get().texture);
         const bool clicked = texture ? ImGui::ImageButton(
                                            "thumbnail",
-                                           reinterpret_cast<ImTextureID>(texture),
+                                           reinterpret_cast<ImTextureID>(&texture->get()),
                                            ImVec2{previewSize, previewSize},
                                            ImVec2{0.0f, 1.0f},
                                            ImVec2{1.0f, 0.0f},
                                            entry.modelIndex ? ImVec4{0.10f, 0.11f, 0.13f, 1.00f} : ImVec4{})
                                      : ImGui::Button(fallbackLabel.c_str(), ImVec2{previewSize, previewSize});
-        if (entry.modelIndex)
-            ImGui::PopStyleColor(3);
+        if (entry.modelIndex) ImGui::PopStyleColor(3);
 
         const char* type = "Folder";
         if (entry.modelIndex)
         {
             type = "Model";
             const auto i = *entry.modelIndex;
-            const auto asset = assetEntries[i];
+            const auto asset = assetEntries.at(i);
             if (clicked && onAssetSelectedCb)
             {
                 onAssetSelectedCb(i);
@@ -1072,7 +1089,7 @@ namespace sage::editor
         else if (entry.materialIndex)
         {
             type = "Material";
-            const auto& key = materialKeys[*entry.materialIndex];
+            const auto& key = materialKeys.at(*entry.materialIndex);
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClick to preview", key.c_str());
             if (ImGui::BeginPopupContextItem("material_context"))
             {
@@ -1083,7 +1100,7 @@ namespace sage::editor
         else if (entry.imageIndex)
         {
             type = "Image";
-            const auto& key = imageKeys[*entry.imageIndex];
+            const auto& key = imageKeys.at(*entry.imageIndex);
             if (ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s\n%s\nClick to preview", key.c_str(), entry.sourcePath.string().c_str());
             if (ImGui::BeginPopupContextItem("image_context"))
@@ -1098,7 +1115,7 @@ namespace sage::editor
         {
             type = "Flatpack";
             const auto i = *entry.flatpackIndex;
-            const auto flatpack = flatpackEntries[i];
+            const auto flatpack = flatpackEntries.at(i);
             const bool doubleClicked =
                 ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
             if (doubleClicked && onFlatpackEditCb)
@@ -1141,11 +1158,13 @@ namespace sage::editor
             type = "Canvas";
             if (ImGui::BeginPopupContextItem("canvas_context"))
             {
-                if (ImGui::MenuItem("Edit Canvas") && onCanvasEditCb) onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
+                if (ImGui::MenuItem("Edit Canvas") && onCanvasEditCb)
+                    onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
                 if (ImGui::MenuItem("New Canvas") && onCanvasEditCb) onCanvasEditCb({});
                 ImGui::EndPopup();
             }
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && onCanvasEditCb) onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && onCanvasEditCb)
+                onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
         }
         else
         {
@@ -1159,9 +1178,9 @@ namespace sage::editor
         }
 
         if (entry.modelIndex && selected) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4{0.72f, 0.83f, 1.00f, 1.00f});
-        const auto label = entry.modelIndex      ? assetEntries[*entry.modelIndex].displayName
-                           : entry.materialIndex ? materialKeys[*entry.materialIndex]
-                           : entry.imageIndex    ? AssetNameFromKey(imageKeys[*entry.imageIndex])
+        const auto label = entry.modelIndex      ? assetEntries.at(*entry.modelIndex).displayName
+                           : entry.materialIndex ? materialKeys.at(*entry.materialIndex)
+                           : entry.imageIndex    ? AssetNameFromKey(imageKeys.at(*entry.imageIndex))
                                                  : entry.path.filename().string();
         ImGui::TextUnformatted(label.c_str());
         if (entry.modelIndex && selected) ImGui::PopStyleColor();
@@ -1177,7 +1196,7 @@ namespace sage::editor
                 if (!entry.sourcePath.empty()) ImGui::TextDisabled("%s", entry.sourcePath.string().c_str());
                 if (texture)
                     ImGui::Image(
-                        reinterpret_cast<ImTextureID>(texture),
+                        reinterpret_cast<ImTextureID>(&texture->get()),
                         ImVec2{256.0f, 256.0f},
                         ImVec2{0.0f, 1.0f},
                         ImVec2{1.0f, 0.0f});

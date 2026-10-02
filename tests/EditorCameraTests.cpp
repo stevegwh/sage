@@ -1,4 +1,5 @@
 #include "EditorCamera.hpp"
+#include "engine/MathConstants.hpp"
 #include "raymath.h"
 
 #include <cmath>
@@ -23,15 +24,20 @@ int main()
     try
     {
         sage::editor::EditorCamera controls;
-        Camera3D camera{{10, 20, 30}, {0, 8, 0}, {0, 1, 0}, 45, CAMERA_PERSPECTIVE};
-        sage::editor::FocusTarget object{{100, 57, -40}, 12};
+        Camera3D camera{
+            .position = {.x = 10, .y = 20, .z = 30},
+            .target = {.x = 0, .y = 8, .z = 0},
+            .up = {.x = 0, .y = 1, .z = 0},
+            .fovy = 45,
+            .projection = CAMERA_PERSPECTIVE};
+        sage::editor::FocusTarget object{.position = {.x = 100, .y = 57, .z = -40}, .radius = 12};
         controls.Focus(camera, object, 0.5f);
         require(near(camera.target, object.position), "Focus must use the object's center, including its height");
         const float distance = Vector3Distance(camera.position, camera.target);
-        const float halfFov = std::atan(std::tan(45 * DEG2RAD / 2) * 0.5f);
+        const float halfFov = std::atan(std::tan(45 * sage::math::DEGREES_TO_RADIANS / 2) * 0.5f);
         require(std::asin(object.radius / distance) < halfFov, "Focus must fit a narrow viewport");
 
-        controls.Look(camera, {150, 80});
+        controls.Look(camera, {.x = 150, .y = 80});
         require(near(camera.target, object.position), "Orbit must preserve the object's center");
         require(
             std::abs(Vector3Distance(camera.position, camera.target) - distance) < 0.001f,
@@ -63,7 +69,7 @@ int main()
             Vector3Distance(camera.position, camera.target) > object.radius + 0.6f,
             "Zoom must reverse immediately without game camera momentum");
 
-        object.position = {200, -30, 70};
+        object.position = {.x = 200, .y = -30, .z = 70};
         object.radius = 80;
         controls.Follow(camera, object);
         require(near(camera.target, object.position), "Focused camera must follow a moved selection");
@@ -73,10 +79,10 @@ int main()
 
         controls.mode = sage::editor::CameraMode::Free;
         const auto position = camera.position;
-        controls.Look(camera, {100, -50});
+        controls.Look(camera, {.x = 100, .y = -50});
         require(near(camera.position, position), "Free look must rotate about the camera itself");
         const auto offset = Vector3Subtract(camera.target, camera.position);
-        controls.Move(camera, {0, 0, 1}, 1, false);
+        controls.Move(camera, {.x = 0, .y = 0, .z = 1}, 1, false);
         require(camera.position.y != position.y, "Free flight must follow pitch without a ground constraint");
         require(
             near(Vector3Subtract(camera.target, camera.position), offset), "Flight must preserve view direction");
@@ -89,7 +95,7 @@ int main()
 
         // Degenerate starting poses should still produce a valid focus direction.
         camera.position = camera.target;
-        controls.Focus(camera, {{0, 0, 0}, 1}, 1);
+        controls.Focus(camera, {.position = {.x = 0, .y = 0, .z = 0}, .radius = 1}, 1);
         require(
             std::isfinite(camera.position.y) && Vector3Distance(camera.position, camera.target) > 1,
             "Focus must handle a zero view offset");

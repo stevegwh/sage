@@ -32,13 +32,14 @@ namespace sage::editor
         constexpr float GRID_DEFAULT_HALF_EXTENT = 50.0f;
         constexpr float GRID_PLACEMENT_SURFACE_HALF_HEIGHT = 0.02f;
         constexpr float PLACEMENT_MIN_SCALE = 0.1f;
-        constexpr Color PLACEMENT_PREVIEW_TINT = {255, 255, 255, 150};
-        constexpr Color PLACEMENT_PREVIEW_BOUNDS_COLOR = {37, 99, 235, 210};
+        constexpr Color PLACEMENT_PREVIEW_TINT = {.r = 255, .g = 255, .b = 255, .a = 150};
+        constexpr Color PLACEMENT_PREVIEW_BOUNDS_COLOR = {.r = 37, .g = 99, .b = 235, .a = 210};
 
         Matrix BuildPlacementMatrix(const Vector3 position, const float rotationY, const float scale)
         {
             return MatrixMultiply(
-                MatrixMultiply(MatrixScale(scale, scale, scale), MatrixRotateY(rotationY * sage::math::DEGREES_TO_RADIANS)),
+                MatrixMultiply(
+                    MatrixScale(scale, scale, scale), MatrixRotateY(rotationY * sage::math::DEGREES_TO_RADIANS)),
                 MatrixTranslate(position.x, position.y, position.z));
         }
 
@@ -48,9 +49,9 @@ namespace sage::editor
             const BoundingBox worldBounds =
                 TransformBoundingBoxByCorners(localBounds, BuildPlacementMatrix(gridPosition, rotationY, scale));
             return {
-                gridPosition.x + (gridPosition.x - worldBounds.min.x),
-                gridPosition.y,
-                gridPosition.z + (gridPosition.z - worldBounds.min.z)};
+                .x = gridPosition.x + (gridPosition.x - worldBounds.min.x),
+                .y = gridPosition.y,
+                .z = gridPosition.z + (gridPosition.z - worldBounds.min.z)};
         }
     } // namespace
 
@@ -147,18 +148,18 @@ namespace sage::editor
     {
         if (!snappedPlacementPosition.has_value()) return std::nullopt;
 
-        const auto& placeable = assets.Selected();
+        const auto& placeable = assets.get().Selected();
         const auto entity = sys->registry->create();
         sys->registry->emplace<EditorMapEntity>(entity);
         sys->registry->emplace<MetaData>(entity);
         sys->registry->emplace<AssetReference>(entity, AssetReference{.assetKey = placeable.modelKey});
         auto& transform = sys->registry->emplace<sgTransform>(entity);
         transform.name = makePlacedLabel(entity);
-        transform.scale.world = {placementScale, placementScale, placementScale};
-        transform.rotation.world = {0.0f, placementRotationY, 0.0f};
+        transform.scale.world = {.x = placementScale, .y = placementScale, .z = placementScale};
+        transform.rotation.world = {.x = 0.0f, .y = placementRotationY, .z = 0.0f};
 
         auto model = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
-        const Matrix defaultTransform = assets.DefaultTransform(placeable);
+        const Matrix defaultTransform = assets.get().DefaultTransform(placeable);
         model.SetTransform(defaultTransform);
         const auto localBounds = model.CalcLocalBoundingBox();
         const Vector3 position =
@@ -169,7 +170,7 @@ namespace sage::editor
         transform.position.world = position;
         auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), defaultTransform);
         auto& uber =
-            sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
+            sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->get().GetMaterialCount());
         uber.SetFlagAll(UberShaderComponent::Flags::Lit);
 
         const auto placementMatrix = BuildPlacementMatrix(position, placementRotationY, placementScale);
@@ -179,7 +180,7 @@ namespace sage::editor
         collideable.isStatic = true;
         sys->registry->emplace<NavigationObstacle>(entity);
         auto& cursorTarget = sys->registry->emplace<CursorTarget>(entity);
-        cursorTarget.cursor = cursors::Denied;
+        cursorTarget.cursor = cursors::DENIED;
         cursorTarget.allowNavigationClickThrough = false;
         sys->navigationGridSystem->MarkSquareAreaOccupied(collideable.worldBoundingBox, true, entity);
 
@@ -190,9 +191,9 @@ namespace sage::editor
     {
         if (!snappedPlacementPosition.has_value()) return;
 
-        const auto& placeable = assets.Selected();
+        const auto& placeable = assets.get().Selected();
         auto previewModel = ResourceManager::GetInstance().GetModelView(placeable.modelKey);
-        previewModel.SetTransform(assets.SelectedDefaultTransform());
+        previewModel.SetTransform(assets.get().SelectedDefaultTransform());
         const auto localBounds = previewModel.CalcLocalBoundingBox();
         const Vector3 position =
             snapToGrid ? PositionForBoundsMinSnap(
@@ -200,9 +201,9 @@ namespace sage::editor
                        : *snappedPlacementPosition;
         previewModel.Draw(
             position,
-            {0.0f, 1.0f, 0.0f},
+            {.x = 0.0f, .y = 1.0f, .z = 0.0f},
             placementRotationY,
-            {placementScale, placementScale, placementScale},
+            {.x = placementScale, .y = placementScale, .z = placementScale},
             PLACEMENT_PREVIEW_TINT);
 
         const auto previewBounds = TransformBoundingBoxByCorners(
@@ -218,9 +219,9 @@ namespace sage::editor
         DrawGrid(gridSlices, EDITOR_GRID_SPACING);
         rlPopMatrix();
 
-        DrawLine3D({0, 0.02f, 0}, {8, 0.02f, 0}, sage::colors::RED_COLOR);
-        DrawLine3D({0, 0.02f, 0}, {0, 8, 0}, sage::colors::GREEN_COLOR);
-        DrawLine3D({0, 0.02f, 0}, {0, 0.02f, 8}, sage::colors::BLUE_COLOR);
+        DrawLine3D({.x = 0, .y = 0.02f, .z = 0}, {.x = 8, .y = 0.02f, .z = 0}, sage::colors::RED_COLOR);
+        DrawLine3D({.x = 0, .y = 0.02f, .z = 0}, {.x = 0, .y = 8, .z = 0}, sage::colors::GREEN_COLOR);
+        DrawLine3D({.x = 0, .y = 0.02f, .z = 0}, {.x = 0, .y = 0.02f, .z = 8}, sage::colors::BLUE_COLOR);
     }
 
     entt::entity EditorPlacementController::GridSurfaceEntity() const
@@ -263,17 +264,21 @@ namespace sage::editor
     {
         gridPlacementSurfaceEntity = sys->registry->create();
         const BoundingBox localBounds = {
-            {-gridHalfExtent, -GRID_PLACEMENT_SURFACE_HALF_HEIGHT, -gridHalfExtent},
-            {gridHalfExtent, GRID_PLACEMENT_SURFACE_HALF_HEIGHT, gridHalfExtent}};
+            .min = {.x = -gridHalfExtent, .y = -GRID_PLACEMENT_SURFACE_HALF_HEIGHT, .z = -gridHalfExtent},
+            .max = {.x = gridHalfExtent, .y = GRID_PLACEMENT_SURFACE_HALF_HEIGHT, .z = gridHalfExtent}};
         auto& collideable =
             sys->registry->emplace<Collideable>(gridPlacementSurfaceEntity, localBounds, MatrixIdentity());
         collideable.worldBoundingBox = {
-            {-gridHalfExtent, gridSurfaceY - GRID_PLACEMENT_SURFACE_HALF_HEIGHT, -gridHalfExtent},
-            {gridHalfExtent, gridSurfaceY + GRID_PLACEMENT_SURFACE_HALF_HEIGHT, gridHalfExtent}};
+            .min =
+                {.x = -gridHalfExtent,
+                 .y = gridSurfaceY - GRID_PLACEMENT_SURFACE_HALF_HEIGHT,
+                 .z = -gridHalfExtent},
+            .max = {
+                .x = gridHalfExtent, .y = gridSurfaceY + GRID_PLACEMENT_SURFACE_HALF_HEIGHT, .z = gridHalfExtent}};
         collideable.isStatic = true;
         sys->registry->emplace<NavigationSurface>(gridPlacementSurfaceEntity);
         auto& cursorTarget = sys->registry->emplace<CursorTarget>(gridPlacementSurfaceEntity);
-        cursorTarget.cursor = cursors::Move;
+        cursorTarget.cursor = cursors::MOVE;
         cursorTarget.allowNavigationClickThrough = true;
     }
 

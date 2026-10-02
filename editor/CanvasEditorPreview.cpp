@@ -4,25 +4,41 @@
 #include "rlgl.h"
 #include "rlImGui.h"
 
+#include <ranges>
+
 namespace sage::editor
 {
+    namespace
+    {
+        constexpr float PREVIEW_INPUT_WIDTH = 100.0f;
+        constexpr float MIN_PREVIEW_WIDTH = 320.0f;
+        constexpr float MAX_PREVIEW_WIDTH = 3840.0f;
+        constexpr float MIN_PREVIEW_HEIGHT = 240.0f;
+        constexpr float MAX_PREVIEW_HEIGHT = 2160.0f;
+        constexpr Color PREVIEW_BACKGROUND = {.r = 30, .g = 33, .b = 39, .a = 255};
+        constexpr Color SELECTION_COLOR = {.r = 240, .g = 190, .b = 65, .a = 255};
+        constexpr float SELECTION_BORDER_WIDTH = 2.0f;
+        constexpr int RESIZE_HANDLE_SIZE = 8;
+    } // namespace
+
     void CanvasEditor::drawPreview()
     {
-        ImGui::SetNextItemWidth(100);
-        ImGui::DragFloat("Preview width", &previewWidth, 1, 320, 3840);
+        ImGui::SetNextItemWidth(PREVIEW_INPUT_WIDTH);
+        ImGui::DragFloat("Preview width", &previewWidth, 1, MIN_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(100);
-        ImGui::DragFloat("Preview height", &previewHeight, 1, 240, 2160);
+        ImGui::SetNextItemWidth(PREVIEW_INPUT_WIDTH);
+        ImGui::DragFloat("Preview height", &previewHeight, 1, MIN_PREVIEW_HEIGHT, MAX_PREVIEW_HEIGHT);
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextWrapped(
             "Alt-drag windows to move. Drag the bottom-right handle to resize. Drag a selected row/cell edge to "
             "adjust its share.");
         ImGui::PopStyleColor();
         const auto available = ImGui::GetContentRegionAvail();
-        previewWidth = std::clamp(previewWidth, 320.f, 3840.f);
-        previewHeight = std::clamp(previewHeight, 240.f, 2160.f);
+        previewWidth = std::clamp(previewWidth, MIN_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH);
+        previewHeight = std::clamp(previewHeight, MIN_PREVIEW_HEIGHT, MAX_PREVIEW_HEIGHT);
         const float fit = std::min(available.x / previewWidth, available.y / previewHeight);
-        const int width = std::max(1, int(previewWidth * fit)), height = std::max(1, int(previewHeight * fit));
+        const int width = std::max(1, static_cast<int>(previewWidth * fit)),
+                  height = std::max(1, static_cast<int>(previewHeight * fit));
         if (preview.texture.width != width || preview.texture.height != height)
         {
             if (preview.id) UnloadRenderTexture(preview);
@@ -31,21 +47,28 @@ namespace sage::editor
         }
         rlDrawRenderBatchActive();
         BeginTextureMode(preview);
-        ClearBackground({30, 33, 39, 255});
-        auto layout = RenderCanvas(document, {0, 0, float(width), float(height)});
+        ClearBackground(PREVIEW_BACKGROUND);
+        auto layout = RenderCanvas(
+            document, {.x = 0, .y = 0, .width = static_cast<float>(width), .height = static_cast<float>(height)});
         if (layout.bounds.contains(selected))
         {
             const auto b = layout.bounds.at(selected);
-            DrawRectangleLinesEx(b, 2, Color{240, 190, 65, 255});
+            DrawRectangleLinesEx(b, SELECTION_BORDER_WIDTH, SELECTION_COLOR);
             if (document.Find(selected)->get().kind == UINodeKind::Window)
-                DrawRectangle(int(b.x + b.width - 8), int(b.y + b.height - 8), 8, 8, Color{240, 190, 65, 255});
+                DrawRectangle(
+                    static_cast<int>(b.x + b.width - RESIZE_HANDLE_SIZE),
+                    static_cast<int>(b.y + b.height - RESIZE_HANDLE_SIZE),
+                    RESIZE_HANDLE_SIZE,
+                    RESIZE_HANDLE_SIZE,
+                    SELECTION_COLOR);
         }
         EndTextureMode();
         const auto origin = ImGui::GetCursorScreenPos();
         rlImGuiImageRenderTexture(&preview);
         const auto mouse = ImGui::GetMousePos();
-        const Vector2 local{mouse.x - origin.x, mouse.y - origin.y};
-        const float scale = std::min(float(width) / document.width, float(height) / document.height);
+        const Vector2 local{.x = mouse.x - origin.x, .y = mouse.y - origin.y};
+        const float scale =
+            std::min(static_cast<float>(width) / document.width, static_cast<float>(height) / document.height);
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             beginPreviewDrag(layout, local);
         updatePreviewDrag(local, scale);
@@ -60,8 +83,9 @@ namespace sage::editor
         {
             const auto b = layout.bounds.at(selected);
             const bool horizontal = selectedNode->get().kind == UINodeKind::Cell;
-            const Rectangle handle = horizontal ? Rectangle{b.x + b.width - 5, b.y, 10, b.height}
-                                                : Rectangle{b.x, b.y + b.height - 5, b.width, 10};
+            const Rectangle handle =
+                horizontal ? Rectangle{.x = b.x + b.width - 5, .y = b.y, .width = 10, .height = b.height}
+                           : Rectangle{.x = b.x, .y = b.y + b.height - 5, .width = b.width, .height = 10};
             if (CheckCollisionPointRec(mouse, handle))
             {
                 std::vector<unsigned int> siblings;
@@ -93,7 +117,8 @@ namespace sage::editor
         if (n && n->get().kind == UINodeKind::Window && layout.bounds.contains(selected))
         {
             const auto b = layout.bounds.at(selected);
-            resizing = CheckCollisionPointRec(mouse, {b.x + b.width - 12, b.y + b.height - 12, 16, 16});
+            resizing = CheckCollisionPointRec(
+                mouse, {.x = b.x + b.width - 12, .y = b.y + b.height - 12, .width = 16, .height = 16});
         }
         if (!resizing && !dividerNeighbor)
         {
@@ -101,10 +126,11 @@ namespace sage::editor
             if (hit)
                 selected = hit;
             else
-                for (auto it = document.nodes.rbegin(); it != document.nodes.rend(); ++it)
-                    if (layout.bounds.contains(it->id) && CheckCollisionPointRec(mouse, layout.bounds.at(it->id)))
+                for (const auto& node : document.nodes | std::views::reverse)
+                    if (layout.bounds.contains(node.id) &&
+                        CheckCollisionPointRec(mouse, layout.bounds.at(node.id)))
                     {
-                        selected = it->id;
+                        selected = node.id;
                         break;
                     }
             if (ImGui::GetIO().KeyAlt)
@@ -120,7 +146,7 @@ namespace sage::editor
         if (moving || resizing)
         {
             dragStart = mouse;
-            dragBounds = n->get().WindowBounds({document.width, document.height});
+            dragBounds = n->get().WindowBounds({.x = document.width, .y = document.height});
         }
     }
 
@@ -134,7 +160,7 @@ namespace sage::editor
                 node.rectangle = dragBounds;
                 node.windowHorizontal = WindowHorizontalAlignment::FREE;
                 node.windowVertical = WindowVerticalAlignment::FREE;
-                const Vector2 delta{(mouse.x - dragStart.x) / scale, (mouse.y - dragStart.y) / scale};
+                const Vector2 delta{.x = (mouse.x - dragStart.x) / scale, .y = (mouse.y - dragStart.y) / scale};
                 if (moving)
                 {
                     node.rectangle.x = dragBounds.x + delta.x;

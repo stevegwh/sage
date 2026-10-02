@@ -13,7 +13,7 @@ namespace sage::content
         json::Document result(rapidjson::kObjectType);
         auto& allocator = result.GetAllocator();
         json::Put(result, "format", "sage-asset-index", allocator);
-        json::Put(result, "version", std::uint64_t(1), allocator);
+        json::Put(result, "version", static_cast<std::uint64_t>(1), allocator);
         for (const auto& [name, keys] : std::vector<std::pair<std::string, std::vector<std::string>>>{
                  {"models", resources.GetModelKeys(true)},
                  {"materials", resources.GetMaterialKeys()},
@@ -41,8 +41,9 @@ namespace sage::content
             const auto& values = json::Require(index, group);
             if (!values.IsArray()) throw std::runtime_error("Invalid asset index group");
             if (std::any_of(values.Begin(), values.End(), [&](const auto& value) {
-                return value.IsString() && key == value.GetString();
-            })) return true;
+                    return value.IsString() && key == value.GetString();
+                }))
+                return true;
             if (std::string_view(group) == "materials") return false;
             std::size_t aliases = 0;
             for (const auto& value : values.GetArray())

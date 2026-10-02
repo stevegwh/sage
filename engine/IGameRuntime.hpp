@@ -10,11 +10,12 @@
 
 #include "systems/CSharpScriptSystem.hpp"
 
-#include "raylib.h"
 #include "content/Json.hpp"
+#include "raylib.h"
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace sage
@@ -31,7 +32,7 @@ namespace sage
     // window.
     struct GameRuntimeContext
     {
-        AudioManager* audioManager = nullptr;
+        std::optional<std::reference_wrapper<AudioManager>> audioManager;
         Vector2 windowSize{};
         Rectangle viewportScreenRect{};
         // Working-dir-relative path to the map the editor snapshotted for this
@@ -47,6 +48,11 @@ namespace sage
     class IGameRuntime
     {
       public:
+        IGameRuntime() = default;
+        IGameRuntime(const IGameRuntime&) = default;
+        IGameRuntime& operator=(const IGameRuntime&) = default;
+        IGameRuntime(IGameRuntime&&) = default;
+        IGameRuntime& operator=(IGameRuntime&&) = default;
         virtual ~IGameRuntime() = default;
 
         // One simulation step (input, systems, cleanup).

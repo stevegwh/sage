@@ -1,7 +1,7 @@
 #pragma once
 
-#include "engine/EditorLayoutTags.hpp"
 #include "engine/content/ContentDocument.hpp"
+#include "engine/EditorLayoutTags.hpp"
 
 #include <cstdint>
 #include <string>
@@ -9,7 +9,7 @@
 
 namespace sage::editor
 {
-    inline constexpr std::string_view SpawnPointTag = editor_layout::SpawnPointSceneTag;
+    inline constexpr std::string_view SPAWN_POINT_TAG = editor_layout::SPAWN_POINT_SCENE_TAG;
 
     struct EditorMapEntity
     {

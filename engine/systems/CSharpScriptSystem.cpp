@@ -40,7 +40,6 @@
 #define SAGE_MANAGED_CALL
 #endif
 
-
 namespace sage
 {
     namespace
@@ -192,6 +191,8 @@ namespace sage
                     assemblyPath.c_str(),
                     typeName.c_str(),
                     hostMethodName.c_str(),
+                    // hostfxr requires this third-party sentinel for native managed entry points.
+                    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast,modernize-avoid-c-style-cast)
                     UNMANAGEDCALLERSONLY_METHOD,
                     nullptr,
                     destination);
@@ -263,7 +264,10 @@ namespace sage
             [[nodiscard]] bool Start(const ManagedScriptingConfig& config, const NativeApiTable& api) const
             {
                 if (!ready) return false;
-                const StartSessionArgs args{config.gameplayAssemblyPath.c_str(), api, config.gameApi};
+                const StartSessionArgs args{
+                    .gameplayAssemblyPath = config.gameplayAssemblyPath.c_str(),
+                    .nativeApi = api,
+                    .gameApi = config.gameApi};
                 return startSession(&args) == 0;
             }
             [[nodiscard]] int CreateScript(const std::uint32_t entity, const char* type) const
@@ -279,9 +283,7 @@ namespace sage
                 return ready ? updateScript(entity, dt, enabled ? 1 : 0) : -1;
             }
             [[nodiscard]] int DispatchTrigger(
-                const std::uint32_t listener,
-                const TriggerEvent type,
-                const std::uint32_t other) const
+                const std::uint32_t listener, const TriggerEvent type, const std::uint32_t other) const
             {
                 return ready ? dispatchTrigger(listener, static_cast<int>(type), other) : -1;
             }
@@ -381,12 +383,14 @@ namespace sage
         {
             const auto& self = *static_cast<Impl*>(context);
             if (componentIds == nullptr || componentCount == 0) return 0;
-            const auto found = self.scriptApi.FindEntitiesWithComponents(
-                *self.registry, std::span{componentIds, componentCount});
+            const auto found =
+                self.scriptApi.FindEntitiesWithComponents(*self.registry, std::span{componentIds, componentCount});
             const auto count = static_cast<std::uint32_t>(found.size());
             if (destination != nullptr)
                 std::ranges::transform(
-                    found.begin(), found.begin() + std::min(capacity, count), destination,
+                    found.begin(),
+                    found.begin() + std::min(capacity, count),
+                    destination,
                     [](const entt::entity entity) { return entt::to_integral(entity); });
             return count;
         }
@@ -396,7 +400,7 @@ namespace sage
         {
             const auto& self = *static_cast<Impl*>(context);
             if (self.systems == nullptr || destination == nullptr) return 0;
-            const auto surface = self.systems->navigationGridSystem->GetSurfaceAt(Vector3{x, y, z});
+            const auto surface = self.systems->navigationGridSystem->GetSurfaceAt(Vector3{.x = x, .y = y, .z = z});
             if (surface == entt::null || !self.registry->valid(surface)) return 0;
             *destination = entt::to_integral(surface);
             return 1;
@@ -435,7 +439,7 @@ namespace sage
                 !self.registry->all_of<sgTransform, MoveableActor, Collideable>(entity))
                 return 0;
             return self.systems->actorMovementSystem->TryPathfindToLocation(
-                       entity, Vector3{x, y, z}, aStar != 0, findClosest != 0)
+                       entity, Vector3{.x = x, .y = y, .z = z}, aStar != 0, findClosest != 0)
                        ? 1
                        : 0;
         }
@@ -461,7 +465,7 @@ namespace sage
                 return 0;
 
             self.routeQueryResult = self.systems->actorMovementSystem->FindRouteToLocation(
-                entity, Vector3{x, y, z}, aStar != 0, findClosest != 0);
+                entity, Vector3{.x = x, .y = y, .z = z}, aStar != 0, findClosest != 0);
             *points = self.routeQueryResult.data();
             return static_cast<std::uint32_t>(self.routeQueryResult.size());
         }
@@ -496,8 +500,10 @@ namespace sage
         {
             auto& self = *static_cast<Impl*>(context);
             if (self.systems == nullptr || name == nullptr || destination == nullptr) return 0;
-            const auto rotation = hasRotation != 0 ? std::optional{Vector3{rx, ry, rz}} : std::nullopt;
-            auto instance = InstantiateFlatpackByName(*self.registry, name, Vector3{px, py, pz}, rotation);
+            const auto rotation =
+                hasRotation != 0 ? std::optional{Vector3{.x = rx, .y = ry, .z = rz}} : std::nullopt;
+            auto instance =
+                InstantiateFlatpackByName(*self.registry, name, Vector3{.x = px, .y = py, .z = pz}, rotation);
             if (!instance) return 0;
             for (const auto entity : instance.entities)
             {
@@ -519,12 +525,12 @@ namespace sage
             const float rhsY,
             const float rhsZ)
         {
-            return ::Vector3DotProduct({lhsX, lhsY, lhsZ}, {rhsX, rhsY, rhsZ});
+            return ::Vector3DotProduct({.x = lhsX, .y = lhsY, .z = lhsZ}, {.x = rhsX, .y = rhsY, .z = rhsZ});
         }
 
         static float SAGE_MANAGED_CALL Vector3Length(const float x, const float y, const float z)
         {
-            return ::Vector3Length({x, y, z});
+            return ::Vector3Length({.x = x, .y = y, .z = z});
         }
 
         static void SAGE_MANAGED_CALL Vector3Normalize(
@@ -536,7 +542,7 @@ namespace sage
             float* normalizedZ)
         {
             if (normalizedX == nullptr || normalizedY == nullptr || normalizedZ == nullptr) return;
-            const Vector3 normalized = ::Vector3Normalize({x, y, z});
+            const Vector3 normalized = ::Vector3Normalize({.x = x, .y = y, .z = z});
             *normalizedX = normalized.x;
             *normalizedY = normalized.y;
             *normalizedZ = normalized.z;
@@ -550,18 +556,15 @@ namespace sage
             const float toY,
             const float toZ)
         {
-            return ::Vector3Angle({fromX, fromY, fromZ}, {toX, toY, toZ}) * sage::math::RADIANS_TO_DEGREES;
+            return ::Vector3Angle({.x = fromX, .y = fromY, .z = fromZ}, {.x = toX, .y = toY, .z = toZ}) *
+                   sage::math::RADIANS_TO_DEGREES;
         }
 
-        void dispatchTrigger(
-            const entt::entity listener,
-            const TriggerEvent type,
-            const entt::entity other)
+        void dispatchTrigger(const entt::entity listener, const TriggerEvent type, const entt::entity other)
         {
             const auto found = instances.find(listener);
             if (found == instances.end() || found->second.failed) return;
-            if (GetManagedHost().DispatchTrigger(
-                    entt::to_integral(listener), type, entt::to_integral(other)) != 0)
+            if (GetManagedHost().DispatchTrigger(entt::to_integral(listener), type, entt::to_integral(other)) != 0)
                 found->second.failed = true;
         }
 
@@ -569,25 +572,21 @@ namespace sage
         {
             auto instance = instances.find(listener);
             if (instance == instances.end() || systems == nullptr || systems->collisionSystem == nullptr) return;
-            instance->second.triggerSubscriptions.push_back(
-                systems->collisionSystem->onTriggerEnter.Subscribe(
-                    [this, listener](const entt::entity trigger, const entt::entity other) {
-                        if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Enter, other);
-                    }));
-            instance->second.triggerSubscriptions.push_back(
-                systems->collisionSystem->onTriggerStay.Subscribe(
-                    [this, listener](const entt::entity trigger, const entt::entity other) {
-                        if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Stay, other);
-                    }));
-            instance->second.triggerSubscriptions.push_back(
-                systems->collisionSystem->onTriggerExit.Subscribe(
-                    [this, listener](const entt::entity trigger, const entt::entity other) {
-                        if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Exit, other);
-                    }));
+            instance->second.triggerSubscriptions.push_back(systems->collisionSystem->onTriggerEnter.Subscribe(
+                [this, listener](const entt::entity trigger, const entt::entity other) {
+                    if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Enter, other);
+                }));
+            instance->second.triggerSubscriptions.push_back(systems->collisionSystem->onTriggerStay.Subscribe(
+                [this, listener](const entt::entity trigger, const entt::entity other) {
+                    if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Stay, other);
+                }));
+            instance->second.triggerSubscriptions.push_back(systems->collisionSystem->onTriggerExit.Subscribe(
+                [this, listener](const entt::entity trigger, const entt::entity other) {
+                    if (trigger == listener) dispatchTrigger(listener, TriggerEvent::Exit, other);
+                }));
         }
 
-        static std::uint8_t SAGE_MANAGED_CALL
-        SubscribeComponentEvent(
+        static std::uint8_t SAGE_MANAGED_CALL SubscribeComponentEvent(
             void* context,
             const std::uint32_t listenerValue,
             const std::uint32_t sourceValue,
@@ -611,8 +610,7 @@ namespace sage
                 [&self, listener, subscriptionId](const std::span<const ScriptValue> values) {
                     auto found = self.instances.find(listener);
                     if (found == self.instances.end() || found->second.failed) return;
-                    if (GetManagedHost().DispatchEvent(
-                            entt::to_integral(listener), subscriptionId, values) != 0)
+                    if (GetManagedHost().DispatchEvent(entt::to_integral(listener), subscriptionId, values) != 0)
                         found->second.failed = true;
                 },
                 subscription);
@@ -700,8 +698,7 @@ namespace sage
             RegisterEngineScriptApi(scriptApi);
             if (config.populateScriptApi) config.populateScriptApi(scriptApi);
             componentObservers = scriptApi.ObserveComponentDestruction(
-                *registry,
-                [this](const ScriptApiRegistry::Id componentId, const entt::entity entity) {
+                *registry, [this](const ScriptApiRegistry::Id componentId, const entt::entity entity) {
                     removeSubscriptionsFromComponent(entity, componentId);
                 });
             if (config.gameplayAssemblyPath.empty()) return;
@@ -734,6 +731,10 @@ namespace sage
             available = host.Start(config, api);
             if (!available) TraceLog(LOG_ERROR, "C#: gameplay session did not start.");
         }
+        Impl(const Impl&) = delete;
+        Impl& operator=(const Impl&) = delete;
+        Impl(Impl&&) = delete;
+        Impl& operator=(Impl&&) = delete;
 
         ~Impl()
         {
@@ -767,8 +768,7 @@ namespace sage
             available = false;
         }
 
-        void removeSubscriptionsFromComponent(
-            const entt::entity source, const ScriptApiRegistry::Id componentId)
+        void removeSubscriptionsFromComponent(const entt::entity source, const ScriptApiRegistry::Id componentId)
         {
             for (auto& [listener, instance] : instances)
             {

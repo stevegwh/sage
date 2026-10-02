@@ -8,6 +8,7 @@
 
 #include "imgui.h"
 #include "imgui_internal.h"
+#include <span>
 
 #include "raylib.h"
 
@@ -19,8 +20,8 @@
 namespace sage::editor
 {
     inline constexpr float DOCK_RESIZE_HANDLE_THICKNESS = 8.0f;
-    inline constexpr Color EDITOR_WINDOW_BACKGROUND = {35, 38, 43, 245};
-    inline constexpr Color EDITOR_TEXT = {230, 234, 240, 255};
+    inline constexpr Color EDITOR_WINDOW_BACKGROUND = {.r = 35, .g = 38, .b = 43, .a = 245};
+    inline constexpr Color EDITOR_TEXT = {.r = 230, .g = 234, .b = 240, .a = 255};
 
     inline ImVec4 ToImGuiColor(const Color color)
     {
@@ -56,7 +57,8 @@ namespace sage::editor
         const float buttonWidth = ImGui::GetFrameHeight();
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         ImGui::SetNextItemWidth(std::max(1.0f, width - buttonWidth - spacing));
-        if (ImGui::InputTextWithHint("##filter_input", hint, filter.InputBuf, std::size(filter.InputBuf)))
+        const std::span<char> input{filter.InputBuf};
+        if (ImGui::InputTextWithHint("##filter_input", hint, input.data(), input.size()))
         {
             filter.Build();
         }
@@ -109,10 +111,9 @@ namespace sage::editor
             changed = resize(ImGui::GetIO().MouseDelta);
         }
 
-        const ImVec4 color =
-            active ? ImVec4{0.36f, 0.58f, 0.92f, 0.95f}
-                   : hovered ? ImVec4{0.36f, 0.58f, 0.92f, 0.70f}
-                             : ImVec4{0.28f, 0.32f, 0.38f, 0.55f};
+        const ImVec4 color = active    ? ImVec4{0.36f, 0.58f, 0.92f, 0.95f}
+                             : hovered ? ImVec4{0.36f, 0.58f, 0.92f, 0.70f}
+                                       : ImVec4{0.28f, 0.32f, 0.38f, 0.55f};
         ImGui::GetWindowDrawList()->AddRectFilled(
             pos, ImVec2{pos.x + size.x, pos.y + size.y}, ImGui::GetColorU32(color));
         return changed;

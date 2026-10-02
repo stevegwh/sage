@@ -1,7 +1,9 @@
 #include "CanvasEditor.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+
 #include <fstream>
+#include <iterator>
 #include <regex>
 
 namespace sage::editor
@@ -15,7 +17,7 @@ namespace sage::editor
         for (auto match = std::sregex_iterator(source.begin(), source.end(), expression);
              match != std::sregex_iterator();
              ++match)
-            fields.push_back((*match)[1].str());
+            fields.push_back(match->str(1));
         return fields;
     }
     void CanvasEditor::scanAssets()
@@ -41,7 +43,7 @@ namespace sage::editor
                     std::smatch ns, type;
                     if (std::regex_search(source, ns, std::regex(R"(namespace\s+([\w.]+))")) &&
                         std::regex_search(source, type, std::regex(R"(class\s+(\w+)\s*:\s*(?:Sage\.)?Script\b)")))
-                        scriptSources[ns[1].str() + "." + type[1].str()] = file.path();
+                        scriptSources[ns.str(1) + "." + type.str(1)] = file.path();
                 }
     }
     void CanvasEditor::drawBehaviour(CanvasNode& node)
@@ -108,9 +110,8 @@ namespace sage::editor
                 const auto fields = exposedFields(scriptSources.at(node.script));
                 for (const auto& field : fields)
                 {
-                    auto ref = std::find_if(node.references.begin(), node.references.end(), [&](const auto& r) {
-                        return r.field == field;
-                    });
+                    auto ref =
+                        std::ranges::find_if(node.references, [&](const auto& r) { return r.field == field; });
                     unsigned int target = ref == node.references.end() ? 0 : ref->node;
                     const auto referenced = document.Find(target);
                     if (ImGui::BeginCombo(
@@ -118,11 +119,11 @@ namespace sage::editor
                     {
                         for (const auto& candidate : document.nodes)
                         {
-                            ImGui::PushID(int(candidate.id));
+                            ImGui::PushID(static_cast<int>(candidate.id));
                             if (ImGui::Selectable(candidate.name.c_str(), candidate.id == target))
                             {
                                 if (ref == node.references.end())
-                                    node.references.push_back({field, candidate.id});
+                                    node.references.push_back({.field = field, .node = candidate.id});
                                 else
                                     ref->node = candidate.id;
                             }
@@ -146,18 +147,18 @@ namespace sage::editor
             {
                 for (std::size_t i = 0; i < node.references.size(); ++i)
                 {
-                    ImGui::PushID(int(i));
-                    if (ImGui::SmallButton(("Clear " + node.references[i].field).c_str()))
+                    ImGui::PushID(static_cast<int>(i));
+                    if (ImGui::SmallButton(("Clear " + node.references.at(i).field).c_str()))
                     {
-                        node.references.erase(node.references.begin() + i);
+                        node.references.erase(std::next(node.references.begin(), static_cast<std::ptrdiff_t>(i)));
                         ImGui::PopID();
                         break;
                     }
                     ImGui::PopID();
-                    if (!document.Find(node.references[i].node))
+                    if (!document.Find(node.references.at(i).node))
                     {
                         ImGui::TextColored(
-                            {1, 0.4f, 0.3f, 1}, "Broken reference: %s", node.references[i].field.c_str());
+                            {1, 0.4f, 0.3f, 1}, "Broken reference: %s", node.references.at(i).field.c_str());
                     }
                 }
                 ImGui::TreePop();
@@ -193,8 +194,8 @@ namespace sage::editor
             {
                 for (std::size_t i = 0; i < issues.size(); ++i)
                 {
-                    ImGui::PushID(int(i));
-                    if (ImGui::Selectable(issues[i].second.c_str())) selected = issues[i].first;
+                    ImGui::PushID(static_cast<int>(i));
+                    if (ImGui::Selectable(issues.at(i).second.c_str())) selected = issues.at(i).first;
                     ImGui::PopID();
                 }
                 ImGui::TreePop();

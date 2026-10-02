@@ -27,7 +27,7 @@ namespace sage
     {
         BoundingBox localBoundingBox{};
         BoundingBox worldBoundingBox{};
-        CollisionLayer collisionLayer = sage::collision_layers::Default;
+        CollisionLayer collisionLayer = sage::collision_layers::DEFAULT;
         ColliderShape shape = ColliderShape::Box;
         bool active = true;
         bool isStatic = false;
@@ -40,18 +40,36 @@ namespace sage
         void save(Archive& archive) const
         {
             const auto shapeValue = static_cast<std::uint8_t>(shape);
-            archive(cereal::make_nvp("localBoundingBox", localBoundingBox), cereal::make_nvp("worldBoundingBox", worldBoundingBox), cereal::make_nvp("collisionLayer", collisionLayer), cereal::make_nvp("shapeValue", shapeValue));
-            if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
-                archive(cereal::make_nvp("active", active), cereal::make_nvp("isStatic", isStatic), cereal::make_nvp("debugDraw", debugDraw));
+            archive(
+                cereal::make_nvp("localBoundingBox", localBoundingBox),
+                cereal::make_nvp("worldBoundingBox", worldBoundingBox),
+                cereal::make_nvp("collisionLayer", collisionLayer),
+                cereal::make_nvp("shapeValue", shapeValue));
+            if constexpr (
+                std::is_same_v<Archive, cereal::JSONInputArchive> ||
+                std::is_same_v<Archive, cereal::JSONOutputArchive>)
+                archive(
+                    cereal::make_nvp("active", active),
+                    cereal::make_nvp("isStatic", isStatic),
+                    cereal::make_nvp("debugDraw", debugDraw));
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
             std::uint8_t shapeValue = 0;
-            archive(cereal::make_nvp("localBoundingBox", localBoundingBox), cereal::make_nvp("worldBoundingBox", worldBoundingBox), cereal::make_nvp("collisionLayer", collisionLayer), cereal::make_nvp("shapeValue", shapeValue));
-            if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
-                archive(cereal::make_nvp("active", active), cereal::make_nvp("isStatic", isStatic), cereal::make_nvp("debugDraw", debugDraw));
+            archive(
+                cereal::make_nvp("localBoundingBox", localBoundingBox),
+                cereal::make_nvp("worldBoundingBox", worldBoundingBox),
+                cereal::make_nvp("collisionLayer", collisionLayer),
+                cereal::make_nvp("shapeValue", shapeValue));
+            if constexpr (
+                std::is_same_v<Archive, cereal::JSONInputArchive> ||
+                std::is_same_v<Archive, cereal::JSONOutputArchive>)
+                archive(
+                    cereal::make_nvp("active", active),
+                    cereal::make_nvp("isStatic", isStatic),
+                    cereal::make_nvp("debugDraw", debugDraw));
             shape = static_cast<ColliderShape>(shapeValue);
             collisionLayer.layerName = GetCollisionLayerName(collisionLayer.bit);
         }

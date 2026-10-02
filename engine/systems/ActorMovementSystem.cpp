@@ -122,7 +122,8 @@ namespace sage
             PruneMoveCommands(entity);
             moveable.onPathChanged.Publish(entity);
         }
-        else releaseStoppedFootprint(entity);
+        else
+            releaseStoppedFootprint(entity);
         moveable.path.insert(moveable.path.end(), route.begin(), route.end());
         moveable.needsStopPosition = false;
         moveable.notifyOnArrival = true;
@@ -168,7 +169,7 @@ namespace sage
             return;
         }
 
-        (void)SetRoute(entity, result.route);
+        static_cast<void>(SetRoute(entity, result.route));
         // A reroute while already walking should steer into the new path;
         // only an actor starting from rest must turn in place first.
         moveable.isWalking = wasWalking;
@@ -189,18 +190,17 @@ namespace sage
             if (actor.path.empty()) continue;
             for (auto p : actor.path)
             {
-                DrawCube({p.x, p.y + 1, p.z}, 1, 1, 1, sage::colors::GREEN_COLOR);
+                DrawCube({.x = p.x, .y = p.y + 1, .z = p.z}, 1, 1, 1, sage::colors::GREEN_COLOR);
             }
         }
     }
 
-    bool ActorMovementSystem::hasReachedNextPoint(
-        const sgTransform& transform, const MoveableActor& moveableActor)
+    bool ActorMovementSystem::hasReachedNextPoint(const sgTransform& transform, const MoveableActor& moveableActor)
     {
         // Arrival tolerance is horizontal; grid height is applied when snapping to the waypoint.
         return Vector2Distance(
-                   {moveableActor.path.front().x, moveableActor.path.front().z},
-                   {transform.GetWorldPos().x, transform.GetWorldPos().z}) < 0.5f;
+                   {.x = moveableActor.path.front().x, .y = moveableActor.path.front().z},
+                   {.x = transform.GetWorldPos().x, .y = transform.GetWorldPos().z}) < 0.5f;
     }
 
     void ActorMovementSystem::handlePointReached(entt::entity entity, MoveableActor& moveableActor)
@@ -208,12 +208,13 @@ namespace sage
         GridSquare index{};
         Vector3 position{};
         if (!navigationGrid->WorldToGridSpace(moveableActor.path.front(), index) ||
-            !navigationGrid->GridToWorldSpace(index, position)) return;
+            !navigationGrid->GridToWorldSpace(index, position))
+            return;
 
         if (moveableActor.path.size() == 1 && registry->all_of<Collideable>(entity) &&
             !claimStoppingPosition(entity, position))
         {
-            (void)rerouteToStoppingPosition(entity, moveableActor, moveableActor.path.back());
+            static_cast<void>(rerouteToStoppingPosition(entity, moveableActor, moveableActor.path.back()));
             return;
         }
         setActorPosition(entity, registry->get<sgTransform>(entity), position);
@@ -230,7 +231,8 @@ namespace sage
     {
         transform.position.world = position;
         if (auto* collider = registry->try_get<Collideable>(entity))
-            collider->worldBoundingBox = TransformAabbNoRotation(collider->localBoundingBox, transform.GetMatrixNoRot());
+            collider->worldBoundingBox =
+                TransformAabbNoRotation(collider->localBoundingBox, transform.GetMatrixNoRot());
     }
 
     void ActorMovementSystem::releaseStoppedFootprint(const entt::entity entity) const
@@ -248,7 +250,8 @@ namespace sage
         const auto& collider = registry->get<Collideable>(entity);
         const auto bounds = TransformAabbNoRotation(collider.localBoundingBox, transform.GetMatrixNoRot());
         const auto offset = Vector3Subtract(position, transform.GetWorldPos());
-        const BoundingBox stoppedBounds{Vector3Add(bounds.min, offset), Vector3Add(bounds.max, offset)};
+        const BoundingBox stoppedBounds{
+            .min = Vector3Add(bounds.min, offset), .max = Vector3Add(bounds.max, offset)};
         releaseStoppedFootprint(entity);
         navigationGrid->MarkSquareAreaOccupied(stoppedBounds, true, entity);
         stoppedFootprints[entity] = stoppedBounds;
@@ -290,9 +293,9 @@ namespace sage
         Renderable* renderable = registry->try_get<Renderable>(entity);
         if (renderable != nullptr)
         {
-            if (const auto* model = renderable->GetModel(); model != nullptr)
+            if (const auto model = renderable->GetModel(); model.has_value())
             {
-                localBounds = model->CalcLocalBoundingBox();
+                localBounds = model->get().CalcLocalBoundingBox();
                 hasBounds = true;
             }
         }
@@ -307,9 +310,9 @@ namespace sage
         if (!hasBounds) return;
 
         const Vector3 localPivot = {
-            (localBounds.min.x + localBounds.max.x) * 0.5f,
-            0.0f,
-            (localBounds.min.z + localBounds.max.z) * 0.5f};
+            .x = (localBounds.min.x + localBounds.max.x) * 0.5f,
+            .y = 0.0f,
+            .z = (localBounds.min.z + localBounds.max.z) * 0.5f};
         if (fabsf(localPivot.x) < 0.0001f && fabsf(localPivot.z) < 0.0001f) return;
 
         // Move the entity origin to the existing world-space pivot, then offset
@@ -317,18 +320,15 @@ namespace sage
         // not visibly move, but subsequent yaw now occurs around its centre.
         const Vector3 pivotWorld = Vector3Transform(localPivot, transform.GetMatrix());
         const Vector3 currentPosition = transform.GetWorldPos();
-        transform.position.world = {
-            pivotWorld.x,
-            currentPosition.y,
-            pivotWorld.z};
+        transform.position.world = {.x = pivotWorld.x, .y = currentPosition.y, .z = pivotWorld.z};
 
         const Matrix pivotOffset = MatrixTranslate(-localPivot.x, 0.0f, -localPivot.z);
         if (renderable != nullptr)
         {
-            if (auto* model = renderable->GetModel(); model != nullptr)
+            if (auto model = renderable->GetModel(); model.has_value())
             {
-                const Matrix centeredTransform = MatrixMultiply(model->GetTransform(), pivotOffset);
-                model->SetTransform(centeredTransform);
+                const Matrix centeredTransform = MatrixMultiply(model->get().GetTransform(), pivotOffset);
+                model->get().SetTransform(centeredTransform);
                 renderable->initialTransform = centeredTransform;
             }
         }
@@ -355,14 +355,14 @@ namespace sage
             constexpr float facingTolerance = 0.01f;
             if (fabsf(delta) <= facingTolerance)
             {
-                transform.rotation.world = {currentRotation.x, target, currentRotation.z};
+                transform.rotation.world = {.x = currentRotation.x, .y = target, .z = currentRotation.z};
                 return true;
             }
 
             const float maxStep = moveableActor.turnSpeed * deltaTime;
             angle = currentRotation.y + Clamp(delta, -maxStep, maxStep);
         }
-        transform.rotation.world = {currentRotation.x, angle, currentRotation.z};
+        transform.rotation.world = {.x = currentRotation.x, .y = angle, .z = currentRotation.z};
         // If this update contained any gradual rotation, remain stationary until
         // the following update observes that the actor is fully facing the path.
         return moveableActor.turnSpeed <= 0.0f;
@@ -386,12 +386,14 @@ namespace sage
         const Vector3 currentPosition = transform.GetWorldPos();
         const Vector3 nextPoint = moveableActor.path.front();
         const float distance = Vector2Distance(
-            {currentPosition.x, currentPosition.z}, {nextPoint.x, nextPoint.z});
+            {.x = currentPosition.x, .y = currentPosition.z}, {.x = nextPoint.x, .y = nextPoint.z});
         const float step = std::min(moveableActor.movementSpeed * speed, distance);
-        setActorPosition(entity, transform, {
-            currentPosition.x + transform.direction.x * step,
-            gridSquare->heightMap.GetHeight(),
-            currentPosition.z + transform.direction.z * step});
+        setActorPosition(
+            entity,
+            transform,
+            {.x = currentPosition.x + transform.direction.x * step,
+             .y = gridSquare->heightMap.GetHeight(),
+             .z = currentPosition.z + transform.direction.z * step});
     }
 
     void ActorMovementSystem::updateActor(
@@ -413,7 +415,7 @@ namespace sage
 
         if (hasCollider && !navigationGrid->CheckEntityAreaUnoccupied(entity, moveableActor.path.front(), true))
         {
-            (void)rerouteToStoppingPosition(entity, moveableActor, moveableActor.GetDestination());
+            static_cast<void>(rerouteToStoppingPosition(entity, moveableActor, moveableActor.GetDestination()));
             return;
         }
 
@@ -433,7 +435,8 @@ namespace sage
         for (auto [entity, actor, transform, collider] : fullView.each())
         {
             centerTurnPivot(entity, actor, transform);
-            collider.worldBoundingBox = TransformAabbNoRotation(collider.localBoundingBox, transform.GetMatrixNoRot());
+            collider.worldBoundingBox =
+                TransformAabbNoRotation(collider.localBoundingBox, transform.GetMatrixNoRot());
             actor.stopRetryTime = std::max(0.0f, actor.stopRetryTime - deltaTime);
         }
 
@@ -451,7 +454,8 @@ namespace sage
                 navigationGrid->MarkSquareAreaOccupied(it->second, false, entity);
                 it = stoppedFootprints.erase(it);
             }
-            else ++it;
+            else
+                ++it;
         }
 
         for (auto [entity, actor, transform, collider] : fullView.each())

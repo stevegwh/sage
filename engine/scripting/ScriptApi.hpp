@@ -14,6 +14,7 @@
 #include <functional>
 #include <initializer_list>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -68,20 +69,21 @@ namespace sage
         using Plain = std::remove_cv_t<std::remove_reference_t<T>>;
 
         template <class T>
-        constexpr bool IsScriptValue =
+        constexpr bool IS_SCRIPT_VALUE =
             std::same_as<Plain<T>, bool> || std::same_as<Plain<T>, int> || std::same_as<Plain<T>, unsigned int> ||
             std::same_as<Plain<T>, float> || std::same_as<Plain<T>, std::string> ||
             std::same_as<Plain<T>, std::string_view> || std::same_as<Plain<T>, const char*> ||
             std::same_as<Plain<T>, Vector3> || std::same_as<Plain<T>, entt::entity> || std::is_enum_v<Plain<T>>;
 
         template <class T>
-        constexpr bool IsScriptReturnValue = IsScriptValue<T> || std::same_as<Plain<T>, std::vector<entt::entity>>;
+        constexpr bool IS_SCRIPT_RETURN_VALUE =
+            IS_SCRIPT_VALUE<T> || std::same_as<Plain<T>, std::vector<entt::entity>>;
 
         template <class T>
         constexpr ScriptValueType ScriptValueTypeOf()
         {
             using Value = Plain<T>;
-            static_assert(IsScriptReturnValue<Value>, "This C++ type is not supported by the script API");
+            static_assert(IS_SCRIPT_RETURN_VALUE<Value>, "This C++ type is not supported by the script API");
             if constexpr (std::same_as<Value, bool>) return ScriptValueType::Boolean;
             if constexpr (std::same_as<Value, entt::entity>) return ScriptValueType::Entity;
             if constexpr (std::same_as<Value, std::vector<entt::entity>>) return ScriptValueType::EntityArray;
@@ -100,7 +102,7 @@ namespace sage
         bool EncodeScriptValue(ScriptValue& destination, const T& source)
         {
             using Value = Plain<T>;
-            static_assert(IsScriptReturnValue<Value>, "This C++ type is not supported by the script API");
+            static_assert(IS_SCRIPT_RETURN_VALUE<Value>, "This C++ type is not supported by the script API");
             destination.type = ScriptValueTypeOf<Value>();
             if constexpr (std::same_as<Value, bool>)
                 destination.integer = source ? 1 : 0;
@@ -136,7 +138,7 @@ namespace sage
                     return source;
                 }();
                 if (destination.text == nullptr || destination.textCapacity <= text.size()) return false;
-                std::copy(text.begin(), text.end(), destination.text);
+                std::ranges::copy(text, destination.text);
                 destination.text[text.size()] = '\0';
             }
             return true;
@@ -168,7 +170,7 @@ namespace sage
         bool DecodeScriptValue(const ScriptValue& source, T& destination)
         {
             using Value = Plain<T>;
-            static_assert(IsScriptValue<Value>, "This C++ type is not supported by the script API");
+            static_assert(IS_SCRIPT_VALUE<Value>, "This C++ type is not supported by the script API");
             if (source.type != ScriptValueTypeOf<Value>()) return false;
             if constexpr (std::same_as<Value, bool>)
                 destination = source.integer != 0;
@@ -179,7 +181,7 @@ namespace sage
             else if constexpr (std::same_as<Value, float>)
                 destination = source.x;
             else if constexpr (std::same_as<Value, Vector3>)
-                destination = Vector3{source.x, source.y, source.z};
+                destination = Vector3{.x = source.x, .y = source.y, .z = source.z};
             else if constexpr (std::same_as<Value, entt::entity>)
                 destination = static_cast<entt::entity>(static_cast<std::uint32_t>(source.integer));
             else if constexpr (std::is_enum_v<Value>)
@@ -216,6 +218,9 @@ namespace sage
         bool DecodeArguments(
             const std::span<const ScriptValue> source, Tuple& destination, std::index_sequence<Index...>)
         {
+            if (source.size() != sizeof...(Index)) return false;
+            // C++20 span has no at(); the argument count above validates every pack index.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             return (DecodeScriptValue(source[Index], std::get<Index>(destination)) && ...);
         }
     } // namespace detail
@@ -230,6 +235,11 @@ namespace sage
         class ComponentObserver
         {
           public:
+            ComponentObserver() = default;
+            ComponentObserver(const ComponentObserver&) = default;
+            ComponentObserver& operator=(const ComponentObserver&) = default;
+            ComponentObserver(ComponentObserver&&) = default;
+            ComponentObserver& operator=(ComponentObserver&&) = default;
             virtual ~ComponentObserver() = default;
         };
 
@@ -309,9 +319,9 @@ namespace sage
         template <class T>
         class ComponentObserverFor;
 
-        [[nodiscard]] Component* findComponent(Id componentId);
-        [[nodiscard]] const Component* findComponent(Id componentId) const;
-        [[nodiscard]] const System* findSystem(Id systemId) const;
+        [[nodiscard]] std::optional<std::reference_wrapper<Component>> findComponent(Id componentId);
+        [[nodiscard]] std::optional<std::reference_wrapper<const Component>> findComponent(Id componentId) const;
+        [[nodiscard]] std::optional<std::reference_wrapper<const System>> findSystem(Id systemId) const;
 
         template <class T>
         [[nodiscard]] std::string managedTypeName() const
@@ -445,6 +455,10 @@ namespace sage
         {
             registry->on_destroy<T>().template connect<&ComponentObserverFor::onDestroyed>(*this);
         }
+        ComponentObserverFor(const ComponentObserverFor&) = delete;
+        ComponentObserverFor& operator=(const ComponentObserverFor&) = delete;
+        ComponentObserverFor(ComponentObserverFor&&) = delete;
+        ComponentObserverFor& operator=(ComponentObserverFor&&) = delete;
 
         ~ComponentObserverFor() override
         {
@@ -455,8 +469,8 @@ namespace sage
     template <class T>
     class ScriptSystemApiBinder
     {
-        ScriptApiRegistry& api;
-        ScriptApiRegistry::System& system;
+        std::reference_wrapper<ScriptApiRegistry> api;
+        std::reference_wrapper<ScriptApiRegistry::System> system;
 
       public:
         ScriptSystemApiBinder(ScriptApiRegistry& owner, ScriptApiRegistry::System& definition)
@@ -472,8 +486,8 @@ namespace sage
         {
             using Return = detail::Plain<Result>;
             using Arguments = std::tuple<detail::Plain<Args>...>;
-            static_assert(std::is_void_v<Return> || detail::IsScriptReturnValue<Return>);
-            static_assert((detail::IsScriptValue<Args> && ...));
+            static_assert(std::is_void_v<Return> || detail::IS_SCRIPT_RETURN_VALUE<Return>);
+            static_assert((detail::IS_SCRIPT_VALUE<Args> && ...));
 
             std::vector<std::string> names;
             names.reserve(parameterNames.size());
@@ -484,17 +498,19 @@ namespace sage
             parameters.reserve(sizeof...(Args));
             [&]<std::size_t... Index>(std::index_sequence<Index...>) {
                 (parameters.push_back(
-                     {.name = Index < names.size() ? names[Index] : "arg" + std::to_string(Index),
+                     {.name = Index < names.size() ? names.at(Index) : "arg" + std::to_string(Index),
                       .type = detail::ScriptValueTypeOf<std::tuple_element_t<Index, Arguments>>(),
-                      .managedType = api.template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
+                      .managedType =
+                          api.get().template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
                  ...);
             }(std::index_sequence_for<Args...>{});
 
-            std::string signature = system.managedNamespace + "." + system.managedName + "." + name + "(";
+            std::string signature =
+                system.get().managedNamespace + "." + system.get().managedName + "." + name + "(";
             for (std::size_t index = 0; index < parameters.size(); ++index)
             {
                 if (index != 0) signature += ",";
-                signature += parameters[index].managedType;
+                signature += parameters.at(index).managedType;
             }
             signature += ")";
 
@@ -508,10 +524,10 @@ namespace sage
                 if constexpr (std::is_void_v<Return>)
                     return std::string{"void"};
                 else
-                    return api.template managedTypeName<Return>();
+                    return api.get().template managedTypeName<Return>();
             }();
 
-            system.methods.push_back(
+            system.get().methods.push_back(
                 {.id = ScriptApiRegistry::MakeId(signature),
                  .name = std::move(name),
                  .returnType = returnType,
@@ -545,7 +561,7 @@ namespace sage
         void event(std::string name, Event<Args...>& (*getEvent)(entt::registry&))
         {
             static_assert(sizeof...(Args) <= 2, "Managed system events currently support up to two values");
-            static_assert((detail::IsScriptValue<Args> && ...));
+            static_assert((detail::IS_SCRIPT_VALUE<Args> && ...));
 
             std::vector<ScriptApiRegistry::Parameter> parameters;
             parameters.reserve(sizeof...(Args));
@@ -553,12 +569,12 @@ namespace sage
                 (parameters.push_back(
                      {.name = "arg" + std::to_string(Index),
                       .type = detail::ScriptValueTypeOf<Args>(),
-                      .managedType = api.template managedTypeName<Args>()}),
+                      .managedType = api.get().template managedTypeName<Args>()}),
                  ...);
             }(std::index_sequence_for<Args...>{});
 
-            const auto qualifiedName = system.managedNamespace + "." + system.managedName + "." + name;
-            system.events.push_back(
+            const auto qualifiedName = system.get().managedNamespace + "." + system.get().managedName + "." + name;
+            system.get().events.push_back(
                 {.id = ScriptApiRegistry::MakeId(qualifiedName),
                  .name = std::move(name),
                  .parameters = std::move(parameters),
@@ -567,20 +583,19 @@ namespace sage
                                   entt::entity,
                                   ScriptApiRegistry::EventCallback callback,
                                   Subscription& subscription) {
-                     subscription = getEvent(source).Subscribe(
-                         [callback = std::move(callback)](Args... args) {
-                             std::array<ScriptValue, sizeof...(Args)> values{};
-                             std::array<std::string, sizeof...(Args)> textStorage{};
-                             std::size_t index = 0;
-                             const auto encode = [&](const auto& argument) {
-                                 const bool result = detail::EncodeEventValue(
-                                     values[index], textStorage[index], argument);
-                                 ++index;
-                                 return result;
-                             };
-                             if ((encode(args) && ...))
-                                 callback(std::span<const ScriptValue>{values.data(), values.size()});
-                         });
+                     subscription = getEvent(source).Subscribe([callback = std::move(callback)](Args... args) {
+                         std::array<ScriptValue, sizeof...(Args)> values{};
+                         std::array<std::string, sizeof...(Args)> textStorage{};
+                         std::size_t index = 0;
+                         const auto encode = [&](const auto& argument) {
+                             const bool result =
+                                 detail::EncodeEventValue(values.at(index), textStorage.at(index), argument);
+                             ++index;
+                             return result;
+                         };
+                         if ((encode(args) && ...))
+                             callback(std::span<const ScriptValue>{values.data(), values.size()});
+                     });
                      return subscription.IsActive();
                  }});
         }
@@ -589,19 +604,20 @@ namespace sage
     template <class T>
     class ScriptApiBinder
     {
-        ScriptApiRegistry& api;
-        ScriptApiRegistry::Component& component;
+        std::reference_wrapper<ScriptApiRegistry> api;
+        std::reference_wrapper<ScriptApiRegistry::Component> component;
 
         template <class Value, class Getter, class Setter>
         void addProperty(std::string name, Getter getter, Setter setter, const bool writable)
         {
-            static_assert(detail::IsScriptValue<Value>);
-            const auto qualifiedName = component.managedNamespace + "." + component.managedName + "." + name;
-            component.properties.push_back(
+            static_assert(detail::IS_SCRIPT_VALUE<Value>);
+            const auto qualifiedName =
+                component.get().managedNamespace + "." + component.get().managedName + "." + name;
+            component.get().properties.push_back(
                 {.id = ScriptApiRegistry::MakeId(qualifiedName),
                  .name = std::move(name),
                  .type = detail::ScriptValueTypeOf<Value>(),
-                 .managedType = api.template managedTypeName<Value>(),
+                 .managedType = api.get().template managedTypeName<Value>(),
                  .writable = writable,
                  .get =
                      [getter = std::move(getter)](
@@ -631,8 +647,8 @@ namespace sage
             using Traits = detail::MemberFunction<Method>;
             using Arguments = typename Traits::Arguments;
             using Return = detail::Plain<typename Traits::Return>;
-            static_assert(std::is_void_v<Return> || detail::IsScriptReturnValue<Return>);
-            static_assert((detail::IsScriptValue<std::tuple_element_t<Index, Arguments>> && ...));
+            static_assert(std::is_void_v<Return> || detail::IS_SCRIPT_RETURN_VALUE<Return>);
+            static_assert((detail::IS_SCRIPT_VALUE<std::tuple_element_t<Index, Arguments>> && ...));
 
             std::vector<std::string> names;
             names.reserve(parameterNames.size());
@@ -642,16 +658,17 @@ namespace sage
             std::vector<ScriptApiRegistry::Parameter> parameters;
             parameters.reserve(sizeof...(Index));
             (parameters.push_back(
-                 {.name = Index < names.size() ? names[Index] : "arg" + std::to_string(Index),
+                 {.name = Index < names.size() ? names.at(Index) : "arg" + std::to_string(Index),
                   .type = detail::ScriptValueTypeOf<std::tuple_element_t<Index, Arguments>>(),
-                  .managedType = api.template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
+                  .managedType = api.get().template managedTypeName<std::tuple_element_t<Index, Arguments>>()}),
              ...);
 
-            std::string signature = component.managedNamespace + "." + component.managedName + "." + name + "(";
+            std::string signature =
+                component.get().managedNamespace + "." + component.get().managedName + "." + name + "(";
             for (std::size_t index = 0; index < parameters.size(); ++index)
             {
                 if (index != 0) signature += ",";
-                signature += parameters[index].managedType;
+                signature += parameters.at(index).managedType;
             }
             signature += ")";
 
@@ -665,10 +682,10 @@ namespace sage
                 if constexpr (std::is_void_v<Return>)
                     return std::string{"void"};
                 else
-                    return api.template managedTypeName<Return>();
+                    return api.get().template managedTypeName<Return>();
             }();
 
-            component.methods.push_back(
+            component.get().methods.push_back(
                 {.id = ScriptApiRegistry::MakeId(signature),
                  .name = std::move(name),
                  .returnType = returnType,
@@ -764,7 +781,7 @@ namespace sage
         void event(std::string name, Event<Args...> T::* member)
         {
             static_assert(sizeof...(Args) <= 2, "Managed component events currently support up to two values");
-            static_assert((detail::IsScriptValue<Args> && ...));
+            static_assert((detail::IS_SCRIPT_VALUE<Args> && ...));
 
             std::vector<ScriptApiRegistry::Parameter> parameters;
             parameters.reserve(sizeof...(Args));
@@ -772,12 +789,13 @@ namespace sage
                 (parameters.push_back(
                      {.name = "arg" + std::to_string(Index),
                       .type = detail::ScriptValueTypeOf<Args>(),
-                      .managedType = api.template managedTypeName<Args>()}),
+                      .managedType = api.get().template managedTypeName<Args>()}),
                  ...);
             }(std::index_sequence_for<Args...>{});
 
-            const auto qualifiedName = component.managedNamespace + "." + component.managedName + "." + name;
-            component.events.push_back(
+            const auto qualifiedName =
+                component.get().managedNamespace + "." + component.get().managedName + "." + name;
+            component.get().events.push_back(
                 {.id = ScriptApiRegistry::MakeId(qualifiedName),
                  .name = std::move(name),
                  .parameters = std::move(parameters),
@@ -788,20 +806,19 @@ namespace sage
                                   Subscription& subscription) {
                      auto* value = source.template try_get<T>(entity);
                      if (value == nullptr) return false;
-                     subscription = (value->*member).Subscribe(
-                         [callback = std::move(callback)](Args... args) {
-                             std::array<ScriptValue, sizeof...(Args)> values{};
-                             std::array<std::string, sizeof...(Args)> textStorage{};
-                             std::size_t index = 0;
-                             const auto encode = [&](const auto& argument) {
-                                 const bool result = detail::EncodeEventValue(
-                                     values[index], textStorage[index], argument);
-                                 ++index;
-                                 return result;
-                             };
-                             if ((encode(args) && ...))
-                                 callback(std::span<const ScriptValue>{values.data(), values.size()});
-                         });
+                     subscription = (value->*member).Subscribe([callback = std::move(callback)](Args... args) {
+                         std::array<ScriptValue, sizeof...(Args)> values{};
+                         std::array<std::string, sizeof...(Args)> textStorage{};
+                         std::size_t index = 0;
+                         const auto encode = [&](const auto& argument) {
+                             const bool result =
+                                 detail::EncodeEventValue(values.at(index), textStorage.at(index), argument);
+                             ++index;
+                             return result;
+                         };
+                         if ((encode(args) && ...))
+                             callback(std::span<const ScriptValue>{values.data(), values.size()});
+                     });
                      return subscription.IsActive();
                  }});
         }
@@ -816,15 +833,17 @@ namespace sage
             {.id = MakeId(qualifiedName),
              .managedNamespace = std::move(managedNamespace),
              .managedName = std::move(managedName),
-             .has = [](const entt::registry& source, const entt::entity entity) {
-                 return source.valid(entity) && source.template all_of<T>(entity);
-             },
+             .has =
+                 [](const entt::registry& source, const entt::entity entity) {
+                     return source.valid(entity) && source.template all_of<T>(entity);
+                 },
              .storage = [](const entt::registry& source) -> const entt::sparse_set* {
                  return source.template storage<T>();
              },
-             .observeDestroyed = [](entt::registry& source, const Id id, ComponentDestroyed callback) {
-                 return std::make_unique<ComponentObserverFor<T>>(source, id, std::move(callback));
-             }});
+             .observeDestroyed =
+                 [](entt::registry& source, const Id id, ComponentDestroyed callback) {
+                     return std::make_unique<ComponentObserverFor<T>>(source, id, std::move(callback));
+                 }});
         ScriptApiBinder<T> binder{*this, components.back()};
         T::define_script_api(binder);
     }

@@ -3,6 +3,7 @@
 #include "../components/Renderable.hpp"
 #include "../components/sgTransform.hpp"
 #include "engine/slib.hpp"
+#include <utility>
 
 #include "entt/entt.hpp"
 #include "raylib.h"
@@ -30,7 +31,7 @@ namespace sage
         {
             assert(registry->valid(entity));
             assert(registry->all_of<sgTransform>(entity));
-            apply(registry->get<sgTransform>(entity));
+            std::forward<Apply>(apply)(registry->get<sgTransform>(entity));
             if constexpr (World)
                 syncLocalFromWorld(entity);
             else
@@ -68,7 +69,7 @@ namespace sage
                 const auto& renderable = registry->get<Renderable>(entity);
                 auto model = renderable.GetModel();
                 if (!model) continue;
-                const auto& key = StripPath(model->GetKey());
+                const auto& key = StripPath(model->get().GetKey());
                 if (key == meshKey) return entity;
             }
             return entt::null;

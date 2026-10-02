@@ -57,9 +57,7 @@ namespace sage::editor
     inline bool SetLeftDockWidth(EditorDockLayout& layout, const float width)
     {
         const float clamped = std::clamp(
-            width,
-            EDITOR_LEFT_DOCK_MIN_WIDTH,
-            std::min(EDITOR_LEFT_DOCK_MAX_WIDTH, MaxLeftDockWidth(layout)));
+            width, EDITOR_LEFT_DOCK_MIN_WIDTH, std::min(EDITOR_LEFT_DOCK_MAX_WIDTH, MaxLeftDockWidth(layout)));
         if (std::fabs(layout.leftDockWidth - clamped) < 0.01f) return false;
         layout.leftDockWidth = clamped;
         return true;
@@ -95,16 +93,15 @@ namespace sage::editor
 
     inline Rectangle CalculateEditor16By9Rect(const float x, const float y, const float width, const float height)
     {
-        const float maxScale =
-            std::min(width / EDITOR_SCENE_ASPECT_WIDTH, height / EDITOR_SCENE_ASPECT_HEIGHT);
+        const float maxScale = std::min(width / EDITOR_SCENE_ASPECT_WIDTH, height / EDITOR_SCENE_ASPECT_HEIGHT);
         const float scale = std::max(1.0f, std::floor(maxScale));
         const float viewportWidth = EDITOR_SCENE_ASPECT_WIDTH * scale;
         const float viewportHeight = EDITOR_SCENE_ASPECT_HEIGHT * scale;
         return {
-            x + (width - viewportWidth) * 0.5f,
-            y + (height - viewportHeight) * 0.5f,
-            viewportWidth,
-            viewportHeight};
+            .x = x + (width - viewportWidth) * 0.5f,
+            .y = y + (height - viewportHeight) * 0.5f,
+            .width = viewportWidth,
+            .height = viewportHeight};
     }
 
     inline Rectangle CalculateEditorSceneViewport(

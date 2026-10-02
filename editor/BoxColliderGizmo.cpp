@@ -27,17 +27,17 @@ namespace sage::editor
             switch (face)
             {
             case BoxColliderGizmo::Face::MinX:
-                return {-1.0f, 0.0f, 0.0f};
+                return {.x = -1.0f, .y = 0.0f, .z = 0.0f};
             case BoxColliderGizmo::Face::MaxX:
-                return {1.0f, 0.0f, 0.0f};
+                return {.x = 1.0f, .y = 0.0f, .z = 0.0f};
             case BoxColliderGizmo::Face::MinY:
-                return {0.0f, -1.0f, 0.0f};
+                return {.x = 0.0f, .y = -1.0f, .z = 0.0f};
             case BoxColliderGizmo::Face::MaxY:
-                return {0.0f, 1.0f, 0.0f};
+                return {.x = 0.0f, .y = 1.0f, .z = 0.0f};
             case BoxColliderGizmo::Face::MinZ:
-                return {0.0f, 0.0f, -1.0f};
+                return {.x = 0.0f, .y = 0.0f, .z = -1.0f};
             case BoxColliderGizmo::Face::MaxZ:
-                return {0.0f, 0.0f, 1.0f};
+                return {.x = 0.0f, .y = 0.0f, .z = 1.0f};
             case BoxColliderGizmo::Face::None:
                 return Vector3Zero();
             }
@@ -51,17 +51,17 @@ namespace sage::editor
             switch (face)
             {
             case BoxColliderGizmo::Face::MinX:
-                return {box.min.x, center.y, center.z};
+                return {.x = box.min.x, .y = center.y, .z = center.z};
             case BoxColliderGizmo::Face::MaxX:
-                return {box.max.x, center.y, center.z};
+                return {.x = box.max.x, .y = center.y, .z = center.z};
             case BoxColliderGizmo::Face::MinY:
-                return {center.x, box.min.y, center.z};
+                return {.x = center.x, .y = box.min.y, .z = center.z};
             case BoxColliderGizmo::Face::MaxY:
-                return {center.x, box.max.y, center.z};
+                return {.x = center.x, .y = box.max.y, .z = center.z};
             case BoxColliderGizmo::Face::MinZ:
-                return {center.x, center.y, box.min.z};
+                return {.x = center.x, .y = center.y, .z = box.min.z};
             case BoxColliderGizmo::Face::MaxZ:
-                return {center.x, center.y, box.max.z};
+                return {.x = center.x, .y = center.y, .z = box.max.z};
             case BoxColliderGizmo::Face::None:
                 return center;
             }
@@ -93,8 +93,8 @@ namespace sage::editor
         float closestDistance = std::numeric_limits<float>::max();
         for (const auto face : ALL_FACES)
         {
-            const float distance = Vector2Distance(
-                mousePosition, WorldToScreen(camera, viewport, FaceCenter(worldBox, face)));
+            const float distance =
+                Vector2Distance(mousePosition, WorldToScreen(camera, viewport, FaceCenter(worldBox, face)));
             if (distance < closestDistance)
             {
                 closestDistance = distance;
@@ -115,10 +115,7 @@ namespace sage::editor
     }
 
     BoxColliderGizmo::DragSample BoxColliderGizmo::SampleDrag(
-        const Camera3D& camera,
-        const Vector2 viewport,
-        const BoundingBox& worldBox,
-        const Vector2 mousePosition)
+        const Camera3D& camera, const Vector2 viewport, const BoundingBox& worldBox, const Vector2 mousePosition)
     {
         if (!drag.active) return {};
 
@@ -132,8 +129,8 @@ namespace sage::editor
         const Vector3 faceCenter = FaceCenter(worldBox, drag.face);
         const Vector3 normal = FaceNormal(drag.face);
         const Vector2 start = WorldToScreen(camera, viewport, faceCenter);
-        const Vector2 end = WorldToScreen(
-            camera, viewport, Vector3Add(faceCenter, Vector3Scale(normal, NORMAL_REFERENCE_LENGTH)));
+        const Vector2 end =
+            WorldToScreen(camera, viewport, Vector3Add(faceCenter, Vector3Scale(normal, NORMAL_REFERENCE_LENGTH)));
         const Vector2 screenNormal = Vector2Subtract(end, start);
         const float screenLength = Vector2Length(screenNormal);
         if (screenLength <= 0.0001f) return {};
@@ -151,7 +148,8 @@ namespace sage::editor
         {
             const Vector3 center = FaceCenter(worldBox, face);
             const float radius = EditGizmo::SizeForCamera(camera.position, center, viewportScale) * 0.06f;
-            const Color color = drag.active && drag.face == face ? sage::colors::GOLD_COLOR : sage::colors::SKY_BLUE_COLOR;
+            const Color color =
+                drag.active && drag.face == face ? sage::colors::GOLD_COLOR : sage::colors::SKY_BLUE_COLOR;
             DrawSphere(center, radius, color);
         }
     }

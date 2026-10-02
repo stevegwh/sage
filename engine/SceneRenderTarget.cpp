@@ -1,8 +1,9 @@
 #include "SceneRenderTarget.hpp"
+#include "engine/MathConstants.hpp"
 #include "Settings.hpp"
 
-#include "rlgl.h"
 #include "raymath.h"
+#include "rlgl.h"
 
 #include <algorithm>
 #include <stdexcept>
@@ -17,12 +18,20 @@ namespace sage
         target.id = rlLoadFramebuffer();
         if (target.id == 0) throw std::runtime_error("Could not create scene framebuffer");
 
-        target.texture = {rlLoadTexture(nullptr, targetWidth, targetHeight,
-                                        PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1),
-                          targetWidth, targetHeight, 1, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
-        target.depth = {rlLoadTextureDepth(targetWidth, targetHeight, false),
-                        targetWidth, targetHeight, 1, 19};
-        rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        target.texture = {
+            .id = rlLoadTexture(nullptr, targetWidth, targetHeight, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1),
+            .width = targetWidth,
+            .height = targetHeight,
+            .mipmaps = 1,
+            .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+        target.depth = {
+            .id = rlLoadTextureDepth(targetWidth, targetHeight, false),
+            .width = targetWidth,
+            .height = targetHeight,
+            .mipmaps = 1,
+            .format = 19};
+        rlFramebufferAttach(
+            target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
         rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
         const bool complete = target.texture.id != 0 && target.depth.id != 0 && rlFramebufferComplete(target.id);
         rlDisableFramebuffer();
@@ -39,16 +48,25 @@ namespace sage
     {
         const float aspect = static_cast<float>(scene.texture.width) / static_cast<float>(scene.texture.height);
         const Matrix projection = camera.projection == CAMERA_ORTHOGRAPHIC
-            ? MatrixOrtho(-camera.fovy * aspect * 0.5, camera.fovy * aspect * 0.5,
-                          -camera.fovy * 0.5, camera.fovy * 0.5,
-                          rlGetCullDistanceNear(), rlGetCullDistanceFar())
-            : MatrixPerspective(camera.fovy * DEG2RAD, aspect,
-                                rlGetCullDistanceNear(), rlGetCullDistanceFar());
+                                      ? MatrixOrtho(
+                                            -camera.fovy * aspect * 0.5,
+                                            camera.fovy * aspect * 0.5,
+                                            -camera.fovy * 0.5,
+                                            camera.fovy * 0.5,
+                                            rlGetCullDistanceNear(),
+                                            rlGetCullDistanceFar())
+                                      : MatrixPerspective(
+                                            camera.fovy * sage::math::DEGREES_TO_RADIANS,
+                                            aspect,
+                                            rlGetCullDistanceNear(),
+                                            rlGetCullDistanceFar());
         const float targetDistance = Vector3Distance(camera.position, camera.target);
-        SetShaderValue(shader, GetShaderLocation(shader, "cameraTargetDistance"), &targetDistance, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(
+            shader, GetShaderLocation(shader, "cameraTargetDistance"), &targetDistance, SHADER_UNIFORM_FLOAT);
         SetShaderValueTexture(shader, GetShaderLocation(shader, "sceneDepth"), scene.depth);
         SetShaderValueMatrix(shader, GetShaderLocation(shader, "sceneProjection"), projection);
-        SetShaderValueMatrix(shader, GetShaderLocation(shader, "inverseSceneProjection"), MatrixInvert(projection));
+        SetShaderValueMatrix(
+            shader, GetShaderLocation(shader, "inverseSceneProjection"), MatrixInvert(projection));
     }
 
     void SetSceneGraphicsUniforms(const Shader shader, const GraphicsSettings& settings)

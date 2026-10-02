@@ -19,7 +19,7 @@ namespace sage::serializer
     {
         class LoadingStreamBuffer final : public std::streambuf
         {
-            const std::function<void()>& updateLoadingScreen;
+            std::reference_wrapper<const std::function<void()>> updateLoadingScreen;
             std::chrono::steady_clock::time_point lastUpdate = std::chrono::steady_clock::now();
 
           public:
@@ -33,10 +33,10 @@ namespace sage::serializer
             std::streamsize xsgetn(char* destination, const std::streamsize count) override
             {
                 const auto read = std::streambuf::xsgetn(destination, count);
-                if (updateLoadingScreen &&
+                if (updateLoadingScreen.get() &&
                     std::chrono::steady_clock::now() - lastUpdate >= std::chrono::milliseconds(50))
                 {
-                    updateLoadingScreen();
+                    updateLoadingScreen.get()();
                     lastUpdate = std::chrono::steady_clock::now();
                 }
                 return read;

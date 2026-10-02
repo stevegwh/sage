@@ -39,8 +39,10 @@ namespace sage
 
     [[nodiscard]] inline std::string_view TrimSceneTag(std::string_view tag)
     {
-        while (!tag.empty() && IsSceneTagSpace(tag.front())) tag.remove_prefix(1);
-        while (!tag.empty() && IsSceneTagSpace(tag.back())) tag.remove_suffix(1);
+        while (!tag.empty() && IsSceneTagSpace(tag.front()))
+            tag.remove_prefix(1);
+        while (!tag.empty() && IsSceneTagSpace(tag.back()))
+            tag.remove_suffix(1);
         return tag;
     }
 
@@ -57,7 +59,7 @@ namespace sage
         {
             const auto separator = remaining.find(',');
             const auto tag = TrimSceneTag(remaining.substr(0, separator));
-            if (!tag.empty()) func(tag);
+            if (!tag.empty()) std::forward<Func>(func)(tag);
 
             if (separator == std::string_view::npos) break;
             remaining.remove_prefix(separator + 1);

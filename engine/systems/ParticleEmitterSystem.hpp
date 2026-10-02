@@ -2,6 +2,7 @@
 
 #include "engine/ParticleSystem.hpp"
 #include "entt/entt.hpp"
+#include <functional>
 
 #include <memory>
 #include <string>
@@ -27,11 +28,13 @@ namespace sage
             }
         };
 
-        entt::registry& registry;
+        std::reference_wrapper<entt::registry> registry;
         std::unordered_map<entt::entity, Instance> instances;
 
       public:
-        explicit ParticleEmitterSystem(entt::registry& registry) : registry(registry) {}
+        explicit ParticleEmitterSystem(entt::registry& registry) : registry(registry)
+        {
+        }
         void Update(float dt);
         void Draw(Camera3D& camera) const;
         void Play(entt::entity entity);

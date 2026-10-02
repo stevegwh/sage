@@ -20,25 +20,21 @@ namespace sage::editor
             return false;
         }
     }
-    bool LoadMap(
-        entt::registry* destination,
-        const char* path,
-        const InspectorRegistry*,
-        const std::function<void()>& updateLoadingScreen)
+    bool LoadMap(entt::registry& destination, const char* path, const std::function<void()>& updateLoadingScreen)
     {
         try
         {
             auto document = content::ReadDocument(path);
             if (json::String(document, "kind") != "map") throw std::runtime_error("Expected a map");
-            const auto result = content::Instantiate(*destination, document, {}, false, updateLoadingScreen);
+            const auto result = content::Instantiate(destination, document, {}, false, updateLoadingScreen);
             for (auto entity : result.entities)
             {
-                destination->emplace<EditorMapEntity>(entity);
-                auto& transform = destination->get<sgTransform>(entity);
+                destination.emplace<EditorMapEntity>(entity);
+                auto& transform = destination.get<sgTransform>(entity);
                 if (editor_layout::IsMapBaseTransform(transform))
                 {
-                    destination->emplace<EditorMapBase>(entity);
-                    if (auto* renderable = destination->try_get<Renderable>(entity)) renderable->active = false;
+                    destination.emplace<EditorMapBase>(entity);
+                    if (auto* renderable = destination.try_get<Renderable>(entity)) renderable->active = false;
                 }
             }
             return true;
@@ -49,22 +45,17 @@ namespace sage::editor
             return false;
         }
     }
-    bool SaveMap(entt::registry& source, const char* path, const InspectorRegistry* components)
+    bool SaveMap(entt::registry& source, const char* path)
     {
-        return SaveMap(source, path, {}, components);
+        return SaveMap(source, path, {});
     }
-    bool SaveMap(
-        entt::registry& source,
-        const char* path,
-        const std::vector<entt::entity>& hierarchyOrder,
-        const InspectorRegistry*)
+    bool SaveMap(entt::registry& source, const char* path, const std::vector<entt::entity>& hierarchyOrder)
     {
         try
         {
             auto entities = hierarchyOrder;
             for (auto entity : source.view<EditorMapEntity>())
-                if (std::find(entities.begin(), entities.end(), entity) == entities.end())
-                    entities.push_back(entity);
+                if (std::ranges::find(entities, entity) == entities.end()) entities.push_back(entity);
             content::WriteDocument(path, content::Capture(source, entities));
             return true;
         }

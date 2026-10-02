@@ -98,13 +98,15 @@ namespace sage
 
     struct CursorTarget
     {
-        std::string cursor{cursors::Regular};
+        std::string cursor{cursors::REGULAR};
         bool allowNavigationClickThrough = true;
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(cereal::make_nvp("cursor", cursor), cereal::make_nvp("allowNavigationClickThrough", allowNavigationClickThrough));
+            archive(
+                cereal::make_nvp("cursor", cursor),
+                cereal::make_nvp("allowNavigationClickThrough", allowNavigationClickThrough));
         }
 
         template <class Inspector>
@@ -112,7 +114,8 @@ namespace sage
         {
             i.template requiresComponent<Collideable>();
             i.cursorDropdown("cursor", "Cursor", cursor);
-            i.field("allow_navigation_click_through", "Allow Navigation Click Through", allowNavigationClickThrough);
+            i.field(
+                "allow_navigation_click_through", "Allow Navigation Click Through", allowNavigationClickThrough);
         }
     };
 } // namespace sage

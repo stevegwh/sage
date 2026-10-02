@@ -42,18 +42,18 @@ namespace sage
         std::string font;
         std::string script;
         std::vector<UIReference> references;
-        Rectangle rectangle{24, 24, 600, 180};
+        Rectangle rectangle{.x = 24, .y = 24, .width = 600, .height = 180};
         Rectangle backgroundSource{};
         float percent = 0; // Zero means share the remaining space.
         float gap = 0;
         Padding padding{};
         float fontSize = 24;
         float borderWidth = 0;
-        Color background{0, 0, 0, 0};
-        Color foreground{235, 231, 218, 255};
-        Color border{0, 0, 0, 0};
-        Color hover{0, 0, 0, 0};
-        Color pressed{0, 0, 0, 0};
+        Color background{.r = 0, .g = 0, .b = 0, .a = 0};
+        Color foreground{.r = 235, .g = 231, .b = 218, .a = 255};
+        Color border{.r = 0, .g = 0, .b = 0, .a = 0};
+        Color hover{.r = 0, .g = 0, .b = 0, .a = 0};
+        Color pressed{.r = 0, .g = 0, .b = 0, .a = 0};
         HorizontalAlignment horizontal = HorizontalAlignment::LEFT;
         VerticalAlignment vertical = VerticalAlignment::MIDDLE;
         WindowHorizontalAlignment windowHorizontal = WindowHorizontalAlignment::FREE;
@@ -61,7 +61,7 @@ namespace sage
         bool visible = true;
         bool enabled = true;
         // Resolves window placement in canvas coordinates. FREE uses rectangle.x/y.
-        Rectangle WindowBounds(Vector2 canvasSize) const;
+        [[nodiscard]] Rectangle WindowBounds(Vector2 canvasSize) const;
         template <class Archive>
         void serialize(Archive& a)
         {
@@ -118,7 +118,7 @@ namespace sage
         static CanvasDocument Load(const std::filesystem::path& path);
         void Save(const std::filesystem::path& path) const;
         std::optional<std::reference_wrapper<CanvasNode>> Find(unsigned int id);
-        std::optional<std::reference_wrapper<const CanvasNode>> Find(unsigned int id) const;
+        [[nodiscard]] std::optional<std::reference_wrapper<const CanvasNode>> Find(unsigned int id) const;
         unsigned int Add(unsigned int parent, UINodeKind kind);
         void Remove(unsigned int id);
         bool Move(unsigned int id, unsigned int parent, unsigned int before = 0);

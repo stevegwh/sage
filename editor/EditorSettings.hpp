@@ -17,21 +17,26 @@ namespace sage
         std::string lastOpenedMap;
         std::string lastVisitedDirectory;
 
-        EditorSettings()
+        EditorSettings() : lastVisitedDirectory(GetWorkingDirectory())
         {
-            lastVisitedDirectory = GetWorkingDirectory();
         }
 
         template <class Archive>
         void save(Archive& archive) const
         {
-            archive(cereal::make_nvp("resourcePath", resourcePath), cereal::make_nvp("lastOpenedMap", lastOpenedMap), cereal::make_nvp("lastVisitedDirectory", lastVisitedDirectory));
+            archive(
+                cereal::make_nvp("resourcePath", resourcePath),
+                cereal::make_nvp("lastOpenedMap", lastOpenedMap),
+                cereal::make_nvp("lastVisitedDirectory", lastVisitedDirectory));
         }
 
         template <class Archive>
         void load(Archive& archive)
         {
-            archive(cereal::make_nvp("resourcePath", resourcePath), cereal::make_nvp("lastOpenedMap", lastOpenedMap), cereal::make_nvp("lastVisitedDirectory", lastVisitedDirectory));
+            archive(
+                cereal::make_nvp("resourcePath", resourcePath),
+                cereal::make_nvp("lastOpenedMap", lastOpenedMap),
+                cereal::make_nvp("lastVisitedDirectory", lastVisitedDirectory));
         }
     };
 } // namespace sage

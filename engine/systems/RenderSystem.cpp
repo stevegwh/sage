@@ -4,21 +4,22 @@
 
 #include "RenderSystem.hpp"
 #include "engine/Colors.hpp"
-#include "engine/MathConstants.hpp"
 #include "engine/LightManager.hpp"
+#include "engine/MathConstants.hpp"
 #include "ShaderPaths.hpp"
+#include <array>
 
-#include "components/CustomShaderComponent.hpp"
 #include "components/Animation.hpp"
+#include "components/CustomShaderComponent.hpp"
 #include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
 
 #include "components/UberShaderComponent.hpp"
 #include "raylib.h"
+#include "raymath.h"
 #include "ResourceManager.hpp"
 #include "rlgl.h"
-#include "raymath.h"
 
 #include <memory>
 #include <stdexcept>
@@ -53,9 +54,8 @@ namespace sage
             }
 
             model = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
-            model.materials[0].shader =
-                ResourceManager::GetInstance().ShaderLoad(
-                    ShaderPath(SKYBOX_VERTEX_SHADER).c_str(), ShaderPath(SKYBOX_FRAGMENT_SHADER).c_str());
+            model.materials[0].shader = ResourceManager::GetInstance().ShaderLoad(
+                ShaderPath(SKYBOX_VERTEX_SHADER), ShaderPath(SKYBOX_FRAGMENT_SHADER));
 
             const int environmentMap = MATERIAL_MAP_CUBEMAP;
             const int disabled = 0;
@@ -85,6 +85,8 @@ namespace sage
             SetTextureFilter(cubemap, TEXTURE_FILTER_BILINEAR);
             model.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = cubemap;
         }
+        Skybox(Skybox&&) = delete;
+        Skybox& operator=(Skybox&&) = delete;
 
         ~Skybox()
         {
@@ -111,7 +113,7 @@ namespace sage
 
     void RenderSystem::DrawShadowCasters(const Shader shader, const int skinnedLocation) const
     {
-        MaterialMap emptyMaps[MAX_MATERIAL_MAPS]{};
+        std::array<MaterialMap, MAX_MATERIAL_MAPS> emptyMaps{};
         const auto drawModel = [&](const Model& model, const Matrix transform, const bool skinned) {
             const int skinnedValue = skinned ? 1 : 0;
             SetShaderValue(shader, skinnedLocation, &skinnedValue, SHADER_UNIFORM_INT);
@@ -119,44 +121,42 @@ namespace sage
             {
                 Material material = model.materials[model.meshMaterial[meshIndex]];
                 material.shader = shader;
-                material.maps = emptyMaps;
+                material.maps = emptyMaps.data();
                 DrawMesh(model.meshes[meshIndex], material, transform);
             }
         };
 
-        for (const auto entity : registry->view<Renderable, sgTransform>(
-                 entt::exclude<CustomShaderComponent, RenderableDeferred>))
+        for (const auto entity :
+             registry->view<Renderable, sgTransform>(entt::exclude<CustomShaderComponent, RenderableDeferred>))
         {
             const auto& renderable = registry->get<Renderable>(entity);
-            if (!renderable.active || renderable.GetModel() == nullptr) continue;
+            if (!renderable.active || !renderable.GetModel()) continue;
             const auto& transform = registry->get<sgTransform>(entity);
-            const auto& model = renderable.GetModel()->GetRlModel();
+            const auto& model = renderable.GetModel()->get().GetRlModel();
             const Matrix srt = MatrixMultiply(
                 MatrixMultiply(
                     MatrixScale(transform.GetScale().x, transform.GetScale().y, transform.GetScale().z),
                     EulerToMatrix(transform.GetWorldRot())),
-                MatrixTranslate(
-                    transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
+                MatrixTranslate(transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
             drawModel(model, MatrixMultiply(model.transform, srt), registry->any_of<Animation>(entity));
         }
 
         for (const auto entity : registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>))
         {
             const auto& renderable = registry->get<DynamicRenderable>(entity);
-            if (!renderable.active || renderable.GetModel() == nullptr) continue;
+            if (!renderable.active || !renderable.GetModel()) continue;
             const auto& transform = registry->get<sgTransform>(entity);
-            const auto& model = *renderable.GetModel();
+            const auto& model = renderable.GetModel()->get();
             const Matrix srt = MatrixMultiply(
                 MatrixMultiply(
                     MatrixScale(transform.GetScale().x, transform.GetScale().y, transform.GetScale().z),
                     MatrixRotateY(transform.GetWorldRot().y * math::DEGREES_TO_RADIANS)),
-                MatrixTranslate(
-                    transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
+                MatrixTranslate(transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
             drawModel(model, MatrixMultiply(model.transform, srt), false);
         }
     }
 
-    void RenderSystem::drawScene(const bool includeSkybox) // Can't be const as GetModel returns pointers
+    void RenderSystem::drawScene(const bool includeSkybox) // Draw callbacks may update shaders
     {
         lightManager->BindShadowMap();
         if (includeSkybox && skybox) skybox->Draw();
@@ -177,12 +177,13 @@ namespace sage
         auto renderEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
             if (!renderable.active) return;
 
-            auto* model = renderable.GetModel();
-            if (model == nullptr) return;
+            auto model = renderable.GetModel();
+            if (!model) return;
 
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
-            model->Draw(transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
+            model->get().Draw(
+                transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
         };
 
         auto renderDynamicEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
@@ -190,7 +191,7 @@ namespace sage
 
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
-            Vector3 rotationAxis = {0.0f, 1.0f, 0.0f};
+            Vector3 rotationAxis = {.x = 0.0f, .y = 1.0f, .z = 0.0f};
 
             renderable.Draw(
                 transform.GetWorldPos(),
@@ -208,7 +209,7 @@ namespace sage
             for (const auto entity : view)
             {
                 auto& renderable = view.template get<Renderable>(entity);
-                if (!renderable.active || renderable.GetModel() == nullptr) continue;
+                if (!renderable.active || !renderable.GetModel()) continue;
                 view.template get<CustomShaderComponent>(entity).Update(renderable);
                 renderEntity(renderable, view.template get<sgTransform>(entity), entity);
             }
@@ -226,14 +227,14 @@ namespace sage
             auto& renderable = uberView.get<Renderable>(entity);
             if (!renderable.active) continue;
 
-            auto* model = renderable.GetModel();
-            if (model == nullptr) continue;
+            auto model = renderable.GetModel();
+            if (!model) continue;
 
             const auto& transform = uberView.get<sgTransform>(entity);
             auto& uber = uberView.get<UberShaderComponent>(entity);
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
-            model->DrawUber(
+            model->get().DrawUber(
                 &uber, transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
         }
 

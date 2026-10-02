@@ -4,6 +4,7 @@
 
 #pragma once
 #include "cereal/archives/json.hpp"
+#include <array>
 
 #include "cereal/cereal.hpp"
 
@@ -20,12 +21,12 @@ namespace sage
 
     struct Light
     {
-        LightType type;
-        bool enabled;
-        Vector3 position;
-        Vector3 target;
-        Color color;
-        float brightness;
+        LightType type = LightType::Sun;
+        bool enabled = false;
+        Vector3 position{};
+        Vector3 target{};
+        Color color{};
+        float brightness = 0.0f;
         bool castsShadows = false;
         float constant = 1.0f;
         float linear = 0.025f;
@@ -45,9 +46,9 @@ namespace sage
             int quadraticLoc = GetShaderLocation(shader, TextFormat("lights[%i].quadratic", lightsCount));
 
             // UpdateLightValues(shader, *this);
-            float _position[3] = {position.x, position.y, position.z};
-            float _target[3] = {target.x, target.y, target.z};
-            float _color[4] = {
+            std::array<float, 3> _position = {position.x, position.y, position.z};
+            std::array<float, 3> _target = {target.x, target.y, target.z};
+            std::array<float, 4> _color = {
                 static_cast<float>(color.r) / static_cast<float>(255),
                 static_cast<float>(color.g) / static_cast<float>(255),
                 static_cast<float>(color.b) / static_cast<float>(255),
@@ -56,9 +57,9 @@ namespace sage
             SetShaderValue(shader, enabledLoc, &enabledValue, SHADER_UNIFORM_INT);
             const int typeValue = static_cast<int>(type);
             SetShaderValue(shader, typeLoc, &typeValue, SHADER_UNIFORM_INT);
-            SetShaderValue(shader, positionLoc, _position, SHADER_UNIFORM_VEC3);
-            SetShaderValue(shader, targetLoc, _target, SHADER_UNIFORM_VEC3);
-            SetShaderValue(shader, colorLoc, _color, SHADER_UNIFORM_VEC4);
+            SetShaderValue(shader, positionLoc, _position.data(), SHADER_UNIFORM_VEC3);
+            SetShaderValue(shader, targetLoc, _target.data(), SHADER_UNIFORM_VEC3);
+            SetShaderValue(shader, colorLoc, _color.data(), SHADER_UNIFORM_VEC4);
             SetShaderValue(shader, brightnessLoc, &brightness, SHADER_UNIFORM_FLOAT);
             SetShaderValue(shader, constantLoc, &constant, SHADER_UNIFORM_FLOAT);
             SetShaderValue(shader, linearLoc, &linear, SHADER_UNIFORM_FLOAT);
@@ -68,9 +69,21 @@ namespace sage
         template <typename Archive>
         void serialize(Archive& archive)
         {
-            archive(cereal::make_nvp("type", type), cereal::make_nvp("position", position), cereal::make_nvp("target", target), cereal::make_nvp("color", color), cereal::make_nvp("brightness", brightness));
-            if constexpr(std::is_same_v<Archive,cereal::JSONInputArchive> || std::is_same_v<Archive,cereal::JSONOutputArchive>)
-                archive(cereal::make_nvp("enabled", enabled), cereal::make_nvp("castsShadows", castsShadows), cereal::make_nvp("constant", constant), cereal::make_nvp("linear", linear), cereal::make_nvp("quadratic", quadratic));
+            archive(
+                cereal::make_nvp("type", type),
+                cereal::make_nvp("position", position),
+                cereal::make_nvp("target", target),
+                cereal::make_nvp("color", color),
+                cereal::make_nvp("brightness", brightness));
+            if constexpr (
+                std::is_same_v<Archive, cereal::JSONInputArchive> ||
+                std::is_same_v<Archive, cereal::JSONOutputArchive>)
+                archive(
+                    cereal::make_nvp("enabled", enabled),
+                    cereal::make_nvp("castsShadows", castsShadows),
+                    cereal::make_nvp("constant", constant),
+                    cereal::make_nvp("linear", linear),
+                    cereal::make_nvp("quadratic", quadratic));
         }
 
         template <class Inspector>

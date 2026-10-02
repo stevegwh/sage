@@ -1,4 +1,5 @@
 #include "EditorCamera.hpp"
+#include "engine/MathConstants.hpp"
 
 #include "raymath.h"
 #include "rcamera.h"
@@ -18,7 +19,8 @@ namespace sage::editor
         Vector3 viewOffset(const Camera3D& camera)
         {
             const auto offset = Vector3Subtract(camera.position, camera.target);
-            return Vector3Length(offset) > 0.0001f ? Vector3Normalize(offset) : Vector3Normalize(Vector3{0, 1, 1});
+            return Vector3Length(offset) > 0.0001f ? Vector3Normalize(offset)
+                                                   : Vector3Normalize(Vector3{.x = 0, .y = 1, .z = 1});
         }
 
         void translate(Camera3D& camera, Vector3 movement)
@@ -32,7 +34,7 @@ namespace sage::editor
     {
         mode = CameraMode::Focused;
         focusRadius = target.radius;
-        const float verticalHalfFov = camera.fovy * DEG2RAD * 0.5f;
+        const float verticalHalfFov = camera.fovy * sage::math::DEGREES_TO_RADIANS * 0.5f;
         const float horizontalHalfFov = std::atan(std::tan(verticalHalfFov) * std::max(0.01f, aspect));
         const float distance = std::max(
             focusRadius + FOCUS_CLEARANCE,

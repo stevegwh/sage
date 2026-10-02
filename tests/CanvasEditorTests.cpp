@@ -31,7 +31,7 @@ int main()
         std::filesystem::current_path(temporary);
         sage::CanvasDocument document;
         document.nodes.front().script = "Missing.Script";
-        document.nodes.front().references.push_back({"Unfinished", 999});
+        document.nodes.front().references.push_back({.field = "Unfinished", .node = 999});
         document.Save("resources/first.canvas");
         document.nodes.front().name = "Second";
         document.Save("resources/second.canvas");

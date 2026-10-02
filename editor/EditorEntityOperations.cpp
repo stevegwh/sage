@@ -33,7 +33,7 @@ namespace sage::editor
     namespace
     {
         constexpr float DEFAULT_LIGHT_BRIGHTNESS = 3.0f;
-        constexpr Color DEFAULT_LIGHT_COLOR = {255, 244, 214, 255};
+        constexpr Color DEFAULT_LIGHT_COLOR = {.r = 255, .g = 244, .b = 214, .a = 255};
 
         std::string lightLabel(const entt::entity entity)
         {
@@ -94,7 +94,7 @@ namespace sage::editor
         transform.position.world = position;
         transform.name = spawnPointLabel(entity);
 
-        AddTag(*sys->registry, entity, SpawnPointTag);
+        AddTag(*sys->registry, entity, SPAWN_POINT_TAG);
         return entity;
     }
 
@@ -108,7 +108,8 @@ namespace sage::editor
 
         // A trigger is a collider plus TriggerVolume intent. Left non-static so
         // the box tracks the transform as the user drags it in the editor.
-        const BoundingBox localBox{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
+        const BoundingBox localBox{
+            .min = {.x = -1.0f, .y = -1.0f, .z = -1.0f}, .max = {.x = 1.0f, .y = 1.0f, .z = 1.0f}};
         auto& collideable = sys->registry->emplace<Collideable>(entity, localBox, transform.GetMatrixNoRot());
         collideable.isStatic = false;
         sys->registry->emplace<TriggerVolume>(entity);
@@ -124,7 +125,7 @@ namespace sage::editor
         // The height field's local origin is its min corner; centre it on the
         // requested position.
         const float halfSize = terrain.WorldSize() * 0.5f;
-        transform.position.world = {position.x - halfSize, position.y, position.z - halfSize};
+        transform.position.world = {.x = position.x - halfSize, .y = position.y, .z = position.z - halfSize};
         transform.name = terrainLabel(entity);
         AttachTerrainRenderable(*sys->registry, entity, *sys->lightSubSystem);
         return entity;
@@ -152,7 +153,7 @@ namespace sage::editor
         auto model = ResourceManager::GetInstance().GetModelView(modelKey);
         auto& renderable = sys->registry->emplace<Renderable>(entity, std::move(model), MatrixIdentity());
         auto& uber =
-            sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->GetMaterialCount());
+            sys->registry->emplace<UberShaderComponent>(entity, renderable.GetModel()->get().GetMaterialCount());
         uber.SetFlagAll(UberShaderComponent::Flags::Lit);
         return entity;
     }
@@ -243,7 +244,7 @@ namespace sage::editor
         };
         visit(visit, root);
         auto document = content::Capture(registry, entities, "flatpack", root);
-        for (auto& node : document["entities"].GetArray())
+        for (auto& node : json::Require(document, "entities").GetArray())
             for (auto entity : entities)
                 if (registry.get<PersistentEntityId>(entity).id == json::Id(node, "id"))
                     if (auto* asset = registry.try_get<AssetReference>(entity))
@@ -271,9 +272,9 @@ namespace sage::editor
         auto result = content::Instantiate(*sys->registry, document, subtree.origin, true);
         for (std::size_t index = 0; index < result.entities.size(); ++index)
         {
-            auto entity = result.entities[index];
+            auto entity = result.entities.at(index);
             sys->registry->emplace<EditorMapEntity>(entity);
-            const auto& node = document["entities"][static_cast<rapidjson::SizeType>(index)];
+            const auto& node = json::At(json::Require(document, "entities"), index);
             if (node.HasMember("editorAssetKey"))
                 sys->registry->emplace<AssetReference>(entity, json::String(node, "editorAssetKey"));
             if (sys->registry->all_of<Terrain>(entity))

@@ -2,16 +2,16 @@
 
 #include "cereal/cereal.hpp"
 
-#include "engine/ParticleSystem.hpp"
-#include "engine/components/sgTransform.hpp"
-#include "engine/raylib-cereal.hpp"
 #include "cereal/types/string.hpp"
+#include "engine/components/sgTransform.hpp"
+#include "engine/ParticleSystem.hpp"
+#include "engine/raylib-cereal.hpp"
 
 #include <string>
 
 namespace sage
 {
-    inline constexpr const char* ParticleTextureDirectory = "resources/textures/particles";
+    inline constexpr const char* PARTICLE_TEXTURE_DIRECTORY = "resources/textures/particles";
 
     // Emitter settings. GPU textures and live particles are runtime state.
     struct ParticleEmitterComponent
@@ -21,25 +21,51 @@ namespace sage
         bool looping = true;
         float duration = 5.0f;
         float size = 1.0f;
-        Vector3 direction{0.0f, 1.0f, 0.0f};
-        FloatRange speed{1.0f, 2.0f};
-        FloatRange spread{-15.0f, 15.0f};
-        FloatRange velocityAngle{0.0f, 0.0f};
-        FloatRange offset{0.0f, 0.0f};
-        FloatRange originAcceleration{0.0f, 0.0f};
-        Vector3 gravity{0.0f, 0.0f, 0.0f};
-        FloatRange lifetime{1.0f, 2.0f};
-        Color startColor{255, 255, 255, 255};
-        Color endColor{255, 255, 255, 0};
+        Vector3 direction{.x = 0.0f, .y = 1.0f, .z = 0.0f};
+        FloatRange speed{.min = 1.0f, .max = 2.0f};
+        FloatRange spread{.min = -15.0f, .max = 15.0f};
+        FloatRange velocityAngle{.min = 0.0f, .max = 0.0f};
+        FloatRange offset{.min = 0.0f, .max = 0.0f};
+        FloatRange originAcceleration{.min = 0.0f, .max = 0.0f};
+        Vector3 gravity{.x = 0.0f, .y = 0.0f, .z = 0.0f};
+        FloatRange lifetime{.min = 1.0f, .max = 2.0f};
+        Color startColor{.r = 255, .g = 255, .b = 255, .a = 255};
+        Color endColor{.r = 255, .g = 255, .b = 255, .a = 0};
         int capacity = 256;
         int emissionRate = 20;
-        IntRange burst{10, 20};
+        IntRange burst{.min = 10, .max = 20};
         BlendMode blendMode = BLEND_ALPHA;
 
         template <class Archive>
         void serialize(Archive& archive)
         {
-            archive(cereal::make_nvp("texture", texture), cereal::make_nvp("playOnAwake", playOnAwake), cereal::make_nvp("looping", looping), cereal::make_nvp("duration", duration), cereal::make_nvp("size", size), cereal::make_nvp("direction", direction), cereal::make_nvp("speed.min", speed.min), cereal::make_nvp("speed.max", speed.max), cereal::make_nvp("spread.min", spread.min), cereal::make_nvp("spread.max", spread.max), cereal::make_nvp("velocityAngle.min", velocityAngle.min), cereal::make_nvp("velocityAngle.max", velocityAngle.max), cereal::make_nvp("offset.min", offset.min), cereal::make_nvp("offset.max", offset.max), cereal::make_nvp("originAcceleration.min", originAcceleration.min), cereal::make_nvp("originAcceleration.max", originAcceleration.max), cereal::make_nvp("gravity", gravity), cereal::make_nvp("lifetime.min", lifetime.min), cereal::make_nvp("lifetime.max", lifetime.max), cereal::make_nvp("startColor", startColor), cereal::make_nvp("endColor", endColor), cereal::make_nvp("capacity", capacity), cereal::make_nvp("emissionRate", emissionRate), cereal::make_nvp("burst.min", burst.min), cereal::make_nvp("burst.max", burst.max), cereal::make_nvp("blendMode", blendMode));
+            archive(
+                cereal::make_nvp("texture", texture),
+                cereal::make_nvp("playOnAwake", playOnAwake),
+                cereal::make_nvp("looping", looping),
+                cereal::make_nvp("duration", duration),
+                cereal::make_nvp("size", size),
+                cereal::make_nvp("direction", direction),
+                cereal::make_nvp("speed.min", speed.min),
+                cereal::make_nvp("speed.max", speed.max),
+                cereal::make_nvp("spread.min", spread.min),
+                cereal::make_nvp("spread.max", spread.max),
+                cereal::make_nvp("velocityAngle.min", velocityAngle.min),
+                cereal::make_nvp("velocityAngle.max", velocityAngle.max),
+                cereal::make_nvp("offset.min", offset.min),
+                cereal::make_nvp("offset.max", offset.max),
+                cereal::make_nvp("originAcceleration.min", originAcceleration.min),
+                cereal::make_nvp("originAcceleration.max", originAcceleration.max),
+                cereal::make_nvp("gravity", gravity),
+                cereal::make_nvp("lifetime.min", lifetime.min),
+                cereal::make_nvp("lifetime.max", lifetime.max),
+                cereal::make_nvp("startColor", startColor),
+                cereal::make_nvp("endColor", endColor),
+                cereal::make_nvp("capacity", capacity),
+                cereal::make_nvp("emissionRate", emissionRate),
+                cereal::make_nvp("burst.min", burst.min),
+                cereal::make_nvp("burst.max", burst.max),
+                cereal::make_nvp("blendMode", blendMode));
         }
 
         template <class Inspector>

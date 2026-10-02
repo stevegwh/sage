@@ -33,14 +33,14 @@ namespace sage
         // GetNormal samples beyond the edge and relies on clamping to duplicate the border cell.
         row = std::clamp(row, 0, resolution - 1);
         col = std::clamp(col, 0, resolution - 1);
-        return heights[static_cast<std::size_t>(row) * resolution + col];
+        return heights.at(static_cast<std::size_t>(row) * resolution + col);
     }
 
     void Terrain::SetHeight(const int row, const int col, const float height)
     {
         // Unlike reads, out-of-range writes are ignored rather than redirected to an edge cell.
         if (row < 0 || row >= resolution || col < 0 || col >= resolution) return;
-        heights[static_cast<std::size_t>(row) * resolution + col] = height;
+        heights.at(static_cast<std::size_t>(row) * resolution + col) = height;
     }
 
     float Terrain::SampleHeight(const float localX, const float localZ) const
@@ -63,6 +63,6 @@ namespace sage
         const float right = GetHeight(row, col + 1);
         const float near = GetHeight(row - 1, col);
         const float far = GetHeight(row + 1, col);
-        return Vector3Normalize({left - right, 2.0f * cellSize, near - far});
+        return Vector3Normalize({.x = left - right, .y = 2.0f * cellSize, .z = near - far});
     }
 } // namespace sage

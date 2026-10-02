@@ -18,7 +18,7 @@ namespace sage::editor
 
     class EditorModelDefaultsController
     {
-        EditorAssetCatalog& assets;
+        std::reference_wrapper<EditorAssetCatalog> assets;
         std::function<bool()> isActive;
         std::function<void()> onChanged;
 

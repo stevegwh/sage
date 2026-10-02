@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <vector>
 
 namespace sage
@@ -64,7 +65,8 @@ namespace sage
             const std::unordered_map<std::uint32_t, entt::entity>& references);
         // The same operation is used by CLI edits and the running editor.
         void Apply(json::Value& document, const json::Value& operation, json::Allocator& allocator);
-        json::Document DescribeComponents(const json::Value* node = nullptr);
+        json::Document DescribeComponents(
+            std::optional<std::reference_wrapper<const json::Value>> node = std::nullopt);
         void EnsureEngineComponentsRegistered();
     } // namespace content
 } // namespace sage

@@ -13,20 +13,20 @@ namespace sage
 {
     BoundingBox TransformAabbNoRotation(const BoundingBox& local, const Matrix& worldMat)
     {
-        return {Vector3Transform(local.min, worldMat), Vector3Transform(local.max, worldMat)};
+        return {.min = Vector3Transform(local.min, worldMat), .max = Vector3Transform(local.max, worldMat)};
     }
 
     BoundingBox TransformBoundingBoxByCorners(const BoundingBox& local, const Matrix& worldMat)
     {
         const std::array<Vector3, 8> corners = {
-            Vector3{local.min.x, local.min.y, local.min.z},
-            Vector3{local.min.x, local.min.y, local.max.z},
-            Vector3{local.min.x, local.max.y, local.min.z},
-            Vector3{local.min.x, local.max.y, local.max.z},
-            Vector3{local.max.x, local.min.y, local.min.z},
-            Vector3{local.max.x, local.min.y, local.max.z},
-            Vector3{local.max.x, local.max.y, local.min.z},
-            Vector3{local.max.x, local.max.y, local.max.z},
+            Vector3{.x = local.min.x, .y = local.min.y, .z = local.min.z},
+            Vector3{.x = local.min.x, .y = local.min.y, .z = local.max.z},
+            Vector3{.x = local.min.x, .y = local.max.y, .z = local.min.z},
+            Vector3{.x = local.min.x, .y = local.max.y, .z = local.max.z},
+            Vector3{.x = local.max.x, .y = local.min.y, .z = local.min.z},
+            Vector3{.x = local.max.x, .y = local.min.y, .z = local.max.z},
+            Vector3{.x = local.max.x, .y = local.max.y, .z = local.min.z},
+            Vector3{.x = local.max.x, .y = local.max.y, .z = local.max.z},
         };
 
         BoundingBox transformed{};
@@ -47,9 +47,8 @@ namespace sage
     }
 
     Collideable::Collideable(const BoundingBox& local, const Matrix& worldMat)
+        : localBoundingBox(local), worldBoundingBox(TransformAabbNoRotation(local, worldMat))
     {
-        localBoundingBox = local;
-        worldBoundingBox = TransformAabbNoRotation(local, worldMat);
     }
 
 } // namespace sage

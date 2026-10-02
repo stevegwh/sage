@@ -56,6 +56,10 @@ namespace sage
                 EditorHistory* history,
                 const InspectorRegistry* components,
                 Callbacks callbacks);
+            EditorMapController(const EditorMapController&) = delete;
+            EditorMapController& operator=(const EditorMapController&) = delete;
+            EditorMapController(EditorMapController&&) = delete;
+            EditorMapController& operator=(EditorMapController&&) = delete;
             ~EditorMapController();
 
             void Update(); // ticks down the transient save-feedback message
@@ -63,11 +67,16 @@ namespace sage
             void OpenLoadBrowser();
             void OpenSaveBrowser();
             void NewMap();
-            void LoadMap(
-                const std::filesystem::path& path, const std::function<void()>& updateLoadingScreen = {});
+            void LoadMap(const std::filesystem::path& path, const std::function<void()>& updateLoadingScreen = {});
             void SaveMap();
-            void SaveAs(const std::filesystem::path& path) { saveMapAs(path); }
-            const std::filesystem::path& Path() const { return currentMapPath; }
+            void SaveAs(const std::filesystem::path& path)
+            {
+                saveMapAs(path);
+            }
+            [[nodiscard]] const std::filesystem::path& Path() const
+            {
+                return currentMapPath;
+            }
             void RestoreLastOpenedMap(const std::function<void()>& updateLoadingScreen = {});
 
             [[nodiscard]] bool HasUnsavedChanges() const;

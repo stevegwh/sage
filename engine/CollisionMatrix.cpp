@@ -26,13 +26,13 @@ namespace sage
     CollisionMask CollisionMatrix::GetMask(const CollisionLayer layer) const
     {
         if (!layer.IsValid()) return CollisionMask{};
-        return CollisionMask{rows[bitIndex(layer)]};
+        return CollisionMask{rows.at(bitIndex(layer))};
     }
 
     bool CollisionMatrix::GetPair(const CollisionLayer a, const CollisionLayer b) const
     {
         if (!a.IsValid() || !b.IsValid()) return false;
-        return (rows[bitIndex(a)] & b.bit) != 0;
+        return (rows.at(bitIndex(a)) & b.bit) != 0;
     }
 
     void CollisionMatrix::SetPair(const CollisionLayer a, const CollisionLayer b, const bool collides)
@@ -40,13 +40,13 @@ namespace sage
         if (!a.IsValid() || !b.IsValid()) return;
         if (collides)
         {
-            rows[bitIndex(a)] |= b.bit;
-            rows[bitIndex(b)] |= a.bit;
+            rows.at(bitIndex(a)) |= b.bit;
+            rows.at(bitIndex(b)) |= a.bit;
         }
         else
         {
-            rows[bitIndex(a)] &= ~b.bit;
-            rows[bitIndex(b)] &= ~a.bit;
+            rows.at(bitIndex(a)) &= ~b.bit;
+            rows.at(bitIndex(b)) &= ~a.bit;
         }
     }
 
@@ -59,14 +59,14 @@ namespace sage
         }
         const int index = FindFreeCollisionLayerIndex();
         if (index < 0) return {};
-        userLayers.push_back({layerName, static_cast<std::uint8_t>(index)});
+        userLayers.push_back({.name = layerName, .index = static_cast<std::uint8_t>(index)});
         return RegisterUserCollisionLayer(layerName, static_cast<std::uint8_t>(index));
     }
 
     void CollisionMatrix::ResetToDefaults()
     {
         rows = {};
-        SetPair(collision_layers::Default, collision_layers::Default, true);
+        SetPair(collision_layers::DEFAULT, collision_layers::DEFAULT, true);
     }
 
     void CollisionMatrix::Load(const char* path)

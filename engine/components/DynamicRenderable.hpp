@@ -1,11 +1,12 @@
 #pragma once
 
-#include "entt/entt.hpp"
 #include "engine/Colors.hpp"
+#include "entt/entt.hpp"
 #include "raylib.h"
 #include "raymath.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 
 namespace sage
@@ -31,10 +32,10 @@ namespace sage
         DynamicRenderable& operator=(DynamicRenderable&& other) noexcept;
 
         [[nodiscard]] bool HasModel() const;
-        [[nodiscard]] Model* GetModel();
-        [[nodiscard]] const Model* GetModel() const;
-        [[nodiscard]] Mesh* GetMesh(int num = 0);
-        [[nodiscard]] const Mesh* GetMesh(int num = 0) const;
+        [[nodiscard]] std::optional<std::reference_wrapper<Model>> GetModel();
+        [[nodiscard]] std::optional<std::reference_wrapper<const Model>> GetModel() const;
+        [[nodiscard]] std::optional<std::reference_wrapper<Mesh>> GetMesh(int num = 0);
+        [[nodiscard]] std::optional<std::reference_wrapper<const Mesh>> GetMesh(int num = 0) const;
         [[nodiscard]] const std::string& GetName() const;
 
         void SetName(const std::string& _name);
