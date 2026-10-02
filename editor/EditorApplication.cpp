@@ -193,7 +193,7 @@ namespace sage
         BeginMode3D(*scene->ActiveCamera());
         scene->Draw3D();
         EndMode3D();
-        DrawViewportFpsCounter(*settings);
+        if (!playing) DrawViewportFpsCounter(*settings);
         EndTextureMode();
 
         if (settings->GetGraphicsSettings().bloom)
@@ -215,6 +215,7 @@ namespace sage
             BeginTextureMode(gameUiTexture);
             ClearBackground(sage::colors::BLANK_COLOR);
             scene->DrawGame2D();
+            DrawViewportFpsCounter(*settings);
             EndTextureMode();
         }
 
