@@ -61,6 +61,9 @@ target_link_libraries(editor
 add_dependencies(editor sage_managed_host)
 
 if (BUILD_TESTING)
+    add_executable(canvas_editor_tests ${SAGE_ROOT_DIR}/tests/CanvasEditorTests.cpp)
+    target_link_libraries(canvas_editor_tests PRIVATE sage_editor)
+    add_test(NAME canvas_editor_tests COMMAND canvas_editor_tests)
     add_executable(editor_camera_tests ${SAGE_ROOT_DIR}/tests/EditorCameraTests.cpp)
     target_link_libraries(editor_camera_tests PRIVATE sage_editor)
     add_test(NAME editor_camera_tests COMMAND editor_camera_tests)

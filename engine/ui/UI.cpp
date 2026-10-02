@@ -242,8 +242,8 @@ namespace sage
 
         void drawTable(
             const Table& table,
-            const Cell* hovered,
-            const Cell* pressed,
+            const std::optional<std::reference_wrapper<const Cell>> hovered,
+            const std::optional<std::reference_wrapper<const Cell>> pressed,
             const float scale)
         {
             for (const auto& row : table.rows)
@@ -251,9 +251,9 @@ namespace sage
                 for (const auto& cell : row->cells)
                 {
                     Color background = cell->style.background;
-                    if (cell.get() == pressed && cell->style.pressedBackground.a > 0)
+                    if (pressed && cell.get() == &pressed->get() && cell->style.pressedBackground.a > 0)
                         background = cell->style.pressedBackground;
-                    else if (cell.get() == hovered && cell->style.hoveredBackground.a > 0)
+                    else if (hovered && cell.get() == &hovered->get() && cell->style.hoveredBackground.a > 0)
                         background = cell->style.hoveredBackground;
 
                     if (cell->style.backgroundTexture.id != 0)
@@ -424,14 +424,20 @@ namespace sage
         if (onHide) onHide();
     }
 
+    void Window::LayoutAt(const Rectangle value, const float scale)
+    {
+        bounds = value;
+        layoutTable(root, inset(bounds, scaled(style.padding, scale)), scale);
+    }
+
     void Window::Layout(const Settings& settings)
     {
-        bounds = {
-            settings.ScaleValueWidth(designBounds.x),
-            settings.ScaleValueHeight(designBounds.y),
-            settings.ScaleValueWidth(designBounds.width),
-            settings.ScaleValueHeight(designBounds.height)};
-        layoutTable(root, inset(bounds, scaled(style.padding, settings.GetCurrentScaleFactor())), settings.GetCurrentScaleFactor());
+        LayoutAt(
+            {settings.ScaleValueWidth(designBounds.x),
+             settings.ScaleValueHeight(designBounds.y),
+             settings.ScaleValueWidth(designBounds.width),
+             settings.ScaleValueHeight(designBounds.height)},
+            settings.GetCurrentScaleFactor());
     }
 
     void Window::MoveTo(const Vector2 designPosition)
@@ -452,7 +458,10 @@ namespace sage
         return hitTest(root, point);
     }
 
-    void Window::Draw(const Cell* hovered, const Cell* pressed, const float scale) const
+    void Window::DrawAt(
+        const std::optional<std::reference_wrapper<const Cell>> hovered,
+        const std::optional<std::reference_wrapper<const Cell>> pressed,
+        const float scale) const
     {
         if (style.background.a > 0) DrawRectangleRec(bounds, style.background);
         if (style.backgroundTexture.id != 0)

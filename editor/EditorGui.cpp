@@ -384,6 +384,15 @@ namespace sage::editor
                     }
                     if (!keepOpen) result.flatpackCloseRequested = true;
                 }
+                if (sceneTabs.canvasOpen)
+                {
+                    bool keepOpen = true;
+                    const auto flags = sceneTabs.canvasDirty ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None;
+                    const auto label = sceneTabs.canvasLabel + "###canvasTab";
+                    if (ImGui::BeginTabItem(label.c_str(), &keepOpen, flags)) ImGui::EndTabItem();
+                    if (ImGui::IsItemClicked()) result.canvasSelected = true;
+                    if (!keepOpen) result.canvasCloseRequested = true;
+                }
                 ImGui::EndTabBar();
             }
         }

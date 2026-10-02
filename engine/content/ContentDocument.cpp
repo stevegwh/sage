@@ -1,3 +1,4 @@
+#include "engine/ui/CanvasSystem.hpp"
 #include "ContentDocument.hpp"
 #include "ContentInspector.hpp"
 #include "engine/Archetypes.hpp"
@@ -345,6 +346,14 @@ namespace sage::content
                 throw std::runtime_error("Unsupported document version");
             const auto kind = json::String(doc, "kind");
             if (kind != "map" && kind != "flatpack") throw std::runtime_error("Expected map or flatpack document");
+            if (doc.HasMember("initialCanvases")) {
+                const auto& canvases = doc["initialCanvases"];
+                if (!canvases.IsArray()) throw std::runtime_error("initialCanvases must be an array");
+                std::set<std::string> unique;
+                for (const auto& asset : canvases.GetArray())
+                    if (!asset.IsString() || std::string(asset.GetString()).empty() || !unique.insert(asset.GetString()).second)
+                        throw std::runtime_error("Initial canvases must be unique nonempty asset paths");
+            }
             const auto& nodes = json::Require(doc, "entities");
             if (!nodes.IsArray()) throw std::runtime_error("entities must be an array");
             std::set<std::uint32_t> ids;
@@ -512,6 +521,8 @@ namespace sage::content
                 self(self, m.value);
             }
         };
+        if (document.HasMember("initialCanvases") && document["initialCanvases"].IsArray())
+            for (const auto& asset : document["initialCanvases"].GetArray()) if (asset.IsString()) result.insert(asset.GetString());
         visit(visit, document);
         return {result.begin(), result.end()};
     }
@@ -525,6 +536,10 @@ namespace sage::content
         EnsureEngineComponentsRegistered();
         auto doc = Empty(kind);
         auto& a = doc.GetAllocator();
+        if (kind == "map") {
+            const auto* settings = registry.ctx().find<InitialCanvases>();
+            json::Put(doc, "initialCanvases", json::Encode(settings ? settings->assets : std::vector<std::string>{}), a);
+        }
         std::uint32_t next = 1;
         for (auto e : registry.view<PersistentEntityId>())
             next = std::max(next, static_cast<std::uint32_t>(registry.get<PersistentEntityId>(e).id + 1));
@@ -762,6 +777,11 @@ namespace sage::content
             for (auto e : result.entities)
                 if (registry.valid(e)) registry.destroy(e);
             throw;
+        }
+        if (json::String(doc, "kind") == "map") {
+            InitialCanvases settings;
+            if (doc.HasMember("initialCanvases")) json::Decode(doc["initialCanvases"], settings.assets);
+            registry.ctx().insert_or_assign<InitialCanvases>(std::move(settings));
         }
         return result;
     }

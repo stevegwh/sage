@@ -1,3 +1,4 @@
+#include "engine/ui/CanvasSystem.hpp"
 #include "EditorScene.hpp"
 #include "engine/Colors.hpp"
 
@@ -281,7 +282,10 @@ namespace sage
              .flatpackOpen = flatpackOpen,
              .flatpackLabel = flatpackOpen ? flatpackSession->FlatpackName() : std::string{},
              .flatpackPath = flatpackOpen ? flatpackSession->Path() : std::filesystem::path{},
-             .flatpackDirty = flatpackOpen && flatpackSession->HasUnsavedChanges()});
+             .flatpackDirty = flatpackOpen && flatpackSession->HasUnsavedChanges(),
+             .canvasOpen = canvasEditor && canvasEditor->HasDocument() && !IsPlaying(),
+             .canvasLabel = canvasEditor ? canvasEditor->Path().filename().string() : std::string{},
+             .canvasDirty = canvasEditor && canvasEditor->IsDirty()});
         gui->SetAssetDefaultsStatus(
             defaultsStatus.assetName, defaultsStatus.height, defaultsStatus.rotation, defaultsStatus.scale);
         gui->SetSelectedAsset(
@@ -390,6 +394,7 @@ namespace sage
     void EditorScene::Update() const
     {
         automation.Poll([this](const json::Value& request) { return automationCommand(request); });
+        if (canvasEditor->IsActive()) return;
         // While playing, the game runtime drives its own registry; the editor's
         // own systems are idle so the two worlds don't fight over input/state.
         if (gameRuntime)
@@ -630,6 +635,17 @@ namespace sage
             return;
         }
         gui->StartImGui();
+        if (canvasEditor->IsActive()) {
+            canvasEditor->Draw();
+            if (!canvasEditor->IsActive()) gui->RefreshResourceBrowser();
+            drawExitConfirmationModal(exitRequested, exitConfirmed);
+            gui->EndImGui();
+            return;
+        }
+        gui->SetCanvasEditCallback([this](const std::filesystem::path& path) {
+            if (path.empty()) canvasEditor->New();
+            else canvasEditor->Open(path);
+        });
         drawMainMenuBar(exitRequested);
 
         // Snapshot the selection's clean state on idle frames so an inspector edit
@@ -642,6 +658,8 @@ namespace sage
         const auto inspectorEdit = gui->DrawInspectorWindow();
         handleInspectorEdit(inspectorEdit);
         drawParticlePreviewWindow();
+        if (!IsPlaying() && !flatpackSession->IsActive())
+            canvasEditor->DrawSceneUI(*sys->registry, [this]() { history->MarkDirty(); });
 
         gui->DrawHierarchyWindow();
         if (gameRuntime)
@@ -649,6 +667,8 @@ namespace sage
         else
             gui->DrawAssetDrawerWindow();
         const auto sceneTabAction = gui->DrawSceneTabBar();
+        if (sceneTabAction.canvasSelected) canvasEditor->Resume();
+        if (sceneTabAction.canvasCloseRequested) canvasEditor->RequestClose();
         if (sceneTabAction.mapSelected || sceneTabAction.flatpackCloseRequested)
         {
             flatpackSession->RequestClose();
@@ -677,7 +697,7 @@ namespace sage
         // own dirty flag is parked in the session stash — check both.
         const bool hasUnsavedChanges = mapController->HasUnsavedChanges() ||
                                        flatpackSession->HasUnsavedChanges() ||
-                                       flatpackSession->StashedMapHadUnsavedChanges();
+                                       flatpackSession->StashedMapHadUnsavedChanges() || canvasEditor->IsDirty();
         if (exitRequested && !hasUnsavedChanges)
         {
             exitRequested = false;
@@ -2010,6 +2030,7 @@ namespace sage
             }
             ImGui::EndMenu();
         }
+        canvasEditor->DrawSceneMenu(!flatpackSession->IsActive() && !IsPlaying());
         drawPlayStopButton();
         ImGui::EndMainMenuBar();
     }
@@ -2429,6 +2450,7 @@ namespace sage
             gui->HideDeleteConfirmation();
         }
 
+        sys->registry->ctx().erase<InitialCanvases>();
         std::vector<entt::entity> mapEntities;
         for (const auto entity : sys->registry->view<editor::EditorMapEntity>())
         {
@@ -2648,6 +2670,7 @@ namespace sage
 
     bool EditorScene::HandleEscapePressed() const
     {
+        if (canvasEditor->IsActive()) return true;
         // Esc exits a play session first, then leaves object focus, then cancels editor modes.
         if (gameRuntime)
         {
@@ -2750,6 +2773,7 @@ namespace sage
         std::function<void()> updateLoadingScreen)
         : sys(_sys), csharpScripts(std::move(_csharpScripts))
     {
+        canvasEditor = std::make_unique<editor::CanvasEditor>(csharpScripts);
         editor::RegisterDefaultInspectorComponents(inspectorRegistry);
         if (registerGameComponents) registerGameComponents(inspectorRegistry);
         assetCatalog =

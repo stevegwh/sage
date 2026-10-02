@@ -49,12 +49,14 @@ namespace sage
         windows.push_back(std::move(ownedWindow));
     }
 
-    void GameUIEngine::Update()
+    void GameUIEngine::Update(const bool inputEnabled)
     {
         for (const auto& window : windows)
         {
             if (!window->hidden) window->Layout(*settings);
         }
+
+        if (!inputEnabled) { hovered = {}; pressed = {}; draggingWindow = false; return; }
 
         if (hovered.window && hovered.window->hidden) hovered = {};
         if (pressed.window && pressed.window->hidden)
@@ -124,7 +126,11 @@ namespace sage
             {
                 // Drawing also works before the first input update (paused previews and captures).
                 window->Layout(*settings);
-                window->Draw(hovered.cell, pressed.cell, settings->GetCurrentScaleFactor());
+                std::optional<std::reference_wrapper<const Cell>> hoveredCell;
+                std::optional<std::reference_wrapper<const Cell>> pressedCell;
+                if (hovered.cell) hoveredCell = std::cref(*hovered.cell);
+                if (pressed.cell) pressedCell = std::cref(*pressed.cell);
+                window->DrawAt(hoveredCell, pressedCell, settings->GetCurrentScaleFactor());
             }
         }
     }

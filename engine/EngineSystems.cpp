@@ -22,6 +22,7 @@
 #include "systems/TransformSystem.hpp"
 #include "systems/UberShaderSystem.hpp"
 #include "ui/GameUIEngine.hpp"
+#include "ui/CanvasSystem.hpp"
 #include "UserInput.hpp"
 
 #include <cassert>
@@ -56,6 +57,7 @@ namespace sage
           spatialAudioSystem(std::make_unique<SpatialAudioSystem>(_registry, this)),
           particleEmitterSystem(std::make_unique<ParticleEmitterSystem>(*_registry))
     {
+        canvasSystem = std::make_unique<CanvasSystem>(*_registry);
         uiEngine = std::make_unique<GameUIEngine>(_settings, cursor.get());
         csharpScriptSystem = std::make_unique<CSharpScriptSystem>(_registry, this, std::move(scripting));
     }
@@ -63,6 +65,7 @@ namespace sage
     EngineSystems::~EngineSystems()
     {
         // The UI refers to settings and the cursor without owning them.
+        canvasSystem.reset();
         uiEngine.reset();
     }
 

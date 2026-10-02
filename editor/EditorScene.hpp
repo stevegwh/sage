@@ -1,6 +1,7 @@
 #pragma once
 
 #include "EditorAssetCatalog.hpp"
+#include "CanvasEditor.hpp"
 #include "EditorCamera.hpp"
 #include "CSharpScriptEditorConfig.hpp"
 #include "EditorEntityOperations.hpp"
@@ -56,6 +57,7 @@ namespace sage
 
         EngineSystems* sys{};
         std::unique_ptr<editor::EditorGui> gui;
+        std::unique_ptr<editor::CanvasEditor> canvasEditor;
         editor::InspectorRegistry inspectorRegistry;
         std::unique_ptr<editor::EditorAssetCatalog> assetCatalog;
         std::unique_ptr<editor::EditorModelDefaultsController> modelDefaults;

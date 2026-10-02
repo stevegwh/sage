@@ -1,7 +1,7 @@
 #pragma once
 
-#include "raylib.h"
 #include "engine/Colors.hpp"
+#include "raylib.h"
 
 #include <functional>
 #include <memory>
@@ -41,6 +41,22 @@ namespace sage
     } // namespace literals
 
     using Size = std::optional<Percent>;
+
+    enum class WindowHorizontalAlignment
+    {
+        LEFT,
+        CENTER,
+        RIGHT,
+        FREE
+    };
+
+    enum class WindowVerticalAlignment
+    {
+        TOP,
+        MIDDLE,
+        BOTTOM,
+        FREE
+    };
 
     enum class HorizontalAlignment
     {
@@ -152,6 +168,11 @@ namespace sage
       public:
         explicit Window(Rectangle designBounds, WindowStyle style = {});
 
+        void LayoutAt(Rectangle bounds, float scale);
+        void DrawAt(
+            std::optional<std::reference_wrapper<const Cell>> hovered,
+            std::optional<std::reference_wrapper<const Cell>> pressed,
+            float scale) const;
         Table& RootTable();
         Window& OnShow(std::function<void()> action);
         Window& OnHide(std::function<void()> action);
@@ -171,7 +192,6 @@ namespace sage
         void MoveTo(Vector2 designPosition);
         void ClampToDesignViewport();
         [[nodiscard]] Cell* HitTest(Vector2 point);
-        void Draw(const Cell* hovered, const Cell* pressed, float scale) const;
         void DrawDebug() const;
 
         friend class GameUIEngine;

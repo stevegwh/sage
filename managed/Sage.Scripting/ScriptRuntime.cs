@@ -116,6 +116,7 @@ public static unsafe class ScriptRuntime
             }
             Destroy(entity);
             script.Entity = new Entity(entity);
+            ExposedFields.Apply(script);
             var instance = new ScriptInstance(script);
             Instances.Add(entity, instance);
             return 0;

@@ -19,7 +19,7 @@ namespace sage
 
         [[nodiscard]] UITheme& Theme();
         Window& AddWindow(Rectangle designBounds);
-        void Update();
+        void Update(bool inputEnabled = true);
         void Draw2D() const;
         void DrawDebug2D() const;
 

@@ -6,12 +6,16 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "ScriptApi.hpp"
+#include "engine/ui/CanvasSystem.hpp"
 
 namespace sage
 {
     void RegisterEngineScriptApi(ScriptApiRegistry& api)
     {
         api.SetDefaultManagedNamespace("Sage");
+        api.RegisterComponent<UINode>("UINode");
+        api.RegisterComponent<ScriptFields>("ScriptFields");
+        api.RegisterSystem<CanvasSystem>("UI");
         api.RegisterComponent<sgTransform>("Transform");
         api.RegisterComponent<Collideable>("Collideable");
         api.RegisterComponent<MoveableActor>("MoveableActor");

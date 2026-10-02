@@ -24,6 +24,7 @@ namespace sage
     class Camera;
     class LightManager;
     class GameUIEngine;
+    class CanvasSystem;
 
     // Systems group
     class TransformSystem;
@@ -45,6 +46,7 @@ namespace sage
         Settings* settings;
         AudioManager* audioManager;
         std::unique_ptr<GameUIEngine> uiEngine;
+        std::unique_ptr<CanvasSystem> canvasSystem;
 
         std::unique_ptr<UserInput> userInput;
         std::unique_ptr<Camera> camera;

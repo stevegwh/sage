@@ -799,6 +799,12 @@ namespace sage::editor
             resourceEntries.push_back({.path = *relative, .flatpackIndex = i});
             addDirectories(*relative);
         }
+        if (std::filesystem::exists(RESOURCES_DIRECTORY))
+            for (const auto& file : std::filesystem::recursive_directory_iterator(RESOURCES_DIRECTORY))
+                if (file.is_regular_file() && file.path().extension() == ".canvas") {
+                    const auto relative = RelativeResourcePath(file.path());
+                    if (relative) { resourceEntries.push_back({.path = *relative, .canvas = true}); addDirectories(*relative); }
+                }
         for (const auto& directory : directories)
             resourceEntries.push_back({.path = directory, .directory = true});
         std::sort(
@@ -853,6 +859,8 @@ namespace sage::editor
     void EditorGui::drawResourceBrowser()
     {
         if (resourceBrowserNeedsRefresh) refreshResourceBrowser();
+        if (ImGui::Button("New Canvas") && onCanvasEditCb) onCanvasEditCb({});
+        ImGui::SameLine();
         if (ImGui::Button(ICON_FA_ROTATE_RIGHT " Refresh"))
         {
             std::vector<FlatpackEntry> flatpacks;
@@ -1013,6 +1021,7 @@ namespace sage::editor
         {
             fallbackLabel = ICON_FA_FOLDER "\nFolder";
         }
+        if (entry.canvas) fallbackLabel = "UI\nCanvas";
         Texture2D* texture = thumbnail && thumbnail->id != 0 ? &thumbnail->texture : nullptr;
         const bool clicked = texture ? ImGui::ImageButton(
                                            "thumbnail",
@@ -1126,6 +1135,17 @@ namespace sage::editor
                 if (ImGui::MenuItem("Copy Path")) ImGui::SetClipboardText(path.c_str());
                 ImGui::EndPopup();
             }
+        }
+        else if (entry.canvas)
+        {
+            type = "Canvas";
+            if (ImGui::BeginPopupContextItem("canvas_context"))
+            {
+                if (ImGui::MenuItem("Edit Canvas") && onCanvasEditCb) onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
+                if (ImGui::MenuItem("New Canvas") && onCanvasEditCb) onCanvasEditCb({});
+                ImGui::EndPopup();
+            }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && onCanvasEditCb) onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
         }
         else
         {

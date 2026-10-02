@@ -50,6 +50,10 @@ namespace sage
     {
         const auto command = json::String(request, "command");
         if (command == "inspect") return automationState();
+        if (command == "canvas") {
+            if (gameRuntime || flatpackSession->IsActive()) throw std::runtime_error("Stop Play and close the flatpack before editing a canvas");
+            return canvasEditor->Command(request);
+        }
         if (command == "schema")
         {
             if (!request.HasMember("entity")) return content::DescribeComponents();
@@ -65,6 +69,7 @@ namespace sage
             json::Put(state, "valid", errors.empty(), state.GetAllocator());
             return state;
         }
+        if (canvasEditor->IsActive() && command != "quit") throw std::runtime_error("Close the canvas editor before changing the world");
         const auto state = automationState();
         if (json::String(request, "revision") != json::String(state, "revision"))
             throw std::runtime_error("Document revision changed; inspect the session again");
@@ -72,7 +77,7 @@ namespace sage
             throw std::runtime_error("An inspector or transform edit is in progress");
         if (command == "quit")
         {
-            if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges())
+            if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges() || canvasEditor->IsDirty())
                 throw std::runtime_error("Save unsaved changes before quitting");
             sys->settings->ExitProgram();
             return automationState();
@@ -115,7 +120,7 @@ namespace sage
             if (gameRuntime) throw std::runtime_error("Stop play before changing source content");
             if (command == "open")
             {
-                if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges())
+                if (mapController->HasUnsavedChanges() || flatpackSession->HasUnsavedChanges() || canvasEditor->IsDirty())
                     throw std::runtime_error("Save or explicitly discard unsaved edits before opening content");
                 const std::filesystem::path path = json::String(request, "path");
                 auto document = content::ReadDocument(path);

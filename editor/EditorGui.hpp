@@ -84,7 +84,7 @@ namespace sage
             };
 
             // What the scene tab bar shows: the map tab is always present; the
-            // flatpack tab appears while a flatpack is open for editing.
+            // flatpack tab appears while editing, and a canvas tab resumes its document.
             struct SceneTabState
             {
                 std::string mapLabel;
@@ -93,14 +93,18 @@ namespace sage
                 std::string flatpackLabel;
                 std::filesystem::path flatpackPath;
                 bool flatpackDirty = false;
+                bool canvasOpen = false;
+                std::string canvasLabel;
+                bool canvasDirty = false;
             };
 
-            // Result of drawing the scene tab bar for one frame. Either flag asks
-            // the host to close the open flatpack (returning to the map).
+            // Tab selections and close requests are handled by the scene host.
             struct SceneTabBarResult
             {
                 bool mapSelected = false;
                 bool flatpackCloseRequested = false;
+                bool canvasSelected = false;
+                bool canvasCloseRequested = false;
             };
 
             struct ModelDefaultCallbacks
@@ -186,11 +190,13 @@ namespace sage
             std::function<void(const std::filesystem::path&)> onFlatpackDeleteCb;
             std::function<void(const SceneSelectionRequest&)> onSceneObjectSelectedCb;
             std::function<void(const HierarchyMoveRequest&)> onHierarchyMoveCb;
+            std::function<void(std::filesystem::path)> onCanvasEditCb;
             struct ResourceEntry
             {
                 // Path relative to resources.
                 std::filesystem::path path;
                 bool directory = false;
+                bool canvas = false;
                 std::optional<std::size_t> modelIndex;
                 std::optional<std::size_t> materialIndex;
                 std::optional<std::size_t> imageIndex;
@@ -284,6 +290,8 @@ namespace sage
             void DrawHierarchyWindow();
             InspectorEditResult DrawInspectorWindow();
             void DrawAssetDrawerWindow();
+            void RefreshResourceBrowser() { resourceBrowserNeedsRefresh = true; }
+            void SetCanvasEditCallback(std::function<void(std::filesystem::path)> callback) { onCanvasEditCb = std::move(callback); }
             void DrawConsoleWindow();
             void AddConsoleEntry(CSharpLogLevel level, std::string_view message);
             void ClearConsole();

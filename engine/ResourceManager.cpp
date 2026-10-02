@@ -489,7 +489,9 @@ namespace sage
         if (!fonts.contains(path))
         {
             auto font = LoadFontEx(path.c_str(), 96, nullptr, 0);
-            SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
+            // Canvas previews and docked Play views can shrink glyphs substantially.
+            GenTextureMipmaps(&font.texture);
+            SetTextureFilter(font.texture, TEXTURE_FILTER_TRILINEAR);
             for (size_t i = 0; i < font.glyphCount; i++)
             {
                 assert(font.glyphs[i].image.data != nullptr);
