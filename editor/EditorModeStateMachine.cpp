@@ -12,6 +12,7 @@
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/Terrain.hpp"
 #include "engine/EngineSystems.hpp"
+#include "engine/ResourceManager.hpp"
 #include "engine/Settings.hpp"
 #include "engine/TerrainMesh.hpp"
 #include "engine/UserInput.hpp"
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 
 namespace sage::editor
 {
@@ -684,8 +686,27 @@ namespace sage::editor
         return "Sculpt Terrain";
     }
 
+    void EditorTerrainSculptState::RefreshTerrainTextures()
+    {
+        terrainTextures.clear();
+        for (const auto& key : ResourceManager::GetInstance().GetImageKeys())
+            if (key.starts_with("textures/terrain/") &&
+                std::filesystem::path(key).stem().string().ends_with("_basecolor"))
+                terrainTextures.push_back("resources/" + key);
+        std::error_code error;
+        const std::filesystem::path folder{"resources/textures/terrain"};
+        for (auto it = std::filesystem::recursive_directory_iterator(folder, error);
+             !error && it != std::filesystem::recursive_directory_iterator{};
+             it.increment(error))
+            if (it->is_regular_file(error) && it->path().stem().string().ends_with("_basecolor"))
+                terrainTextures.push_back(it->path().generic_string());
+        std::ranges::sort(terrainTextures);
+        terrainTextures.erase(std::unique(terrainTextures.begin(), terrainTextures.end()), terrainTextures.end());
+    }
+
     void EditorTerrainSculptState::OnEnter(EditorModeStateMachine& machine)
     {
+        RefreshTerrainTextures();
         machine.refreshOverlay();
     }
 
@@ -714,6 +735,7 @@ namespace sage::editor
             brushRadius = std::min(50.0f, brushRadius + 0.5f);
         }
 
+        const auto previousMode = brushMode;
         // Number-key shortcuts mirror the brush selector in the Terrain Brush
         // window. Switching away from Ramp drops any pending endpoint.
         if (IsKeyPressed(KEY_ONE)) brushMode = TerrainBrushMode::RaiseLower;
@@ -722,6 +744,8 @@ namespace sage::editor
         if (IsKeyPressed(KEY_FOUR)) brushMode = TerrainBrushMode::Noise;
         if (IsKeyPressed(KEY_FIVE)) brushMode = TerrainBrushMode::Erosion;
         if (IsKeyPressed(KEY_SIX)) brushMode = TerrainBrushMode::Ramp;
+        if (IsKeyPressed(KEY_SEVEN)) brushMode = TerrainBrushMode::Texture;
+        if (brushMode != previousMode) finishStroke(machine, true);
         if (brushMode != TerrainBrushMode::Ramp) rampStart.reset();
 
         cursorHit.reset();
@@ -742,7 +766,9 @@ namespace sage::editor
             if (!stroking && cursorHit.has_value() && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 stroking = true;
-                machine.history().Begin(EditAction::SculptTerrain, {terrain});
+                machine.history().Begin(
+                    brushMode == TerrainBrushMode::Texture ? EditAction::PaintTerrain : EditAction::SculptTerrain,
+                    {terrain});
                 if (brushMode == TerrainBrushMode::Flatten)
                 {
                     const auto& terrainData = registry.get<Terrain>(terrain);
@@ -787,7 +813,10 @@ namespace sage::editor
         const float localRadius = brushRadius / terrainHorizontalScale(transform);
 
         const auto region =
-            ApplyTerrainBrush(terrainData, localCenter, localRadius, amount, brushMode, flattenTarget);
+            brushMode == TerrainBrushMode::Texture
+                ? ApplyTerrainTextureBrush(
+                      terrainData, localCenter, localRadius, amount, static_cast<std::size_t>(textureLayer), lower)
+                : ApplyTerrainBrush(terrainData, localCenter, localRadius, amount, brushMode, flattenTarget);
         commitTerrainRegion(machine, region);
     }
 
@@ -824,9 +853,12 @@ namespace sage::editor
         auto& renderable = registry.get<DynamicRenderable>(terrain);
         if (auto model = renderable.GetModel())
         {
-            UpdateTerrainModelRegion(model->get(), terrainData, region);
+            if (brushMode == TerrainBrushMode::Texture)
+                UpdateTerrainTextureRegion(model->get(), terrainData, region);
+            else
+                UpdateTerrainModelRegion(model->get(), terrainData, region);
         }
-        UpdateTerrainCollideableBounds(registry, terrain);
+        if (brushMode != TerrainBrushMode::Texture) UpdateTerrainCollideableBounds(registry, terrain);
     }
 
     void EditorTerrainSculptState::finishStroke(EditorModeStateMachine& machine, const bool keepChanges)
@@ -1167,9 +1199,11 @@ namespace sage::editor
         return std::visit([this](auto& current) { return current.GetName(*this); }, currentState);
     }
 
-    EditorTerrainSculptState* EditorModeStateMachine::CurrentTerrainSculptState()
+    std::optional<std::reference_wrapper<EditorTerrainSculptState>> EditorModeStateMachine::
+        CurrentTerrainSculptState()
     {
-        return std::get_if<EditorTerrainSculptState>(&currentState);
+        if (!std::holds_alternative<EditorTerrainSculptState>(currentState)) return std::nullopt;
+        return std::ref(std::get<EditorTerrainSculptState>(currentState));
     }
 
     EditorModeStateMachine::EditorModeStateMachine(EditorScene& scene, EditorTransformEditor& transformEditor)

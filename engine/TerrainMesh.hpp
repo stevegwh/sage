@@ -3,6 +3,7 @@
 #include "entt/entt.hpp"
 #include "raylib.h"
 
+#include <cstddef>
 #include <optional>
 
 namespace sage
@@ -45,7 +46,8 @@ namespace sage
         Flatten,    // pull the field toward a reference height
         Noise,      // jitter the field for natural roughness
         Erosion,    // wear down ridges, lightly fill pits (thermal-style)
-        Ramp        // linear grade between two points (handled separately)
+        Ramp,       // linear grade between two points (handled separately)
+        Texture     // blend texture weights (ApplyTerrainTextureBrush)
     };
 
     // Applies one paint-brush dab inside the brush circle with a smoothstep
@@ -62,12 +64,21 @@ namespace sage
         TerrainBrushMode mode,
         float reference = 0.0f);
 
+    // Blends toward one texture layer, or erases that layer back to the base surface.
+    TerrainRegion ApplyTerrainTextureBrush(
+        Terrain& terrain, Vector2 localCenter, float radius, float amount, std::size_t layer, bool erase);
+
+    // Paint changes only vertex blend weights, leaving geometry and collider bounds untouched.
+    void UpdateTerrainTextureRegion(Model& model, const Terrain& terrain, const TerrainRegion& region);
+
+    // Refreshes texture bindings and tiled UVs after changing the terrain palette.
+    void UpdateTerrainTextures(Model& model, const Terrain& terrain);
+
     // Linearly grades a strip of the given half-width between two local points,
     // taking the end heights from the current field and blending toward that
     // ramp with a smoothstep falloff across the strip. Single-shot (not a drag).
     // Returns the touched vertex range.
-    TerrainRegion ApplyTerrainRamp(
-        Terrain& terrain, Vector2 localStart, Vector2 localEnd, float halfWidth);
+    TerrainRegion ApplyTerrainRamp(Terrain& terrain, Vector2 localStart, Vector2 localEnd, float halfWidth);
 
     // Intersects a world-space ray with the transformed height field. Returns
     // the world-space hit point.

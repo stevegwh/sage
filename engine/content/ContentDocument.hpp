@@ -6,6 +6,8 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <span>
+#include <string_view>
 #include <vector>
 
 namespace sage
@@ -45,12 +47,14 @@ namespace sage
         void WriteDocument(const std::filesystem::path& path, const json::Value& document);
         std::vector<std::string> Validate(const json::Value& document);
         std::vector<std::string> Dependencies(const json::Value& document);
+        // Callers keeping separate in-memory snapshots can omit registered components from JSON capture.
         json::Document Capture(
             entt::registry& registry,
             const std::vector<entt::entity>& entities,
             const std::string& kind = "map",
             entt::entity root = entt::null,
-            bool keepExternalReferences = false);
+            bool keepExternalReferences = false,
+            std::span<const std::string_view> excludedComponents = {});
         ContentLoadResult Instantiate(
             entt::registry& registry,
             const json::Value& document,

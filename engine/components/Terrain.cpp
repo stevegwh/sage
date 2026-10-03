@@ -3,6 +3,8 @@
 #include "raymath.h"
 
 #include <algorithm>
+#include <cmath>
+#include <numeric>
 
 namespace sage
 {
@@ -19,8 +21,20 @@ namespace sage
 
     bool Terrain::IsValid() const
     {
-        return resolution >= 2 && cellSize > 0.0f &&
-               heights.size() == static_cast<std::size_t>(resolution) * resolution;
+        if (resolution < 2 || !std::isfinite(cellSize) || cellSize <= 0.0f ||
+            heights.size() != static_cast<std::size_t>(resolution) * resolution ||
+            !std::isfinite(textureTileSize) || textureTileSize <= 0.0f ||
+            (!textureWeights.empty() && textureWeights.size() != heights.size()))
+            return false;
+        for (const auto& weights : textureWeights)
+        {
+            for (std::size_t layer = 0; layer < weights.size(); ++layer)
+                if (!std::isfinite(weights[layer]) || weights[layer] < 0.0f || weights[layer] > 1.0f ||
+                    (weights[layer] > 0.0f && textures[layer].empty()))
+                    return false;
+            if (std::accumulate(weights.begin(), weights.end(), 0.0f) > 1.0001f) return false;
+        }
+        return true;
     }
 
     float Terrain::WorldSize() const

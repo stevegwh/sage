@@ -36,11 +36,19 @@ namespace sage::editor
 
     bool EditorHistory::statesEqual(const EntityState& a, const EntityState& b)
     {
+        const auto terrainsEqual = [](const std::optional<Terrain>& left, const std::optional<Terrain>& right) {
+            if (left.has_value() != right.has_value()) return false;
+            if (!left) return true;
+            return left->resolution == right->resolution && left->cellSize == right->cellSize &&
+                   left->heights == right->heights && left->textures == right->textures &&
+                   left->textureWeights == right->textureWeights &&
+                   left->textureTileSize == right->textureTileSize;
+        };
         return a.exists == b.exists &&
                (!a.exists || (a.parentId == b.parentId && a.nextSiblingId == b.nextSiblingId &&
                               a.isMapEntity == b.isMapEntity && a.isMapBase == b.isMapBase &&
                               a.hasAssetReference == b.hasAssetReference && a.assetKey == b.assetKey &&
-                              a.contentJson == b.contentJson));
+                              a.contentJson == b.contentJson && terrainsEqual(a.terrain, b.terrain)));
     }
 
     std::uint64_t EditorHistory::ensureId(const entt::entity entity)
@@ -124,7 +132,9 @@ namespace sage::editor
             s.hasAssetReference = true;
             s.assetKey = asset->assetKey;
         }
-        auto document = content::Capture(reg, {entity}, "map", entt::null, true);
+        if (reg.all_of<Terrain>(entity)) s.terrain = reg.get<Terrain>(entity);
+        constexpr std::array<std::string_view, 1> EXCLUDED_COMPONENTS{"sage.Terrain"};
+        auto document = content::Capture(reg, {entity}, "map", entt::null, true, EXCLUDED_COMPONENTS);
         s.contentJson = json::Stringify(json::At(json::Require(document, "entities"), 0));
         return s;
     }
@@ -148,12 +158,14 @@ namespace sage::editor
         if (active) Commit(); // finalize any leaked transaction rather than lose it
         active = true;
         activeAction = action;
+        baselineSelection.reset();
         activeBefore = captureAll(affected);
     }
 
     void EditorHistory::Commit()
     {
         if (!active) return;
+        baselineSelection.reset();
 
         auto idMap = buildIdMap();
         std::vector<EntityState> after;
@@ -200,7 +212,9 @@ namespace sage::editor
 
     void EditorHistory::CaptureBaseline(const std::vector<entt::entity>& entities)
     {
+        if (baselineSelection && *baselineSelection == entities) return;
         baseline = captureAll(entities);
+        baselineSelection = entities;
     }
 
     void EditorHistory::BeginFromBaseline(const EditAction action)
@@ -209,6 +223,7 @@ namespace sage::editor
         active = true;
         activeAction = action;
         activeBefore = baseline;
+        baselineSelection.reset();
     }
 
     void EditorHistory::RecordCreate(const EditAction action, const std::vector<entt::entity>& roots)
@@ -312,6 +327,7 @@ namespace sage::editor
     void EditorHistory::MarkDirty()
     {
         dirty = true;
+        baselineSelection.reset();
     }
 
     void EditorHistory::MarkSaved()
@@ -331,6 +347,7 @@ namespace sage::editor
         active = false;
         activeBefore.clear();
         baseline.clear();
+        baselineSelection.reset();
         MarkSaved();
     }
 
@@ -338,6 +355,7 @@ namespace sage::editor
 
     void EditorHistory::applyEntry(const HistoryEntry& entry, const bool undo)
     {
+        baselineSelection.reset();
         auto& reg = registry();
         auto idMap = buildIdMap();
         const auto pick = [undo](const EntityDelta& delta) -> const EntityState& {
@@ -420,6 +438,7 @@ namespace sage::editor
         for (const auto& [id, handle] : idMap)
             references.emplace(static_cast<std::uint32_t>(id), handle);
         content::RestoreEntity(reg, entity, json::Parse(target.contentJson), references);
+        if (target.terrain) reg.emplace_or_replace<Terrain>(entity, *target.terrain);
         if (target.hasAssetReference)
             reg.emplace_or_replace<AssetReference>(entity, AssetReference{target.assetKey});
         else

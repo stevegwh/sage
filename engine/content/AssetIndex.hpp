@@ -1,6 +1,7 @@
 #pragma once
 #include "ContentDocument.hpp"
 #include "engine/AssetKey.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/ResourceManager.hpp"
 #include <set>
 
@@ -88,6 +89,13 @@ namespace sage::content
                 // Mutable models store material overrides after a separator in legacy resource keys.
                 key = key.substr(0, key.find('\x1f'));
                 if (kind == 1 || kind == 2) check("models", key);
+            }
+            if (supported("sage.Terrain"))
+            {
+                Terrain terrain;
+                json::Decode(components["sage.Terrain"]["data"], terrain);
+                for (const auto& texture : terrain.textures)
+                    check("images", AssetKeyForPath(texture));
             }
             if (supported("sage.Animation"))
                 check("models", json::String(components["sage.Animation"]["data"], "modelKey"));

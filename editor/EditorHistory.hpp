@@ -20,6 +20,7 @@
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/ScriptComponent.hpp"
+#include "engine/components/Terrain.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
 
@@ -61,7 +62,8 @@ namespace sage::editor
         AddTerrain,
         AddEmptyTransform,
         AddMesh,
-        SculptTerrain
+        SculptTerrain,
+        PaintTerrain
     };
 
     class EditorHistory
@@ -85,7 +87,7 @@ namespace sage::editor
 
         // Inspector helper: the inspector mutates the live component while a widget
         // is active, and some widgets (checkbox/combo) mutate on the very frame
-        // they activate. CaptureBaseline is called each idle frame to keep a clean
+        // they activate. CaptureBaseline reuses the snapshot until selection or history changes to keep a clean
         // pre-edit snapshot; BeginFromBaseline promotes it into a transaction once
         // an edit actually starts.
         void CaptureBaseline(const std::vector<entt::entity>& entities);
@@ -128,6 +130,8 @@ namespace sage::editor
             bool hasAssetReference = false;
             std::string assetKey;
             std::string contentJson;
+            // Large numeric fields stay as values instead of round-tripping through JSON on every stroke.
+            std::optional<Terrain> terrain;
         };
 
         struct EntityDelta
@@ -156,6 +160,7 @@ namespace sage::editor
         std::vector<EntityState> activeBefore;
 
         std::vector<EntityState> baseline;
+        std::optional<std::vector<entt::entity>> baselineSelection;
 
         [[nodiscard]] static bool statesEqual(const EntityState& a, const EntityState& b);
         [[nodiscard]] std::uint64_t ensureId(entt::entity entity);

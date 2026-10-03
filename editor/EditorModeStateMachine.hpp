@@ -100,6 +100,9 @@ namespace sage::editor
         // World units per second applied at the brush centre.
         float brushStrength = 6.0f;
         TerrainBrushMode brushMode = TerrainBrushMode::RaiseLower;
+        int textureLayer = 0;
+        std::vector<std::string> terrainTextures;
+        void RefreshTerrainTextures();
 
         void OnEnter(EditorModeStateMachine& machine);
         void OnExit(EditorModeStateMachine& machine);
@@ -192,7 +195,7 @@ namespace sage::editor
         [[nodiscard]] bool IsPlaceMode() const;
         [[nodiscard]] bool IsEditMode() const;
         [[nodiscard]] std::string GetStateName() const;
-        [[nodiscard]] EditorTerrainSculptState* CurrentTerrainSculptState();
+        [[nodiscard]] std::optional<std::reference_wrapper<EditorTerrainSculptState>> CurrentTerrainSculptState();
 
         EditorModeStateMachine(EditorScene& scene, EditorTransformEditor& transformEditor);
     };

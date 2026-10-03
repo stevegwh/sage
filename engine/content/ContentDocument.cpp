@@ -507,6 +507,18 @@ namespace sage::content
     std::vector<std::string> Dependencies(const json::Value& document)
     {
         std::set<std::string> result;
+        for (const auto& node : document["entities"].GetArray())
+        {
+            const auto& components = node["components"];
+            if (components.HasMember("sage.Terrain") && json::Id(components["sage.Terrain"], "version") == 1 &&
+                !components["sage.Terrain"].HasMember("encoding"))
+            {
+                Terrain terrain;
+                json::Decode(components["sage.Terrain"]["data"], terrain);
+                for (const auto& texture : terrain.textures)
+                    if (!texture.empty()) result.insert(texture);
+            }
+        }
         const auto visit = [&](auto& self, const json::Value& value) -> void {
             if (value.IsArray())
                 for (const auto& v : value.GetArray())
@@ -536,7 +548,8 @@ namespace sage::content
         const std::vector<entt::entity>& entities,
         const std::string& kind,
         entt::entity root,
-        bool keepExternalReferences)
+        bool keepExternalReferences,
+        const std::span<const std::string_view> excludedComponents)
     {
         EnsureEngineComponentsRegistered();
         auto doc = Empty(kind);
@@ -588,7 +601,8 @@ namespace sage::content
                 a);
             json::Put(n, "order", order++, a);
             for (const auto& operations : detail::RegisteredComponentOperations())
-                if (operations.has(registry, e))
+                if (std::ranges::find(excludedComponents, operations.key) == excludedComponents.end() &&
+                    operations.has(registry, e))
                     Component(n, operations.key, json::Parse(operations.captureJson(registry, e, refs)), a);
             if (light && t)
             {

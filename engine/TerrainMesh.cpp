@@ -10,6 +10,7 @@
 #include "components/Terrain.hpp"
 #include "LightManager.hpp"
 #include "ResourceManager.hpp"
+#include "rlgl.h"
 #include "ShaderPaths.hpp"
 
 #include "raymath.h"
@@ -23,7 +24,6 @@ namespace sage
     namespace
     {
         constexpr int TERRAIN_CHUNK_QUADS = 64;
-        constexpr Color TERRAIN_TINT = {.r = 92, .g = 142, .b = 74, .a = 255};
         // Minimum half-thickness so a freshly created flat terrain still has a
         // pickable bounding box.
         constexpr float TERRAIN_BOUNDS_PADDING = 0.05f;
@@ -66,7 +66,7 @@ namespace sage
 
         void fillChunkVertexData(const Terrain& terrain, const ChunkRange& range, Mesh& mesh)
         {
-            const float uvScale = 1.0f / static_cast<float>(terrain.resolution - 1);
+            const float uvScale = terrain.cellSize / terrain.textureTileSize;
             int vertexIndex = 0;
             for (int row = range.firstRow; row <= range.lastRow; ++row)
             {
@@ -83,6 +83,15 @@ namespace sage
 
                     mesh.texcoords[vertexIndex * 2] = static_cast<float>(col) * uvScale;
                     mesh.texcoords[vertexIndex * 2 + 1] = static_cast<float>(row) * uvScale;
+                    for (std::size_t layer = 0; layer < TERRAIN_TEXTURE_LAYERS; ++layer)
+                    {
+                        const float weight =
+                            terrain.textureWeights.empty()
+                                ? 0.0f
+                                : terrain.textureWeights.at(
+                                      static_cast<std::size_t>(row) * terrain.resolution + col)[layer];
+                        mesh.colors[vertexIndex * 4 + layer] = static_cast<unsigned char>(weight * 255.0f);
+                    }
                 }
             }
         }
@@ -99,6 +108,7 @@ namespace sage
             mesh.vertices = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
             mesh.normals = static_cast<float*>(MemAlloc(vertexCount * 3 * sizeof(float)));
             mesh.texcoords = static_cast<float*>(MemAlloc(vertexCount * 2 * sizeof(float)));
+            mesh.colors = static_cast<unsigned char*>(MemAlloc(vertexCount * 4 * sizeof(unsigned char)));
             mesh.indices = static_cast<unsigned short*>(MemAlloc(mesh.triangleCount * 3 * sizeof(unsigned short)));
 
             fillChunkVertexData(terrain, range, mesh);
@@ -186,6 +196,7 @@ namespace sage
 
                 auto& mesh = model.meshes[chunkRow * chunks + chunkCol];
                 fillChunkVertexData(terrain, range, mesh);
+                UpdateMeshBuffer(mesh, 3, mesh.colors, mesh.vertexCount * 4, 0);
                 UpdateMeshBuffer(
                     mesh,
                     vboPositionSlot,
@@ -196,6 +207,81 @@ namespace sage
                     mesh, vboNormalSlot, mesh.normals, static_cast<int>(mesh.vertexCount * 3 * sizeof(float)), 0);
             }
         }
+    }
+
+    void UpdateTerrainTextureRegion(Model& model, const Terrain& terrain, const TerrainRegion& region)
+    {
+        const int chunks = chunksPerSide(terrain);
+        if (model.meshCount != chunks * chunks) return;
+        constexpr int VBO_COLOR_SLOT = 3;
+        for (int chunkRow = 0; chunkRow < chunks; ++chunkRow)
+            for (int chunkCol = 0; chunkCol < chunks; ++chunkCol)
+            {
+                const auto range = getChunkRange(terrain, chunkRow, chunkCol);
+                const int firstRow = std::max(range.firstRow, region.minRow);
+                const int lastRow = std::min(range.lastRow, region.maxRow);
+                const int firstCol = std::max(range.firstCol, region.minCol);
+                const int lastCol = std::min(range.lastCol, region.maxCol);
+                if (firstRow > lastRow || firstCol > lastCol) continue;
+                auto& mesh = model.meshes[chunkRow * chunks + chunkCol];
+                for (int row = firstRow; row <= lastRow; ++row)
+                {
+                    for (int col = firstCol; col <= lastCol; ++col)
+                    {
+                        const int vertex = (row - range.firstRow) * range.VertsX() + col - range.firstCol;
+                        for (std::size_t layer = 0; layer < TERRAIN_TEXTURE_LAYERS; ++layer)
+                        {
+                            const float weight =
+                                terrain.textureWeights.empty()
+                                    ? 0.0f
+                                    : terrain.textureWeights.at(
+                                          static_cast<std::size_t>(row) * terrain.resolution + col)[layer];
+                            mesh.colors[vertex * 4 + layer] = static_cast<unsigned char>(weight * 255.0f);
+                        }
+                    }
+                }
+                // One contiguous upload per touched chunk avoids a GL call for each painted row.
+                const int firstVertex = (firstRow - range.firstRow) * range.VertsX() + firstCol - range.firstCol;
+                const int lastVertex = (lastRow - range.firstRow) * range.VertsX() + lastCol - range.firstCol;
+                UpdateMeshBuffer(
+                    mesh,
+                    VBO_COLOR_SLOT,
+                    mesh.colors + firstVertex * 4,
+                    (lastVertex - firstVertex + 1) * 4,
+                    firstVertex * 4);
+            }
+    }
+
+    void UpdateTerrainTextures(Model& model, const Terrain& terrain)
+    {
+        for (std::size_t layer = 0; layer < TERRAIN_TEXTURE_LAYERS; ++layer)
+        {
+            Texture texture{
+                .id = rlGetTextureIdDefault(),
+                .width = 1,
+                .height = 1,
+                .mipmaps = 1,
+                .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+            if (!terrain.textures[layer].empty())
+            {
+                texture = ResourceManager::GetInstance().TextureLoad(terrain.textures[layer]);
+                if (texture.id != 0)
+                {
+                    if (texture.mipmaps == 1) GenTextureMipmaps(&texture);
+                    SetTextureFilter(texture, TEXTURE_FILTER_TRILINEAR);
+                    SetTextureWrap(texture, TEXTURE_WRAP_REPEAT);
+                }
+            }
+            model.materials[0].maps[layer].texture = texture;
+        }
+        for (int chunkRow = 0; chunkRow < chunksPerSide(terrain); ++chunkRow)
+            for (int chunkCol = 0; chunkCol < chunksPerSide(terrain); ++chunkCol)
+            {
+                auto& mesh = model.meshes[chunkRow * chunksPerSide(terrain) + chunkCol];
+                fillChunkVertexData(terrain, getChunkRange(terrain, chunkRow, chunkCol), mesh);
+                UpdateMeshBuffer(
+                    mesh, 1, mesh.texcoords, static_cast<int>(mesh.vertexCount * 2 * sizeof(float)), 0);
+            }
     }
 
     BoundingBox GetTerrainLocalBounds(const Terrain& terrain)
@@ -299,6 +385,8 @@ namespace sage
 
                 switch (mode)
                 {
+                case TerrainBrushMode::Texture:
+                    break;
                 case TerrainBrushMode::RaiseLower:
                     next = height + amount * falloff;
                     break;
@@ -332,6 +420,40 @@ namespace sage
             }
         }
 
+        return region;
+    }
+
+    TerrainRegion ApplyTerrainTextureBrush(
+        Terrain& terrain,
+        const Vector2 localCenter,
+        const float radius,
+        const float amount,
+        const std::size_t layer,
+        const bool erase)
+    {
+        const auto region = brushRegion(terrain, localCenter, radius);
+        if (layer >= TERRAIN_TEXTURE_LAYERS || terrain.textures[layer].empty() || radius <= 0.0f || amount <= 0.0f)
+            return region;
+        if (terrain.textureWeights.empty()) terrain.textureWeights.resize(terrain.heights.size());
+        for (int row = region.minRow; row <= region.maxRow; ++row)
+            for (int col = region.minCol; col <= region.maxCol; ++col)
+            {
+                const float dx = static_cast<float>(col) * terrain.cellSize - localCenter.x;
+                const float dz = static_cast<float>(row) * terrain.cellSize - localCenter.y;
+                const float distance = std::sqrt(dx * dx + dz * dz);
+                if (distance >= radius) continue;
+                const float blend = 1.0f - std::exp(-amount * smoothstepFalloff(distance, radius));
+                auto& weights =
+                    terrain.textureWeights.at(static_cast<std::size_t>(row) * terrain.resolution + col);
+                if (erase)
+                    weights[layer] *= 1.0f - blend;
+                else
+                {
+                    for (auto& weight : weights)
+                        weight *= 1.0f - blend;
+                    weights[layer] += blend;
+                }
+            }
         return region;
     }
 
@@ -447,12 +569,14 @@ namespace sage
         auto& renderable = registry.get_or_emplace<DynamicRenderable>(entity);
         renderable.SetModel(GenerateTerrainModel(terrain));
         renderable.SetName("Terrain");
-        renderable.hint = TERRAIN_TINT;
+        renderable.hint = sage::colors::WHITE_COLOR;
 
         Shader lighting = ResourceManager::GetInstance().ShaderLoad(
-            ShaderPath("custom/lighting.vs"), ShaderPath("custom/lighting.fs"));
+            ShaderPath("custom/terrain.vs"), ShaderPath("custom/terrain.fs"));
+        lighting.locs[SHADER_LOC_MAP_ROUGHNESS] = GetShaderLocation(lighting, "texture3");
         lightManager.LinkShaderToLights(lighting);
         renderable.SetShader(lighting);
+        if (auto model = renderable.GetModel()) UpdateTerrainTextures(model->get(), terrain);
 
         if (!registry.all_of<Collideable>(entity))
         {
