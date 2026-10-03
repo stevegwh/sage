@@ -497,8 +497,7 @@ namespace sage::editor
 
             if ((enterPressed || renamePressed) && onAssetRenameCb)
             {
-                const auto before =
-                    std::to_string(static_cast<int>(BrowserAssetKind::Model)) + ":" + asset.modelKey;
+                const auto before = BrowserAsset{.kind = BrowserAssetKind::Model, .key = asset.modelKey}.Id();
                 auto result = onAssetRenameCb(index, assetRenameInput);
                 assetRenameStatus = std::move(result.message);
                 if (result.renamed)
@@ -507,8 +506,8 @@ namespace sage::editor
                     {
                         assetBrowserHistory.Rename(
                             before,
-                            std::to_string(static_cast<int>(BrowserAssetKind::Model)) + ":" +
-                                result.updatedEntry->modelKey);
+                            BrowserAsset{.kind = BrowserAssetKind::Model, .key = result.updatedEntry->modelKey}
+                                .Id());
                         saveBrowserHistory();
                         assetEntries.at(index) = std::move(*result.updatedEntry);
                         resourceBrowserNeedsRefresh = true;
@@ -598,10 +597,14 @@ namespace sage::editor
                 flatpackRenameStatus = std::move(result.message);
                 if (result.renamed)
                 {
-                    const auto prefix = std::to_string(static_cast<int>(BrowserAssetKind::Flatpack)) + ":";
                     assetBrowserHistory.Rename(
-                        prefix + path.lexically_normal().generic_string(),
-                        prefix + renamedPath.lexically_normal().generic_string());
+                        BrowserAsset{
+                            .kind = BrowserAssetKind::Flatpack, .key = path.lexically_normal().generic_string()}
+                            .Id(),
+                        BrowserAsset{
+                            .kind = BrowserAssetKind::Flatpack,
+                            .key = renamedPath.lexically_normal().generic_string()}
+                            .Id());
                     saveBrowserHistory();
                     clearRename();
                     ImGui::CloseCurrentPopup();
@@ -981,7 +984,7 @@ namespace sage::editor
             if (favourites || recent)
             {
                 if (entry.directory) continue;
-                const auto id = browserAssetId(entry);
+                const auto id = browserAsset(entry).Id();
                 if (favourites && !assetBrowserHistory.IsFavourite(id)) continue;
                 if (recent &&
                     std::ranges::find(assetBrowserHistory.recent, id) == assetBrowserHistory.recent.end())
@@ -1020,8 +1023,8 @@ namespace sage::editor
 
         if (resourceDirectory == "Recently used")
             std::ranges::sort(visible, [&](std::size_t a, std::size_t b) {
-                return std::ranges::find(assetBrowserHistory.recent, browserAssetId(resourceEntries.at(a))) <
-                       std::ranges::find(assetBrowserHistory.recent, browserAssetId(resourceEntries.at(b)));
+                return std::ranges::find(assetBrowserHistory.recent, browserAsset(resourceEntries.at(a)).Id()) <
+                       std::ranges::find(assetBrowserHistory.recent, browserAsset(resourceEntries.at(b)).Id());
             });
         if (ImGui::BeginChild("resource_grid_scroll", ImVec2{0.0f, 0.0f}, false))
         {
@@ -1123,7 +1126,7 @@ namespace sage::editor
 
         if (!entry.directory && clicked)
         {
-            assetBrowserHistory.Use(browserAssetId(entry));
+            assetBrowserHistory.Use(browserAsset(entry).Id());
             saveBrowserHistory();
         }
         const char* type = "Folder";
@@ -1287,7 +1290,7 @@ namespace sage::editor
                            : entry.materialIndex ? materialKeys.at(*entry.materialIndex)
                            : entry.imageIndex    ? AssetNameFromKey(imageKeys.at(*entry.imageIndex))
                                                  : entry.path.filename().string();
-        const auto displayLabel = !entry.directory && assetBrowserHistory.IsFavourite(browserAssetId(entry))
+        const auto displayLabel = !entry.directory && assetBrowserHistory.IsFavourite(browserAsset(entry).Id())
                                       ? std::string(ICON_FA_STAR " ") + label
                                       : label;
         ImGui::TextUnformatted(displayLabel.c_str());

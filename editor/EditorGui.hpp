@@ -218,7 +218,7 @@ namespace sage
             std::string usageStatus;
             std::string browserHistoryError;
             BrowserAsset browserAsset(const ResourceEntry& entry) const;
-            std::string browserAssetId(const ResourceEntry& entry) const;
+            BrowserAsset assetUsageQuery(const ResourceEntry& entry) const;
             void saveBrowserHistory();
             void drawResourceActions(const ResourceEntry& entry);
             void refreshAssetUsages();

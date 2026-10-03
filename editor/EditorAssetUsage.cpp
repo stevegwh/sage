@@ -20,7 +20,8 @@ namespace sage::editor
         {
             // Mutable model resource keys append material overrides after this separator.
             if (asset.kind == BrowserAssetKind::Model) value = value.substr(0, value.find('\x1f'));
-            const auto matches = [&](const std::string& key) { return Normalized(value) == Normalized(key); };
+            const auto normalized = Normalized(value);
+            const auto matches = [&](const std::string& key) { return normalized == Normalized(key); };
             return matches(asset.key) || std::ranges::any_of(asset.aliases, matches);
         }
         bool ReferenceField(BrowserAssetKind kind, std::string_view field)
@@ -55,6 +56,11 @@ namespace sage::editor
                        std::filesystem::absolute(b).lexically_normal();
         }
     } // namespace
+
+    std::string BrowserAsset::Id() const
+    {
+        return std::to_string(static_cast<int>(kind)) + ":" + key;
+    }
 
     void AddEditorAssetReferences(
         json::Document& document, const entt::registry& registry, const std::vector<entt::entity>& entities)

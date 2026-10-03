@@ -22,6 +22,8 @@ namespace sage::editor
         BrowserAssetKind kind = BrowserAssetKind::Model;
         std::string key;
         std::vector<std::string> aliases;
+
+        std::string Id() const;
     };
 
     struct ScriptSource

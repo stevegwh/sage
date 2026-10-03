@@ -8,10 +8,6 @@ namespace sage::editor
     namespace
     {
         const std::filesystem::path BROWSER_HISTORY_PATH{"resources/Editor/asset-browser.json"};
-        std::string Identity(const BrowserAsset& asset)
-        {
-            return std::to_string(static_cast<int>(asset.kind)) + ":" + asset.key;
-        }
     } // namespace
 
     void EditorGui::ConfigureAssetBrowser(
@@ -35,11 +31,23 @@ namespace sage::editor
 
     BrowserAsset EditorGui::browserAsset(const ResourceEntry& entry) const
     {
-        BrowserAsset result;
+        if (entry.modelIndex)
+            return {.kind = BrowserAssetKind::Model, .key = assetEntries.at(*entry.modelIndex).modelKey};
+        if (entry.materialIndex)
+            return {.kind = BrowserAssetKind::Material, .key = materialKeys.at(*entry.materialIndex)};
+        if (entry.imageIndex) return {.kind = BrowserAssetKind::Image, .key = imageKeys.at(*entry.imageIndex)};
+        if (entry.flatpackIndex)
+            return {
+                .kind = BrowserAssetKind::Flatpack,
+                .key = flatpackEntries.at(*entry.flatpackIndex).path.lexically_normal().generic_string()};
+        if (entry.scriptIndex) return {.kind = BrowserAssetKind::Script, .key = entry.path.generic_string()};
+        return {.kind = BrowserAssetKind::Canvas, .key = entry.sourcePath.lexically_normal().generic_string()};
+    }
+    BrowserAsset EditorGui::assetUsageQuery(const ResourceEntry& entry) const
+    {
+        auto result = browserAsset(entry);
         if (entry.modelIndex)
         {
-            result.kind = BrowserAssetKind::Model;
-            result.key = assetEntries.at(*entry.modelIndex).modelKey;
             const auto& sourcePath = assetEntries.at(*entry.modelIndex).sourcePath;
             if (!sourcePath.empty()) result.aliases.push_back(sourcePath.generic_string());
             result.aliases.push_back("resources/" + result.key);
@@ -52,8 +60,6 @@ namespace sage::editor
         }
         else if (entry.materialIndex)
         {
-            result.kind = BrowserAssetKind::Material;
-            result.key = materialKeys.at(*entry.materialIndex);
             const auto& resources = ResourceManager::GetInstance();
             for (const auto& key : materialKeys)
                 if (&resources.GetMaterial(key) == &resources.GetMaterial(result.key))
@@ -61,49 +67,17 @@ namespace sage::editor
         }
         else if (entry.imageIndex)
         {
-            result.kind = BrowserAssetKind::Image;
-            result.key = imageKeys.at(*entry.imageIndex);
             if (!entry.sourcePath.empty()) result.aliases.push_back(entry.sourcePath.generic_string());
             const auto alias = AssetNameFromKey(result.key);
             if (std::ranges::count_if(
                     imageKeys, [&](const auto& key) { return AssetNameFromKey(key) == alias; }) == 1)
                 result.aliases.push_back(alias);
         }
-        else if (entry.flatpackIndex)
-        {
-            result.kind = BrowserAssetKind::Flatpack;
-            result.key = flatpackEntries.at(*entry.flatpackIndex).path.lexically_normal().generic_string();
-        }
         else if (entry.scriptIndex)
         {
-            result.kind = BrowserAssetKind::Script;
-            result.key = entry.path.generic_string();
             result.aliases = scriptEntries.at(*entry.scriptIndex).types;
         }
-        else
-        {
-            result.kind = BrowserAssetKind::Canvas;
-            result.key = entry.sourcePath.lexically_normal().generic_string();
-        }
         return result;
-    }
-    std::string EditorGui::browserAssetId(const ResourceEntry& entry) const
-    {
-        // Collections only need identity; avoid resolving aliases for every tile each frame.
-        if (entry.modelIndex)
-            return Identity({.kind = BrowserAssetKind::Model, .key = assetEntries.at(*entry.modelIndex).modelKey});
-        if (entry.materialIndex)
-            return Identity({.kind = BrowserAssetKind::Material, .key = materialKeys.at(*entry.materialIndex)});
-        if (entry.imageIndex)
-            return Identity({.kind = BrowserAssetKind::Image, .key = imageKeys.at(*entry.imageIndex)});
-        if (entry.flatpackIndex)
-            return Identity(
-                {.kind = BrowserAssetKind::Flatpack,
-                 .key = flatpackEntries.at(*entry.flatpackIndex).path.lexically_normal().generic_string()});
-        if (entry.scriptIndex)
-            return Identity({.kind = BrowserAssetKind::Script, .key = entry.path.generic_string()});
-        return Identity(
-            {.kind = BrowserAssetKind::Canvas, .key = entry.sourcePath.lexically_normal().generic_string()});
     }
     void EditorGui::saveBrowserHistory()
     {
@@ -119,7 +93,7 @@ namespace sage::editor
     }
     void EditorGui::drawResourceActions(const ResourceEntry& entry)
     {
-        const auto id = browserAssetId(entry);
+        const auto id = browserAsset(entry).Id();
         if (ImGui::MenuItem(assetBrowserHistory.IsFavourite(id) ? "Remove from Favourites" : "Add to Favourites"))
         {
             assetBrowserHistory.ToggleFavourite(id);
@@ -127,7 +101,7 @@ namespace sage::editor
         }
         if (ImGui::MenuItem("Find Usages", nullptr, false, static_cast<bool>(findUsages)))
         {
-            usageAsset = browserAsset(entry);
+            usageAsset = assetUsageQuery(entry);
             assetBrowserHistory.Use(id);
             saveBrowserHistory();
             usageWindowOpen = true;
