@@ -656,6 +656,7 @@ namespace sage
         if (canvasEditor->IsActive())
         {
             canvasEditor->Draw();
+            gui->DrawAssetUsages();
             if (!canvasEditor->IsActive()) gui->RefreshResourceBrowser();
             drawExitConfirmationModal(exitRequested, exitConfirmed);
             gui->EndImGui();
@@ -676,7 +677,9 @@ namespace sage
         {
             history->CaptureBaseline(selection->Selected());
         }
-        const auto inspectorEdit = gui->DrawInspectorWindow();
+        std::function<void()> terrainTools;
+        if (editorModes->CurrentTerrainSculptState()) terrainTools = [this]() { drawTerrainBrushTools(); };
+        const auto inspectorEdit = gui->DrawInspectorWindow(terrainTools);
         handleInspectorEdit(inspectorEdit);
         drawParticlePreviewWindow();
         if (!IsPlaying() && !flatpackSession->IsActive())
@@ -687,6 +690,7 @@ namespace sage
             gui->DrawConsoleWindow();
         else
             gui->DrawAssetDrawerWindow();
+        gui->DrawAssetUsages();
         const auto sceneTabAction = gui->DrawSceneTabBar();
         if (sceneTabAction.canvasSelected) canvasEditor->Resume();
         if (sceneTabAction.canvasCloseRequested) canvasEditor->RequestClose();
@@ -701,7 +705,6 @@ namespace sage
         drawShaderBrowser();
         drawCollisionMatrixWindow();
         drawGraphicsSettingsWindow();
-        drawTerrainBrushWindow();
         handleClipboardShortcuts();
         handleHistoryShortcuts();
         drawHierarchyContextMenu();
@@ -1840,10 +1843,19 @@ namespace sage
     {
         auto instance = sage::LoadFlatpack(*sys->registry, path.string().c_str(), anchor);
         if (!instance) return std::nullopt;
-        for (const auto entity : instance.entities)
+        const auto document = content::ReadDocument(path);
+        for (std::size_t i = 0; i < instance.entities.size(); ++i)
         {
+            const auto entity = instance.entities.at(i);
             sys->registry->emplace<editor::EditorMapEntity>(entity);
+            const auto& node = json::At(document["entities"], i);
+            if (node.HasMember("editorAssetKey"))
+                sys->registry->emplace_or_replace<editor::AssetReference>(
+                    entity, json::String(node, "editorAssetKey"));
         }
+
+        sys->registry->emplace_or_replace<editor::AssetReference>(
+            instance.root, path.lexically_normal().generic_string());
 
         // The loaded subtree has Renderables without an UberShaderComponent;
         // applyLitShaderToLoadedRenderables attaches one with Lit set, matching
@@ -2288,146 +2300,141 @@ namespace sage
         graphicsSettingsWindowOpen = open;
     }
 
-    void EditorScene::drawTerrainBrushWindow() const
+    void EditorScene::drawTerrainBrushTools() const
     {
         const auto currentBrush = editorModes->CurrentTerrainSculptState();
         if (!currentBrush) return;
         auto& sculpt = currentBrush->get();
 
-        ImGui::SetNextWindowSize(ImVec2{280.0f, 0.0f}, ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("Terrain Brush"))
+        ImGui::BeginDisabled(history && history->HasActiveTransaction());
+        // Order must match TerrainBrushMode (engine/TerrainMesh.hpp).
+        static constexpr std::array<const char*, 7> BRUSH_MODE_NAMES = {
+            "Raise / Lower", "Smooth", "Flatten", "Noise", "Erosion", "Ramp", "Texture Paint"};
+        int mode = static_cast<int>(sculpt.brushMode);
+        if (ImGui::Combo("Brush", &mode, BRUSH_MODE_NAMES.data(), static_cast<int>(BRUSH_MODE_NAMES.size())))
         {
-            ImGui::BeginDisabled(history && history->HasActiveTransaction());
-            // Order must match TerrainBrushMode (engine/TerrainMesh.hpp).
-            static constexpr std::array<const char*, 7> BRUSH_MODE_NAMES = {
-                "Raise / Lower", "Smooth", "Flatten", "Noise", "Erosion", "Ramp", "Texture Paint"};
-            int mode = static_cast<int>(sculpt.brushMode);
-            if (ImGui::Combo("Brush", &mode, BRUSH_MODE_NAMES.data(), static_cast<int>(BRUSH_MODE_NAMES.size())))
-            {
-                sculpt.brushMode = static_cast<TerrainBrushMode>(mode);
-            }
+            sculpt.brushMode = static_cast<TerrainBrushMode>(mode);
+        }
 
-            if (sculpt.brushMode == TerrainBrushMode::Texture && sys->registry->valid(sculpt.terrain))
+        if (sculpt.brushMode == TerrainBrushMode::Texture && sys->registry->valid(sculpt.terrain))
+        {
+            auto& terrain = sys->registry->get<Terrain>(sculpt.terrain);
+            ImGui::TextUnformatted("Texture slots");
+            for (int layer = 0; layer < static_cast<int>(TERRAIN_TEXTURE_LAYERS); ++layer)
             {
-                auto& terrain = sys->registry->get<Terrain>(sculpt.terrain);
-                ImGui::TextUnformatted("Texture slots");
-                for (int layer = 0; layer < static_cast<int>(TERRAIN_TEXTURE_LAYERS); ++layer)
+                if (layer > 0) ImGui::SameLine();
+                const auto label = std::to_string(layer + 1);
+                ImGui::RadioButton(label.c_str(), &sculpt.textureLayer, layer);
+            }
+            auto& texturePath = terrain.textures.at(static_cast<std::size_t>(sculpt.textureLayer));
+            const auto label = texturePath.empty() ? std::string("Choose texture...")
+                                                   : std::filesystem::path(texturePath).stem().string();
+            if (ImGui::BeginCombo("Texture", label.c_str()))
+            {
+                if (ImGui::Selectable("Empty", texturePath.empty()))
                 {
-                    if (layer > 0) ImGui::SameLine();
-                    const auto label = std::to_string(layer + 1);
-                    ImGui::RadioButton(label.c_str(), &sculpt.textureLayer, layer);
-                }
-                auto& texturePath = terrain.textures.at(static_cast<std::size_t>(sculpt.textureLayer));
-                const auto label = texturePath.empty() ? std::string("Choose texture...")
-                                                       : std::filesystem::path(texturePath).stem().string();
-                if (ImGui::BeginCombo("Texture", label.c_str()))
-                {
-                    if (ImGui::Selectable("Empty", texturePath.empty()))
-                    {
-                        history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
-                        texturePath.clear();
-                        for (auto& weights : terrain.textureWeights)
-                            weights.at(static_cast<std::size_t>(sculpt.textureLayer)) = 0.0f;
-                        auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
-                        if (auto model = renderable.GetModel())
-                        {
-                            UpdateTerrainTextures(model->get(), terrain);
-                            UpdateTerrainTextureRegion(
-                                model->get(), terrain, {0, 0, terrain.resolution - 1, terrain.resolution - 1});
-                        }
-                        history->Commit();
-                    }
-                    for (const auto& path : sculpt.terrainTextures)
-                    {
-                        const auto name = std::filesystem::path(path).stem().string();
-                        if (ImGui::Selectable(name.c_str(), path == texturePath))
-                        {
-                            history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
-                            texturePath = path;
-                            auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
-                            if (auto model = renderable.GetModel()) UpdateTerrainTextures(model->get(), terrain);
-                            history->Commit();
-                        }
-                        if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", path.c_str());
-                    }
-                    ImGui::EndCombo();
-                }
-                if (ImGui::SmallButton("Refresh textures")) sculpt.RefreshTerrainTextures();
-                if (sculpt.terrainTextures.empty())
-                    ImGui::TextWrapped("No base-color textures found in resources/textures/terrain.");
-                if (!texturePath.empty())
-                {
+                    history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
+                    texturePath.clear();
+                    for (auto& weights : terrain.textureWeights)
+                        weights.at(static_cast<std::size_t>(sculpt.textureLayer)) = 0.0f;
                     auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
                     if (auto model = renderable.GetModel())
                     {
-                        auto& texture = model->get().materials[0].maps[sculpt.textureLayer].texture;
-                        if (texture.id != 0)
-                            ImGui::Image(reinterpret_cast<ImTextureID>(&texture), ImVec2{72.0f, 72.0f});
-                    }
-                }
-                float tileSize = terrain.textureTileSize;
-                if (ImGui::InputFloat(
-                        "Tile size", &tileSize, 0.0f, 0.0f, "%.2f", ImGuiInputTextFlags_EnterReturnsTrue) &&
-                    std::isfinite(tileSize) && tileSize > 0.0f && tileSize != terrain.textureTileSize)
-                {
-                    history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
-                    terrain.textureTileSize = tileSize;
-                    auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
-                    if (auto model = renderable.GetModel()) UpdateTerrainTextures(model->get(), terrain);
-                    history->Commit();
-                }
-                ImGui::BeginDisabled(texturePath.empty());
-                if (ImGui::Button("Fill terrain"))
-                {
-                    history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
-                    std::array<float, TERRAIN_TEXTURE_LAYERS> weights{};
-                    weights.at(static_cast<std::size_t>(sculpt.textureLayer)) = 1.0f;
-                    terrain.textureWeights.assign(terrain.heights.size(), weights);
-                    auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
-                    if (auto model = renderable.GetModel())
+                        UpdateTerrainTextures(model->get(), terrain);
                         UpdateTerrainTextureRegion(
                             model->get(), terrain, {0, 0, terrain.resolution - 1, terrain.resolution - 1});
+                    }
                     history->Commit();
                 }
-                ImGui::EndDisabled();
+                for (const auto& path : sculpt.terrainTextures)
+                {
+                    const auto name = std::filesystem::path(path).stem().string();
+                    if (ImGui::Selectable(name.c_str(), path == texturePath))
+                    {
+                        history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
+                        texturePath = path;
+                        auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
+                        if (auto model = renderable.GetModel()) UpdateTerrainTextures(model->get(), terrain);
+                        history->Commit();
+                    }
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", path.c_str());
+                }
+                ImGui::EndCombo();
             }
-
-            const bool ramp = sculpt.brushMode == TerrainBrushMode::Ramp;
-            ImGui::SliderFloat(ramp ? "Width" : "Radius", &sculpt.brushRadius, 0.5f, 50.0f, "%.1f");
-            if (!ramp)
+            if (ImGui::SmallButton("Refresh textures")) sculpt.RefreshTerrainTextures();
+            if (sculpt.terrainTextures.empty())
+                ImGui::TextWrapped("No base-color textures found in resources/textures/terrain.");
+            if (!texturePath.empty())
             {
-                ImGui::SliderFloat("Strength", &sculpt.brushStrength, 0.5f, 30.0f, "%.1f");
+                auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
+                if (auto model = renderable.GetModel())
+                {
+                    auto& texture = model->get().materials[0].maps[sculpt.textureLayer].texture;
+                    if (texture.id != 0)
+                        ImGui::Image(reinterpret_cast<ImTextureID>(&texture), ImVec2{72.0f, 72.0f});
+                }
             }
-
-            ImGui::Spacing();
-            switch (sculpt.brushMode)
+            float tileSize = terrain.textureTileSize;
+            if (ImGui::InputFloat(
+                    "Tile size", &tileSize, 0.0f, 0.0f, "%.2f", ImGuiInputTextFlags_EnterReturnsTrue) &&
+                std::isfinite(tileSize) && tileSize > 0.0f && tileSize != terrain.textureTileSize)
             {
-            case TerrainBrushMode::RaiseLower:
-                ImGui::TextUnformatted("LMB raise - Shift+LMB lower");
-                break;
-            case TerrainBrushMode::Smooth:
-                ImGui::TextUnformatted("LMB to average toward neighbours");
-                break;
-            case TerrainBrushMode::Flatten:
-                ImGui::TextUnformatted("LMB flattens toward the click height");
-                break;
-            case TerrainBrushMode::Noise:
-                ImGui::TextUnformatted("LMB to add randomized roughness");
-                break;
-            case TerrainBrushMode::Erosion:
-                ImGui::TextUnformatted("LMB to wear ridges down");
-                break;
-            case TerrainBrushMode::Texture:
-                ImGui::TextUnformatted("LMB paint - Shift+LMB erase layer");
-                break;
-            case TerrainBrushMode::Ramp:
-                ImGui::TextUnformatted("Click start, then end - Esc cancels");
-                break;
+                history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
+                terrain.textureTileSize = tileSize;
+                auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
+                if (auto model = renderable.GetModel()) UpdateTerrainTextures(model->get(), terrain);
+                history->Commit();
             }
-            ImGui::TextUnformatted("Keys 1-7 pick brush - [ / ] size - Esc to finish");
+            ImGui::BeginDisabled(texturePath.empty());
+            if (ImGui::Button("Fill terrain"))
+            {
+                history->Begin(editor::EditAction::PaintTerrain, {sculpt.terrain});
+                std::array<float, TERRAIN_TEXTURE_LAYERS> weights{};
+                weights.at(static_cast<std::size_t>(sculpt.textureLayer)) = 1.0f;
+                terrain.textureWeights.assign(terrain.heights.size(), weights);
+                auto& renderable = sys->registry->get<DynamicRenderable>(sculpt.terrain);
+                if (auto model = renderable.GetModel())
+                    UpdateTerrainTextureRegion(
+                        model->get(), terrain, {0, 0, terrain.resolution - 1, terrain.resolution - 1});
+                history->Commit();
+            }
             ImGui::EndDisabled();
         }
-        ImGui::End();
+
+        const bool ramp = sculpt.brushMode == TerrainBrushMode::Ramp;
+        ImGui::SliderFloat(ramp ? "Width" : "Radius", &sculpt.brushRadius, 0.5f, 50.0f, "%.1f");
+        if (!ramp)
+        {
+            ImGui::SliderFloat("Strength", &sculpt.brushStrength, 0.5f, 30.0f, "%.1f");
+        }
+
+        ImGui::Spacing();
+        switch (sculpt.brushMode)
+        {
+        case TerrainBrushMode::RaiseLower:
+            ImGui::TextUnformatted("LMB raise - Shift+LMB lower");
+            break;
+        case TerrainBrushMode::Smooth:
+            ImGui::TextUnformatted("LMB to average toward neighbours");
+            break;
+        case TerrainBrushMode::Flatten:
+            ImGui::TextUnformatted("LMB flattens toward the click height");
+            break;
+        case TerrainBrushMode::Noise:
+            ImGui::TextUnformatted("LMB to add randomized roughness");
+            break;
+        case TerrainBrushMode::Erosion:
+            ImGui::TextUnformatted("LMB to wear ridges down");
+            break;
+        case TerrainBrushMode::Texture:
+            ImGui::TextUnformatted("LMB paint - Shift+LMB erase layer");
+            break;
+        case TerrainBrushMode::Ramp:
+            ImGui::TextUnformatted("Click start, then end - Esc cancels");
+            break;
+        }
+        ImGui::TextWrapped("Keys 1-7 pick brush - [ / ] size - Esc to finish");
+        ImGui::EndDisabled();
     }
 
     void EditorScene::addLight() const
@@ -2955,6 +2962,11 @@ namespace sage
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());
 
+        gui->ConfigureAssetBrowser(
+            csharpScripts,
+            [this](const editor::BrowserAsset& asset) { return findAssetUsages(asset); },
+            [this](const editor::AssetUsage& usage) { return navigateAssetUsage(usage); });
+
         if (csharpScripts.IsConfigured())
         {
             scriptBrowser = std::make_unique<ImGui::FileBrowser>(
@@ -2988,8 +3000,24 @@ namespace sage
                 .clearScene = [this]() { clearCurrentMap(); },
                 .loadFlatpack =
                     [this](const std::filesystem::path& path) {
-                        return PlaceFlatpackAt(path, Vector3{.x = 0.0f, .y = 0.0f, .z = 0.0f})
-                            .value_or(entt::null);
+                        const auto root = PlaceFlatpackAt(path, Vector3{.x = 0.0f, .y = 0.0f, .z = 0.0f});
+                        flatpackSourceEntities.clear();
+                        if (root)
+                        {
+                            sys->registry->remove<editor::AssetReference>(*root);
+                            const auto source = content::ReadDocument(path);
+                            std::vector<entt::entity> loaded;
+                            for (auto entity : sys->registry->view<PersistentEntityId>())
+                                loaded.push_back(entity);
+                            std::ranges::sort(loaded, [this](auto a, auto b) {
+                                return sys->registry->get<PersistentEntityId>(a).id <
+                                       sys->registry->get<PersistentEntityId>(b).id;
+                            });
+                            for (std::size_t i = 0; i < loaded.size(); ++i)
+                                flatpackSourceEntities.emplace(
+                                    json::Id(json::At(source["entities"], i), "id"), loaded.at(i));
+                        }
+                        return root.value_or(entt::null);
                     },
                 // The flatpack scene needs the same fixups as a freshly loaded
                 // map: default base (placement raycast target), shaders, light

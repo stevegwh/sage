@@ -90,6 +90,20 @@ int main(int argc, char** argv)
         invalid = doc;
         invalid.width = 0;
         rejects(invalid);
+        invalid = doc;
+        invalid.width = 1280;
+        invalid.height = 720;
+        rejects(invalid);
+        bool wrongResolutionRejected = false;
+        try
+        {
+            sage::CanvasDocument::FromJson(sage::json::Encode(invalid));
+        }
+        catch (const std::exception&)
+        {
+            wrongResolutionRejected = true;
+        }
+        require(wrongResolutionRejected, "Loading a different canvas reference resolution succeeded");
         const auto layout = sage::RenderCanvas(doc, {.x = 0, .y = 0, .width = 1920, .height = 1080}, 0, 0, false);
         const auto scaled = sage::RenderCanvas(doc, {.x = 0, .y = 0, .width = 960, .height = 540}, 0, 0, false);
         for (const auto& [id, b] : layout.bounds)

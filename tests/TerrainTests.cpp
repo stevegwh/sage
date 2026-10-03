@@ -70,15 +70,18 @@ namespace
             loaded.textures == terrain.textures && loaded.textureWeights == terrain.textureWeights &&
                 loaded.textureTileSize == terrain.textureTileSize && loaded.IsValid(),
             "Paint JSON round trip failed");
-        auto legacy = sage::json::Encode(terrain);
-        legacy.RemoveMember("textures");
-        legacy.RemoveMember("textureWeights");
-        legacy.RemoveMember("textureTileSize");
-        sage::json::Decode(legacy, loaded);
-        Check(
-            loaded.IsValid() && loaded.textureWeights.empty() && loaded.textures[2].empty() &&
-                loaded.heights == terrain.heights,
-            "Pre-paint terrain documents did not load");
+        auto incomplete = sage::json::Encode(terrain);
+        incomplete.RemoveMember("textures");
+        bool rejected = false;
+        try
+        {
+            sage::json::Decode(incomplete, loaded);
+        }
+        catch (const cereal::Exception&)
+        {
+            rejected = true;
+        }
+        Check(rejected, "Terrain documents without required texture fields were accepted");
 
         entt::registry registry;
         sage::TransformSystem transforms(&registry);

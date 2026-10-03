@@ -83,8 +83,8 @@ namespace sage
     void CanvasDocument::Validate() const
     {
         if (format != "sage-canvas" || version != 1) throw std::runtime_error("Unsupported canvas format/version");
-        if (!std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0)
-            throw std::runtime_error("Canvas dimensions must be positive");
+        if (width != Settings::TARGET_SCREEN_WIDTH || height != Settings::TARGET_SCREEN_HEIGHT)
+            throw std::runtime_error("Canvas reference resolution must be 1920 x 1080");
         if (nodes.empty() || nodes.size() > 10000) throw std::runtime_error("Invalid canvas node count");
         std::set<unsigned int> ids;
         unsigned int roots = 0;

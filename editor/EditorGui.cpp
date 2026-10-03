@@ -54,7 +54,7 @@ namespace sage::editor
         rlImGuiEnd();
     }
 
-    EditorGui::InspectorEditResult EditorGui::DrawInspectorWindow()
+    EditorGui::InspectorEditResult EditorGui::DrawInspectorWindow(const std::function<void()>& drawTerrainTools)
     {
         if (!settings) return {};
 
@@ -63,11 +63,8 @@ namespace sage::editor
         const float mainMenuHeight = ImGui::GetFrameHeight();
         const float rightDockWidth = dockLayout ? dockLayout->rightDockWidth : EDITOR_RIGHT_DOCK_DEFAULT_WIDTH;
         const float width = settings->ScaleValueWidth(rightDockWidth);
-        const ImVec2 windowPos{viewportOffset.x + viewport.x - width, viewportOffset.y + mainMenuHeight};
-        const ImVec2 windowSize{width, std::max(1.0f, viewport.y - mainMenuHeight)};
-
-        ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
-        ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
+        ImVec2 windowPos{viewportOffset.x + viewport.x - width, viewportOffset.y + mainMenuHeight};
+        ImVec2 windowSize{width, std::max(1.0f, viewport.y - mainMenuHeight)};
 
         PushEditorWindowStyle();
         ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{6.0f, 5.0f});
@@ -75,6 +72,23 @@ namespace sage::editor
 
         constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
                                                  ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
+
+        if (drawTerrainTools)
+        {
+            // Fit the temporary tools pane to its contents, keeping room for the inspector below.
+            ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
+            ImGui::SetNextWindowSize(ImVec2{width, 0.0f}, ImGuiCond_Always);
+            ImGui::SetNextWindowSizeConstraints(
+                ImVec2{width, ImGui::GetFrameHeight()}, ImVec2{width, windowSize.y * 0.6f});
+            if (ImGui::Begin("Terrain Tools", nullptr, windowFlags | ImGuiWindowFlags_AlwaysAutoResize))
+                drawTerrainTools();
+            const float toolsHeight = ImGui::GetWindowHeight();
+            ImGui::End();
+            windowPos.y += toolsHeight;
+            windowSize.y = std::max(1.0f, windowSize.y - toolsHeight);
+        }
+        ImGui::SetNextWindowPos(windowPos, ImGuiCond_Always);
+        ImGui::SetNextWindowSize(windowSize, ImGuiCond_Always);
 
         InspectorComponentsResult inspectorResult;
         std::optional<EditorComponentId> addComponent;

@@ -42,8 +42,6 @@ namespace sage::editor
         float dividerSpace = 0;
         float dividerPercent = 0;
         float dividerNeighborPercent = 0;
-        float previewWidth = 1920;
-        float previewHeight = 1080;
         // Resources available to the inspector.
         std::vector<std::filesystem::path> textures;
         std::vector<std::filesystem::path> fonts;
@@ -96,6 +94,12 @@ namespace sage::editor
         [[nodiscard]] const std::filesystem::path& Path() const
         {
             return path;
+        }
+        bool SelectNode(unsigned int id)
+        {
+            if (!document.Find(id)) return false;
+            selected = id;
+            return true;
         }
         void Resume()
         {

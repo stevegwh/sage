@@ -36,19 +36,11 @@ namespace sage::editor
 
     bool EditorHistory::statesEqual(const EntityState& a, const EntityState& b)
     {
-        const auto terrainsEqual = [](const std::optional<Terrain>& left, const std::optional<Terrain>& right) {
-            if (left.has_value() != right.has_value()) return false;
-            if (!left) return true;
-            return left->resolution == right->resolution && left->cellSize == right->cellSize &&
-                   left->heights == right->heights && left->textures == right->textures &&
-                   left->textureWeights == right->textureWeights &&
-                   left->textureTileSize == right->textureTileSize;
-        };
         return a.exists == b.exists &&
                (!a.exists || (a.parentId == b.parentId && a.nextSiblingId == b.nextSiblingId &&
                               a.isMapEntity == b.isMapEntity && a.isMapBase == b.isMapBase &&
                               a.hasAssetReference == b.hasAssetReference && a.assetKey == b.assetKey &&
-                              a.contentJson == b.contentJson && terrainsEqual(a.terrain, b.terrain)));
+                              a.contentJson == b.contentJson && a.terrain == b.terrain));
     }
 
     std::uint64_t EditorHistory::ensureId(const entt::entity entity)

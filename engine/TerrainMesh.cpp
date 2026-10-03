@@ -64,9 +64,31 @@ namespace sage
                 .lastCol = std::min(firstCol + TERRAIN_CHUNK_QUADS, terrain.resolution - 1)};
         }
 
-        void fillChunkVertexData(const Terrain& terrain, const ChunkRange& range, Mesh& mesh)
+        void writeTextureWeights(const Terrain& terrain, const int row, const int col, unsigned char* colors)
+        {
+            const std::array<float, TERRAIN_TEXTURE_LAYERS> weights =
+                terrain.textureWeights.empty()
+                    ? std::array<float, TERRAIN_TEXTURE_LAYERS>{}
+                    : terrain.textureWeights.at(static_cast<std::size_t>(row) * terrain.resolution + col);
+            for (std::size_t layer = 0; layer < weights.size(); ++layer)
+                colors[layer] = static_cast<unsigned char>(weights[layer] * 255.0f);
+        }
+
+        void fillChunkTexcoords(const Terrain& terrain, const ChunkRange& range, Mesh& mesh)
         {
             const float uvScale = terrain.cellSize / terrain.textureTileSize;
+            int vertex = 0;
+            for (int row = range.firstRow; row <= range.lastRow; ++row)
+                for (int col = range.firstCol; col <= range.lastCol; ++col, ++vertex)
+                {
+                    mesh.texcoords[vertex * 2] = static_cast<float>(col) * uvScale;
+                    mesh.texcoords[vertex * 2 + 1] = static_cast<float>(row) * uvScale;
+                }
+        }
+
+        void fillChunkVertexData(const Terrain& terrain, const ChunkRange& range, Mesh& mesh)
+        {
+            fillChunkTexcoords(terrain, range, mesh);
             int vertexIndex = 0;
             for (int row = range.firstRow; row <= range.lastRow; ++row)
             {
@@ -81,17 +103,7 @@ namespace sage
                     mesh.normals[vertexIndex * 3 + 1] = normal.y;
                     mesh.normals[vertexIndex * 3 + 2] = normal.z;
 
-                    mesh.texcoords[vertexIndex * 2] = static_cast<float>(col) * uvScale;
-                    mesh.texcoords[vertexIndex * 2 + 1] = static_cast<float>(row) * uvScale;
-                    for (std::size_t layer = 0; layer < TERRAIN_TEXTURE_LAYERS; ++layer)
-                    {
-                        const float weight =
-                            terrain.textureWeights.empty()
-                                ? 0.0f
-                                : terrain.textureWeights.at(
-                                      static_cast<std::size_t>(row) * terrain.resolution + col)[layer];
-                        mesh.colors[vertexIndex * 4 + layer] = static_cast<unsigned char>(weight * 255.0f);
-                    }
+                    writeTextureWeights(terrain, row, col, mesh.colors + vertexIndex * 4);
                 }
             }
         }
@@ -229,15 +241,7 @@ namespace sage
                     for (int col = firstCol; col <= lastCol; ++col)
                     {
                         const int vertex = (row - range.firstRow) * range.VertsX() + col - range.firstCol;
-                        for (std::size_t layer = 0; layer < TERRAIN_TEXTURE_LAYERS; ++layer)
-                        {
-                            const float weight =
-                                terrain.textureWeights.empty()
-                                    ? 0.0f
-                                    : terrain.textureWeights.at(
-                                          static_cast<std::size_t>(row) * terrain.resolution + col)[layer];
-                            mesh.colors[vertex * 4 + layer] = static_cast<unsigned char>(weight * 255.0f);
-                        }
+                        writeTextureWeights(terrain, row, col, mesh.colors + vertex * 4);
                     }
                 }
                 // One contiguous upload per touched chunk avoids a GL call for each painted row.
@@ -274,11 +278,12 @@ namespace sage
             }
             model.materials[0].maps[layer].texture = texture;
         }
-        for (int chunkRow = 0; chunkRow < chunksPerSide(terrain); ++chunkRow)
-            for (int chunkCol = 0; chunkCol < chunksPerSide(terrain); ++chunkCol)
+        const int chunks = chunksPerSide(terrain);
+        for (int chunkRow = 0; chunkRow < chunks; ++chunkRow)
+            for (int chunkCol = 0; chunkCol < chunks; ++chunkCol)
             {
-                auto& mesh = model.meshes[chunkRow * chunksPerSide(terrain) + chunkCol];
-                fillChunkVertexData(terrain, getChunkRange(terrain, chunkRow, chunkCol), mesh);
+                auto& mesh = model.meshes[chunkRow * chunks + chunkCol];
+                fillChunkTexcoords(terrain, getChunkRange(terrain, chunkRow, chunkCol), mesh);
                 UpdateMeshBuffer(
                     mesh, 1, mesh.texcoords, static_cast<int>(mesh.vertexCount * 2 * sizeof(float)), 0);
             }

@@ -76,8 +76,7 @@ namespace sage::editor
     void CanvasEditor::drawCanvasProperties()
     {
         ImGui::SeparatorText("Canvas size");
-        ImGui::DragFloat("Reference width", &document.width, 1, 1, 8192);
-        ImGui::DragFloat("Reference height", &document.height, 1, 1, 8192);
+        ImGui::TextUnformatted("Reference resolution: 1920 x 1080");
         ImGui::TextWrapped("Scales uniformly to fit the viewport.");
     }
 

@@ -2,7 +2,6 @@
 
 #include "cereal/cereal.hpp"
 
-#include "cereal/archives/json.hpp"
 #include "cereal/types/array.hpp"
 #include "cereal/types/string.hpp"
 #include "cereal/types/vector.hpp"
@@ -10,7 +9,6 @@
 
 #include <array>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 namespace sage
@@ -35,6 +33,8 @@ namespace sage
         Terrain();
         Terrain(int _resolution, float _cellSize);
 
+        bool operator==(const Terrain&) const = default;
+
         [[nodiscard]] bool IsValid() const;
         [[nodiscard]] float WorldSize() const;
         // Out-of-range indices clamp to the field edge.
@@ -45,46 +45,13 @@ namespace sage
         [[nodiscard]] Vector3 GetNormal(int row, int col) const;
 
         template <class Archive>
-        void save(Archive& archive) const
+        void serialize(Archive& archive)
         {
             archive(
                 cereal::make_nvp("resolution", resolution),
                 cereal::make_nvp("cellSize", cellSize),
                 cereal::make_nvp("heights", heights),
                 cereal::make_nvp("textures", textures),
-                cereal::make_nvp("textureWeights", textureWeights),
-                cereal::make_nvp("textureTileSize", textureTileSize));
-        }
-        template <class Archive>
-        void load(Archive& archive)
-        {
-            archive(
-                cereal::make_nvp("resolution", resolution),
-                cereal::make_nvp("cellSize", cellSize),
-                cereal::make_nvp("heights", heights));
-            textures = {};
-            textureWeights.clear();
-            textureTileSize = 4.0f;
-            // Terrain documents authored before painting have no texture fields.
-            // Only the missing first field is optional; incomplete paint data must fail.
-            if constexpr (std::is_same_v<Archive, cereal::JSONInputArchive>)
-            {
-                try
-                {
-                    archive(cereal::make_nvp("textures", textures));
-                }
-                catch (const cereal::Exception& error)
-                {
-                    if (std::string(error.what()) != "JSON Parsing failed - provided NVP (textures) not found")
-                        throw;
-                    return;
-                }
-            }
-            else
-            {
-                archive(cereal::make_nvp("textures", textures));
-            }
-            archive(
                 cereal::make_nvp("textureWeights", textureWeights),
                 cereal::make_nvp("textureTileSize", textureTileSize));
         }

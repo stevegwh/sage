@@ -10,11 +10,6 @@ namespace sage::editor
 {
     namespace
     {
-        constexpr float PREVIEW_INPUT_WIDTH = 100.0f;
-        constexpr float MIN_PREVIEW_WIDTH = 320.0f;
-        constexpr float MAX_PREVIEW_WIDTH = 3840.0f;
-        constexpr float MIN_PREVIEW_HEIGHT = 240.0f;
-        constexpr float MAX_PREVIEW_HEIGHT = 2160.0f;
         constexpr Color PREVIEW_BACKGROUND = {.r = 30, .g = 33, .b = 39, .a = 255};
         constexpr Color SELECTION_COLOR = {.r = 240, .g = 190, .b = 65, .a = 255};
         constexpr float SELECTION_BORDER_WIDTH = 2.0f;
@@ -23,22 +18,17 @@ namespace sage::editor
 
     void CanvasEditor::drawPreview()
     {
-        ImGui::SetNextItemWidth(PREVIEW_INPUT_WIDTH);
-        ImGui::DragFloat("Preview width", &previewWidth, 1, MIN_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(PREVIEW_INPUT_WIDTH);
-        ImGui::DragFloat("Preview height", &previewHeight, 1, MIN_PREVIEW_HEIGHT, MAX_PREVIEW_HEIGHT);
+        ImGui::TextUnformatted("1920 x 1080 reference resolution");
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
         ImGui::TextWrapped(
             "Alt-drag windows to move. Drag the bottom-right handle to resize. Drag a selected row/cell edge to "
             "adjust its share.");
         ImGui::PopStyleColor();
         const auto available = ImGui::GetContentRegionAvail();
-        previewWidth = std::clamp(previewWidth, MIN_PREVIEW_WIDTH, MAX_PREVIEW_WIDTH);
-        previewHeight = std::clamp(previewHeight, MIN_PREVIEW_HEIGHT, MAX_PREVIEW_HEIGHT);
-        const float fit = std::min(available.x / previewWidth, available.y / previewHeight);
-        const int width = std::max(1, static_cast<int>(previewWidth * fit)),
-                  height = std::max(1, static_cast<int>(previewHeight * fit));
+        const float fit =
+            std::min(available.x / Settings::TARGET_SCREEN_WIDTH, available.y / Settings::TARGET_SCREEN_HEIGHT);
+        const int width = std::max(1, static_cast<int>(Settings::TARGET_SCREEN_WIDTH * fit)),
+                  height = std::max(1, static_cast<int>(Settings::TARGET_SCREEN_HEIGHT * fit));
         if (preview.texture.width != width || preview.texture.height != height)
         {
             if (preview.id) UnloadRenderTexture(preview);

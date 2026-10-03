@@ -30,6 +30,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ImGui
@@ -125,7 +126,7 @@ namespace sage
         void drawParticlePreviewWindow() const;
         void addMesh(const char* modelKey, const char* name) const;
         // Brush settings panel, shown only while terrain sculpting is active.
-        void drawTerrainBrushWindow() const;
+        void drawTerrainBrushTools() const;
         void clearCurrentMap() const;
         void ensureDefaultMapBase() const;
         [[nodiscard]] std::vector<entt::entity> collectMapHierarchyOrder() const;
@@ -143,7 +144,10 @@ namespace sage
         void handleInspectorEdit(const editor::EditorGui::InspectorEditResult& result) const;
         void drawScriptBrowser() const;
         void drawShaderBrowser() const;
+        mutable std::unordered_map<std::uint64_t, entt::entity> flatpackSourceEntities;
         void openScriptBrowser() const;
+        editor::AssetUsageResults findAssetUsages(const editor::BrowserAsset& asset) const;
+        std::string navigateAssetUsage(const editor::AssetUsage& usage) const;
         [[nodiscard]] bool createScriptSource(const std::filesystem::path& sourceFile) const;
         void attachScriptToSelection(const std::filesystem::path& sourceFile) const;
         void openSelectedScript() const;

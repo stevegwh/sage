@@ -72,11 +72,16 @@ namespace sage::editor
 
         bool IsVirtualResourceFolder(const std::filesystem::path& path)
         {
-            return path == "Materials" || path == "Unlocated images" || path == "External models";
+            return path == "Materials" || path == "Unlocated images" || path == "External models" ||
+                   path == "Scripts" || path == "Canvases" || path == "Favourites" || path == "Recently used";
         }
 
         std::string ResourceFolderTooltip(const std::filesystem::path& path)
         {
+            if (path == "Canvases") return "All saved UI canvases; files remain at their source paths";
+            if (path == "Scripts") return "Virtual folder: C# source files remain in the managed project";
+            if (path == "Favourites") return "Your favourite assets";
+            if (path == "Recently used") return "Assets you recently selected or opened";
             if (path == "Materials") return "Packed materials have no separate source files";
             if (path == "Unlocated images") return "Imported images without a unique source path";
             if (path == "External models") return "Imported models with source paths outside resources";
@@ -492,12 +497,19 @@ namespace sage::editor
 
             if ((enterPressed || renamePressed) && onAssetRenameCb)
             {
+                const auto before =
+                    std::to_string(static_cast<int>(BrowserAssetKind::Model)) + ":" + asset.modelKey;
                 auto result = onAssetRenameCb(index, assetRenameInput);
                 assetRenameStatus = std::move(result.message);
                 if (result.renamed)
                 {
                     if (result.updatedEntry.has_value())
                     {
+                        assetBrowserHistory.Rename(
+                            before,
+                            std::to_string(static_cast<int>(BrowserAssetKind::Model)) + ":" +
+                                result.updatedEntry->modelKey);
+                        saveBrowserHistory();
                         assetEntries.at(index) = std::move(*result.updatedEntry);
                         resourceBrowserNeedsRefresh = true;
                     }
@@ -579,10 +591,18 @@ namespace sage::editor
                 // The rename callback refreshes the catalog (SetFlatpacks swaps
                 // out flatpackEntries), so copy the path before invoking.
                 const auto path = flatpack.path;
+                auto requested = std::filesystem::path(flatpackRenameInput);
+                if (requested.extension() == ".flatpack") requested = requested.stem();
+                const auto renamedPath = path.parent_path() / (requested.string() + ".flatpack");
                 auto result = onFlatpackRenameCb(path, flatpackRenameInput);
                 flatpackRenameStatus = std::move(result.message);
                 if (result.renamed)
                 {
+                    const auto prefix = std::to_string(static_cast<int>(BrowserAssetKind::Flatpack)) + ":";
+                    assetBrowserHistory.Rename(
+                        prefix + path.lexically_normal().generic_string(),
+                        prefix + renamedPath.lexically_normal().generic_string());
+                    saveBrowserHistory();
                     clearRename();
                     ImGui::CloseCurrentPopup();
                 }
@@ -809,17 +829,36 @@ namespace sage::editor
             resourceEntries.push_back({.path = *relative, .flatpackIndex = i});
             addDirectories(*relative);
         }
+        // Canvas discovery is independent of packed assets. Keep the virtual folder
+        // visible even before the first canvas is saved, and retain real source paths.
+        directories.insert("Canvases");
         if (std::filesystem::exists(RESOURCES_DIRECTORY))
-            for (const auto& file : std::filesystem::recursive_directory_iterator(RESOURCES_DIRECTORY))
-                if (file.is_regular_file() && file.path().extension() == ".canvas")
+            for (auto it = std::filesystem::recursive_directory_iterator(RESOURCES_DIRECTORY);
+                 it != std::filesystem::recursive_directory_iterator();
+                 ++it)
+            {
+                if (it->is_directory() && it->path().filename().string().starts_with('.'))
                 {
-                    const auto relative = RelativeResourcePath(file.path());
-                    if (relative)
-                    {
-                        resourceEntries.push_back({.path = *relative, .canvas = true});
-                        addDirectories(*relative);
-                    }
+                    it.disable_recursion_pending();
+                    continue;
                 }
+                if (it->is_regular_file() && it->path().extension() == ".canvas")
+                    resourceEntries.push_back(
+                        {.path = std::filesystem::path{"Canvases"} / it->path().filename(),
+                         .canvas = true,
+                         .sourcePath = it->path()});
+            }
+        scriptEntries = DiscoverScriptSources(scriptConfig);
+        directories.insert("Scripts");
+        directories.insert("Favourites");
+        directories.insert("Recently used");
+        for (std::size_t i = 0; i < scriptEntries.size(); ++i)
+        {
+            const auto path = std::filesystem::path{"Scripts"} /
+                              scriptEntries.at(i).path.lexically_relative(scriptConfig.sourceDirectory);
+            resourceEntries.push_back({.path = path, .scriptIndex = i, .sourcePath = scriptEntries.at(i).path});
+            addDirectories(path);
+        }
         for (const auto& directory : directories)
             resourceEntries.push_back({.path = directory, .directory = true});
         std::ranges::sort(resourceEntries, [](const ResourceEntry& a, const ResourceEntry& b) {
@@ -843,6 +882,7 @@ namespace sage::editor
     {
         resourceDirectory = path;
         resourceFilter.Clear();
+        if (path == "Canvases") resourceTypeFilter = 0;
         showAssetDefaults = false;
     }
 
@@ -873,6 +913,7 @@ namespace sage::editor
     void EditorGui::drawResourceBrowser()
     {
         if (resourceBrowserNeedsRefresh) refreshResourceBrowser();
+        if (!browserHistoryError.empty()) ImGui::TextWrapped("%s", browserHistoryError.c_str());
         if (ImGui::Button("New Canvas") && onCanvasEditCb) onCanvasEditCb({});
         ImGui::SameLine();
         if (ImGui::Button(ICON_FA_ROTATE_RIGHT " Refresh"))
@@ -889,7 +930,10 @@ namespace sage::editor
         ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::SetNextItemWidth(110.0f);
-        ImGui::Combo("##resource_type", &resourceTypeFilter, "All assets\0Models\0Materials\0Images\0Flatpacks\0");
+        ImGui::Combo(
+            "##resource_type",
+            &resourceTypeFilter,
+            "All assets\0Models\0Materials\0Images\0Flatpacks\0Canvases\0Scripts\0");
         ImGui::SameLine();
         DrawSearchFilter(
             resourceFilter, "resource_filter", "Search resources...", ImGui::GetContentRegionAvail().x);
@@ -932,9 +976,22 @@ namespace sage::editor
         for (std::size_t i = 0; i < resourceEntries.size(); ++i)
         {
             const auto& entry = resourceEntries.at(i);
+            const bool favourites = resourceDirectory == "Favourites";
+            const bool recent = resourceDirectory == "Recently used";
+            if (favourites || recent)
+            {
+                if (entry.directory) continue;
+                const auto id = browserAssetId(entry);
+                if (favourites && !assetBrowserHistory.IsFavourite(id)) continue;
+                if (recent &&
+                    std::ranges::find(assetBrowserHistory.recent, id) == assetBrowserHistory.recent.end())
+                    continue;
+            }
             if (resourceFilter.IsActive())
             {
-                const bool pathMatches = resourceFilter.PassFilter(entry.path.generic_string().c_str());
+                const bool pathMatches = resourceFilter.PassFilter(entry.path.generic_string().c_str()) ||
+                                         (!entry.sourcePath.empty() &&
+                                          resourceFilter.PassFilter(entry.sourcePath.generic_string().c_str()));
                 const bool keyMatches =
                     entry.modelIndex &&
                     resourceFilter.PassFilter(assetEntries.at(*entry.modelIndex).modelKey.c_str());
@@ -943,17 +1000,29 @@ namespace sage::editor
                     resourceFilter.PassFilter(materialKeys.at(*entry.materialIndex).c_str());
                 const bool imageMatches =
                     entry.imageIndex && resourceFilter.PassFilter(imageKeys.at(*entry.imageIndex).c_str());
-                if (!pathMatches && !keyMatches && !materialMatches && !imageMatches) continue;
+                const bool scriptMatches =
+                    entry.scriptIndex &&
+                    std::ranges::any_of(scriptEntries.at(*entry.scriptIndex).types, [this](const auto& type) {
+                        return resourceFilter.PassFilter(type.c_str());
+                    });
+                if (!pathMatches && !keyMatches && !materialMatches && !imageMatches && !scriptMatches) continue;
             }
-            else if (entry.path.parent_path() != resourceDirectory)
+            else if (!favourites && !recent && entry.path.parent_path() != resourceDirectory)
                 continue;
             if (!entry.directory && resourceTypeFilter == 1 && !entry.modelIndex) continue;
             if (!entry.directory && resourceTypeFilter == 2 && !entry.materialIndex) continue;
             if (!entry.directory && resourceTypeFilter == 3 && !entry.imageIndex) continue;
             if (!entry.directory && resourceTypeFilter == 4 && !entry.flatpackIndex) continue;
+            if (!entry.directory && resourceTypeFilter == 5 && !entry.canvas) continue;
+            if (!entry.directory && resourceTypeFilter == 6 && !entry.scriptIndex) continue;
             visible.push_back(i);
         }
 
+        if (resourceDirectory == "Recently used")
+            std::ranges::sort(visible, [&](std::size_t a, std::size_t b) {
+                return std::ranges::find(assetBrowserHistory.recent, browserAssetId(resourceEntries.at(a))) <
+                       std::ranges::find(assetBrowserHistory.recent, browserAssetId(resourceEntries.at(b)));
+            });
         if (ImGui::BeginChild("resource_grid_scroll", ImVec2{0.0f, 0.0f}, false))
         {
             if (resourceFilter.IsActive()) ImGui::TextDisabled("Results from all resources");
@@ -1039,6 +1108,7 @@ namespace sage::editor
             fallbackLabel = ICON_FA_FOLDER "\nFolder";
         }
         if (entry.canvas) fallbackLabel = "UI\nCanvas";
+        if (entry.scriptIndex) fallbackLabel = "C#\nScript";
         std::optional<std::reference_wrapper<Texture2D>> texture;
         if (thumbnail && thumbnail->get().id != 0) texture = std::ref(thumbnail->get().texture);
         const bool clicked = texture ? ImGui::ImageButton(
@@ -1051,6 +1121,11 @@ namespace sage::editor
                                      : ImGui::Button(fallbackLabel.c_str(), ImVec2{previewSize, previewSize});
         if (entry.modelIndex) ImGui::PopStyleColor(3);
 
+        if (!entry.directory && clicked)
+        {
+            assetBrowserHistory.Use(browserAssetId(entry));
+            saveBrowserHistory();
+        }
         const char* type = "Folder";
         if (entry.modelIndex)
         {
@@ -1070,6 +1145,7 @@ namespace sage::editor
             }
             if (ImGui::BeginPopupContextItem("asset_context"))
             {
+                drawResourceActions(entry);
                 if (ImGui::MenuItem("Placement Defaults"))
                 {
                     if (onAssetSelectedCb) onAssetSelectedCb(i);
@@ -1093,6 +1169,7 @@ namespace sage::editor
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nClick to preview", key.c_str());
             if (ImGui::BeginPopupContextItem("material_context"))
             {
+                drawResourceActions(entry);
                 if (ImGui::MenuItem("Copy Material Key")) ImGui::SetClipboardText(key.c_str());
                 ImGui::EndPopup();
             }
@@ -1105,6 +1182,7 @@ namespace sage::editor
                 ImGui::SetTooltip("%s\n%s\nClick to preview", key.c_str(), entry.sourcePath.string().c_str());
             if (ImGui::BeginPopupContextItem("image_context"))
             {
+                drawResourceActions(entry);
                 if (ImGui::MenuItem("Copy Image Key")) ImGui::SetClipboardText(key.c_str());
                 if (!entry.sourcePath.empty() && ImGui::MenuItem("Copy Source Path"))
                     ImGui::SetClipboardText(entry.sourcePath.string().c_str());
@@ -1132,6 +1210,7 @@ namespace sage::editor
             }
             if (ImGui::BeginPopupContextItem("flatpack_context"))
             {
+                drawResourceActions(entry);
                 const auto path = flatpack.path.string();
                 if (ImGui::MenuItem("Edit Flatpack") && onFlatpackEditCb) onFlatpackEditCb(flatpack.path);
                 ImGui::Separator();
@@ -1153,18 +1232,44 @@ namespace sage::editor
                 ImGui::EndPopup();
             }
         }
+        else if (entry.scriptIndex)
+        {
+            type = "Script";
+            if (ImGui::IsItemHovered())
+            {
+                std::string tooltip = entry.sourcePath.string();
+                for (const auto& name : scriptEntries.at(*entry.scriptIndex).types)
+                    tooltip += "\n" + name;
+                ImGui::SetTooltip("%s\nDouble-click: open source", tooltip.c_str());
+            }
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                OpenURL(("file://" + std::filesystem::absolute(entry.sourcePath).string()).c_str());
+            if (ImGui::BeginPopupContextItem("script_context"))
+            {
+                drawResourceActions(entry);
+                if (ImGui::MenuItem("Open Script"))
+                    OpenURL(("file://" + std::filesystem::absolute(entry.sourcePath).string()).c_str());
+                if (ImGui::MenuItem("Copy Source Path"))
+                    ImGui::SetClipboardText(entry.sourcePath.string().c_str());
+                ImGui::EndPopup();
+            }
+        }
         else if (entry.canvas)
         {
             type = "Canvas";
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s\nDouble-click: edit", entry.sourcePath.string().c_str());
             if (ImGui::BeginPopupContextItem("canvas_context"))
             {
-                if (ImGui::MenuItem("Edit Canvas") && onCanvasEditCb)
-                    onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
+                drawResourceActions(entry);
+                if (ImGui::MenuItem("Edit Canvas") && onCanvasEditCb) onCanvasEditCb(entry.sourcePath);
                 if (ImGui::MenuItem("New Canvas") && onCanvasEditCb) onCanvasEditCb({});
+                if (ImGui::MenuItem("Copy Source Path"))
+                    ImGui::SetClipboardText(entry.sourcePath.string().c_str());
                 ImGui::EndPopup();
             }
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && onCanvasEditCb)
-                onCanvasEditCb(RESOURCES_DIRECTORY / entry.path);
+                onCanvasEditCb(entry.sourcePath);
         }
         else
         {
@@ -1182,7 +1287,10 @@ namespace sage::editor
                            : entry.materialIndex ? materialKeys.at(*entry.materialIndex)
                            : entry.imageIndex    ? AssetNameFromKey(imageKeys.at(*entry.imageIndex))
                                                  : entry.path.filename().string();
-        ImGui::TextUnformatted(label.c_str());
+        const auto displayLabel = !entry.directory && assetBrowserHistory.IsFavourite(browserAssetId(entry))
+                                      ? std::string(ICON_FA_STAR " ") + label
+                                      : label;
+        ImGui::TextUnformatted(displayLabel.c_str());
         if (entry.modelIndex && selected) ImGui::PopStyleColor();
         ImGui::TextDisabled("%s", type);
         ImGui::EndGroup();

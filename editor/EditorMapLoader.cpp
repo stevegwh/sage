@@ -1,4 +1,5 @@
 #include "EditorMapLoader.hpp"
+#include "EditorAssetUsage.hpp"
 #include "EditorComponents.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/Renderable.hpp"
@@ -37,6 +38,11 @@ namespace sage::editor
                     if (auto* renderable = destination.try_get<Renderable>(entity)) renderable->active = false;
                 }
             }
+            for (const auto& node : document["entities"].GetArray())
+                if (node.HasMember("editorAssetKey"))
+                    destination.emplace_or_replace<AssetReference>(
+                        content::FindEntityById(destination, json::Id(node, "id")),
+                        json::String(node, "editorAssetKey"));
             return true;
         }
         catch (const std::exception& error)
@@ -56,7 +62,9 @@ namespace sage::editor
             auto entities = hierarchyOrder;
             for (auto entity : source.view<EditorMapEntity>())
                 if (std::ranges::find(entities, entity) == entities.end()) entities.push_back(entity);
-            content::WriteDocument(path, content::Capture(source, entities));
+            auto document = content::Capture(source, entities);
+            AddEditorAssetReferences(document, source, entities);
+            content::WriteDocument(path, document);
             return true;
         }
         catch (const std::exception& error)

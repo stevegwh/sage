@@ -1,8 +1,10 @@
 #include "EditorFlatpackEditSession.hpp"
 
+#include "EditorAssetUsage.hpp"
 #include "EditorHistory.hpp"
 #include "EditorMapLoader.hpp"
 #include "engine/Camera.hpp"
+#include "engine/components/sgTransform.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/Flatpack.hpp"
 
@@ -93,9 +95,22 @@ namespace sage::editor
     {
         if (!active) return;
 
-        if (!sage::SaveFlatpack(*sys->registry, root, flatpackPath.string().c_str()))
+        try
         {
-            std::cerr << "ERROR: Failed to save flatpack: " << flatpackPath << std::endl;
+            std::vector<entt::entity> entities;
+            const auto collect = [&](auto& self, entt::entity entity) -> void {
+                entities.push_back(entity);
+                for (auto child : sys->registry->get<sgTransform>(entity).GetChildren())
+                    self(self, child);
+            };
+            collect(collect, root);
+            auto document = content::Capture(*sys->registry, entities, "flatpack", root);
+            AddEditorAssetReferences(document, *sys->registry, entities);
+            content::WriteDocument(flatpackPath, document);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "ERROR: Failed to save flatpack: " << error.what() << std::endl;
             return;
         }
         if (history) history->MarkSaved();

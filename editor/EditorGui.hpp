@@ -1,5 +1,6 @@
 #pragma once
 
+#include "EditorAssetUsage.hpp"
 #include "EditorDockLayout.hpp"
 #include "EditorInspector.hpp"
 #include "engine/systems/CSharpScriptSystem.hpp"
@@ -197,6 +198,7 @@ namespace sage
                 std::filesystem::path path;
                 bool directory = false;
                 bool canvas = false;
+                std::optional<std::size_t> scriptIndex;
                 std::optional<std::size_t> modelIndex;
                 std::optional<std::size_t> materialIndex;
                 std::optional<std::size_t> imageIndex;
@@ -205,6 +207,21 @@ namespace sage
                 std::filesystem::path sourcePath;
             };
             std::vector<ResourceEntry> resourceEntries;
+            CSharpScriptEditorConfig scriptConfig;
+            std::vector<ScriptSource> scriptEntries;
+            AssetBrowserHistory assetBrowserHistory;
+            std::function<AssetUsageResults(const BrowserAsset&)> findUsages;
+            std::function<std::string(const AssetUsage&)> navigateUsage;
+            std::optional<BrowserAsset> usageAsset;
+            AssetUsageResults usageResults;
+            bool usageWindowOpen = false;
+            std::string usageStatus;
+            std::string browserHistoryError;
+            BrowserAsset browserAsset(const ResourceEntry& entry) const;
+            std::string browserAssetId(const ResourceEntry& entry) const;
+            void saveBrowserHistory();
+            void drawResourceActions(const ResourceEntry& entry);
+            void refreshAssetUsages();
             std::filesystem::path resourceDirectory;
             ImGuiTextFilter resourceFilter;
             bool resourceBrowserNeedsRefresh = true;
@@ -288,7 +305,7 @@ namespace sage
             void StartImGui();
             void EndImGui();
             void DrawHierarchyWindow();
-            InspectorEditResult DrawInspectorWindow();
+            InspectorEditResult DrawInspectorWindow(const std::function<void()>& drawTerrainTools = {});
             void DrawAssetDrawerWindow();
             void RefreshResourceBrowser()
             {
@@ -298,6 +315,11 @@ namespace sage
             {
                 onCanvasEditCb = std::move(callback);
             }
+            void ConfigureAssetBrowser(
+                CSharpScriptEditorConfig config,
+                std::function<AssetUsageResults(const BrowserAsset&)> find,
+                std::function<std::string(const AssetUsage&)> navigate);
+            void DrawAssetUsages();
             void DrawConsoleWindow();
             void AddConsoleEntry(CSharpLogLevel level, std::string_view message);
             void ClearConsole();

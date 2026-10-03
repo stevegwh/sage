@@ -3,6 +3,7 @@
 #include "cereal/types/vector.hpp"
 #include "engine/content/Json.hpp"
 #include "engine/raylib-cereal.hpp"
+#include "engine/Settings.hpp"
 #include "UI.hpp"
 #include <functional>
 #include <optional>
@@ -110,8 +111,8 @@ namespace sage
         std::string format = "sage-canvas";
         unsigned int version = 1;
         unsigned int nextId = 2;
-        float width = 1920;
-        float height = 1080;
+        float width = Settings::TARGET_SCREEN_WIDTH;
+        float height = Settings::TARGET_SCREEN_HEIGHT;
         std::vector<CanvasNode> nodes{CanvasNode{}};
         void Validate() const;
         static CanvasDocument FromJson(const json::Value& value);
