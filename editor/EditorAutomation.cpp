@@ -43,7 +43,33 @@ namespace sage
             if (auto* id = sys->registry->try_get<PersistentEntityId>(e))
                 selected.PushBack(json::Value(id->id), a);
         json::Put(state, "selection", selected, a);
-        if (gameRuntime) json::Put(state, "runtime", gameRuntime->Inspect(), a);
+        if (gameRuntime)
+        {
+            json::Put(state, "runtime", gameRuntime->Inspect(), a);
+            if (runtimeSelection && gameRuntime->InspectionRegistry().valid(*runtimeSelection))
+            {
+                json::Put(
+                    state,
+                    "runtimeSelection",
+                    static_cast<std::uint64_t>(entt::to_integral(*runtimeSelection)),
+                    a);
+                json::Put(state, "runtimeScript", gameRuntime->InspectScript(*runtimeSelection), a);
+                json::Value components(rapidjson::kArrayType);
+                for (const auto& component :
+                     inspectorRegistry.InspectRuntime(gameRuntime->InspectionRegistry(), *runtimeSelection))
+                {
+                    json::Value row(rapidjson::kObjectType);
+                    json::Put(row, "name", component.displayName, a);
+                    json::Value fields(rapidjson::kObjectType);
+                    for (const auto& field : component.fields)
+                        if (const auto* value = std::get_if<editor::NoteField>(&field.value))
+                            json::Put(fields, field.label.c_str(), value->text, a);
+                    json::Put(row, "fields", fields, a);
+                    components.PushBack(row, a);
+                }
+                json::Put(state, "runtimeInspector", components, a);
+            }
+        }
         return state;
     }
     json::Document EditorScene::automationCommand(const json::Value& request) const
@@ -91,6 +117,16 @@ namespace sage
         {
             if (!gameRuntime) throw std::runtime_error("No play session");
             return gameRuntime->Command(json::Require(request, "operation"));
+        }
+        if (command == "runtime-select")
+        {
+            if (!gameRuntime) throw std::runtime_error("No play session");
+            const auto entity = static_cast<entt::entity>(json::Id(request, "handle"));
+            if (!gameRuntime->InspectionRegistry().valid(entity))
+                throw std::runtime_error("Runtime entity no longer exists");
+            runtimeSelection = entity;
+            refreshRuntimeInspection();
+            return automationState();
         }
         if (command == "play")
         {

@@ -294,6 +294,12 @@ namespace sage
 
     void EditorScene::refreshSceneWindows() const
     {
+        if (gameRuntime)
+        {
+            refreshRuntimeInspection();
+            return;
+        }
+        gui->SetRuntimeInspection(false);
         const auto selectedRoots = selection->Selected();
         auto inspectedComponents = !selectedRoots.empty()
                                        ? inspectorRegistry.Inspect(*sys->registry, selectedRoots)
@@ -403,7 +409,7 @@ namespace sage
             // Keep the game's viewport pinned to the (possibly resized/redocked)
             // scene view so its UI stays aligned with the play area.
             gameRuntime->SetViewport(gameViewportScreenRect());
-            gameRuntime->Update();
+            gameRuntime->Update(viewportFullscreen || (!gui->WantsMouseCapture() && !gui->WantsKeyboardCapture()));
             return;
         }
 
@@ -513,6 +519,22 @@ namespace sage
         if (gameRuntime)
         {
             gameRuntime->Draw3D();
+            auto& registry = gameRuntime->InspectionRegistry();
+            if (runtimeSelection && registry.valid(*runtimeSelection))
+            {
+                if (const auto* collider = registry.try_get<Collideable>(*runtimeSelection))
+                    DrawBoundingBox(collider->worldBoundingBox, sage::colors::ORANGE_COLOR);
+                if (const auto* actor = registry.try_get<MoveableActor>(*runtimeSelection);
+                    actor && registry.any_of<sgTransform>(*runtimeSelection))
+                {
+                    auto previous = registry.get<sgTransform>(*runtimeSelection).GetWorldPos();
+                    for (const auto& point : actor->path)
+                    {
+                        DrawLine3D(previous, point, sage::colors::ORANGE_COLOR);
+                        previous = point;
+                    }
+                }
+            }
             return;
         }
 
@@ -669,6 +691,18 @@ namespace sage
                 canvasEditor->Open(path);
         });
         drawMainMenuBar(exitRequested);
+
+        if (gameRuntime)
+        {
+            refreshRuntimeInspection();
+            gui->DrawHierarchyWindow();
+            static_cast<void>(gui->DrawInspectorWindow({}, [this]() { frameRuntimeObject(); }));
+            gui->DrawConsoleWindow();
+            drawGraphicsSettingsWindow();
+            drawExitConfirmationModal(exitRequested, exitConfirmed);
+            gui->EndImGui();
+            return;
+        }
 
         // Keep the selection's clean state cached so an inspector edit
         // that mutates on its activation frame (checkbox/combo) still has a correct
@@ -1884,7 +1918,7 @@ namespace sage
     void EditorScene::drawMainMenuBar(bool& exitRequested) const
     {
         if (!ImGui::BeginMainMenuBar()) return;
-        if (ImGui::BeginMenu("File"))
+        if (ImGui::BeginMenu("File", !IsPlaying()))
         {
             const bool flatpackOpen = flatpackSession->IsActive();
             if (flatpackOpen)
@@ -1922,7 +1956,7 @@ namespace sage
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Edit"))
+        if (ImGui::BeginMenu("Edit", !IsPlaying()))
         {
             const bool historyBusy = history && history->HasActiveTransaction();
             const bool canUndo = history && !historyBusy && history->CanUndo();
@@ -1960,7 +1994,7 @@ namespace sage
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("View"))
+        if (ImGui::BeginMenu("View", !IsPlaying()))
         {
             if (ImGui::MenuItem("Navigation Grid", nullptr, navigationGridVisible))
             {
@@ -1995,7 +2029,7 @@ namespace sage
                     "Q/E orbit sideways, W/S orbit up/down, RMB/MMB drag, wheel zoom; Esc returns to In-game");
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Add"))
+        if (ImGui::BeginMenu("Add", !IsPlaying()))
         {
             if (ImGui::BeginMenu("Mesh"))
             {
@@ -2074,7 +2108,7 @@ namespace sage
 
     void EditorScene::drawPlayStopButton() const
     {
-        const bool playing = IsPlaying();
+        bool playing = IsPlaying();
         // No factory means this is the standalone editor (no game linked in);
         // a flatpack edit session is its own isolated scene, so disallow play.
         const bool canPlay = HasGameRuntimeFactory() && !flatpackSession->IsActive();
@@ -2086,10 +2120,25 @@ namespace sage
                 stopPlay();
             else if (canPlay)
                 startPlay();
+            playing = IsPlaying();
         }
 
         constexpr float buttonWidth = 80.0f;
-        ImGui::SameLine(ImGui::GetWindowWidth() - buttonWidth - 8.0f);
+        const float controlsWidth =
+            playing ? 3.0f * buttonWidth + 2.0f * ImGui::GetStyle().ItemSpacing.x : buttonWidth;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - controlsWidth - 8.0f));
+        if (playing)
+        {
+            if (ImGui::Button(gameRuntime->IsPaused() ? "Resume" : "Pause", ImVec2{buttonWidth, 0.0f}))
+                gameRuntime->SetPaused(!gameRuntime->IsPaused());
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!gameRuntime->IsPaused());
+            if (ImGui::Button("Step", ImVec2{buttonWidth, 0.0f})) gameRuntime->Step(1.0f / 60.0f);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Advance one simulation frame (1/60 second) while paused");
+            ImGui::SameLine();
+        }
         const bool disabled = !playing && !canPlay;
         if (disabled) ImGui::BeginDisabled();
         if (ImGui::Button(playing ? "Stop" : "Play", ImVec2(buttonWidth, 0.0f)))
@@ -2854,8 +2903,21 @@ namespace sage
         };
         gameRuntime = CreateGameRuntime(context);
         if (gameRuntime)
+        {
+            runtimeSelection.reset();
+            runtimeHierarchy = std::make_unique<editor::EditorHierarchyTree>(gameRuntime->InspectionRegistry());
+            if (const auto selected = selection->Active(); selected && sys->registry->valid(*selected))
+            {
+                if (const auto* id = sys->registry->try_get<PersistentEntityId>(*selected))
+                {
+                    const auto live = content::FindEntityById(gameRuntime->InspectionRegistry(), id->id);
+                    if (live != entt::null) runtimeSelection = live;
+                }
+            }
+            refreshRuntimeInspection();
             gameRuntime->ApplyProjectSettings(
                 sys->settings->GetLightSettings(), sys->settings->GetGraphicsSettings());
+        }
         if (!gameRuntime)
         {
             TraceLog(LOG_WARNING, "Play: failed to create game runtime; staying in edit mode.");
@@ -2867,7 +2929,11 @@ namespace sage
         if (!gameRuntime) return;
         // The runtime owned its own registry, so tearing it down leaves the
         // editor's scene exactly as it was — no restore needed.
+        gui->SetInspector("None", {}, {});
+        runtimeHierarchy.reset();
+        runtimeSelection.reset();
         gameRuntime.reset();
+        refreshSceneWindows();
         std::error_code ec;
         std::filesystem::remove(PLAY_SESSION_MAP_PATH, ec);
     }
@@ -2920,7 +2986,7 @@ namespace sage
         selection = std::make_unique<editor::EditorSelection>(sys);
         pickingService = std::make_unique<editor::EditorPickingService>(sys);
         entityOperations = std::make_unique<editor::EditorEntityOperations>(sys, &inspectorRegistry);
-        hierarchyTree = std::make_unique<editor::EditorHierarchyTree>(sys);
+        hierarchyTree = std::make_unique<editor::EditorHierarchyTree>(*sys->registry);
         placementController = std::make_unique<editor::EditorPlacementController>(sys, *assetCatalog);
 
         ensureDefaultMapBase();
@@ -2957,7 +3023,13 @@ namespace sage
             },
             [this](const std::filesystem::path& path) { deleteFlatpackFile(path); },
             [this](const editor::EditorGui::SceneSelectionRequest& request) {
-                editorModes->SelectSceneFromHierarchy(request);
+                if (gameRuntime)
+                {
+                    if (gameRuntime->InspectionRegistry().valid(request.entity)) runtimeSelection = request.entity;
+                    refreshRuntimeInspection();
+                }
+                else
+                    editorModes->SelectSceneFromHierarchy(request);
             },
             [this](const editor::EditorGui::HierarchyMoveRequest& request) { moveHierarchyEntity(request); },
             modelDefaults->Callbacks());

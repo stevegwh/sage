@@ -201,6 +201,16 @@ namespace sage
             i.field("scale", "Scale", scale.local);
         }
 
+        template <class Inspector>
+        void define_runtime_options(Inspector& i)
+        {
+            i.field("World Position", position.world);
+            i.field("World Rotation", rotation.world);
+            i.field("World Scale", scale.world);
+            i.note("Parent", m_parent == entt::null ? "None" : std::to_string(entt::to_integral(m_parent)));
+            i.note("Children", std::to_string(m_children.size()));
+        }
+
         template <class Api>
         static void define_script_api(Api& api)
         {

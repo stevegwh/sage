@@ -7,16 +7,11 @@
 #include <string>
 #include <vector>
 
-namespace sage
-{
-    class EngineSystems;
-}
-
 namespace sage::editor
 {
     class EditorHierarchyTree
     {
-        EngineSystems* sys;
+        entt::registry& registry;
         mutable std::vector<entt::entity> rootOrder;
 
         void appendSceneObjectEntry(
@@ -27,11 +22,12 @@ namespace sage::editor
         void syncRootOrder(std::vector<entt::entity>& roots) const;
 
       public:
-        explicit EditorHierarchyTree(EngineSystems* sys);
+        explicit EditorHierarchyTree(entt::registry& registry);
 
         [[nodiscard]] std::string GetEntityName(entt::entity entity) const;
         [[nodiscard]] const char* GetEntityIcon(entt::entity entity) const;
-        [[nodiscard]] std::vector<EditorGui::SceneObjectEntry> CollectSceneObjectEntries() const;
+        [[nodiscard]] std::vector<EditorGui::SceneObjectEntry> CollectSceneObjectEntries(
+            bool includeRuntimeEntities = false) const;
         void NoteHierarchyMove(entt::entity dragged, entt::entity newParent, entt::entity insertBefore);
     };
 } // namespace sage::editor

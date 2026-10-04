@@ -14,6 +14,16 @@ namespace sage
         CanvasNode data;
         entt::entity canvas = entt::null;
         Event<> clicked;
+        template <class Inspector>
+        void define_editor_options(Inspector& i)
+        {
+            i.field("Name", data.name, false);
+            i.field("Kind", data.kind, false);
+            i.field("Text", data.text, false);
+            i.field("Visible", data.visible, false);
+            i.field("Enabled", data.enabled, false);
+            i.note("Canvas", std::to_string(entt::to_integral(canvas)));
+        }
         template <class Api>
         static void define_script_api(Api& api)
         {

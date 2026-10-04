@@ -75,6 +75,10 @@ namespace sage
         // Non-null only while play-in-editor is running. Owns its own registry,
         // so Play/Stop never touches the editor scene (see startPlay/stopPlay).
         mutable std::unique_ptr<IGameRuntime> gameRuntime;
+        mutable std::unique_ptr<editor::EditorHierarchyTree> runtimeHierarchy;
+        mutable std::optional<entt::entity> runtimeSelection;
+        void refreshRuntimeInspection() const;
+        void frameRuntimeObject() const;
         mutable content::AutomationInbox automation;
         json::Document automationState() const;
         json::Document automationCommand(const json::Value& request) const;

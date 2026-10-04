@@ -169,6 +169,28 @@ public static unsafe class ScriptRuntime
         Instances.TryGetValue(entity, out var instance) ? instance.Script as T : null;
 
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    public static int InspectScript(uint entity, byte* buffer, int capacity)
+    {
+        if (!Instances.TryGetValue(entity, out var instance)) return -1;
+        try
+        {
+            var snapshot = new
+            {
+                instance.Awakened, instance.Enabled, instance.Started, instance.Failed,
+                Root = RuntimeInspection.Capture(instance.Script)
+            };
+            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(snapshot);
+            if (buffer != null && capacity >= bytes.Length)
+                bytes.CopyTo(new Span<byte>(buffer, capacity));
+            return bytes.Length;
+        }
+        catch (Exception)
+        {
+            return -2;
+        }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     public static int DispatchTrigger(uint listener, int eventType, uint other)
     {
         if (!Instances.TryGetValue(listener, out var instance) || instance.Failed) return -1;

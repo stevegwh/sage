@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/content/Json.hpp"
 #include "entt/entt.hpp"
 
 #include <functional>
@@ -43,6 +44,7 @@ namespace sage
       public:
         void Update(float deltaTime);
         [[nodiscard]] bool IsAvailable() const;
+        [[nodiscard]] json::Document Inspect(entt::entity entity) const;
 
         CSharpScriptSystem(entt::registry* registry, EngineSystems* systems, ManagedScriptingConfig config);
         CSharpScriptSystem(const CSharpScriptSystem&) = delete;

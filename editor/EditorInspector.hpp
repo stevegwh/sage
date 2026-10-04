@@ -560,7 +560,7 @@ namespace sage::editor
             EditorComponentId componentId{};
             std::string displayName;
             std::function<bool(const entt::registry&, entt::entity)> has;
-            std::function<ComponentDescription(entt::registry&, entt::entity)> describe;
+            std::function<ComponentDescription(entt::registry&, entt::entity, bool)> describe;
             std::vector<EditorComponentId> requirements;
             std::vector<EditorComponentId> incompatibleComponents;
             bool removable = false;
@@ -617,10 +617,14 @@ namespace sage::editor
                 .has = [](const entt::registry& r,
                           const entt::entity e) { return r.valid(e) && r.template any_of<T>(e); },
                 .describe =
-                    [](entt::registry& r, const entt::entity e) {
+                    [](entt::registry& r, const entt::entity e, const bool runtime) {
                         ComponentInspector ci;
                         ci.SetContext(r, e);
-                        r.template get<T>(e).define_editor_options(ci);
+                        auto& component = r.template get<T>(e);
+                        component.define_editor_options(ci);
+                        if (runtime)
+                            if constexpr (requires { component.define_runtime_options(ci); })
+                                component.define_runtime_options(ci);
                         return std::move(ci).Take();
                     },
                 .requirements = std::move(defaultDescription.requirements),
@@ -692,6 +696,9 @@ namespace sage::editor
             EditorComponentId componentId,
             const std::vector<entt::entity>& entities) const;
         [[nodiscard]] std::vector<InspectedComponent> Inspect(entt::registry& registry, entt::entity entity) const;
+        // Runtime descriptions own copied values and retain no component references or mutation callbacks.
+        [[nodiscard]] std::vector<InspectedComponent> InspectRuntime(
+            entt::registry& registry, entt::entity entity) const;
         [[nodiscard]] std::vector<InspectedComponent> Inspect(
             entt::registry& registry, const std::vector<entt::entity>& entities) const;
     };

@@ -123,6 +123,17 @@ namespace sage
             }
         }
 
+        template <class Inspector>
+        void define_runtime_options(Inspector& i)
+        {
+            i.note("Current Clip", current.index < clipNames.size() ? clipNames.at(current.index) : "None");
+            i.field("Current Frame", current.currentFrame, false);
+            i.field("Animation Speed", current.speed, false);
+            i.field("One Shot", oneShotMode, false);
+            i.field("Blending", blending, false);
+            i.field("Blend Timer", blendTimer, false);
+        }
+
         template <class Api>
         static void define_script_api(Api& api)
         {

@@ -92,6 +92,7 @@ namespace sage::editor
 
         if (ImGui::Begin("Hierarchy", nullptr, windowFlags))
         {
+            if (runtimeInspection) ImGui::TextDisabled("PLAY - Runtime objects");
             const float resizeHandleWidth = dockLayout ? DOCK_RESIZE_HANDLE_THICKNESS : 0.0f;
             const float resizeHandleX = windowPos.x + windowSize.x - resizeHandleWidth;
 
@@ -113,7 +114,7 @@ namespace sage::editor
                     const ImVec2 dropMin = ImGui::GetCursorScreenPos();
                     ImGui::InvisibleButton("##hierarchy_blank_drop", dropSize);
                     bool targetActive = false;
-                    if (ImGui::BeginDragDropTarget())
+                    if (!runtimeInspection && ImGui::BeginDragDropTarget())
                     {
                         targetActive = true;
                         acceptHierarchyDrop(entt::null, entt::null);
@@ -168,7 +169,7 @@ namespace sage::editor
                         ImGui::PushID(static_cast<int>(entryIndex));
                         ImGui::InvisibleButton("##insert_before", ImVec2{targetWidth, targetHeight});
                         bool targetActive = false;
-                        if (ImGui::BeginDragDropTarget())
+                        if (!runtimeInspection && ImGui::BeginDragDropTarget())
                         {
                             targetActive = true;
                             acceptHierarchyDrop(entry.parent, entry.entity);
@@ -262,7 +263,7 @@ namespace sage::editor
                             }
                         }
 
-                        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+                        if (!runtimeInspection && ImGui::IsItemClicked(ImGuiMouseButton_Right))
                         {
                             pendingHierarchyContextEntity = entry.entity;
                         }
@@ -273,7 +274,7 @@ namespace sage::editor
                             focusedHierarchyEntity.reset();
                         }
 
-                        if (ImGui::BeginDragDropSource())
+                        if (!runtimeInspection && ImGui::BeginDragDropSource())
                         {
                             const std::uint32_t payload = EntityPayloadId(entry.entity);
                             ImGui::SetDragDropPayload(HIERARCHY_DRAG_PAYLOAD, &payload, sizeof(payload));
@@ -289,7 +290,7 @@ namespace sage::editor
                             ImGui::EndDragDropSource();
                         }
 
-                        if (ImGui::BeginDragDropTarget())
+                        if (!runtimeInspection && ImGui::BeginDragDropTarget())
                         {
                             acceptHierarchyDrop(entry.entity, entt::null);
                             ImGui::EndDragDropTarget();
@@ -370,6 +371,7 @@ namespace sage::editor
 
     EditorGui::SceneSelectionRequest EditorGui::makeSceneSelectionRequest(const entt::entity clicked) const
     {
+        if (runtimeInspection) return {.entity = clicked};
         const ImGuiIO& io = ImGui::GetIO();
 
         // Shift selects every entity in the displayed tree between the anchor and

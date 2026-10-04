@@ -24,6 +24,10 @@ namespace sage
     {
         class EditorGui
         {
+            bool runtimeInspection = false;
+            json::Document runtimeScript{rapidjson::kObjectType};
+            void drawRuntimeScript() const;
+
           public:
             struct AssetEntry
             {
@@ -305,7 +309,9 @@ namespace sage
             void StartImGui();
             void EndImGui();
             void DrawHierarchyWindow();
-            InspectorEditResult DrawInspectorWindow(const std::function<void()>& drawTerrainTools = {});
+            InspectorEditResult DrawInspectorWindow(
+                const std::function<void()>& drawTerrainTools = {},
+                const std::function<void()>& frameRuntimeObject = {});
             void DrawAssetDrawerWindow();
             void RefreshResourceBrowser()
             {
@@ -323,6 +329,8 @@ namespace sage
             void DrawConsoleWindow();
             void AddConsoleEntry(CSharpLogLevel level, std::string_view message);
             void ClearConsole();
+            void SetRuntimeInspection(bool enabled);
+            void SetRuntimeScript(json::Document snapshot);
             void DrawDeleteConfirmationModal();
             void SetOverlayStatus(
                 const std::string& mode, const std::string& cursor, const std::string& camera) const;

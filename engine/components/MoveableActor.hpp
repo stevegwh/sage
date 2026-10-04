@@ -55,6 +55,21 @@ namespace sage
             i.clipDropdown("idle_clip", "Idle Clip", idleClip);
         }
 
+        template <class Inspector>
+        void define_runtime_options(Inspector& i)
+        {
+            i.note("Moving", IsMoving() ? "true" : "false");
+            i.field("Walking", isWalking, false);
+            i.field("Needs Stop Position", needsStopPosition, false);
+            i.field("Stop Retry Time", stopRetryTime, false);
+            i.note("Route Points", std::to_string(path.size()));
+            if (!path.empty())
+            {
+                i.field("Next Waypoint", path.front(), false);
+                i.field("Destination", path.back(), false);
+            }
+        }
+
         std::deque<Vector3> path{};
         // A cancelled route may still need a short move to an unoccupied stopping place.
         bool needsStopPosition = false;

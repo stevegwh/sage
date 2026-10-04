@@ -132,6 +132,7 @@ namespace sage
         using DispatchEventFunction =
             int(SAGE_MANAGED_CALL*)(std::uint32_t, std::uint64_t, const ScriptValue*, std::uint32_t);
         using DestroyScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t);
+        using InspectScriptFunction = int(SAGE_MANAGED_CALL*)(std::uint32_t, char*, int);
         using StopSessionFunction = int(SAGE_MANAGED_CALL*)();
 
         HostString ToHostString(const char* value)
@@ -179,6 +180,7 @@ namespace sage
             DispatchTriggerFunction dispatchTrigger = nullptr;
             DispatchEventFunction dispatchEvent = nullptr;
             DestroyScriptFunction destroyScript = nullptr;
+            InspectScriptFunction inspectScript = nullptr;
             StopSessionFunction stopSession = nullptr;
             bool ready = false;
 
@@ -255,6 +257,7 @@ namespace sage
                     !loadEntryPoint("DispatchTrigger", reinterpret_cast<void**>(&dispatchTrigger)) ||
                     !loadEntryPoint("DispatchEvent", reinterpret_cast<void**>(&dispatchEvent)) ||
                     !loadEntryPoint("DestroyScript", reinterpret_cast<void**>(&destroyScript)) ||
+                    !loadEntryPoint("InspectScript", reinterpret_cast<void**>(&inspectScript)) ||
                     !loadEntryPoint("StopSession", reinterpret_cast<void**>(&stopSession)))
                     return false;
                 ready = true;
@@ -297,6 +300,17 @@ namespace sage
             void DestroyScript(const std::uint32_t entity) const
             {
                 if (ready) destroyScript(entity);
+            }
+            [[nodiscard]] json::Document InspectScript(const std::uint32_t entity) const
+            {
+                if (!ready) return json::Document{rapidjson::kObjectType};
+                const int size = inspectScript(entity, nullptr, 0);
+                constexpr int MAX_SNAPSHOT_BYTES = 1024 * 1024;
+                if (size <= 0 || size > MAX_SNAPSHOT_BYTES) return json::Document{rapidjson::kObjectType};
+                std::vector<char> buffer(static_cast<std::size_t>(size));
+                const int written = inspectScript(entity, buffer.data(), size);
+                if (written <= 0 || written > size) return json::Document{rapidjson::kObjectType};
+                return json::Parse(std::string(buffer.data(), static_cast<std::size_t>(written)));
             }
             void Stop() const
             {
@@ -834,6 +848,23 @@ namespace sage
     bool CSharpScriptSystem::IsAvailable() const
     {
         return impl->available;
+    }
+    json::Document CSharpScriptSystem::Inspect(const entt::entity entity) const
+    {
+        if (!registry->valid(entity) || !registry->any_of<ScriptComponent>(entity))
+            return json::Document{rapidjson::kObjectType};
+        auto snapshot = impl->available ? GetManagedHost().InspectScript(entt::to_integral(entity))
+                                        : json::Document{rapidjson::kObjectType};
+        if (!snapshot.HasMember("Root"))
+        {
+            const auto instance = impl->instances.find(entity);
+            const char* status = !impl->available ? "Managed runtime unavailable"
+                                 : instance != impl->instances.end() && instance->second.failed
+                                     ? "Script creation failed; see Console"
+                                     : "No live instance yet; advance the simulation to create it";
+            json::Put(snapshot, "Status", status, snapshot.GetAllocator());
+        }
+        return snapshot;
     }
     void CSharpScriptSystem::onScriptDestroyed(entt::registry&, const entt::entity entity)
     {

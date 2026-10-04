@@ -765,7 +765,9 @@ namespace sage::editor
         bool DrawInspectorFieldWidget(const NoteField& field, const bool, const bool mixed)
         {
             ImGui::AlignTextToFramePadding();
-            ImGui::TextDisabled("%s", mixed ? "-" : field.text.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::TextWrapped("%s", mixed ? "-" : field.text.c_str());
+            ImGui::PopStyleColor();
             return false;
         }
 
@@ -858,7 +860,7 @@ namespace sage::editor
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::AlignTextToFramePadding();
-            ImGui::TextUnformatted(field.label.c_str());
+            ImGui::TextWrapped("%s", field.label.c_str());
 
             ImGui::TableSetColumnIndex(1);
             ImGui::PushID(field.label.c_str());
@@ -959,7 +961,8 @@ namespace sage::editor
             std::optional<InspectorComponentsResult::MaterialSelection>& selectedMaterial,
             bool& selectScriptFile,
             bool& openScriptFile,
-            std::optional<ShaderFileSlot>& selectShaderFile)
+            std::optional<ShaderFileSlot>& selectShaderFile,
+            const bool readOnly)
         {
             ImGui::PushID(component.displayName.c_str());
             bool changed = false;
@@ -968,7 +971,7 @@ namespace sage::editor
             const ImVec2 headerMin = ImGui::GetItemRectMin();
             const ImVec2 headerMax = ImGui::GetItemRectMax();
 
-            if (ImGui::BeginDragDropSource())
+            if (!readOnly && ImGui::BeginDragDropSource())
             {
                 const EditorComponentId payload = component.componentId;
                 ImGui::SetDragDropPayload(INSPECTOR_COMPONENT_DRAG_PAYLOAD, &payload, sizeof(payload));
@@ -976,7 +979,7 @@ namespace sage::editor
                 ImGui::EndDragDropSource();
             }
 
-            if (ImGui::BeginDragDropTarget())
+            if (!readOnly && ImGui::BeginDragDropTarget())
             {
                 const bool dropAfter = ImGui::GetMousePos().y > (headerMin.y + headerMax.y) * 0.5f;
                 if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(INSPECTOR_COMPONENT_DRAG_PAYLOAD);
@@ -1063,7 +1066,29 @@ namespace sage::editor
         }
     } // namespace
 
-    InspectorComponentsResult DrawInspectorComponents(const std::vector<InspectedComponent>& components)
+    std::vector<InspectedComponent> SnapshotInspectorComponents(std::vector<InspectedComponent> components)
+    {
+        for (auto& component : components)
+        {
+            component.removable = false;
+            component.removeAllowed = false;
+            component.modelPicker.reset();
+            component.materialPickers.clear();
+            component.modelDefaultsAvailable = false;
+            for (auto& field : component.fields)
+            {
+                if (!std::holds_alternative<DividerField>(field.value))
+                    field.value = NoteField{FormatFieldValue(field.value)};
+                field.editable = false;
+                field.scriptFile = false;
+                field.shaderFile.reset();
+            }
+        }
+        return components;
+    }
+
+    InspectorComponentsResult DrawInspectorComponents(
+        const std::vector<InspectedComponent>& components, const bool readOnly)
     {
         g_fieldEditBegan = false;
         g_fieldEditCommitted = false;
@@ -1087,7 +1112,8 @@ namespace sage::editor
                 selectedMaterial,
                 selectScriptFile,
                 openScriptFile,
-                selectShaderFile);
+                selectShaderFile,
+                readOnly);
         }
         return {
             .changed = changed,

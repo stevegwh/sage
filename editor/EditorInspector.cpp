@@ -16,6 +16,8 @@
 #include "engine/Light.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/SceneTags.hpp"
+#include "engine/ui/CanvasSystem.hpp"
+#include "InspectorFieldUI.hpp"
 #include "project/CustomArchetypes.hpp"
 #include "project/CustomCursors.hpp"
 #include "project/CustomSceneTags.hpp"
@@ -509,7 +511,7 @@ namespace sage::editor
         for (const auto& entry : entries_)
         {
             if (!entry.has(registry, entity)) continue;
-            result.push_back({.entry = std::cref(entry), .description = entry.describe(registry, entity)});
+            result.push_back({.entry = std::cref(entry), .description = entry.describe(registry, entity, false)});
         }
         return result;
     }
@@ -713,6 +715,22 @@ namespace sage::editor
         return {.allowed = true};
     }
 
+    std::vector<InspectedComponent> InspectorRegistry::InspectRuntime(
+        entt::registry& registry, const entt::entity entity) const
+    {
+        std::vector<InspectedComponent> result;
+        for (const auto& entry : entries_)
+        {
+            if (!entry.has(registry, entity)) continue;
+            auto description = entry.describe(registry, entity, true);
+            result.push_back(
+                {.componentId = entry.componentId,
+                 .displayName = entry.displayName,
+                 .fields = std::move(description.fields)});
+        }
+        return SnapshotInspectorComponents(std::move(result));
+    }
+
     std::vector<InspectedComponent> InspectorRegistry::Inspect(
         entt::registry& registry, const entt::entity entity) const
     {
@@ -850,6 +868,7 @@ namespace sage::editor
         registry.Register<Animation>("Animation", true, true);
         registry.Register<MoveableActor>("Moveable Actor", true, true);
         registry.Register<ScriptComponent>("C# Script", true, true);
+        registry.Register<UINode>("UI Node");
         registry.Register<Archetype>("Archetype", true, true);
     }
 } // namespace sage::editor

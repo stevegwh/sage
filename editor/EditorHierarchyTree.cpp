@@ -6,9 +6,9 @@
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/SpatialAudioComponent.hpp"
-#include "engine/EngineSystems.hpp"
 #include "engine/Light.hpp"
 #include "engine/SceneTags.hpp"
+#include "engine/ui/CanvasSystem.hpp"
 
 #include "extras/IconsFontAwesome6.h"
 
@@ -25,64 +25,71 @@ namespace sage::editor
         }
     } // namespace
 
-    EditorHierarchyTree::EditorHierarchyTree(EngineSystems* _sys) : sys(_sys)
+    EditorHierarchyTree::EditorHierarchyTree(entt::registry& source) : registry(source)
     {
     }
 
     std::string EditorHierarchyTree::GetEntityName(const entt::entity entity) const
     {
-        if (!sys->registry->valid(entity))
+        if (!registry.valid(entity))
         {
             return entityName(entity);
         }
 
-        if (sys->registry->any_of<sgTransform>(entity))
+        if (registry.any_of<sgTransform>(entity))
         {
-            const auto& transform = sys->registry->get<sgTransform>(entity);
+            const auto& transform = registry.get<sgTransform>(entity);
             return transform.name.empty() ? entityName(entity) : transform.name;
         }
-        if (sys->registry->any_of<Light>(entity))
+        if (registry.any_of<Light>(entity))
         {
             return std::format("light_{}", entt::to_integral(entity));
         }
+        if (const auto* node = registry.try_get<UINode>(entity)) return "UI: " + node->data.name;
         return entityName(entity);
     }
 
     const char* EditorHierarchyTree::GetEntityIcon(const entt::entity entity) const
     {
-        if (!sys->registry->valid(entity))
+        if (!registry.valid(entity))
         {
             return ICON_FA_CIRCLE;
         }
 
         // Ordered most-specific first: an entity may carry several of these components,
         // and the first match wins so the icon reflects the entity's primary role.
-        if (sys->registry->any_of<Light>(entity)) return ICON_FA_LIGHTBULB;
-        if (sys->registry->any_of<DoorBehaviorComponent>(entity)) return ICON_FA_DOOR_OPEN;
-        if (sys->registry->any_of<SpatialAudioComponent>(entity)) return ICON_FA_VOLUME_HIGH;
-        if (const auto* meta = sys->registry->try_get<MetaData>(entity);
+        if (registry.any_of<Light>(entity)) return ICON_FA_LIGHTBULB;
+        if (registry.any_of<DoorBehaviorComponent>(entity)) return ICON_FA_DOOR_OPEN;
+        if (registry.any_of<SpatialAudioComponent>(entity)) return ICON_FA_VOLUME_HIGH;
+        if (const auto* meta = registry.try_get<MetaData>(entity);
             meta != nullptr && HasTag(*meta, SPAWN_POINT_TAG))
         {
             return ICON_FA_LOCATION_DOT;
         }
-        if (sys->registry->any_of<Renderable>(entity)) return ICON_FA_CUBE;
-        if (sys->registry->any_of<Collideable>(entity)) return ICON_FA_VECTOR_SQUARE;
+        if (registry.any_of<Renderable>(entity)) return ICON_FA_CUBE;
+        if (registry.any_of<Collideable>(entity)) return ICON_FA_VECTOR_SQUARE;
 
         return ICON_FA_CIRCLE;
     }
 
-    std::vector<EditorGui::SceneObjectEntry> EditorHierarchyTree::CollectSceneObjectEntries() const
+    std::vector<EditorGui::SceneObjectEntry> EditorHierarchyTree::CollectSceneObjectEntries(
+        const bool includeRuntimeEntities) const
     {
         std::vector<entt::entity> roots;
-        auto view = sys->registry->view<sgTransform>();
+        auto view = registry.view<sgTransform>();
         for (const auto entity : view)
         {
             const auto parent = view.get<sgTransform>(entity).GetParent();
-            if (parent == entt::null || !sys->registry->valid(parent) ||
-                !sys->registry->any_of<sgTransform>(parent))
+            if (parent == entt::null || !registry.valid(parent) || !registry.any_of<sgTransform>(parent))
             {
                 roots.push_back(entity);
             }
+        }
+
+        if (includeRuntimeEntities)
+        {
+            for (const auto [entity] : registry.storage<entt::entity>().each())
+                if (!registry.any_of<sgTransform>(entity)) roots.push_back(entity);
         }
 
         std::ranges::sort(roots, [](const entt::entity lhs, const entt::entity rhs) {
@@ -105,7 +112,7 @@ namespace sage::editor
         const entt::entity parent,
         const int depth) const
     {
-        if (!sys->registry->valid(entity) || !sys->registry->any_of<sgTransform>(entity)) return;
+        if (!registry.valid(entity)) return;
 
         entries.push_back(
             {.entity = entity,
@@ -114,7 +121,8 @@ namespace sage::editor
              .icon = GetEntityIcon(entity),
              .depth = depth});
 
-        for (const auto child : sys->registry->get<sgTransform>(entity).GetChildren())
+        if (!registry.any_of<sgTransform>(entity)) return;
+        for (const auto child : registry.get<sgTransform>(entity).GetChildren())
         {
             appendSceneObjectEntry(entries, child, entity, depth + 1);
         }
@@ -127,7 +135,7 @@ namespace sage::editor
         };
 
         std::erase_if(rootOrder, [&](const entt::entity entity) {
-            return !sys->registry->valid(entity) || !isCurrentRoot(entity);
+            return !registry.valid(entity) || !isCurrentRoot(entity);
         });
 
         for (const auto root : roots)

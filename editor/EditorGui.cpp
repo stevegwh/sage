@@ -54,7 +54,8 @@ namespace sage::editor
         rlImGuiEnd();
     }
 
-    EditorGui::InspectorEditResult EditorGui::DrawInspectorWindow(const std::function<void()>& drawTerrainTools)
+    EditorGui::InspectorEditResult EditorGui::DrawInspectorWindow(
+        const std::function<void()>& drawTerrainTools, const std::function<void()>& frameRuntimeObject)
     {
         if (!settings) return {};
 
@@ -94,22 +95,30 @@ namespace sage::editor
         std::optional<EditorComponentId> addComponent;
         if (ImGui::Begin("Inspector", nullptr, windowFlags))
         {
-            ImGui::Text("Selected: %s", inspectorSelectedEntity.c_str());
+            if (runtimeInspection) ImGui::TextDisabled("PLAY - Live values (read-only)");
+            ImGui::TextWrapped("Selected: %s", inspectorSelectedEntity.c_str());
+            if (runtimeInspection && !inspectedComponents.empty() && frameRuntimeObject &&
+                ImGui::Button("Frame Object"))
+                frameRuntimeObject();
             ImGui::Separator();
+            if (runtimeInspection) drawRuntimeScript();
 
             if (inspectedComponents.empty())
             {
-                ImGui::TextDisabled("No component data");
+                if (runtimeInspection)
+                    ImGui::TextWrapped("Select a runtime object in the Hierarchy to inspect its live values.");
+                else
+                    ImGui::TextDisabled("No component data");
             }
             else
             {
-                inspectorResult = DrawInspectorComponents(inspectedComponents);
+                inspectorResult = DrawInspectorComponents(inspectedComponents, runtimeInspection);
                 if (inspectorResult.moveComponent.has_value())
                 {
                     const auto& move = *inspectorResult.moveComponent;
                     moveInspectorComponent(move.dragged, move.target, move.after);
                 }
-                addComponent = drawAddComponentControls();
+                if (!runtimeInspection) addComponent = drawAddComponentControls();
             }
 
             if (dockLayout)
@@ -230,6 +239,18 @@ namespace sage::editor
     void EditorGui::SetSceneName(const std::string& sceneName) const
     {
         sceneNameStatus = sceneName;
+    }
+
+    void EditorGui::SetRuntimeInspection(const bool enabled)
+    {
+        if (runtimeInspection == enabled) return;
+        runtimeInspection = enabled;
+        runtimeScript.SetObject();
+        hierarchyFilter.Clear();
+        focusedHierarchyEntity.reset();
+        pendingHierarchyContextEntity.reset();
+        pendingHierarchyClick.reset();
+        hierarchySelectionAnchor = entt::null;
     }
 
     void EditorGui::SetInspector(

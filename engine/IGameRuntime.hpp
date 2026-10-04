@@ -56,8 +56,12 @@ namespace sage
         virtual ~IGameRuntime() = default;
 
         // One simulation step (input, systems, cleanup).
-        virtual void Update() = 0;
+        virtual void Update(bool listenForInput = true) = 0;
         virtual void SetPaused(bool paused) = 0;
+        [[nodiscard]] virtual bool IsPaused() const = 0;
+        // Borrowed only for inspection on the window thread. The runtime retains ownership.
+        [[nodiscard]] virtual entt::registry& InspectionRegistry() = 0;
+        [[nodiscard]] virtual json::Document InspectScript(entt::entity entity) = 0;
         virtual void Step(float deltaTime, std::uint32_t frames = 1) = 0;
         virtual json::Document Inspect() = 0;
         virtual json::Document Command(const json::Value& command) = 0;

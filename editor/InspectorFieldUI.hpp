@@ -50,5 +50,9 @@ namespace sage::editor
     // Draws every component (collapsing header + field table). Caller supplies the
     // surrounding Inspector window; this only emits the contents.
     [[nodiscard]] InspectorComponentsResult DrawInspectorComponents(
-        const std::vector<InspectedComponent>& components);
+        const std::vector<InspectedComponent>& components, bool readOnly = false);
+
+    // Copies values into informational rows; no registry references or mutation callbacks survive.
+    [[nodiscard]] std::vector<InspectedComponent> SnapshotInspectorComponents(
+        std::vector<InspectedComponent> components);
 } // namespace sage::editor
