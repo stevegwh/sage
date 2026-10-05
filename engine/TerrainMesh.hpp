@@ -80,8 +80,12 @@ namespace sage
     // Returns the touched vertex range.
     TerrainRegion ApplyTerrainRamp(Terrain& terrain, Vector2 localStart, Vector2 localEnd, float halfWidth);
 
-    // Intersects a world-space ray with the transformed height field. Returns
-    // the world-space hit point.
+    // Tests only grid cells crossed by the ray, using the rendered mesh's triangles.
+    // terrainToWorld includes the model transform and returns world-space collision data.
+    [[nodiscard]] std::optional<RayCollision> GetTerrainRayCollision(
+        const Terrain& terrain, Matrix terrainToWorld, const Ray& ray);
+
+    // Intersects a world-space ray with the transformed height field.
     [[nodiscard]] std::optional<Vector3> GetTerrainRayHit(
         const Terrain& terrain, const sgTransform& transform, const Ray& ray);
 

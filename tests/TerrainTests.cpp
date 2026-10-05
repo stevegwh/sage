@@ -4,16 +4,178 @@
 #include "engine/systems/TransformSystem.hpp"
 #include "engine/TerrainMesh.hpp"
 
+#include <array>
 #include <cmath>
 #include <iostream>
 #include <numeric>
+#include <random>
 #include <stdexcept>
+#include <vector>
 
 namespace
 {
+    constexpr float RAY_HIT_TOLERANCE = 0.0002f;
+    constexpr unsigned int RAY_TEST_SEED = 4517;
+    constexpr int RANDOM_RAYS_PER_TRANSFORM = 500;
+
     void Check(const bool condition, const char* message)
     {
         if (!condition) throw std::runtime_error(message);
+    }
+
+    std::vector<float> TerrainTriangleVertices(const sage::Terrain& terrain)
+    {
+        std::vector<float> vertices;
+        const auto append = [&](const int row, const int col) {
+            vertices.push_back(static_cast<float>(col) * terrain.cellSize);
+            vertices.push_back(terrain.GetHeight(row, col));
+            vertices.push_back(static_cast<float>(row) * terrain.cellSize);
+        };
+        for (int row = 0; row < terrain.resolution - 1; ++row)
+            for (int col = 0; col < terrain.resolution - 1; ++col)
+            {
+                append(row, col);
+                append(row + 1, col);
+                append(row, col + 1);
+                append(row, col + 1);
+                append(row + 1, col);
+                append(row + 1, col + 1);
+            }
+        return vertices;
+    }
+
+    void CheckTerrainRay(
+        const sage::Terrain& terrain,
+        const Mesh mesh,
+        const Matrix transform,
+        const Ray ray,
+        const bool checkNormal)
+    {
+        const auto expected = GetRayCollisionMesh(ray, mesh, transform);
+        const auto actual = sage::GetTerrainRayCollision(terrain, transform, ray);
+        if (actual.has_value() != expected.hit)
+            std::cerr << "Ray origin: " << ray.position.x << ", " << ray.position.y << ", " << ray.position.z
+                      << "; direction: " << ray.direction.x << ", " << ray.direction.y << ", " << ray.direction.z
+                      << "; expected hit: " << expected.hit << "; grid hit: " << actual.has_value() << '\n';
+        Check(actual.has_value() == expected.hit, "Terrain grid picking disagrees with exhaustive mesh picking");
+        if (!actual) return;
+        Check(std::abs(actual->distance - expected.distance) < RAY_HIT_TOLERANCE, "Terrain hit distance changed");
+        Check(Vector3Distance(actual->point, expected.point) < RAY_HIT_TOLERANCE, "Terrain hit position changed");
+        if (checkNormal)
+            Check(
+                Vector3Distance(actual->normal, expected.normal) < RAY_HIT_TOLERANCE,
+                "Terrain hit normal changed");
+    }
+
+    void TestRayPicking()
+    {
+        sage::Terrain terrain(9, 1.0f);
+        auto vertices = TerrainTriangleVertices(terrain);
+        Mesh mesh{};
+        mesh.vertices = vertices.data();
+        mesh.vertexCount = static_cast<int>(vertices.size() / 3);
+        mesh.triangleCount = mesh.vertexCount / 3;
+        const std::array<Ray, 12> rays = {
+            Ray{.position = {.x = 4.0f, .y = 10.0f, .z = 4.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}},
+            Ray{.position = {.x = 4.0f, .y = -10.0f, .z = 4.0f}, .direction = {.x = 0.0f, .y = 1.0f, .z = 0.0f}},
+            Ray{.position = {.x = 0.0f, .y = 10.0f, .z = 0.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}},
+            Ray{.position = {.x = 8.0f, .y = 10.0f, .z = 8.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}},
+            Ray{.position = {.x = 4.0f, .y = 0.01f, .z = 4.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}},
+            Ray{.position = {.x = -1.0f, .y = 10.0f, .z = 4.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}},
+            Ray{.position = {.x = 4.0f, .y = 10.0f, .z = 4.0f}, .direction = {.x = 0.0f, .y = 1.0f, .z = 0.0f}},
+            Ray{.position = {.x = 4.0f, .y = 1.0f, .z = 4.0f}, .direction = {.x = 1.0f, .y = 0.0f, .z = 0.0f}},
+            Ray{.position = {.x = 4.0f, .y = 1.0f, .z = 4.0f}, .direction = {.x = 0.0f, .y = 0.0f, .z = 0.0f}},
+            Ray{.position = {.x = -1.0f, .y = 0.4f, .z = -1.0f},
+                .direction = Vector3Normalize({.x = 1.0f, .y = -0.05f, .z = 1.0f})},
+            Ray{.position = {.x = 9.0f, .y = 0.4f, .z = 9.0f},
+                .direction = Vector3Normalize({.x = -1.0f, .y = -0.05f, .z = -1.0f})},
+            Ray{.position = {.x = 4.0f, .y = 0.0f, .z = 4.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}}};
+        for (const auto ray : rays)
+            CheckTerrainRay(terrain, mesh, MatrixIdentity(), ray, false);
+
+        // Non-planar cells distinguish the rendered diagonal from bilinear height sampling.
+        std::mt19937 random(RAY_TEST_SEED);
+        std::uniform_real_distribution<float> heights(-2.0f, 2.0f);
+        for (auto& height : terrain.heights)
+            height = heights(random);
+        vertices = TerrainTriangleVertices(terrain);
+        mesh.vertices = vertices.data();
+        const std::array<Matrix, 3> transforms = {
+            MatrixIdentity(),
+            MatrixMultiply(
+                MatrixMultiply(MatrixScale(2.0f, 0.7f, 3.0f), MatrixRotateY(0.7f)),
+                MatrixTranslate(-13.0f, 5.0f, 7.0f)),
+            MatrixMultiply(
+                MatrixMultiply(MatrixScale(-1.5f, 2.0f, 0.8f), MatrixRotateX(0.3f)),
+                MatrixTranslate(4.0f, -3.0f, 8.0f))};
+        std::uniform_real_distribution<float> origins(-4.0f, 12.0f);
+        std::uniform_real_distribution<float> directions(-1.0f, 1.0f);
+        for (const auto transform : transforms)
+        {
+            for (const float x : {0.0f, 4.0f, 8.0f})
+                for (const float z : {0.0f, 4.0f, 8.0f})
+                {
+                    const auto origin = Vector3Transform({.x = x, .y = 10.0f, .z = z}, transform);
+                    const auto target = Vector3Transform({.x = x, .y = 0.0f, .z = z}, transform);
+                    CheckTerrainRay(
+                        terrain,
+                        mesh,
+                        transform,
+                        {.position = origin, .direction = Vector3Normalize(Vector3Subtract(target, origin))},
+                        false);
+                }
+            for (int index = 0; index < RANDOM_RAYS_PER_TRANSFORM; ++index)
+            {
+                const Vector3 localOrigin{.x = origins(random), .y = origins(random), .z = origins(random)};
+                const Vector3 localDirection{
+                    .x = directions(random), .y = directions(random), .z = directions(random)};
+                const auto origin = Vector3Transform(localOrigin, transform);
+                const auto target = Vector3Transform(Vector3Add(localOrigin, localDirection), transform);
+                const Ray ray{.position = origin, .direction = Vector3Normalize(Vector3Subtract(target, origin))};
+                CheckTerrainRay(terrain, mesh, transform, ray, true);
+            }
+        }
+
+        // Shared chunk edges/corners and live height edits require no acceleration-cache rebuild.
+        sage::Terrain large(129, 1.0f);
+        large.SetHeight(64, 64, 2.0f);
+        vertices = TerrainTriangleVertices(large);
+        mesh.vertices = vertices.data();
+        mesh.vertexCount = static_cast<int>(vertices.size() / 3);
+        mesh.triangleCount = mesh.vertexCount / 3;
+        for (const float coordinate : {0.0f, 63.75f, 64.0f, 64.25f, 128.0f})
+            CheckTerrainRay(
+                large,
+                mesh,
+                MatrixIdentity(),
+                {.position = {.x = coordinate, .y = 5.0f, .z = coordinate},
+                 .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}},
+                false);
+        const std::array<Ray, 4> shallowRays = {
+            Ray{.position = {.x = -1.0f, .y = 0.1f, .z = 64.1f},
+                .direction = Vector3Normalize({.x = 1.0f, .y = -0.001f, .z = 0.0f})},
+            Ray{.position = {.x = 129.0f, .y = 0.1f, .z = 64.1f},
+                .direction = Vector3Normalize({.x = -1.0f, .y = -0.001f, .z = 0.0f})},
+            Ray{.position = {.x = 64.1f, .y = 0.1f, .z = -1.0f},
+                .direction = Vector3Normalize({.x = 0.0f, .y = -0.001f, .z = 1.0f})},
+            Ray{.position = {.x = 64.1f, .y = 0.1f, .z = 129.0f},
+                .direction = Vector3Normalize({.x = 0.0f, .y = -0.001f, .z = -1.0f})}};
+        for (const auto ray : shallowRays)
+            CheckTerrainRay(large, mesh, MatrixIdentity(), ray, true);
+        large.SetHeight(64, 64, 3.0f);
+        sage::sgTransform transform;
+        const auto hit = sage::GetTerrainRayHit(
+            large,
+            transform,
+            {.position = {.x = 64.0f, .y = 5.0f, .z = 64.0f}, .direction = {.x = 0.0f, .y = -1.0f, .z = 0.0f}});
+        Check(hit && std::abs(hit->y - 3.0f) < 0.00001f, "Terrain picking did not use edited height data");
+        Check(
+            !sage::GetTerrainRayCollision(large, MatrixScale(0.0f, 1.0f, 1.0f), rays.front()),
+            "Singular terrain transform accepted");
+        large.heights.pop_back();
+        Check(
+            !sage::GetTerrainRayCollision(large, MatrixIdentity(), rays.front()),
+            "Invalid terrain dimensions accepted");
     }
 
     void TestPainting()
@@ -133,6 +295,7 @@ int main()
     {
         TestPainting();
         TestPersistence();
+        TestRayPicking();
         std::cout << "Terrain tests passed\n";
         return 0;
     }

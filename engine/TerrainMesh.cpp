@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 
 namespace sage
 {
@@ -508,61 +509,129 @@ namespace sage
         return region;
     }
 
-    std::optional<Vector3> GetTerrainRayHit(const Terrain& terrain, const sgTransform& transform, const Ray& ray)
+    std::optional<RayCollision> GetTerrainRayCollision(
+        const Terrain& terrain, const Matrix terrainToWorld, const Ray& ray)
     {
-        if (!terrain.IsValid()) return std::nullopt;
+        // Full asset validation scans texture weights; geometry dimensions suffice for this hot path.
+        if (terrain.resolution < 2 || !std::isfinite(terrain.cellSize) || terrain.cellSize <= 0.0f ||
+            terrain.heights.size() != static_cast<std::size_t>(terrain.resolution) * terrain.resolution)
+            return std::nullopt;
 
-        const Matrix terrainToWorld = GetTerrainWorldMatrix(transform);
-        if (std::abs(MatrixDeterminant(terrainToWorld)) < 1e-6f) return std::nullopt;
+        const float determinant = MatrixDeterminant(terrainToWorld);
+        if (!std::isfinite(determinant) || determinant == 0.0f) return std::nullopt;
 
         const Matrix worldToTerrain = MatrixInvert(terrainToWorld);
         const Vector3 localOrigin = Vector3Transform(ray.position, worldToTerrain);
-        const Vector3 localRayPoint = Vector3Transform(Vector3Add(ray.position, ray.direction), worldToTerrain);
-        const Vector3 localDirection = Vector3Subtract(localRayPoint, localOrigin);
-        if (Vector3LengthSqr(localDirection) < 1e-8f) return std::nullopt;
+        // Transform a direction without translation or subtracting nearly equal positions.
+        const Vector3 localDirection = {
+            .x = worldToTerrain.m0 * ray.direction.x + worldToTerrain.m4 * ray.direction.y +
+                 worldToTerrain.m8 * ray.direction.z,
+            .y = worldToTerrain.m1 * ray.direction.x + worldToTerrain.m5 * ray.direction.y +
+                 worldToTerrain.m9 * ray.direction.z,
+            .z = worldToTerrain.m2 * ray.direction.x + worldToTerrain.m6 * ray.direction.y +
+                 worldToTerrain.m10 * ray.direction.z};
+        if (!std::isfinite(localOrigin.x) || !std::isfinite(localOrigin.y) || !std::isfinite(localOrigin.z) ||
+            !std::isfinite(localDirection.x) || !std::isfinite(localDirection.y) ||
+            !std::isfinite(localDirection.z) || Vector3LengthSqr(localDirection) == 0.0f)
+            return std::nullopt;
 
-        const Ray localRay = {.position = localOrigin, .direction = Vector3Normalize(localDirection)};
-        const auto bounds = GetTerrainLocalBounds(terrain);
-        const auto entry = GetRayCollisionBox(localRay, bounds);
-        if (!entry.hit) return std::nullopt;
+        const double worldSize = terrain.WorldSize();
+        // Inverting a float matrix can move a ray on the outer edge slightly outside the grid.
+        // Expand traversal bounds only; the triangle tests still decide whether there is a hit.
+        const double edgeTolerance = terrain.cellSize * 0.00001;
+        double entry = 0.0;
+        double exit = std::numeric_limits<double>::infinity();
+        const auto clipAxis = [&](const double origin, const double direction) {
+            if (direction == 0.0) return origin >= -edgeTolerance && origin <= worldSize + edgeTolerance;
+            const double first = (-edgeTolerance - origin) / direction;
+            const double last = (worldSize + edgeTolerance - origin) / direction;
+            entry = std::max(entry, std::min(first, last));
+            exit = std::min(exit, std::max(first, last));
+            return entry <= exit;
+        };
+        if (!clipAxis(localOrigin.x, localDirection.x) || !clipAxis(localOrigin.z, localDirection.z))
+            return std::nullopt;
 
-        const float step = terrain.cellSize * 0.5f;
-        const float worldSize = terrain.WorldSize();
-        float t = std::max(entry.distance, 0.0f);
-        const float tEnd = t + Vector3Distance(bounds.min, bounds.max) + step;
+        const int cells = terrain.resolution - 1;
+        const auto cellAtEntry = [&](const double origin, const double direction, const double offset) {
+            const double coordinate =
+                std::clamp(origin + direction * entry + offset, 0.0, worldSize) / terrain.cellSize;
+            return std::clamp(static_cast<int>(std::floor(coordinate)), 0, cells - 1);
+        };
+        int col = cellAtEntry(localOrigin.x, localDirection.x, 0.0);
+        int row = cellAtEntry(localOrigin.z, localDirection.z, 0.0);
+        const int colStep = (localDirection.x > 0.0f) - (localDirection.x < 0.0f);
+        const int rowStep = (localDirection.z > 0.0f) - (localDirection.z < 0.0f);
+        const auto nextBoundary =
+            [&](const int cell, const int step, const double origin, const double direction) {
+                if (step == 0) return std::numeric_limits<double>::infinity();
+                return (static_cast<double>(cell + (step > 0 ? 1 : 0)) * terrain.cellSize - origin) / direction;
+            };
+        double nextCol = nextBoundary(col, colStep, localOrigin.x, localDirection.x);
+        double nextRow = nextBoundary(row, rowStep, localOrigin.z, localDirection.z);
+        const double colDelta = colStep == 0 ? std::numeric_limits<double>::infinity()
+                                             : terrain.cellSize / std::abs(static_cast<double>(localDirection.x));
+        const double rowDelta = rowStep == 0 ? std::numeric_limits<double>::infinity()
+                                             : terrain.cellSize / std::abs(static_cast<double>(localDirection.z));
 
-        Vector3 previous = Vector3Add(localRay.position, Vector3Scale(localRay.direction, t));
-        bool previousAbove = previous.y > terrain.SampleHeight(previous.x, previous.z);
-        for (t += step; t <= tEnd; t += step)
+        const auto vertex = [&](const int vertexRow, const int vertexCol) {
+            return Vector3Transform(
+                {.x = static_cast<float>(vertexCol) * terrain.cellSize,
+                 .y = terrain.GetHeight(vertexRow, vertexCol),
+                 .z = static_cast<float>(vertexRow) * terrain.cellSize},
+                terrainToWorld);
+        };
+        const double timeTolerance = edgeTolerance / Vector3Length(localDirection);
+        while (row >= 0 && row < cells && col >= 0 && col < cells)
         {
-            const Vector3 point = Vector3Add(localRay.position, Vector3Scale(localRay.direction, t));
-            const bool inField =
-                point.x >= 0.0f && point.x <= worldSize && point.z >= 0.0f && point.z <= worldSize;
-            const bool above = point.y > terrain.SampleHeight(point.x, point.z);
-            if (inField && previousAbove && !above)
-            {
-                Vector3 high = previous;
-                Vector3 low = point;
-                for (int i = 0; i < 8; ++i)
+            const double next = std::min(nextCol, nextRow);
+            const double segmentEnd = std::min(next, exit);
+            // At grid boundaries, float transform rounding can put the intersection in either
+            // adjacent cell. Include those cells, but accept hits only in this traversal segment.
+            const int minCol = std::min(col, cellAtEntry(localOrigin.x, localDirection.x, -edgeTolerance));
+            const int maxCol = std::max(col, cellAtEntry(localOrigin.x, localDirection.x, edgeTolerance));
+            const int minRow = std::min(row, cellAtEntry(localOrigin.z, localDirection.z, -edgeTolerance));
+            const int maxRow = std::max(row, cellAtEntry(localOrigin.z, localDirection.z, edgeTolerance));
+            std::optional<RayCollision> closest;
+            const auto consider = [&](const RayCollision collision) {
+                if (collision.hit && collision.distance >= entry - timeTolerance &&
+                    collision.distance <= segmentEnd + timeTolerance &&
+                    (!closest || collision.distance < closest->distance))
+                    closest = collision;
+            };
+            for (int candidateRow = minRow; candidateRow <= maxRow; ++candidateRow)
+                for (int candidateCol = minCol; candidateCol <= maxCol; ++candidateCol)
                 {
-                    const Vector3 mid = Vector3Scale(Vector3Add(high, low), 0.5f);
-                    if (mid.y > terrain.SampleHeight(mid.x, mid.z))
-                    {
-                        high = mid;
-                    }
-                    else
-                    {
-                        low = mid;
-                    }
+                    const auto topLeft = vertex(candidateRow, candidateCol);
+                    const auto topRight = vertex(candidateRow, candidateCol + 1);
+                    const auto bottomLeft = vertex(candidateRow + 1, candidateCol);
+                    const auto bottomRight = vertex(candidateRow + 1, candidateCol + 1);
+                    // Match createChunkMesh's diagonal and winding, including transformed normals.
+                    consider(GetRayCollisionTriangle(ray, topLeft, bottomLeft, topRight));
+                    consider(GetRayCollisionTriangle(ray, topRight, bottomLeft, bottomRight));
                 }
-                const Vector3 hit = Vector3Scale(Vector3Add(high, low), 0.5f);
-                return Vector3Transform(
-                    Vector3{.x = hit.x, .y = terrain.SampleHeight(hit.x, hit.z), .z = hit.z}, terrainToWorld);
+            if (closest) return closest;
+            if (!std::isfinite(next) || next > exit) break;
+            entry = next;
+            if (nextCol <= nextRow)
+            {
+                col += colStep;
+                nextCol += colDelta;
             }
-            previous = point;
-            previousAbove = above;
+            else
+            {
+                row += rowStep;
+                nextRow += rowDelta;
+            }
         }
 
+        return std::nullopt;
+    }
+
+    std::optional<Vector3> GetTerrainRayHit(const Terrain& terrain, const sgTransform& transform, const Ray& ray)
+    {
+        if (const auto collision = GetTerrainRayCollision(terrain, GetTerrainWorldMatrix(transform), ray))
+            return collision->point;
         return std::nullopt;
     }
 

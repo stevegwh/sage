@@ -65,21 +65,10 @@ namespace sage::editor
                 const auto& transform = sys->registry->get<sgTransform>(entity);
                 const Matrix modelMatrix =
                     MatrixMultiply(model->get().transform, GetTerrainWorldMatrix(transform));
-                RayCollision closestMeshHit{};
-                closestMeshHit.distance = std::numeric_limits<float>::max();
-
-                for (int meshIndex = 0; meshIndex < model->get().meshCount; ++meshIndex)
-                {
-                    const auto meshCollision =
-                        GetRayCollisionMesh(ray, model->get().meshes[meshIndex], modelMatrix);
-                    if (meshCollision.hit && meshCollision.distance < closestMeshHit.distance)
-                    {
-                        closestMeshHit = meshCollision;
-                    }
-                }
-
-                if (!closestMeshHit.hit) continue;
-                collision.rlCollision = closestMeshHit;
+                const auto terrainHit =
+                    GetTerrainRayCollision(sys->registry->get<Terrain>(entity), modelMatrix, ray);
+                if (!terrainHit) continue;
+                collision.rlCollision = *terrainHit;
             }
             else if (sys->registry->any_of<Renderable>(entity))
             {

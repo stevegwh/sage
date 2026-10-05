@@ -5,9 +5,11 @@
 #include "components/DynamicRenderable.hpp"
 #include "components/Renderable.hpp"
 #include "components/sgTransform.hpp"
+#include "components/Terrain.hpp"
 #include "EngineSystems.hpp"
 #include "Settings.hpp"
 #include "systems/CollisionSystem.hpp"
+#include "TerrainMesh.hpp"
 
 #include <algorithm>
 #include <limits>
@@ -116,6 +118,17 @@ namespace sage
             const auto& transform = registry->get<sgTransform>(hitInfo.collidedEntityId);
             const auto model = renderable.GetModel();
             if (!model) return false;
+
+            if (registry->all_of<Terrain>(hitInfo.collidedEntityId))
+            {
+                const auto collision = GetTerrainRayCollision(
+                    registry->get<Terrain>(hitInfo.collidedEntityId),
+                    MatrixMultiply(model->get().transform, GetTerrainWorldMatrix(transform)),
+                    ray);
+                if (!collision) return false;
+                hitInfo.rlCollision = *collision;
+                return true;
+            }
 
             const Matrix worldMatrix = MatrixMultiply(model->get().transform, transform.GetMatrix());
             RayCollision closest{};
