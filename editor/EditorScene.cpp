@@ -57,6 +57,7 @@
 #include <array>
 #include <cctype>
 #include <cerrno>
+#include <chrono>
 #include <cmath>
 #include <format>
 #include <fstream>
@@ -2153,8 +2154,10 @@ namespace sage
         }
 
         constexpr float buttonWidth = 80.0f;
+        constexpr float runButtonWidth = 100.0f;
         const float controlsWidth =
-            playing ? 3.0f * buttonWidth + 2.0f * ImGui::GetStyle().ItemSpacing.x : buttonWidth;
+            (playing ? 3.0f * buttonWidth + 2.0f * ImGui::GetStyle().ItemSpacing.x : buttonWidth) +
+            runButtonWidth + ImGui::GetStyle().ItemSpacing.x;
         ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() - controlsWidth - 8.0f));
         if (playing)
         {
@@ -2182,6 +2185,12 @@ namespace sage
         {
             ImGui::SetTooltip(playing ? "Stop play session (Esc/F5)" : "Play this map in-engine (F5)");
         }
+        ImGui::SameLine();
+        ImGui::BeginDisabled(playing || flatpackSession->IsActive() || !HasStandaloneGameLauncher());
+        if (ImGui::Button("Run Game", ImVec2{runButtonWidth, 0.0f})) static_cast<void>(runStandaloneGame());
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            ImGui::SetTooltip("Run this map, including unsaved scene edits, in a separate game window with FPS");
     }
 
     void EditorScene::drawCollisionMatrixWindow() const
@@ -2975,6 +2984,22 @@ namespace sage
         {
             TraceLog(LOG_WARNING, "Play: failed to create game runtime; staying in edit mode.");
         }
+    }
+
+    bool EditorScene::runStandaloneGame() const
+    {
+        if (IsPlaying() || flatpackSession->IsActive() || !HasStandaloneGameLauncher()) return false;
+        closeParticleEditor();
+        const auto hierarchyOrder = collectMapHierarchyOrder();
+        const auto stamp = std::chrono::system_clock::now().time_since_epoch().count();
+        const auto snapshot =
+            std::filesystem::absolute(automation.Directory() / ("standalone-" + std::to_string(stamp) + ".map"));
+        if (!editor::SaveMap(*sys->registry, snapshot.string().c_str(), hierarchyOrder)) return false;
+        if (LaunchStandaloneGame(snapshot.string())) return true;
+        std::error_code error;
+        std::filesystem::remove(snapshot, error);
+        gui->AddConsoleEntry(CSharpLogLevel::Error, "Could not launch standalone game. Check the editor log.");
+        return false;
     }
 
     void EditorScene::stopPlay() const

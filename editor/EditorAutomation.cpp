@@ -138,6 +138,10 @@ namespace sage
         }
         else if (command == "stop")
             stopPlay();
+        else if (command == "run-game")
+        {
+            if (!runStandaloneGame()) throw std::runtime_error("Could not launch standalone game");
+        }
         else if (command == "capture")
         {
             const auto capture = std::filesystem::path(json::String(request, "path"));

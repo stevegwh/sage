@@ -89,4 +89,11 @@ namespace sage
     // Builds a runtime via the registered factory; returns nullptr when no
     // factory is registered or construction throws.
     [[nodiscard]] std::unique_ptr<IGameRuntime> CreateGameRuntime(const GameRuntimeContext& context);
+
+    // The game host launches its standalone executable. On success the child
+    // owns the snapshot and removes it when it exits; on failure the editor does.
+    using StandaloneGameLauncher = std::function<bool(const std::string& mapPath)>;
+    void SetStandaloneGameLauncher(StandaloneGameLauncher launcher);
+    [[nodiscard]] bool HasStandaloneGameLauncher();
+    [[nodiscard]] bool LaunchStandaloneGame(const std::string& mapPath);
 } // namespace sage

@@ -119,6 +119,7 @@ namespace sage
         // spin up a game runtime on its own registry, tear it down on stop.
         void drawPlayStopButton() const;
         void startPlay() const;
+        [[nodiscard]] bool runStandaloneGame() const;
         void stopPlay() const;
         // The docked scene-view rectangle in window coords; the game's viewport
         // is pinned to this so its UI lines up with the play area.

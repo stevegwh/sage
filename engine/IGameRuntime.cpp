@@ -17,6 +17,12 @@ namespace sage
             static GameRuntimeFactory factory;
             return factory;
         }
+
+        StandaloneGameLauncher& launcherStorage()
+        {
+            static StandaloneGameLauncher launcher;
+            return launcher;
+        }
     } // namespace
 
     void SetGameRuntimeFactory(GameRuntimeFactory factory)
@@ -41,6 +47,31 @@ namespace sage
         {
             std::cerr << "ERROR: Failed to create game runtime: " << e.what() << std::endl;
             return nullptr;
+        }
+    }
+
+    void SetStandaloneGameLauncher(StandaloneGameLauncher launcher)
+    {
+        launcherStorage() = std::move(launcher);
+    }
+
+    bool HasStandaloneGameLauncher()
+    {
+        return static_cast<bool>(launcherStorage());
+    }
+
+    bool LaunchStandaloneGame(const std::string& mapPath)
+    {
+        const auto& launcher = launcherStorage();
+        if (!launcher) return false;
+        try
+        {
+            return launcher(mapPath);
+        }
+        catch (const std::exception& error)
+        {
+            std::cerr << "ERROR: Failed to launch standalone game: " << error.what() << '\n';
+            return false;
         }
     }
 } // namespace sage
