@@ -58,6 +58,16 @@ int main()
             "W/S orbit must keep its distance");
         controls.Pitch(camera, 0.3f);
         require(near(camera.position, beforeKeyboardOrbit), "S must reverse W's camera movement");
+        controls.RotateFocused(camera, {.x = 1, .y = -1}, 0.1f);
+        require(near(camera.target, object.position), "Shared keyboard orbit must preserve the focused center");
+        require(camera.position.y > beforeKeyboardOrbit.y, "Shared W input must raise the focused camera");
+        require(
+            std::abs(Vector3Distance(camera.position, camera.target) - distance) < 0.001f,
+            "Shared keyboard orbit must preserve distance");
+        controls.RotateFocused(camera, {.x = 0, .y = 1}, 0.1f);
+        controls.RotateFocused(camera, {.x = -1, .y = 0}, 0.1f);
+        require(
+            near(camera.position, beforeKeyboardOrbit), "Opposite shared keyboard inputs must restore the view");
         for (int i = 0; i < 100; ++i)
             controls.Zoom(camera, 5);
         require(

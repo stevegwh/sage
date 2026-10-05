@@ -55,7 +55,12 @@
  *
  **********************************************************************************************/
 
+#include "engine/raylib-cereal.hpp"
+#include "ParticleLifetime.hpp"
 #include "raylib.h"
+#include <cstdint>
+#include <optional>
+#include <random>
 
 #include <cmath>
 #include <cstdlib>
@@ -91,6 +96,11 @@ namespace sage
     //----------------------------------------------------------------------------------
     struct EmitterConfig
     {
+        ParticleCurve sizeOverLifetime;
+        ParticleCurve opacityOverLifetime;
+        ParticleCurve speedOverLifetime;
+        ParticleGradient colorOverLifetime;
+        std::optional<std::uint32_t> randomSeed;
         float size = 1.0f;   // Size of the particle.
         Vector3 direction;   // Direction vector will be normalized.
         FloatRange velocity; // The possible range of the particle velocities.
@@ -134,8 +144,8 @@ namespace sage
         // when a particle is deactivated.
 
         explicit Particle(const std::function<bool(Particle*)>& deactivatorFunc);
-        void Init(const EmitterConfig& cfg);
-        void Update(float dt);
+        void Init(const EmitterConfig& cfg, std::mt19937& random);
+        void Update(float dt, const ParticleCurve& speedOverLifetime);
     };
 
     // Emitter type.
@@ -145,6 +155,7 @@ namespace sage
     struct Emitter
     {
         EmitterConfig config;
+        std::mt19937 random;
         float mustEmit = 0.0f; // Amount of particles to be emitted within next update call.
         Vector2 offset{};      // Offset holds half the width and height of the texture.
         bool isEmitting = false;
@@ -152,6 +163,8 @@ namespace sage
 
         explicit Emitter(EmitterConfig cfg);
         bool Reinit(const EmitterConfig& cfg);
+        [[nodiscard]] Color ParticleColor(const Particle& particle) const;
+        [[nodiscard]] float ParticleSize(const Particle& particle) const;
         void Start();
         void Stop();
         void Burst();

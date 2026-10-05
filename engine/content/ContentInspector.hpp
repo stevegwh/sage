@@ -230,6 +230,9 @@ namespace sage::content
         void note(const std::string&, const std::string&)
         {
         }
+        void module(const std::string&)
+        {
+        }
         void divider(const std::string&)
         {
         }

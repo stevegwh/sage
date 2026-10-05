@@ -52,6 +52,8 @@ namespace sage
                 // Font Awesome glyph (from IconsFontAwesome6.h) shown before the name in the hierarchy.
                 std::string icon;
                 int depth = 0;
+                bool hidden = false;
+                bool disabled = false;
             };
 
             struct HierarchyMoveRequest
@@ -98,6 +100,9 @@ namespace sage
                 std::string flatpackLabel;
                 std::filesystem::path flatpackPath;
                 bool flatpackDirty = false;
+                bool particleOpen = false;
+                std::string particleLabel;
+                bool particleDirty = false;
                 bool canvasOpen = false;
                 std::string canvasLabel;
                 bool canvasDirty = false;
@@ -108,6 +113,8 @@ namespace sage
             {
                 bool mapSelected = false;
                 bool flatpackCloseRequested = false;
+                bool flatpackSelected = false;
+                bool particleCloseRequested = false;
                 bool canvasSelected = false;
                 bool canvasCloseRequested = false;
             };
@@ -311,7 +318,8 @@ namespace sage
             void DrawHierarchyWindow();
             InspectorEditResult DrawInspectorWindow(
                 const std::function<void()>& drawTerrainTools = {},
-                const std::function<void()>& frameRuntimeObject = {});
+                const std::function<void()>& frameRuntimeObject = {},
+                const std::function<void()>& drawExtraInspectorFields = {});
             void DrawAssetDrawerWindow();
             void RefreshResourceBrowser()
             {

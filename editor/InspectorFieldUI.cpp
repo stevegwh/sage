@@ -1053,12 +1053,31 @@ namespace sage::editor
                     {
                         DrawMaterialPickerRow(picker, selectedMaterial);
                     }
+                    bool tableOpen = true;
+                    bool moduleOpen = true;
                     for (const auto& field : component.fields)
                     {
-                        changed |=
-                            DrawInspectorFieldRow(field, selectScriptFile, openScriptFile, selectShaderFile);
+                        if (const auto* divider = std::get_if<DividerField>(&field.value);
+                            divider && divider->collapsible)
+                        {
+                            if (tableOpen) ImGui::EndTable();
+                            moduleOpen = ImGui::CollapsingHeader(
+                                field.label.c_str(),
+                                field.label == "Main" ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None);
+                            tableOpen = moduleOpen && ImGui::BeginTable(field.label.c_str(), 2, tableFlags);
+                            if (tableOpen)
+                            {
+                                ImGui::TableSetupColumn("Field", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+                                ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+                            }
+                        }
+                        else if (moduleOpen && tableOpen)
+                        {
+                            changed |=
+                                DrawInspectorFieldRow(field, selectScriptFile, openScriptFile, selectShaderFile);
+                        }
                     }
-                    ImGui::EndTable();
+                    if (tableOpen) ImGui::EndTable();
                 }
             }
             ImGui::PopID();

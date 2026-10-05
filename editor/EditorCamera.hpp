@@ -23,6 +23,7 @@ namespace sage::editor
         void Zoom(Camera3D& camera, float wheel);
         void Yaw(Camera3D& camera, float radians) const;
         void Pitch(Camera3D& camera, float radians) const;
+        void RotateFocused(Camera3D& camera, Vector2 input, float deltaTime) const;
         void Look(Camera3D& camera, Vector2 delta) const;
         void Pan(Camera3D& camera, Vector2 delta) const;
         void Move(Camera3D& camera, Vector3 localMovement, float deltaTime, bool fast) const;

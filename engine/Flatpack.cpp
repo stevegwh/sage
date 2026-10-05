@@ -1,10 +1,12 @@
 #include "Flatpack.hpp"
 #include "content/ContentDocument.hpp"
+#include "engine/components/EntityVisibility.hpp"
 
 #include "engine/components/Animation.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/ParticleEmitterComponent.hpp"
+#include "engine/components/ParticleSystemComponent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/UberShaderComponent.hpp"
@@ -50,6 +52,8 @@ namespace sage
         {
             static const bool registered = [] {
                 RegisterFlatpackComponent<ParticleEmitterComponent>("sage.ParticleEmitter");
+                RegisterFlatpackComponent<ParticleSystemComponent>("sage.ParticleSystem");
+                RegisterFlatpackComponent<EntityVisibility>("sage.EntityVisibility");
                 return true;
             }();
             static_cast<void>(registered);

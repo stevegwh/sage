@@ -6,8 +6,10 @@
 #include "engine/components/CollisionIntent.hpp"
 #include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/DynamicRenderable.hpp"
+#include "engine/components/EntityVisibility.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/ParticleEmitterComponent.hpp"
+#include "engine/components/ParticleSystemComponent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -305,6 +307,8 @@ namespace sage::content
             RegisterFlatpackComponent<Archetype>("sage.Archetype");
             RegisterFlatpackComponent<CustomShaderComponent>("sage.CustomShader");
             RegisterFlatpackComponent<ParticleEmitterComponent>("sage.ParticleEmitter");
+            RegisterFlatpackComponent<ParticleSystemComponent>("sage.ParticleSystem");
+            RegisterFlatpackComponent<EntityVisibility>("sage.EntityVisibility");
             RegisterFlatpackComponent<Terrain>("sage.Terrain");
             RegisterFlatpackComponent<MoveableActor>("sage.MoveableActor");
             return true;

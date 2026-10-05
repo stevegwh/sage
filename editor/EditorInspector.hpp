@@ -94,6 +94,7 @@ namespace sage::editor
 
     struct DividerField
     {
+        bool collapsible = false;
     };
 
     // The variant alternative *is* the kind. Leaf overloads on ComponentInspector
@@ -296,6 +297,14 @@ namespace sage::editor
         void divider(std::string id)
         {
             fields_.push_back({.label = qualified(std::move(id)), .editable = false, .value = DividerField{}});
+        }
+
+        void module(std::string label)
+        {
+            fields_.push_back(
+                {.label = qualified(std::move(label)),
+                 .editable = false,
+                 .value = DividerField{.collapsible = true}});
         }
 
         // --- Leaf overloads ------------------------------------------------------------

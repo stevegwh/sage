@@ -55,7 +55,9 @@ namespace sage::editor
     }
 
     EditorGui::InspectorEditResult EditorGui::DrawInspectorWindow(
-        const std::function<void()>& drawTerrainTools, const std::function<void()>& frameRuntimeObject)
+        const std::function<void()>& drawTerrainTools,
+        const std::function<void()>& frameRuntimeObject,
+        const std::function<void()>& drawExtraInspectorFields)
     {
         if (!settings) return {};
 
@@ -120,6 +122,8 @@ namespace sage::editor
                 }
                 if (!runtimeInspection) addComponent = drawAddComponentControls();
             }
+
+            if (!runtimeInspection && drawExtraInspectorFields) drawExtraInspectorFields();
 
             if (dockLayout)
             {
@@ -397,7 +401,7 @@ namespace sage::editor
             {
                 ImGuiTabItemFlags mapFlags =
                     sceneTabs.mapDirty ? ImGuiTabItemFlags_UnsavedDocument : ImGuiTabItemFlags_None;
-                if (!sceneTabs.flatpackOpen) mapFlags |= ImGuiTabItemFlags_SetSelected;
+                if (!sceneTabs.flatpackOpen && !sceneTabs.particleOpen) mapFlags |= ImGuiTabItemFlags_SetSelected;
                 const std::string mapLabel =
                     (sceneTabs.mapLabel.empty() ? "Map" : sceneTabs.mapLabel) + "###mapTab";
                 if (ImGui::BeginTabItem(mapLabel.c_str(), nullptr, mapFlags))
@@ -406,7 +410,7 @@ namespace sage::editor
                 }
                 // While a flatpack owns the scene its tab is force-selected, so a
                 // click on the map tab is read directly off the item instead.
-                if (sceneTabs.flatpackOpen && ImGui::IsItemClicked())
+                if ((sceneTabs.flatpackOpen || sceneTabs.particleOpen) && ImGui::IsItemClicked())
                 {
                     result.mapSelected = true;
                 }
@@ -414,14 +418,25 @@ namespace sage::editor
                 if (sceneTabs.flatpackOpen)
                 {
                     bool keepOpen = true;
-                    ImGuiTabItemFlags flatpackFlags = ImGuiTabItemFlags_SetSelected;
+                    ImGuiTabItemFlags flatpackFlags =
+                        sceneTabs.particleOpen ? ImGuiTabItemFlags_None : ImGuiTabItemFlags_SetSelected;
                     if (sceneTabs.flatpackDirty) flatpackFlags |= ImGuiTabItemFlags_UnsavedDocument;
                     const std::string flatpackLabel = sceneTabs.flatpackLabel + "###flatpackTab";
                     if (ImGui::BeginTabItem(flatpackLabel.c_str(), &keepOpen, flatpackFlags))
                     {
                         ImGui::EndTabItem();
                     }
+                    if (ImGui::IsItemClicked()) result.flatpackSelected = true;
                     if (!keepOpen) result.flatpackCloseRequested = true;
+                }
+                if (sceneTabs.particleOpen)
+                {
+                    bool keepOpen = true;
+                    ImGuiTabItemFlags flags = ImGuiTabItemFlags_SetSelected;
+                    if (sceneTabs.particleDirty) flags |= ImGuiTabItemFlags_UnsavedDocument;
+                    const auto label = sceneTabs.particleLabel + "###particleTab";
+                    if (ImGui::BeginTabItem(label.c_str(), &keepOpen, flags)) ImGui::EndTabItem();
+                    if (!keepOpen) result.particleCloseRequested = true;
                 }
                 if (sceneTabs.canvasOpen)
                 {

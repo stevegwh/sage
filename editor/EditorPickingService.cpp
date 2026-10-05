@@ -1,4 +1,5 @@
 #include "EditorPickingService.hpp"
+#include "engine/components/EntityVisibility.hpp"
 
 #include "EditorComponents.hpp"
 #include "EditorTransformMath.hpp"
@@ -50,7 +51,7 @@ namespace sage::editor
         {
             const auto entity = collision.collidedEntityId;
             if (entity == entt::null || entity == ignoredEntity || !sys->registry->valid(entity) ||
-                !sys->registry->any_of<sgTransform>(entity))
+                !sys->registry->any_of<sgTransform>(entity) || !IsEntityVisible(*sys->registry, entity))
             {
                 continue;
             }
@@ -128,7 +129,9 @@ namespace sage::editor
         };
         for (const auto entity : sys->registry->view<sgTransform, MetaData>())
         {
-            if (!HasTag(sys->registry->get<MetaData>(entity), SPAWN_POINT_TAG)) continue;
+            if (!IsEntityVisible(*sys->registry, entity) ||
+                !HasTag(sys->registry->get<MetaData>(entity), SPAWN_POINT_TAG))
+                continue;
             const auto position = sys->registry->get<sgTransform>(entity).GetWorldPos();
             considerMarker(entity, GetRayCollisionSphere(ray, position, 0.5f));
         }

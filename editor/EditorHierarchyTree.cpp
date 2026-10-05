@@ -1,8 +1,10 @@
 #include "EditorHierarchyTree.hpp"
+#include "engine/components/EntityVisibility.hpp"
 
 #include "EditorComponents.hpp"
 #include "engine/components/Collideable.hpp"
 #include "engine/components/DoorBehaviorComponent.hpp"
+#include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/sgTransform.hpp"
 #include "engine/components/SpatialAudioComponent.hpp"
@@ -75,6 +77,12 @@ namespace sage::editor
     std::vector<EditorGui::SceneObjectEntry> EditorHierarchyTree::CollectSceneObjectEntries(
         const bool includeRuntimeEntities) const
     {
+        if (registry.ctx().contains<EntityViewScope>())
+        {
+            std::vector<EditorGui::SceneObjectEntry> entries;
+            appendSceneObjectEntry(entries, registry.ctx().get<EntityViewScope>().root, entt::null, 0);
+            return entries;
+        }
         std::vector<entt::entity> roots;
         auto view = registry.view<sgTransform>();
         for (const auto entity : view)
@@ -114,12 +122,22 @@ namespace sage::editor
     {
         if (!registry.valid(entity)) return;
 
+        const bool hidden = !IsEntityVisible(registry, entity);
+        const bool disabled =
+            (registry.all_of<Renderable>(entity) && !registry.get<Renderable>(entity).active) ||
+            (registry.all_of<DynamicRenderable>(entity) && !registry.get<DynamicRenderable>(entity).active) ||
+            (registry.all_of<Light>(entity) && !registry.get<Light>(entity).enabled);
+        auto name = GetEntityName(entity);
+        if (hidden) name += " (Hidden)";
+        if (disabled) name += " (Disabled)";
         entries.push_back(
             {.entity = entity,
              .parent = parent,
-             .displayName = GetEntityName(entity),
+             .displayName = std::move(name),
              .icon = GetEntityIcon(entity),
-             .depth = depth});
+             .depth = depth,
+             .hidden = hidden,
+             .disabled = disabled});
 
         if (!registry.any_of<sgTransform>(entity)) return;
         for (const auto child : registry.get<sgTransform>(entity).GetChildren())

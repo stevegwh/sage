@@ -240,12 +240,15 @@ namespace sage::editor
                         }
 
                         const auto imguiEntityId = static_cast<std::uintptr_t>(EntityPayloadId(entry.entity)) + 1u;
+                        if (entry.hidden || entry.disabled)
+                            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
                         const bool open = ImGui::TreeNodeEx(
                             reinterpret_cast<void*>(imguiEntityId),
                             nodeFlags,
                             "%s  %s",
                             entry.icon.c_str(),
                             entry.displayName.c_str());
+                        if (entry.hidden || entry.disabled) ImGui::PopStyleColor();
 
                         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                         {

@@ -1,4 +1,5 @@
 #include "engine/Colors.hpp"
+#include "engine/components/EntityVisibility.hpp"
 #include "engine/MathConstants.hpp"
 #include <functional>
 #include <optional>
@@ -53,7 +54,7 @@ namespace sage
         for (const auto view = registry->view<Light>(); auto& entity : view)
         {
             const auto& light = registry->get<Light>(entity);
-            if (!light.enabled) continue;
+            if (!light.enabled || !IsEntityVisible(*registry, entity)) continue;
 
             if (lightsCount < MAX_LIGHT_COUNT)
             {
@@ -164,6 +165,7 @@ namespace sage
         for (const auto view = registry->view<Light>(); auto& entity : view)
         {
             auto& light = registry->get<Light>(entity);
+            if (!IsEntityVisible(*registry, entity)) continue;
             if (light.enabled)
                 DrawSphereEx(light.position, 0.2f, 8, 8, light.color);
             else
@@ -206,7 +208,7 @@ namespace sage
         for (const auto entity : registry->view<Light>())
         {
             const auto& light = registry->get<Light>(entity);
-            if (!light.enabled) continue;
+            if (!light.enabled || !IsEntityVisible(*registry, entity)) continue;
             if (index >= MAX_LIGHT_COUNT) break;
             if (light.castsShadows)
             {

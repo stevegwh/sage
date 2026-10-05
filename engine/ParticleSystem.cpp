@@ -3,6 +3,7 @@
 
 #include "raylib.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include <algorithm>
 #include <utility>
 
@@ -67,13 +68,13 @@ namespace sage
 {
     // Utility functions & structs.
     //----------------------------------------------------------------------------------
-    // Returns a random float in the inclusive range [min, max].
-    float GetRandomFloat(float min, float max)
+    namespace
     {
-        float range = max - min;
-        float n = static_cast<float>(GetRandomValue(0, RAND_MAX)) / static_cast<float>(RAND_MAX);
-        return n * range + min;
-    }
+        float RandomFloat(std::mt19937& random, float min, float max)
+        {
+            return std::uniform_real_distribution<float>(std::min(min, max), std::max(min, max))(random);
+        }
+    } // namespace
 
     // Assuming these utility functions are available or need to be implemented for Vector3
     Vector3 RotateV3(const Vector3& vec, float angleX, float angleY, float angleZ)
@@ -81,28 +82,6 @@ namespace sage
         // Implement or use existing functions to rotate a Vector3 around the X, Y, and Z axes
         Matrix rotationMatrix = MatrixRotateXYZ(Vector3{.x = angleX, .y = angleY, .z = angleZ});
         return Vector3Transform(vec, rotationMatrix);
-    }
-
-    // LinearFade fades from Color c1 to Color c2. Fraction is a value between 0 and 1.
-    // The interpolation is linear.
-    Color LinearFade(Color c1, Color c2, float fraction)
-    {
-        auto newr = static_cast<unsigned char>(
-            static_cast<float>(static_cast<int>(c2.r) - static_cast<int>(c1.r)) * fraction +
-            static_cast<float>(c1.r));
-        auto newg = static_cast<unsigned char>(
-            static_cast<float>(static_cast<int>(c2.g) - static_cast<int>(c1.g)) * fraction +
-            static_cast<float>(c1.g));
-        auto newb = static_cast<unsigned char>(
-            static_cast<float>(static_cast<int>(c2.b) - static_cast<int>(c1.b)) * fraction +
-            static_cast<float>(c1.b));
-        auto newa = static_cast<unsigned char>(
-            static_cast<float>(static_cast<int>(c2.a) - static_cast<int>(c1.a)) * fraction +
-            static_cast<float>(c1.a));
-
-        Color c = {.r = newr, .g = newg, .b = newb, .a = newa};
-
-        return c;
     }
 
     bool Particle_DeactivatorAge(Particle* p)
@@ -120,7 +99,7 @@ namespace sage
     {
     }
 
-    void Particle::Init(const EmitterConfig& cfg)
+    void Particle::Init(const EmitterConfig& cfg, std::mt19937& random)
     {
         age = 0;
         origin = cfg.origin;
@@ -130,45 +109,48 @@ namespace sage
 
         // Get a small random angle to find a random velocity direction.
         float randaX =
-            GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+            RandomFloat(random, cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
         float randaY =
-            GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+            RandomFloat(random, cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
         float randaZ =
-            GetRandomFloat(cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
+            RandomFloat(random, cfg.directionAngle.min, cfg.directionAngle.max) * sage::math::DEGREES_TO_RADIANS;
 
         // Rotate base direction with the given angles.
         direction = RotateV3(direction, randaX, randaY, randaZ);
 
         // Get a random value for velocity range (direction is normalized).
-        float randv = GetRandomFloat(cfg.velocity.min, cfg.velocity.max);
+        float randv = RandomFloat(random, cfg.velocity.min, cfg.velocity.max);
 
         // Multiply direction with factor to set actual velocity in the Particle.
         velocity = Vector3Scale(direction, randv);
 
         // Get a small random angle to rotate the velocity vector.
-        randaX = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
-        randaY = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
-        randaZ = GetRandomFloat(cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        randaX =
+            RandomFloat(random, cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        randaY =
+            RandomFloat(random, cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
+        randaZ =
+            RandomFloat(random, cfg.velocityAngle.min, cfg.velocityAngle.max) * sage::math::DEGREES_TO_RADIANS;
 
         // Rotate velocity vector with given angles.
         velocity = RotateV3(velocity, randaX, randaY, randaZ);
 
         // Get a smaller random value for origin offset and apply it to position.
-        float rando = GetRandomFloat(cfg.offset.min, cfg.offset.max) * 0.1f;
+        float rando = RandomFloat(random, cfg.offset.min, cfg.offset.max) * 0.1f;
         position.x = cfg.origin.x + direction.x * rando;
         position.y = cfg.origin.y + direction.y * rando;
         position.z = cfg.origin.z + direction.z * rando;
 
         // Get a random value for the intrinsic particle acceleration
-        float rands = GetRandomFloat(cfg.originAcceleration.min, cfg.originAcceleration.max);
+        float rands = RandomFloat(random, cfg.originAcceleration.min, cfg.originAcceleration.max);
         originAcceleration = rands;
         externalAcceleration = cfg.externalAcceleration;
-        ttl = GetRandomFloat(cfg.age.min, cfg.age.max);
+        ttl = RandomFloat(random, cfg.age.min, cfg.age.max);
         active = true;
         size = cfg.size;
     }
 
-    void Particle::Update(float dt)
+    void Particle::Update(float dt, const ParticleCurve& speedOverLifetime)
     {
         if (!active)
         {
@@ -196,11 +178,12 @@ namespace sage
         //	velocity = Vector3Add(velocity, Vector3Scale(centripetalForce, originAcceleration * dt));
 
         // Update position by velocity.
-        position = Vector3Add(position, Vector3Scale(velocity, dt));
+        position = Vector3Add(position, Vector3Scale(velocity, dt * speedOverLifetime.Evaluate(age / ttl)));
     }
 
     // Emitter constructor
-    Emitter::Emitter(EmitterConfig cfg) : config(std::move(cfg))
+    Emitter::Emitter(EmitterConfig cfg)
+        : config(std::move(cfg)), random(config.randomSeed ? *config.randomSeed : std::random_device{}())
     {
         offset.x = static_cast<float>(config.texture.width / 2);
         offset.y = static_cast<float>(config.texture.height / 2);
@@ -234,7 +217,8 @@ namespace sage
 
         for (size_t i = 0; i < config.capacity; i++)
         {
-            particles.at(i)->particle_Deactivator = config.particle_Deactivator;
+            particles.at(i)->particle_Deactivator =
+                config.particle_Deactivator ? config.particle_Deactivator : Particle_DeactivatorAge;
         }
 
         return true;
@@ -258,14 +242,15 @@ namespace sage
     void Emitter::Burst()
     {
         size_t emitted = 0;
-        int amount = GetRandomValue(config.burst.min, config.burst.max);
+        const int amount = std::uniform_int_distribution<int>(config.burst.min, config.burst.max)(random);
+        if (amount <= 0) return;
 
         for (size_t i = 0; i < config.capacity; i++)
         {
             auto& p = particles.at(i);
             if (!p->active)
             {
-                p->Init(config);
+                p->Init(config, random);
                 p->position = config.origin;
                 emitted++;
             }
@@ -294,45 +279,74 @@ namespace sage
             auto& p = particles.at(i);
             if (p->active)
             {
-                p->Update(dt);
+                p->Update(dt, config.speedOverLifetime);
             }
             else if (isEmitting && emitNow > 0)
             {
                 // emit new particles here
-                p->Init(config);
-                p->Update(dt);
+                p->Init(config, random);
+                p->Update(dt, config.speedOverLifetime);
                 emitNow--;
                 mustEmit--;
             }
         }
     }
 
+    Color Emitter::ParticleColor(const Particle& particle) const
+    {
+        const float age = particle.ttl > 0 ? particle.age / particle.ttl : 1.0f;
+        auto color = config.colorOverLifetime.Evaluate(age, config.startColor, config.endColor);
+        color.a = static_cast<unsigned char>(
+            std::clamp(static_cast<float>(color.a) * config.opacityOverLifetime.Evaluate(age), 0.0f, 255.0f));
+        return color;
+    }
+
+    float Emitter::ParticleSize(const Particle& particle) const
+    {
+        return particle.size *
+               config.sizeOverLifetime.Evaluate(particle.ttl > 0 ? particle.age / particle.ttl : 1.0f);
+    }
+
+    namespace
+    {
+        std::vector<const Particle*> ActiveParticles(const Emitter& emitter)
+        {
+            std::vector<const Particle*> active;
+            active.reserve(emitter.particles.size());
+            for (const auto& particle : emitter.particles)
+                if (particle->active) active.push_back(particle.get());
+            return active;
+        }
+
+        void DrawParticleBillboards(
+            const Emitter& emitter, Camera3D& camera, const std::vector<const Particle*>& particles)
+        {
+            BeginBlendMode(emitter.config.blendMode);
+            // Flush opaque geometry before changing depth writes. Transparent texels must
+            // still depth-test against the scene, but must not occlude later particles.
+            rlDrawRenderBatchActive();
+            rlDisableDepthMask();
+            for (const auto* particle : particles)
+                DrawBillboard(
+                    camera,
+                    emitter.config.texture,
+                    particle->position,
+                    emitter.ParticleSize(*particle),
+                    emitter.ParticleColor(*particle));
+            // Submit the billboards before restoring the depth state for later geometry.
+            rlDrawRenderBatchActive();
+            rlEnableDepthMask();
+            EndBlendMode();
+        }
+    } // namespace
+
     void Emitter::DrawNearestFirst(Camera3D* const camera) const
     {
-        std::vector<Particle*> activeParticles;
-        for (size_t i = 0; i < config.capacity; i++)
-        {
-            if (particles.at(i)->active)
-            {
-                activeParticles.push_back(particles.at(i).get());
-            }
-        }
-
-        std::ranges::sort(activeParticles, [&camera](const Particle* a, const Particle* b) {
+        auto active = ActiveParticles(*this);
+        std::ranges::sort(active, [&camera](const Particle* a, const Particle* b) {
             return Vector3Distance(a->position, camera->position) < Vector3Distance(b->position, camera->position);
         });
-
-        BeginBlendMode(config.blendMode);
-        for (const auto& p : activeParticles)
-        {
-            DrawBillboard(
-                *camera,
-                config.texture,
-                p->position,
-                p->size,
-                LinearFade(config.startColor, config.endColor, p->age / p->ttl));
-        }
-        EndBlendMode();
+        DrawParticleBillboards(*this, *camera, active);
     }
 
     void Emitter::DrawNearestFirst(Camera3D* const camera, const Shader& shader) const
@@ -344,28 +358,9 @@ namespace sage
 
     void Emitter::DrawOldestFirst(Camera3D* const camera) const
     {
-        std::vector<Particle*> activeParticles;
-        for (size_t i = 0; i < config.capacity; i++)
-        {
-            if (particles.at(i)->active)
-            {
-                activeParticles.push_back(particles.at(i).get());
-            }
-        }
-
-        std::ranges::sort(activeParticles, [](const Particle* a, const Particle* b) { return a->age < b->age; });
-
-        BeginBlendMode(config.blendMode);
-        for (const auto& p : activeParticles)
-        {
-            DrawBillboard(
-                *camera,
-                config.texture,
-                p->position,
-                p->size,
-                LinearFade(config.startColor, config.endColor, p->age / p->ttl));
-        }
-        EndBlendMode();
+        auto active = ActiveParticles(*this);
+        std::ranges::sort(active, [](const Particle* a, const Particle* b) { return a->age < b->age; });
+        DrawParticleBillboards(*this, *camera, active);
     }
 
     void Emitter::DrawOldestFirst(Camera3D* const camera, const Shader& shader) const
@@ -375,21 +370,15 @@ namespace sage
         EndShaderMode();
     }
 
-    // Emitter_Draw draws all active particles.
+    // Alpha blending requires back-to-front order in camera space.
     void Emitter::Draw(Camera3D* const camera) const
     {
-        BeginBlendMode(config.blendMode);
-        for (const auto& p : particles)
-        {
-            if (!p->active) continue;
-            DrawBillboard(
-                *camera,
-                config.texture,
-                p->position,
-                p->size,
-                LinearFade(config.startColor, config.endColor, p->age / p->ttl));
-        }
-        EndBlendMode();
+        auto active = ActiveParticles(*this);
+        const auto forward = Vector3Subtract(camera->target, camera->position);
+        std::ranges::sort(active, [&forward](const Particle* a, const Particle* b) {
+            return Vector3DotProduct(a->position, forward) > Vector3DotProduct(b->position, forward);
+        });
+        DrawParticleBillboards(*this, *camera, active);
     }
 
     void Emitter::Draw(Camera3D* const camera, const Shader& shader) const

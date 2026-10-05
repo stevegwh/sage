@@ -5,7 +5,7 @@ if (NOT DEFINED SAGE_ROOT_DIR)
 endif ()
 
 file(GLOB EDITOR_HEADERS *.hpp)
-file(GLOB EDITOR_SOURCES *.cpp)
+file(GLOB EDITOR_SOURCES CONFIGURE_DEPENDS *.cpp)
 
 # main.cpp is the standalone-editor entry point; keep it out of the library so
 # the game project can provide its own entry point that registers the lq game

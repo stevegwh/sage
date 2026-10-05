@@ -35,6 +35,10 @@ namespace sage
         int emissionRate = 20;
         IntRange burst{.min = 10, .max = 20};
         BlendMode blendMode = BLEND_ALPHA;
+        ParticleCurve sizeOverLifetime;
+        ParticleCurve opacityOverLifetime;
+        ParticleCurve speedOverLifetime;
+        ParticleGradient colorOverLifetime;
 
         template <class Archive>
         void serialize(Archive& archive)
@@ -65,30 +69,35 @@ namespace sage
                 cereal::make_nvp("emissionRate", emissionRate),
                 cereal::make_nvp("burst.min", burst.min),
                 cereal::make_nvp("burst.max", burst.max),
-                cereal::make_nvp("blendMode", blendMode));
+                cereal::make_nvp("blendMode", blendMode),
+                cereal::make_nvp("sizeOverLifetime", sizeOverLifetime),
+                cereal::make_nvp("opacityOverLifetime", opacityOverLifetime),
+                cereal::make_nvp("speedOverLifetime", speedOverLifetime),
+                cereal::make_nvp("colorOverLifetime", colorOverLifetime));
         }
 
         template <class Inspector>
         void define_editor_options(Inspector& i)
         {
             i.template requiresComponent<sgTransform>();
-            i.note("Main", "Playback and initial particle settings");
-            i.particleTextureDropdown("texture", "Texture", texture);
+            i.module("Main");
             i.field("play_on_awake", "Play On Awake", playOnAwake);
             i.field("looping", "Looping", looping);
             i.field("duration", "Duration", duration);
-            i.field("size", "Size", size);
-            i.divider("Emission");
-            i.note("Emission", "Rate and burst counts");
-            i.field("capacity", "Capacity", capacity);
+            i.field("size", "Start Size", size);
+            i.field("lifetime_min", "Start Lifetime Min", lifetime.min);
+            i.field("lifetime_max", "Start Lifetime Max", lifetime.max);
+            i.field("speed_min", "Start Speed Min", speed.min);
+            i.field("speed_max", "Start Speed Max", speed.max);
+            i.field("start_color", "Start Color", startColor);
+            i.field("capacity", "Max Particles", capacity);
+            i.module("Emission");
             i.field("emission_rate", "Emission Rate", emissionRate);
             i.field("burst_min", "Burst Min", burst.min);
             i.field("burst_max", "Burst Max", burst.max);
-            i.divider("Motion");
-            i.note("Motion", "Velocity and forces in world space");
+            i.module("Shape and Motion");
+            i.note("Space", "World");
             i.field("direction", "Direction", direction);
-            i.field("speed_min", "Speed Min", speed.min);
-            i.field("speed_max", "Speed Max", speed.max);
             i.field("spread_min", "Spread Min", spread.min);
             i.field("spread_max", "Spread Max", spread.max);
             i.field("velocity_angle_min", "Velocity Angle Min", velocityAngle.min);
@@ -98,11 +107,8 @@ namespace sage
             i.field("origin_acceleration_min", "Origin Acceleration Min", originAcceleration.min);
             i.field("origin_acceleration_max", "Origin Acceleration Max", originAcceleration.max);
             i.field("gravity", "Gravity", gravity);
-            i.divider("Lifetime");
-            i.field("lifetime_min", "Lifetime Min", lifetime.min);
-            i.field("lifetime_max", "Lifetime Max", lifetime.max);
-            i.divider("Rendering");
-            i.field("start_color", "Start Color", startColor);
+            i.module("Renderer");
+            i.particleTextureDropdown("texture", "Texture", texture);
             i.field("end_color", "End Color", endColor);
             i.field("blend_mode", "Blend Mode", blendMode);
         }

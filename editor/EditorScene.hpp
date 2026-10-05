@@ -13,6 +13,7 @@
 #include "EditorMapController.hpp"
 #include "EditorModelDefaultsController.hpp"
 #include "EditorModeStateMachine.hpp"
+#include "EditorParticleEditor.hpp"
 #include "EditorPickingService.hpp"
 #include "EditorPlacementController.hpp"
 #include "EditorSelection.hpp"
@@ -63,6 +64,10 @@ namespace sage
         std::unique_ptr<editor::EditorAssetCatalog> assetCatalog;
         std::unique_ptr<editor::EditorModelDefaultsController> modelDefaults;
         std::unique_ptr<editor::EditorSelection> selection;
+        mutable editor::EditorParticleEditor particleEditor;
+        mutable std::optional<entt::entity> particleEditorRoot;
+        mutable std::optional<Camera3D> particleSceneCamera;
+        mutable std::vector<entt::entity> particleSceneSelection;
         std::unique_ptr<editor::EditorPickingService> pickingService;
         std::unique_ptr<editor::EditorEntityOperations> entityOperations;
         std::unique_ptr<editor::EditorHierarchyTree> hierarchyTree;
@@ -126,8 +131,10 @@ namespace sage
         void addTriggerVolume() const;
         void addTerrain() const;
         void addEmptyTransform() const;
-        void addParticleEmitter() const;
-        void drawParticlePreviewWindow() const;
+        void addParticleSystem() const;
+        void drawParticleEditorTab() const;
+        void openParticleEditor(entt::entity entity) const;
+        void closeParticleEditor() const;
         void addMesh(const char* modelKey, const char* name) const;
         // Brush settings panel, shown only while terrain sculpting is active.
         void drawTerrainBrushTools() const;

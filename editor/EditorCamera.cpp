@@ -12,6 +12,7 @@ namespace sage::editor
     namespace
     {
         constexpr float LOOK_SENSITIVITY = 0.003f;
+        constexpr float FOCUSED_KEY_ROTATION_SPEED = 1.5f;
         constexpr float MOVE_SPEED = 30.0f;
         constexpr float FAST_MULTIPLIER = 4.0f;
         constexpr float FOCUS_CLEARANCE = 0.5f;
@@ -80,6 +81,13 @@ namespace sage::editor
     {
         Yaw(camera, -delta.x * LOOK_SENSITIVITY);
         Pitch(camera, -delta.y * LOOK_SENSITIVITY);
+    }
+
+    void EditorCamera::RotateFocused(Camera3D& camera, const Vector2 input, const float deltaTime) const
+    {
+        if (mode != CameraMode::Focused) return;
+        Yaw(camera, input.x * FOCUSED_KEY_ROTATION_SPEED * deltaTime);
+        Pitch(camera, input.y * FOCUSED_KEY_ROTATION_SPEED * deltaTime);
     }
 
     void EditorCamera::Pan(Camera3D& camera, const Vector2 delta) const

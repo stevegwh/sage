@@ -1,5 +1,6 @@
 #include "EditorScene.hpp"
 #include "engine/Colors.hpp"
+#include "engine/components/EntityVisibility.hpp"
 #include "engine/ui/CanvasSystem.hpp"
 
 #include <iterator>
@@ -19,6 +20,7 @@
 #include "engine/components/DynamicRenderable.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/ParticleEmitterComponent.hpp"
+#include "engine/components/ParticleSystemComponent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -75,7 +77,6 @@ namespace sage
     namespace
     {
         constexpr float GRID_SURFACE_Y_STEP = 1.0f;
-        constexpr float FOCUSED_CAMERA_KEY_ROTATION_SPEED = 1.5f;
         constexpr std::array<const char*, 3> CAMERA_MODE_NAMES = {"In-game", "Free", "Object Focused"};
         constexpr const char* UNTITLED_SCENE_NAME = "Untitled";
         constexpr const char* SHADERS_DIRECTORY = "resources/shaders";
@@ -283,6 +284,11 @@ namespace sage
              .flatpackLabel = flatpackOpen ? flatpackSession->FlatpackName() : std::string{},
              .flatpackPath = flatpackOpen ? flatpackSession->Path() : std::filesystem::path{},
              .flatpackDirty = flatpackOpen && flatpackSession->HasUnsavedChanges(),
+             .particleOpen = particleEditorRoot.has_value(),
+             .particleLabel = particleEditorRoot
+                                  ? "Particles: " + hierarchyTree->GetEntityName(*particleEditorRoot)
+                                  : std::string{},
+             .particleDirty = particleEditorRoot.has_value() && history->HasUnsavedChanges(),
              .canvasOpen = canvasEditor && canvasEditor->HasDocument() && !IsPlaying(),
              .canvasLabel = canvasEditor ? canvasEditor->Path().filename().string() : std::string{},
              .canvasDirty = canvasEditor && canvasEditor->IsDirty()});
@@ -467,18 +473,11 @@ namespace sage
                 {
                     if (editorCamera.mode == editor::CameraMode::Focused)
                     {
-                        const int rotationInput = IsKeyDown(KEY_E) - IsKeyDown(KEY_Q);
-                        if (rotationInput != 0)
-                            editorCamera.Yaw(
-                                camera,
-                                static_cast<float>(rotationInput) * FOCUSED_CAMERA_KEY_ROTATION_SPEED *
-                                    GetFrameTime());
-                        const int heightInput = IsKeyDown(KEY_S) - IsKeyDown(KEY_W);
-                        if (heightInput != 0)
-                            editorCamera.Pitch(
-                                camera,
-                                static_cast<float>(heightInput) * FOCUSED_CAMERA_KEY_ROTATION_SPEED *
-                                    GetFrameTime());
+                        editorCamera.RotateFocused(
+                            camera,
+                            {.x = static_cast<float>(IsKeyDown(KEY_E) - IsKeyDown(KEY_Q)),
+                             .y = static_cast<float>(IsKeyDown(KEY_S) - IsKeyDown(KEY_W))},
+                            GetFrameTime());
                     }
                     editorCamera.Move(
                         camera,
@@ -506,7 +505,8 @@ namespace sage
             }
         }
         editorModes->Update();
-        sys->particleEmitterSystem->Update(GetFrameTime());
+        const auto selectedEntities = selection->SelectedWithChildren();
+        sys->particleEmitterSystem->Update(GetFrameTime(), std::span<const entt::entity>{selectedEntities});
         syncLightTransforms();
         sys->lightSubSystem->Update();
         sys->lightSubSystem->RefreshLights();
@@ -551,7 +551,9 @@ namespace sage
         // Marker entities have no mesh, so draw a stand-in sphere for tagged spawn points.
         for (const auto entity : sys->registry->view<sgTransform, MetaData>())
         {
-            if (!HasTag(sys->registry->get<MetaData>(entity), editor::SPAWN_POINT_TAG)) continue;
+            if (!IsEntityVisible(*sys->registry, entity) ||
+                !HasTag(sys->registry->get<MetaData>(entity), editor::SPAWN_POINT_TAG))
+                continue;
             const auto& transform = sys->registry->get<sgTransform>(entity);
             const auto position = transform.GetWorldPos();
             const auto color = SPAWN_POINT_MARKER_COLOR;
@@ -563,12 +565,14 @@ namespace sage
         // otherwise-invisible region is visible and editable.
         for (const auto entity : sys->registry->view<Collideable, TriggerVolume>())
         {
+            if (!IsEntityVisible(*sys->registry, entity)) continue;
             const auto& collideable = sys->registry->get<Collideable>(entity);
             DrawBoundingBox(collideable.worldBoundingBox, sage::colors::GREEN_COLOR);
         }
 
         for (const auto entity : selection->SelectedWithChildren())
         {
+            if (!IsEntityVisible(*sys->registry, entity)) continue;
             // The brush ring marks the active terrain; dense selection wires obscure painted textures.
             if (const auto brush = editorModes->CurrentTerrainSculptState();
                 brush && brush->get().terrain == entity && brush->get().brushMode == TerrainBrushMode::Texture)
@@ -713,9 +717,11 @@ namespace sage
         }
         std::function<void()> terrainTools;
         if (editorModes->CurrentTerrainSculptState()) terrainTools = [this]() { drawTerrainBrushTools(); };
-        const auto inspectorEdit = gui->DrawInspectorWindow(terrainTools);
+        const auto inspectorEdit = gui->DrawInspectorWindow(terrainTools, {}, [this]() {
+            particleEditor.DrawInspectorModules(*sys->registry, selection->Active(), *history);
+        });
         handleInspectorEdit(inspectorEdit);
-        drawParticlePreviewWindow();
+        drawParticleEditorTab();
         if (!IsPlaying() && !flatpackSession->IsActive())
             canvasEditor->DrawSceneUI(*sys->registry, [this]() { history->MarkDirty(); });
 
@@ -728,6 +734,9 @@ namespace sage
         const auto sceneTabAction = gui->DrawSceneTabBar();
         if (sceneTabAction.canvasSelected) canvasEditor->Resume();
         if (sceneTabAction.canvasCloseRequested) canvasEditor->RequestClose();
+        if (sceneTabAction.particleCloseRequested || sceneTabAction.flatpackSelected ||
+            sceneTabAction.mapSelected || sceneTabAction.flatpackCloseRequested)
+            closeParticleEditor();
         if (sceneTabAction.mapSelected || sceneTabAction.flatpackCloseRequested)
         {
             flatpackSession->RequestClose();
@@ -829,6 +838,7 @@ namespace sage
             ImGui::OpenPopup(popupId);
         }
 
+        std::optional<entt::entity> openParticleRequest;
         if (ImGui::BeginPopup(popupId))
         {
             if (!sys->registry->valid(hierarchyContextEntity))
@@ -854,6 +864,24 @@ namespace sage
                     PasteClipboard();
                 }
                 ImGui::Separator();
+                const auto& registry = *sys->registry;
+                const bool locallyVisible = !registry.all_of<EntityVisibility>(hierarchyContextEntity) ||
+                                            registry.get<EntityVisibility>(hierarchyContextEntity).visible;
+                if (locallyVisible && !IsEntityVisible(registry, hierarchyContextEntity))
+                    ImGui::TextDisabled("Hidden by parent");
+                if (ImGui::MenuItem(locallyVisible ? "Hide" : "Show"))
+                {
+                    history->Begin(editor::EditAction::EditField, {hierarchyContextEntity});
+                    sys->registry->get_or_emplace<EntityVisibility>(hierarchyContextEntity).visible =
+                        !locallyVisible;
+                    history->Commit();
+                    sys->lightSubSystem->RefreshLights();
+                }
+                ImGui::Separator();
+                const auto particleRoot = ParticleEffectRoot(*sys->registry, hierarchyContextEntity);
+                if (!GatherParticleEmitters(*sys->registry, particleRoot).empty() &&
+                    ImGui::MenuItem("Open Particle Editor"))
+                    openParticleRequest = particleRoot;
                 if (ImGui::MenuItem("Create Flatpack"))
                 {
                     createFlatpackFromEntity(hierarchyContextEntity);
@@ -861,6 +889,7 @@ namespace sage
             }
             ImGui::EndPopup();
         }
+        if (openParticleRequest) openParticleEditor(*openParticleRequest);
     }
 
     void EditorScene::handleFileShortcuts() const
@@ -1902,9 +1931,9 @@ namespace sage
 
     void EditorScene::adoptIntoFlatpackRoot(const std::vector<entt::entity>& roots) const
     {
-        if (!flatpackSession || !flatpackSession->IsActive()) return;
+        if (!particleEditorRoot && (!flatpackSession || !flatpackSession->IsActive())) return;
 
-        const auto sessionRoot = flatpackSession->Root();
+        const auto sessionRoot = particleEditorRoot.value_or(flatpackSession->Root());
         for (const auto entity : roots)
         {
             if (entity == sessionRoot) continue;
@@ -2080,7 +2109,7 @@ namespace sage
             }
             if (ImGui::MenuItem("Particle System"))
             {
-                addParticleEmitter();
+                addParticleSystem();
             }
             ImGui::EndMenu();
         }
@@ -2559,40 +2588,61 @@ namespace sage
         editorModes->SelectSceneEntity(entity);
     }
 
-    void EditorScene::addParticleEmitter() const
+    void EditorScene::addParticleSystem() const
     {
         Vector3 position = sys->camera->getRaylibCam()->target;
         if (const auto snapped = placementController->SnappedPlacementPosition()) position = *snapped;
-        const auto entity = entityOperations->CreateEmptyTransform(position);
-        sys->registry->get<sgTransform>(entity).name = "Particle System";
-        sys->registry->emplace<ParticleEmitterComponent>(entity);
-        adoptIntoFlatpackRoot({entity});
-        if (history) history->RecordCreate(editor::EditAction::AddEmptyTransform, {entity});
-        editorModes->SelectSceneEntity(entity);
+        const auto root = entityOperations->CreateEmptyTransform(position);
+        sys->registry->get<sgTransform>(root).name = "Particle System";
+        sys->registry->emplace<ParticleSystemComponent>(root);
+        const auto emitter = entityOperations->CreateEmptyTransform(position);
+        auto& transform = sys->registry->get<sgTransform>(emitter);
+        transform.name = "Emitter";
+        transform.SetParent(root);
+        transform.position.local = Vector3{};
+        sys->registry->emplace<ParticleEmitterComponent>(emitter);
+        adoptIntoFlatpackRoot({root});
+        if (history) history->RecordCreate(editor::EditAction::AddEmptyTransform, {root});
+        editorModes->SelectSceneEntity(root);
     }
 
-    void EditorScene::drawParticlePreviewWindow() const
+    void EditorScene::drawParticleEditorTab() const
     {
-        const auto selected = selection->Active();
-        if (!selected || !sys->registry->valid(*selected) ||
-            !sys->registry->all_of<ParticleEmitterComponent, sgTransform>(*selected))
-            return;
-        if (!ImGui::Begin("Particle Preview"))
+        if (!particleEditorRoot) return;
+        if (!sys->registry->valid(*particleEditorRoot) ||
+            !particleEditor.DrawPreview(
+                *sys->registry, *particleEditorRoot, sys->settings->GetRenderViewportScreenRect()))
+            closeParticleEditor();
+    }
+
+    void EditorScene::openParticleEditor(const entt::entity entity) const
+    {
+        if (!sys->registry->valid(entity)) return;
+        if (!particleEditorRoot)
         {
-            ImGui::End();
-            return;
+            particleSceneCamera = *sys->camera->getRaylibCam();
+            particleSceneSelection = selection->Selected();
         }
-        ImGui::Text("%s", sys->registry->get<sgTransform>(*selected).name.c_str());
-        if (ImGui::Button("Play")) sys->particleEmitterSystem->Play(*selected);
-        ImGui::SameLine();
-        if (ImGui::Button("Pause")) sys->particleEmitterSystem->Pause(*selected);
-        ImGui::SameLine();
-        if (ImGui::Button("Restart")) sys->particleEmitterSystem->Restart(*selected);
-        ImGui::SameLine();
-        if (ImGui::Button("Burst")) sys->particleEmitterSystem->Burst(*selected);
-        ImGui::Text("Alive: %zu", sys->particleEmitterSystem->Alive(*selected));
-        ImGui::TextUnformatted("Select this object in the Inspector to edit its emitter modules.");
-        ImGui::End();
+        particleEditorRoot = entity;
+        sys->registry->ctx().insert_or_assign<EntityViewScope>(EntityViewScope{entity});
+        editorModes->SelectSceneEntity(entity);
+        sys->camera->FocusEntity(entity);
+        refreshSceneWindows();
+        refreshOverlay();
+    }
+
+    void EditorScene::closeParticleEditor() const
+    {
+        if (!particleEditorRoot) return;
+        sys->registry->ctx().erase<EntityViewScope>();
+        particleEditorRoot.reset();
+        if (particleSceneCamera)
+            sys->camera->SetCamera(particleSceneCamera->position, particleSceneCamera->target);
+        particleSceneCamera.reset();
+        static_cast<void>(selection->ReplaceWith(particleSceneSelection));
+        particleSceneSelection.clear();
+        refreshSceneWindows();
+        refreshOverlay();
     }
 
     void EditorScene::addMesh(const char* modelKey, const char* name) const
@@ -2612,6 +2662,7 @@ namespace sage
 
     void EditorScene::clearCurrentMap() const
     {
+        closeParticleEditor();
         if (history)
         {
             history->Clear();
@@ -2791,15 +2842,16 @@ namespace sage
 
         if (draggedEntities.empty()) return;
 
-        if (flatpackSession && flatpackSession->IsActive())
+        if (particleEditorRoot || (flatpackSession && flatpackSession->IsActive()))
         {
+            const auto sessionRoot = particleEditorRoot.value_or(flatpackSession->Root());
             // The session root anchors the open flatpack: it stays at the top,
             // and anything dropped at the top level belongs under it.
-            std::erase(draggedEntities, flatpackSession->Root());
+            std::erase(draggedEntities, sessionRoot);
             if (draggedEntities.empty()) return;
             if (newParent == entt::null)
             {
-                newParent = flatpackSession->Root();
+                newParent = sessionRoot;
                 insertBefore = entt::null;
             }
         }
@@ -2879,6 +2931,7 @@ namespace sage
 
     void EditorScene::startPlay() const
     {
+        closeParticleEditor();
         if (gameRuntime) return;
         if (!HasGameRuntimeFactory())
         {
@@ -3016,6 +3069,7 @@ namespace sage
             },
             [this](std::filesystem::path path) { editorModes->SelectFlatpack(std::move(path)); },
             [this](std::filesystem::path path) {
+                closeParticleEditor();
                 if (flatpackSession) flatpackSession->Open(std::move(path));
             },
             [this](const std::filesystem::path& path, const std::string& requestedName) {

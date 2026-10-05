@@ -1,11 +1,12 @@
+#include "engine/components/EntityVisibility.hpp"
 //
 // Created by Steve Wheeler on 21/02/2024.
 //
 
-#include "RenderSystem.hpp"
 #include "engine/Colors.hpp"
 #include "engine/LightManager.hpp"
 #include "engine/MathConstants.hpp"
+#include "RenderSystem.hpp"
 #include "ShaderPaths.hpp"
 #include <array>
 
@@ -130,7 +131,7 @@ namespace sage
              registry->view<Renderable, sgTransform>(entt::exclude<CustomShaderComponent, RenderableDeferred>))
         {
             const auto& renderable = registry->get<Renderable>(entity);
-            if (!renderable.active || !renderable.GetModel()) continue;
+            if (!renderable.active || !IsEntityVisible(*registry, entity) || !renderable.GetModel()) continue;
             const auto& transform = registry->get<sgTransform>(entity);
             const auto& model = renderable.GetModel()->get().GetRlModel();
             const Matrix srt = MatrixMultiply(
@@ -144,7 +145,7 @@ namespace sage
         for (const auto entity : registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>))
         {
             const auto& renderable = registry->get<DynamicRenderable>(entity);
-            if (!renderable.active || !renderable.GetModel()) continue;
+            if (!renderable.active || !IsEntityVisible(*registry, entity) || !renderable.GetModel()) continue;
             const auto& transform = registry->get<sgTransform>(entity);
             const auto& model = renderable.GetModel()->get();
             const Matrix srt = MatrixMultiply(
@@ -175,7 +176,7 @@ namespace sage
         auto dynamicDeferredView = registry->view<DynamicRenderable, sgTransform, RenderableDeferred>();
 
         auto renderEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
-            if (!renderable.active) return;
+            if (!renderable.active || !IsEntityVisible(*registry, entity)) return;
 
             auto model = renderable.GetModel();
             if (!model) return;
@@ -187,7 +188,7 @@ namespace sage
         };
 
         auto renderDynamicEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
-            if (!renderable.active) return;
+            if (!renderable.active || !IsEntityVisible(*registry, entity)) return;
 
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
@@ -205,11 +206,11 @@ namespace sage
             for (auto [entity, renderable, transform] : view.each())
                 draw(renderable, transform, entity);
         };
-        const auto drawCustomAll = [&renderEntity](auto& view) {
+        const auto drawCustomAll = [this, &renderEntity](auto& view) {
             for (const auto entity : view)
             {
                 auto& renderable = view.template get<Renderable>(entity);
-                if (!renderable.active || !renderable.GetModel()) continue;
+                if (!renderable.active || !IsEntityVisible(*registry, entity) || !renderable.GetModel()) continue;
                 view.template get<CustomShaderComponent>(entity).Update(renderable);
                 renderEntity(renderable, view.template get<sgTransform>(entity), entity);
             }
@@ -225,7 +226,7 @@ namespace sage
         for (auto entity : uberView)
         {
             auto& renderable = uberView.get<Renderable>(entity);
-            if (!renderable.active) continue;
+            if (!renderable.active || !IsEntityVisible(*registry, entity)) continue;
 
             auto model = renderable.GetModel();
             if (!model) continue;

@@ -1,5 +1,6 @@
 #include "EditorInspector.hpp"
 #include "engine/AssetKey.hpp"
+#include "engine/components/EntityVisibility.hpp"
 
 #include "EditorComponents.hpp"
 #include "engine/CollisionLayers.hpp"
@@ -9,6 +10,7 @@
 #include "engine/components/CustomShaderComponent.hpp"
 #include "engine/components/MoveableActor.hpp"
 #include "engine/components/ParticleEmitterComponent.hpp"
+#include "engine/components/ParticleSystemComponent.hpp"
 #include "engine/components/Renderable.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include "engine/components/sgTransform.hpp"
@@ -203,7 +205,11 @@ namespace sage::editor
             result.value = std::visit(
                 [&fields, &result, &supported]<typename T0>(const T0& firstValue) -> FieldValue {
                     using T = std::decay_t<T0>;
-                    if constexpr (std::is_same_v<T, BoundedCollectionField> || std::is_same_v<T, DividerField>)
+                    if constexpr (std::is_same_v<T, DividerField>)
+                    {
+                        return firstValue;
+                    }
+                    else if constexpr (std::is_same_v<T, BoundedCollectionField>)
                     {
                         if (fields.size() != 1)
                         {
@@ -852,13 +858,15 @@ namespace sage::editor
     {
         // Keep the editor identity first; it is the user's primary handle for scene objects.
         registry.Register<sgTransform>("Transform");
+        registry.RegisterPersistent<EntityVisibility>("Visibility", "sage.EntityVisibility", true, true);
         registry.Register<PersistentEntityId>("Persistent Entity Id");
         registry.Register<AssetReference>("Asset Reference", true);
         registry.Register<MetaData>("Meta Data");
         registry.Register<Renderable>("Renderable", true, true);
         registry.RegisterPersistent<CustomShaderComponent>("Custom Shader", "sage.CustomShader", true, true);
         registry.RegisterPersistent<ParticleEmitterComponent>(
-            "Particle System", "sage.ParticleEmitter", true, true);
+            "Particle Emitter", "sage.ParticleEmitter", true, true);
+        registry.RegisterPersistent<ParticleSystemComponent>("Particle System", "sage.ParticleSystem", true, true);
         registry.Register<Collideable>("Collideable", true, true);
         registry.Register<NavigationSurface>("Navigation Surface", true, true);
         registry.Register<NavigationObstacle>("Navigation Obstacle", true, true);
