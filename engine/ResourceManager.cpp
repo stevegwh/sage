@@ -552,6 +552,7 @@ namespace sage
         assert(modelCopies.contains(key));
         ModelView view;
         view.rlmodel = modelCopies.at(key).model;
+        view.renderBounds = modelCopies.at(key).renderBounds;
         view.assetKey = key;
         return view;
     }
@@ -651,6 +652,7 @@ namespace sage
 
         ModelMutable mut;
         mut.rlmodel = modelCopies.at(instanceKey).model;
+        mut.renderBounds = modelCopies.at(instanceKey).renderBounds;
         mut.assetKey = key;
         mut.instanceKey = instanceKey;
         return mut;

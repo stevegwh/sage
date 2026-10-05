@@ -114,18 +114,27 @@ namespace sage
 
     void RenderSystem::DrawShadowCasters(const Shader shader, const int skinnedLocation) const
     {
+        // Use the active light camera, including each individual cubemap face.
+        const RenderFrustum frustum(MatrixMultiply(
+            rlGetMatrixTransform(), MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection())));
         std::array<MaterialMap, MAX_MATERIAL_MAPS> emptyMaps{};
-        const auto drawModel = [&](const Model& model, const Matrix transform, const bool skinned) {
-            const int skinnedValue = skinned ? 1 : 0;
-            SetShaderValue(shader, skinnedLocation, &skinnedValue, SHADER_UNIFORM_INT);
-            for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex)
-            {
-                Material material = model.materials[model.meshMaterial[meshIndex]];
-                material.shader = shader;
-                material.maps = emptyMaps.data();
-                DrawMesh(model.meshes[meshIndex], material, transform);
-            }
-        };
+        const auto drawModel =
+            [&](const auto& owner, const Model& model, const Matrix transform, const bool skinned) {
+                const int skinnedValue = skinned ? 1 : 0;
+                SetShaderValue(shader, skinnedLocation, &skinnedValue, SHADER_UNIFORM_INT);
+                for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex)
+                {
+                    if (!skinned)
+                    {
+                        const auto bounds = owner.GetRenderMeshBounds(meshIndex);
+                        if (bounds && !frustum.Intersects(*bounds, transform)) continue;
+                    }
+                    Material material = model.materials[model.meshMaterial[meshIndex]];
+                    material.shader = shader;
+                    material.maps = emptyMaps.data();
+                    DrawMesh(model.meshes[meshIndex], material, transform);
+                }
+            };
 
         for (const auto entity :
              registry->view<Renderable, sgTransform>(entt::exclude<CustomShaderComponent, RenderableDeferred>))
@@ -139,7 +148,11 @@ namespace sage
                     MatrixScale(transform.GetScale().x, transform.GetScale().y, transform.GetScale().z),
                     EulerToMatrix(transform.GetWorldRot())),
                 MatrixTranslate(transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
-            drawModel(model, MatrixMultiply(model.transform, srt), registry->any_of<Animation>(entity));
+            drawModel(
+                renderable.GetModel()->get(),
+                model,
+                MatrixMultiply(model.transform, srt),
+                registry->any_of<Animation>(entity));
         }
 
         for (const auto entity : registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>))
@@ -153,12 +166,21 @@ namespace sage
                     MatrixScale(transform.GetScale().x, transform.GetScale().y, transform.GetScale().z),
                     MatrixRotateY(transform.GetWorldRot().y * math::DEGREES_TO_RADIANS)),
                 MatrixTranslate(transform.GetWorldPos().x, transform.GetWorldPos().y, transform.GetWorldPos().z));
-            drawModel(model, MatrixMultiply(model.transform, srt), false);
+            drawModel(renderable, model, MatrixMultiply(model.transform, srt), false);
         }
     }
 
     void RenderSystem::drawScene(const bool includeSkybox) // Draw callbacks may update shaders
     {
+        const std::optional<RenderFrustum> frustum =
+            rlIsStereoRenderEnabled()
+                ? std::nullopt
+                : std::make_optional<RenderFrustum>(MatrixMultiply(
+                      rlGetMatrixTransform(), MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection())));
+        const auto entityFrustum = [this, &frustum](const entt::entity entity) {
+            // Arbitrary vertex shaders and skeletal poses need deformation-aware bounds.
+            return registry->any_of<Animation, CustomShaderComponent>(entity) ? std::nullopt : frustum;
+        };
         lightManager->BindShadowMap();
         if (includeSkybox && skybox) skybox->Draw();
 
@@ -175,7 +197,8 @@ namespace sage
         auto dynamicView = registry->view<DynamicRenderable, sgTransform>(entt::exclude<RenderableDeferred>);
         auto dynamicDeferredView = registry->view<DynamicRenderable, sgTransform, RenderableDeferred>();
 
-        auto renderEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
+        auto renderEntity = [this,
+                             &entityFrustum](auto& renderable, const auto& transform, const entt::entity entity) {
             if (!renderable.active || !IsEntityVisible(*registry, entity)) return;
 
             auto model = renderable.GetModel();
@@ -184,23 +207,29 @@ namespace sage
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
             model->get().Draw(
-                transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
-        };
-
-        auto renderDynamicEntity = [this](auto& renderable, const auto& transform, const entt::entity entity) {
-            if (!renderable.active || !IsEntityVisible(*registry, entity)) return;
-
-            if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
-
-            Vector3 rotationAxis = {.x = 0.0f, .y = 1.0f, .z = 0.0f};
-
-            renderable.Draw(
                 transform.GetWorldPos(),
-                rotationAxis,
-                transform.GetWorldRot().y,
+                transform.GetWorldRot(),
                 transform.GetScale(),
-                renderable.hint);
+                renderable.hint,
+                entityFrustum(entity));
         };
+
+        auto renderDynamicEntity =
+            [this, &entityFrustum](auto& renderable, const auto& transform, const entt::entity entity) {
+                if (!renderable.active || !IsEntityVisible(*registry, entity)) return;
+
+                if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
+
+                Vector3 rotationAxis = {.x = 0.0f, .y = 1.0f, .z = 0.0f};
+
+                renderable.Draw(
+                    transform.GetWorldPos(),
+                    rotationAxis,
+                    transform.GetWorldRot().y,
+                    transform.GetScale(),
+                    renderable.hint,
+                    entityFrustum(entity));
+            };
 
         const auto drawAll = [](auto& view, const auto& draw) {
             for (auto [entity, renderable, transform] : view.each())
@@ -236,7 +265,12 @@ namespace sage
             if (renderable.reqShaderUpdate) renderable.reqShaderUpdate(entity);
 
             model->get().DrawUber(
-                &uber, transform.GetWorldPos(), transform.GetWorldRot(), transform.GetScale(), renderable.hint);
+                &uber,
+                transform.GetWorldPos(),
+                transform.GetWorldRot(),
+                transform.GetScale(),
+                renderable.hint,
+                entityFrustum(entity));
         }
 
         drawAll(deferredView, renderEntity);

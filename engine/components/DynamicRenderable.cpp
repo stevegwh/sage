@@ -1,4 +1,5 @@
 #include "DynamicRenderable.hpp"
+#include "engine/MathConstants.hpp"
 
 #include <utility>
 
@@ -17,6 +18,7 @@ namespace sage
 
     DynamicRenderable::DynamicRenderable(DynamicRenderable&& other) noexcept
         : model(other.model),
+          renderBounds(std::move(other.renderBounds)),
           name(std::move(other.name)),
           hint(other.hint),
           active(other.active),
@@ -33,6 +35,7 @@ namespace sage
         Unload();
 
         model = other.model;
+        renderBounds = std::move(other.renderBounds);
         name = std::move(other.name);
         hint = other.hint;
         active = other.active;
@@ -41,6 +44,16 @@ namespace sage
 
         other.model = {};
         return *this;
+    }
+
+    std::optional<BoundingBox> DynamicRenderable::GetRenderMeshBounds(const int meshIndex) const
+    {
+        return renderBounds.Get(model, meshIndex);
+    }
+
+    void DynamicRenderable::InvalidateRenderBounds()
+    {
+        renderBounds.Invalidate();
     }
 
     bool DynamicRenderable::HasModel() const
@@ -63,6 +76,7 @@ namespace sage
     std::optional<std::reference_wrapper<Mesh>> DynamicRenderable::GetMesh(int num)
     {
         if (!HasModel() || num < 0 || num >= model.meshCount) return std::nullopt;
+        InvalidateRenderBounds();
         return std::ref(model.meshes[num]);
     }
 
@@ -92,6 +106,7 @@ namespace sage
 
     void DynamicRenderable::Unload()
     {
+        InvalidateRenderBounds();
         if (model.meshes == nullptr && model.materials == nullptr && model.meshMaterial == nullptr &&
             model.bones == nullptr && model.bindPose == nullptr)
         {
@@ -125,9 +140,38 @@ namespace sage
     }
 
     void DynamicRenderable::Draw(
-        Vector3 position, Vector3 rotationAxis, float rotationAngle, Vector3 scale, Color tint) const
+        Vector3 position,
+        Vector3 rotationAxis,
+        float rotationAngle,
+        Vector3 scale,
+        Color tint,
+        const std::optional<RenderFrustum>& frustum) const
     {
         if (!HasModel()) return;
-        DrawModelEx(model, position, rotationAxis, rotationAngle, scale, tint);
+        if (!frustum)
+        {
+            DrawModelEx(model, position, rotationAxis, rotationAngle, scale, tint);
+            return;
+        }
+        const Matrix srt = MatrixMultiply(
+            MatrixMultiply(
+                MatrixScale(scale.x, scale.y, scale.z),
+                MatrixRotate(rotationAxis, rotationAngle * math::DEGREES_TO_RADIANS)),
+            MatrixTranslate(position.x, position.y, position.z));
+        const Matrix transform = MatrixMultiply(model.transform, srt);
+        for (int meshIndex = 0; meshIndex < model.meshCount; ++meshIndex)
+        {
+            const auto bounds = GetRenderMeshBounds(meshIndex);
+            if (bounds && !frustum->Intersects(*bounds, transform)) continue;
+            auto& material = model.materials[model.meshMaterial[meshIndex]];
+            const Color color = material.maps[MATERIAL_MAP_DIFFUSE].color;
+            material.maps[MATERIAL_MAP_DIFFUSE].color = {
+                .r = static_cast<unsigned char>(static_cast<int>(color.r) * tint.r / 255),
+                .g = static_cast<unsigned char>(static_cast<int>(color.g) * tint.g / 255),
+                .b = static_cast<unsigned char>(static_cast<int>(color.b) * tint.b / 255),
+                .a = static_cast<unsigned char>(static_cast<int>(color.a) * tint.a / 255)};
+            DrawMesh(model.meshes[meshIndex], material, transform);
+            material.maps[MATERIAL_MAP_DIFFUSE].color = color;
+        }
     }
 } // namespace sage

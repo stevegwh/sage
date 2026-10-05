@@ -304,12 +304,21 @@ namespace sage
     }
 
     void ModelView::Draw(
-        const Vector3& position, const Vector3& rotation, const Vector3& scale, const Color& tint) const
+        const Vector3& position,
+        const Vector3& rotation,
+        const Vector3& scale,
+        const Color& tint,
+        const std::optional<RenderFrustum>& frustum) const
     {
         auto model = rlmodel;
         model.transform = MatrixMultiply(model.transform, BuildSrtMatrix(position, rotation, scale));
         for (int i = 0; i < model.meshCount; i++)
         {
+            if (frustum)
+            {
+                const auto bounds = GetRenderMeshBounds(i);
+                if (bounds && !frustum->Intersects(*bounds, model.transform)) continue;
+            }
             const int materialIndex = model.meshMaterial[i];
             const Color color = model.materials[materialIndex].maps[MATERIAL_MAP_DIFFUSE].color;
             model.materials[materialIndex].maps[MATERIAL_MAP_DIFFUSE].color = TintMaterialColor(color, tint);
@@ -372,12 +381,18 @@ namespace sage
         const Vector3& position,
         const Vector3& rotation,
         const Vector3& scale,
-        const Color& tint) const
+        const Color& tint,
+        const std::optional<RenderFrustum>& frustum) const
     {
         auto model = rlmodel;
         model.transform = MatrixMultiply(model.transform, BuildSrtMatrix(position, rotation, scale));
         for (int i = 0; i < model.meshCount; i++)
         {
+            if (frustum)
+            {
+                const auto bounds = GetRenderMeshBounds(i);
+                if (bounds && !frustum->Intersects(*bounds, model.transform)) continue;
+            }
             const int materialIndex = model.meshMaterial[i];
             uber->SetShaderBools(materialIndex);
             if (uber->HasFlag(materialIndex, UberShaderComponent::Flags::EmissiveTexture))
@@ -404,6 +419,16 @@ namespace sage
             DrawMesh(model.meshes[i], model.materials[materialIndex], model.transform);
             model.materials[materialIndex].maps[MATERIAL_MAP_DIFFUSE].color = color;
         }
+    }
+
+    std::optional<BoundingBox> ModelView::GetRenderMeshBounds(const int meshIndex) const
+    {
+        return renderBounds->Get(rlmodel, meshIndex);
+    }
+
+    void ModelView::InvalidateRenderBounds() const
+    {
+        renderBounds->Invalidate();
     }
 
     int ModelView::GetMeshCount() const
@@ -467,6 +492,7 @@ namespace sage
 
     Model& ModelMutable::GetRlModelMut()
     {
+        InvalidateRenderBounds();
         return rlmodel;
     }
 

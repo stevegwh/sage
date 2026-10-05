@@ -856,7 +856,10 @@ namespace sage::editor
             if (brushMode == TerrainBrushMode::Texture)
                 UpdateTerrainTextureRegion(model->get(), terrainData, region);
             else
+            {
                 UpdateTerrainModelRegion(model->get(), terrainData, region);
+                renderable.InvalidateRenderBounds();
+            }
         }
         if (brushMode != TerrainBrushMode::Texture) UpdateTerrainCollideableBounds(registry, terrain);
     }

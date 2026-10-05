@@ -38,6 +38,8 @@ namespace sage
         // created by CreateModelMutable). UnloadAll frees the per-material
         // maps allocations directly rather than going through the shared materialMap.
         bool privateMaterials = false;
+        // Shared by views of this entry; runtime cache is deliberately not serialized.
+        std::shared_ptr<ModelRenderBounds> renderBounds = std::make_shared<ModelRenderBounds>();
 
         template <class Archive>
         void save(Archive& archive) const
@@ -52,6 +54,7 @@ namespace sage
             archive(model, _materialNames, _sourcePath);
             materialNames = std::move(_materialNames);
             sourcePath = std::move(_sourcePath);
+            renderBounds->Invalidate();
         }
     };
 

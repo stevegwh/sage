@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/Colors.hpp"
+#include "engine/RenderCulling.hpp"
 #include "entt/entt.hpp"
 #include "raylib.h"
 #include "raymath.h"
@@ -14,6 +15,7 @@ namespace sage
     class DynamicRenderable
     {
         Model model{};
+        mutable ModelRenderBounds renderBounds;
         std::string name = "DynamicRenderable";
 
       public:
@@ -32,6 +34,9 @@ namespace sage
         DynamicRenderable& operator=(DynamicRenderable&& other) noexcept;
 
         [[nodiscard]] bool HasModel() const;
+        [[nodiscard]] std::optional<BoundingBox> GetRenderMeshBounds(int meshIndex) const;
+        // Call after changing vertices through GetModel() or a retained mesh reference.
+        void InvalidateRenderBounds();
         [[nodiscard]] std::optional<std::reference_wrapper<Model>> GetModel();
         [[nodiscard]] std::optional<std::reference_wrapper<const Model>> GetModel() const;
         [[nodiscard]] std::optional<std::reference_wrapper<Mesh>> GetMesh(int num = 0);
@@ -44,6 +49,12 @@ namespace sage
         void SetTransform(Matrix trans);
         void SetShader(Shader shader, int materialIdx);
         void SetShader(Shader shader);
-        void Draw(Vector3 position, Vector3 rotationAxis, float rotationAngle, Vector3 scale, Color tint) const;
+        void Draw(
+            Vector3 position,
+            Vector3 rotationAxis,
+            float rotationAngle,
+            Vector3 scale,
+            Color tint,
+            const std::optional<RenderFrustum>& frustum = std::nullopt) const;
     };
 } // namespace sage

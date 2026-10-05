@@ -6,6 +6,9 @@
 
 #include "raylib-cereal.hpp"
 #include "raylib.h"
+#include "RenderCulling.hpp"
+
+#include <memory>
 
 #include "entt/entt.hpp"
 #include <string>
@@ -59,10 +62,14 @@ namespace sage
     {
       protected:
         Model rlmodel{};
+        std::shared_ptr<ModelRenderBounds> renderBounds = std::make_shared<ModelRenderBounds>();
         std::string assetKey{};
 
       public:
         [[nodiscard]] const Model& GetRlModel() const;
+        [[nodiscard]] std::optional<BoundingBox> GetRenderMeshBounds(int meshIndex) const;
+        // Call after changing vertices through a retained mutable model reference.
+        void InvalidateRenderBounds() const;
         [[nodiscard]] const Mesh& GetMesh(int num) const;
         [[nodiscard]] BoundingBox CalcLocalMeshBoundingBox(const Mesh& mesh, bool& success) const;
         [[nodiscard]] BoundingBox CalcLocalBoundingBox() const;
@@ -84,7 +91,12 @@ namespace sage
             const float rotationAngle,
             const Vector3& scale,
             const Color& tint) const;
-        void Draw(const Vector3& position, const Vector3& rotation, const Vector3& scale, const Color& tint) const;
+        void Draw(
+            const Vector3& position,
+            const Vector3& rotation,
+            const Vector3& scale,
+            const Color& tint,
+            const std::optional<RenderFrustum>& frustum = std::nullopt) const;
         void DrawUber(
             UberShaderComponent* uber,
             const Vector3& position,
@@ -97,7 +109,8 @@ namespace sage
             const Vector3& position,
             const Vector3& rotation,
             const Vector3& scale,
-            const Color& tint) const;
+            const Color& tint,
+            const std::optional<RenderFrustum>& frustum = std::nullopt) const;
         [[nodiscard]] int GetMeshCount() const;
         [[nodiscard]] int GetMaterialCount() const;
         [[nodiscard]] Matrix GetTransform() const;
