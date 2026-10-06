@@ -98,17 +98,19 @@ namespace sage
             if (!isActive(entity)) continue;
             const auto& settings = registry.get().get<ParticleEmitterComponent>(entity);
             const auto origin = registry.get().get<sgTransform>(entity).GetWorldPos();
-            const auto config = MakeParticleEmitterConfig(settings, origin);
             auto& instance = instances[entity];
-            if (!instance.emitter || instance.texture != settings.texture)
+            if (!instance.emitter || !instance.settings || instance.settings->texture != settings.texture)
             {
-                instance.Reset(config, settings.texture, settings.playOnAwake);
+                instance.Reset(MakeParticleEmitterConfig(settings, origin), settings, settings.playOnAwake);
             }
-            else
+            else if (*instance.settings != settings)
             {
                 // Reinit preserves live particles while applying edited settings.
-                instance.emitter->Reinit(config);
+                instance.emitter->Reinit(MakeParticleEmitterConfig(settings, origin));
+                instance.settings = settings;
             }
+            // Movement changes the spawn origin without rebuilding configuration or live particles.
+            instance.emitter->config.origin = origin;
             if (instance.paused) continue;
             instance.elapsed += deltaTime;
             if (!settings.looping && instance.elapsed >= std::max(0.0f, settings.duration))
@@ -173,7 +175,7 @@ namespace sage
             {
                 const auto& settings = registry.get().get<ParticleEmitterComponent>(target);
                 const auto origin = registry.get().get<sgTransform>(target).GetWorldPos();
-                instances[target].Reset(MakeParticleEmitterConfig(settings, origin), settings.texture, true);
+                instances[target].Reset(MakeParticleEmitterConfig(settings, origin), settings, true);
             }
         }
     }

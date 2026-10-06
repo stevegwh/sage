@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Sage;
 
@@ -10,6 +11,26 @@ internal static class RuntimeInspection
     private const int MaxDepth = 4;
     private const int MaxChildren = 32;
     private const int MaxNodes = 256;
+
+    private sealed record Member(string Label, FieldInfo Field);
+    // Weak keys allow collectible gameplay assemblies to unload after Stop.
+    private static readonly ConditionalWeakTable<Type, Member[]> Members = new();
+
+    private static Member[] GetMembers(Type type) => Members.GetValue(type, static type =>
+    {
+        var members = new List<Member>();
+        for (var current = type; current != null && current != typeof(object); current = current.BaseType)
+            foreach (var field in current.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                    BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+                         .OrderBy(field => field.Name, StringComparer.Ordinal))
+            {
+                var label = field.Name;
+                if (label.StartsWith('<') && label.EndsWith(">k__BackingField", StringComparison.Ordinal))
+                    label = label[1..label.IndexOf('>')];
+                members.Add(new(label, field));
+            }
+        return members.ToArray();
+    });
 
     internal sealed record Node(string Name, string Type, string Value, List<Node> Children);
 
@@ -51,22 +72,14 @@ internal static class RuntimeInspection
             }
             else
             {
-                for (var current = type; current != null && current != typeof(object); current = current.BaseType)
+                foreach (var member in GetMembers(type))
                 {
-                    foreach (var field in current.GetFields(BindingFlags.Instance | BindingFlags.Public |
-                                                           BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
-                                 .OrderBy(field => field.Name, StringComparer.Ordinal))
+                    if (children.Count >= MaxChildren || remaining <= 0)
                     {
-                        if (children.Count >= MaxChildren || remaining <= 0)
-                        {
-                            children.Add(new("…", "", "More fields", []));
-                            return new(name, typeName, typeName, children);
-                        }
-                        var label = field.Name;
-                        if (label.StartsWith('<') && label.EndsWith(">k__BackingField", StringComparison.Ordinal))
-                            label = label[1..label.IndexOf('>')];
-                        children.Add(Read(label, field.GetValue(value), depth + 1, ancestors, ref remaining));
+                        children.Add(new("…", "", "More fields", []));
+                        return new(name, typeName, typeName, children);
                     }
+                    children.Add(Read(member.Label, member.Field.GetValue(value), depth + 1, ancestors, ref remaining));
                 }
             }
         }

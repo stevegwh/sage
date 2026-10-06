@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <unordered_map>
 #include <vector>
 
 namespace sage
@@ -47,50 +48,62 @@ namespace sage
              {.x = 0.0f, .y = -1.0f, .z = 0.0f}}};
     } // namespace
 
-    void LightManager::updateShaderLights(Shader& _shader)
+    LightManager::ShaderState::ShaderState(const Shader source)
+        : shader(source),
+          ambientLocation(GetShaderLocation(source, "ambient")),
+          gammaLocation(GetShaderLocation(source, "gamma")),
+          lightsCountLocation(GetShaderLocation(source, "lightsCount")),
+          pointShadowIndexLocation(GetShaderLocation(source, "shadowLightIndex")),
+          sunShadowIndexLocation(GetShaderLocation(source, "sunShadowLightIndex")),
+          sunMatrixLocation(GetShaderLocation(source, "sunLightMatrix")),
+          bloomLocation(GetShaderLocation(source, "bloomMask"))
     {
-        updateAmbientLight(_shader);
-        lightsCount = 0;
-        for (const auto view = registry->view<Light>(); auto& entity : view)
-        {
-            const auto& light = registry->get<Light>(entity);
-            if (!light.enabled || !IsEntityVisible(*registry, entity)) continue;
-
-            if (lightsCount < MAX_LIGHT_COUNT)
-            {
-                light.LinkShader(_shader, lightsCount);
-                lightsCount++;
-            }
-            else
-            {
-                std::cout << "Scene: Max light sources reached. \n";
-                break;
-            }
-        }
-
-        auto lightsCountLoc = GetShaderLocation(_shader, "lightsCount");
-        SetShaderValue(_shader, lightsCountLoc, &lightsCount, SHADER_UNIFORM_INT);
-        auto gammaLoc = GetShaderLocation(_shader, "gamma");
-        SetShaderValue(_shader, gammaLoc, &gamma, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(
-            _shader, GetShaderLocation(_shader, "shadowLightIndex"), &shadowLightIndex, SHADER_UNIFORM_INT);
-        const int shadowSlot = SHADOW_TEXTURE_SLOT;
-        SetShaderValue(_shader, GetShaderLocation(_shader, "pointShadowMap"), &shadowSlot, SHADER_UNIFORM_INT);
+        const int pointSlot = SHADOW_TEXTURE_SLOT;
+        const int sunSlot = SUN_SHADOW_TEXTURE_SLOT;
         const float farPlane = SHADOW_FAR_PLANE;
-        SetShaderValue(_shader, GetShaderLocation(_shader, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(
-            _shader, GetShaderLocation(_shader, "sunShadowLightIndex"), &sunShadowLightIndex, SHADER_UNIFORM_INT);
-        const int sunShadowSlot = SUN_SHADOW_TEXTURE_SLOT;
-        SetShaderValue(_shader, GetShaderLocation(_shader, "sunShadowMap"), &sunShadowSlot, SHADER_UNIFORM_INT);
-        if (sunShadowLightIndex >= 0)
-            SetShaderValueMatrix(_shader, GetShaderLocation(_shader, "sunLightMatrix"), sunLightMatrix);
+        SetShaderValue(source, GetShaderLocation(source, "pointShadowMap"), &pointSlot, SHADER_UNIFORM_INT);
+        SetShaderValue(source, GetShaderLocation(source, "sunShadowMap"), &sunSlot, SHADER_UNIFORM_INT);
+        SetShaderValue(source, GetShaderLocation(source, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
     }
 
-    void LightManager::updateAmbientLight(Shader& _shader) const
+    void LightManager::updateShaderLights(ShaderState& state)
     {
-        auto ambientLoc = GetShaderLocation(_shader, "ambient");
-        std::array<float, 4> ambientValue = {ambient.at(0), ambient.at(1), ambient.at(2), ambient.at(3)};
-        SetShaderValue(_shader, ambientLoc, ambientValue.data(), SHADER_UNIFORM_VEC4);
+        const auto shader = state.shader;
+        const std::array<float, 5> ambientValues{ambient[0], ambient[1], ambient[2], ambient[3], gamma};
+        if (state.ambientValues != ambientValues)
+        {
+            SetShaderValue(shader, state.ambientLocation, ambient.data(), SHADER_UNIFORM_VEC4);
+            SetShaderValue(shader, state.gammaLocation, &gamma, SHADER_UNIFORM_FLOAT);
+            state.ambientValues = ambientValues;
+        }
+        if (!state.lightValues || *state.lightValues != activeLights)
+        {
+            for (std::size_t index = 0; index < activeLights.size(); ++index)
+            {
+                if (state.lightLocations.size() <= index)
+                    state.lightLocations.emplace_back(shader, static_cast<int>(index));
+                activeLights[index].LinkShader(shader, state.lightLocations[index]);
+            }
+            SetShaderValue(shader, state.lightsCountLocation, &lightsCount, SHADER_UNIFORM_INT);
+            state.lightValues = activeLights;
+        }
+        const std::pair shadowIndices{shadowLightIndex, sunShadowLightIndex};
+        if (state.shadowIndices != shadowIndices)
+        {
+            SetShaderValue(shader, state.pointShadowIndexLocation, &shadowLightIndex, SHADER_UNIFORM_INT);
+            SetShaderValue(shader, state.sunShadowIndexLocation, &sunShadowLightIndex, SHADER_UNIFORM_INT);
+            state.shadowIndices = shadowIndices;
+        }
+        if (sunShadowLightIndex >= 0)
+        {
+            std::array<float, 16> matrixValues{};
+            std::ranges::copy(MatrixToFloatV(sunLightMatrix).v, matrixValues.begin());
+            if (state.sunMatrix != matrixValues)
+            {
+                SetShaderValueMatrix(shader, state.sunMatrixLocation, sunLightMatrix);
+                state.sunMatrix = matrixValues;
+            }
+        }
     }
 
     void LightManager::RemoveLight(entt::entity light)
@@ -121,14 +134,23 @@ namespace sage
 
     void LightManager::LinkShaderToLights(Shader& _shader)
     {
-        auto it = std::ranges::find_if(
-            shaders, [&_shader](const Shader& existingShader) { return existingShader.id == _shader.id; });
-
-        if (it == shaders.end())
+        const auto existing = std::ranges::find_if(
+            shaders, [&_shader](const auto& state) { return state->shader.id == _shader.id; });
+        if (existing == shaders.end())
         {
-            shaders.push_back(_shader);
+            // Editor and Play worlds share ResourceManager shaders and their actual GPU uniforms.
+            // Share the cache too, so switching worlds always restores that world's values.
+            static std::unordered_map<unsigned int, std::weak_ptr<ShaderState>> states;
+            std::erase_if(states, [](const auto& entry) { return entry.second.expired(); });
+            auto state = states[_shader.id].lock();
+            if (!state)
+            {
+                state = std::make_shared<ShaderState>(_shader);
+                states[_shader.id] = state;
+            }
+            shaders.push_back(std::move(state));
         }
-        updateShaderLights(_shader);
+        RefreshLights();
     }
 
     void LightManager::ApplyLightSettings(const LightSettings& settings)
@@ -140,10 +162,17 @@ namespace sage
 
     void LightManager::RefreshLights()
     {
-        for (auto& _shader : shaders)
+        activeLights.clear();
+        for (const auto entity : registry->view<Light>())
         {
-            updateShaderLights(_shader);
+            const auto& light = registry->get<Light>(entity);
+            if (!light.enabled || !IsEntityVisible(*registry, entity)) continue;
+            if (activeLights.size() == MAX_LIGHT_COUNT) break;
+            activeLights.push_back(light);
         }
+        lightsCount = static_cast<int>(activeLights.size());
+        for (auto& state : shaders)
+            updateShaderLights(*state);
     }
 
     void LightManager::onLightAdded(entt::entity)
@@ -173,24 +202,26 @@ namespace sage
         }
     }
 
-    void LightManager::Update() const
+    void LightManager::Update()
     {
         auto [x, y, z] = camera->GetPosition();
         const std::array<float, 3> cameraPos = {x, y, z};
-        for (auto& shader : shaders)
+        for (const auto& sharedState : shaders)
         {
-            SetShaderValue(shader, shader.locs[SHADER_LOC_VECTOR_VIEW], cameraPos.data(), SHADER_UNIFORM_VEC3);
+            auto& state = *sharedState;
+            if (state.cameraPosition == cameraPos) continue;
+            SetShaderValue(
+                state.shader, state.shader.locs[SHADER_LOC_VECTOR_VIEW], cameraPos.data(), SHADER_UNIFORM_VEC3);
+            state.cameraPosition = cameraPos;
         }
     }
 
     void LightManager::SetBloomMask(const bool enabled) const
     {
         const int value = enabled ? 1 : 0;
-        for (const auto& shader : shaders)
-        {
-            const int location = GetShaderLocation(shader, "bloomMask");
-            if (location >= 0) SetShaderValue(shader, location, &value, SHADER_UNIFORM_INT);
-        }
+        for (const auto& state : shaders)
+            if (state->bloomLocation >= 0)
+                SetShaderValue(state->shader, state->bloomLocation, &value, SHADER_UNIFORM_INT);
     }
 
     void LightManager::DrawShadowMap(const RenderSystem& renderer)
@@ -238,6 +269,11 @@ namespace sage
         {
             shadowShader = ResourceManager::GetInstance().ShaderLoad(
                 ShaderPath("custom/point_shadow.vs"), ShaderPath("custom/point_shadow.fs"));
+            shadowPositionLocation = GetShaderLocation(shadowShader, "lightPosition");
+            shadowSkinnedLocation = GetShaderLocation(shadowShader, "skinned");
+            const float farPlane = SHADOW_FAR_PLANE;
+            SetShaderValue(
+                shadowShader, GetShaderLocation(shadowShader, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
             const std::vector<float> clearData(6 * SHADOW_MAP_SIZE * SHADOW_MAP_SIZE, 1.0f);
             shadowCubemap =
                 rlLoadTextureCubemap(clearData.data(), SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
@@ -263,15 +299,7 @@ namespace sage
         }
 
         const std::array<float, 3> lightPosition = {light.position.x, light.position.y, light.position.z};
-        SetShaderValue(
-            shadowShader,
-            GetShaderLocation(shadowShader, "lightPosition"),
-            lightPosition.data(),
-            SHADER_UNIFORM_VEC3);
-        const float farPlane = SHADOW_FAR_PLANE;
-        SetShaderValue(
-            shadowShader, GetShaderLocation(shadowShader, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
-        const int skinnedLocation = GetShaderLocation(shadowShader, "skinned");
+        SetShaderValue(shadowShader, shadowPositionLocation, lightPosition.data(), SHADER_UNIFORM_VEC3);
 
         const unsigned int previousFramebuffer = rlGetActiveFramebuffer();
         const int previousWidth = rlGetFramebufferWidth();
@@ -294,7 +322,7 @@ namespace sage
             BeginMode3D(faceCamera);
             rlSetMatrixProjection(
                 MatrixPerspective(90.0 * sage::math::DEGREES_TO_RADIANS, 1.0, 0.1, SHADOW_FAR_PLANE));
-            renderer.DrawShadowCasters(shadowShader, skinnedLocation);
+            renderer.DrawShadowCasters(shadowShader, shadowSkinnedLocation);
             EndMode3D();
         }
         rlEnableFramebuffer(previousFramebuffer);
@@ -309,6 +337,7 @@ namespace sage
         {
             sunShadowShader = ResourceManager::GetInstance().ShaderLoad(
                 ShaderPath("custom/point_shadow.vs"), ShaderPath("custom/sun_shadow.fs"));
+            sunSkinnedLocation = GetShaderLocation(sunShadowShader, "skinned");
             const std::vector<float> clearData(SUN_SHADOW_MAP_SIZE * SUN_SHADOW_MAP_SIZE, 1.0f);
             sunShadowTexture = rlLoadTexture(
                 clearData.data(), SUN_SHADOW_MAP_SIZE, SUN_SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
@@ -358,7 +387,7 @@ namespace sage
             0.1,
             SUN_SHADOW_FAR_PLANE));
         sunLightMatrix = MatrixMultiply(rlGetMatrixModelview(), rlGetMatrixProjection());
-        renderer.DrawShadowCasters(sunShadowShader, GetShaderLocation(sunShadowShader, "skinned"));
+        renderer.DrawShadowCasters(sunShadowShader, sunSkinnedLocation);
         EndMode3D();
         rlEnableFramebuffer(previousFramebuffer);
         rlViewport(0, 0, previousWidth, previousHeight);

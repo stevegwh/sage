@@ -4,6 +4,10 @@
 
 #include "entt/entt.hpp"
 #include "raylib.h"
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace sage
 {
@@ -17,22 +21,44 @@ namespace sage
         entt::registry* registry;
         Camera* camera;
         Shader defaultShader{};
-        std::vector<Shader> shaders;
+        struct ShaderState
+        {
+            Shader shader;
+            std::vector<LightShaderLocations> lightLocations;
+            int ambientLocation;
+            int gammaLocation;
+            int lightsCountLocation;
+            int pointShadowIndexLocation;
+            int sunShadowIndexLocation;
+            int sunMatrixLocation;
+            int bloomLocation;
+            std::optional<std::array<float, 5>> ambientValues;
+            std::optional<std::vector<Light>> lightValues;
+            std::optional<std::pair<int, int>> shadowIndices;
+            std::optional<std::array<float, 16>> sunMatrix;
+            std::optional<std::array<float, 3>> cameraPosition;
+
+            explicit ShaderState(Shader source);
+        };
+        std::vector<std::shared_ptr<ShaderState>> shaders;
+        std::vector<Light> activeLights;
         int lightsCount = 0;
         float gamma = 1.9;
         std::array<float, 4> ambient{};
         Shader shadowShader{};
+        int shadowPositionLocation = -1;
+        int shadowSkinnedLocation = -1;
         unsigned int shadowFramebuffer = 0;
         unsigned int shadowCubemap = 0;
         int shadowLightIndex = -1;
         Shader sunShadowShader{};
+        int sunSkinnedLocation = -1;
         unsigned int sunShadowFramebuffer = 0;
         unsigned int sunShadowTexture = 0;
         int sunShadowLightIndex = -1;
         bool shadowsEnabled = true;
         Matrix sunLightMatrix{};
-        void updateShaderLights(Shader& _shader);
-        void updateAmbientLight(Shader& _shader) const;
+        void updateShaderLights(ShaderState& state);
         void onLightAdded(entt::entity entity);
         void drawPointShadowMap(const RenderSystem& renderer, const Light& light);
         void drawSunShadowMap(const RenderSystem& renderer, const Light& sun);
@@ -50,7 +76,7 @@ namespace sage
         void RefreshLights();
         void LinkRenderableToLight(entt::entity entity) const;
         void DrawDebugLights() const;
-        void Update() const;
+        void Update();
         void DrawShadowMap(const RenderSystem& renderer);
         void SetShadowsEnabled(bool enabled)
         {

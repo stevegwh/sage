@@ -2165,7 +2165,11 @@ namespace sage
                 gameRuntime->SetPaused(!gameRuntime->IsPaused());
             ImGui::SameLine();
             ImGui::BeginDisabled(!gameRuntime->IsPaused());
-            if (ImGui::Button("Step", ImVec2{buttonWidth, 0.0f})) gameRuntime->Step(1.0f / 60.0f);
+            if (ImGui::Button("Step", ImVec2{buttonWidth, 0.0f}))
+            {
+                gameRuntime->Step(1.0f / 60.0f);
+                refreshRuntimeInspection(true);
+            }
             ImGui::EndDisabled();
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
                 ImGui::SetTooltip("Advance one simulation frame (1/60 second) while paused");
@@ -2967,6 +2971,7 @@ namespace sage
         if (gameRuntime)
         {
             runtimeSelection.reset();
+            inspectedRuntimePaused.reset();
             runtimeHierarchy = std::make_unique<editor::EditorHierarchyTree>(gameRuntime->InspectionRegistry());
             if (const auto selected = selection->Active(); selected && sys->registry->valid(*selected))
             {

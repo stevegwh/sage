@@ -44,6 +44,48 @@ namespace
         system.Update(1.0f / 60);
         Require(system.Alive(second) == 1, "runtime playback was restricted by editor selection");
     }
+    void CheckConfigurationChanges()
+    {
+        entt::registry registry;
+        sage::TransformSystem transforms(&registry);
+        const auto entity = registry.create();
+        registry.emplace<sage::sgTransform>(entity);
+        auto& settings = registry.emplace<sage::ParticleEmitterComponent>(entity);
+        settings.texture = "missing-test-texture.png";
+        settings.emissionRate = 60;
+        settings.capacity = 4;
+        settings.lifetime = {.min = 10, .max = 10};
+        sage::ParticleEmitterSystem system(registry);
+        system.Update(1.0f / 60);
+        system.Update(1.0f / 60);
+        Require(system.Alive(entity) == 2, "emitter failed to fill before configuration edits");
+        transforms.SetWorldPos(entity, {.x = 10, .y = 2, .z = 3});
+        system.Update(0);
+        Require(system.Alive(entity) == 2, "moving an emitter reset live particles");
+        settings.sizeOverLifetime.enabled = true;
+        settings.sizeOverLifetime.values[2] = 3;
+        settings.colorOverLifetime.colors[2].r = 12;
+        system.Update(0);
+        Require(system.Alive(entity) == 2, "editing lifetime modules reset live particles");
+        settings.capacity = 1;
+        system.Update(0);
+        Require(system.Alive(entity) == 1, "cached configuration ignored a capacity edit");
+        settings.capacity = 4;
+        system.Update(1.0f / 60);
+        Require(system.Alive(entity) == 2, "cached configuration did not grow emitter capacity");
+        settings.emissionRate = 0;
+        system.Update(1.0f / 60);
+        Require(system.Alive(entity) == 2, "cached configuration ignored the new emission rate");
+        settings.looping = false;
+        settings.duration = 0;
+        settings.emissionRate = 60;
+        system.Update(1.0f / 60);
+        Require(system.Alive(entity) == 2, "cached configuration ignored non-looping duration");
+        settings.texture = "different-missing-test-texture.png";
+        system.Update(0);
+        Require(system.Alive(entity) == 0, "changing the texture did not restart the emitter");
+    }
+
     void CheckEffectPlayback()
     {
         entt::registry registry;
@@ -257,6 +299,7 @@ int main()
     {
         CheckSimulation();
         CheckSelectedPlayback();
+        CheckConfigurationChanges();
         CheckEffectPlayback();
         CheckSystemRootPersistence();
         entt::registry source;

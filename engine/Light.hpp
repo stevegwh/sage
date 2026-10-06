@@ -5,6 +5,7 @@
 #pragma once
 #include "cereal/archives/json.hpp"
 #include <array>
+#include <tuple>
 
 #include "cereal/cereal.hpp"
 
@@ -17,6 +18,32 @@ namespace sage
     {
         Sun = 0,
         Point = 1
+    };
+
+    struct LightShaderLocations
+    {
+        int enabled;
+        int type;
+        int position;
+        int target;
+        int color;
+        int brightness;
+        int constant;
+        int linear;
+        int quadratic;
+
+        LightShaderLocations(const Shader shader, const int index)
+            : enabled(GetShaderLocation(shader, TextFormat("lights[%i].enabled", index))),
+              type(GetShaderLocation(shader, TextFormat("lights[%i].type", index))),
+              position(GetShaderLocation(shader, TextFormat("lights[%i].position", index))),
+              target(GetShaderLocation(shader, TextFormat("lights[%i].target", index))),
+              color(GetShaderLocation(shader, TextFormat("lights[%i].color", index))),
+              brightness(GetShaderLocation(shader, TextFormat("lights[%i].brightness", index))),
+              constant(GetShaderLocation(shader, TextFormat("lights[%i].constant", index))),
+              linear(GetShaderLocation(shader, TextFormat("lights[%i].linear", index))),
+              quadratic(GetShaderLocation(shader, TextFormat("lights[%i].quadratic", index)))
+        {
+        }
     };
 
     struct Light
@@ -32,19 +59,30 @@ namespace sage
         float linear = 0.025f;
         float quadratic = 0.004f;
 
-        void LinkShader(const Shader shader, const int lightsCount) const
+        bool operator==(const Light& other) const
         {
-            // NOTE: Lighting shader naming must be the provided ones
-            int enabledLoc = GetShaderLocation(shader, TextFormat("lights[%i].enabled", lightsCount));
-            int typeLoc = GetShaderLocation(shader, TextFormat("lights[%i].type", lightsCount));
-            int positionLoc = GetShaderLocation(shader, TextFormat("lights[%i].position", lightsCount));
-            int targetLoc = GetShaderLocation(shader, TextFormat("lights[%i].target", lightsCount));
-            int colorLoc = GetShaderLocation(shader, TextFormat("lights[%i].color", lightsCount));
-            int brightnessLoc = GetShaderLocation(shader, TextFormat("lights[%i].brightness", lightsCount));
-            int constantLoc = GetShaderLocation(shader, TextFormat("lights[%i].constant", lightsCount));
-            int linearLoc = GetShaderLocation(shader, TextFormat("lights[%i].linear", lightsCount));
-            int quadraticLoc = GetShaderLocation(shader, TextFormat("lights[%i].quadratic", lightsCount));
+            const auto values = [](const Light& light) {
+                return std::tuple{
+                    light.type,
+                    light.enabled,
+                    light.position.x,
+                    light.position.y,
+                    light.position.z,
+                    light.target.x,
+                    light.target.y,
+                    light.target.z,
+                    ColorToInt(light.color),
+                    light.brightness,
+                    light.castsShadows,
+                    light.constant,
+                    light.linear,
+                    light.quadratic};
+            };
+            return values(*this) == values(other);
+        }
 
+        void LinkShader(const Shader shader, const LightShaderLocations& locations) const
+        {
             // UpdateLightValues(shader, *this);
             std::array<float, 3> _position = {position.x, position.y, position.z};
             std::array<float, 3> _target = {target.x, target.y, target.z};
@@ -54,16 +92,16 @@ namespace sage
                 static_cast<float>(color.b) / static_cast<float>(255),
                 static_cast<float>(color.a) / static_cast<float>(255)};
             const int enabledValue = enabled ? 1 : 0;
-            SetShaderValue(shader, enabledLoc, &enabledValue, SHADER_UNIFORM_INT);
+            SetShaderValue(shader, locations.enabled, &enabledValue, SHADER_UNIFORM_INT);
             const int typeValue = static_cast<int>(type);
-            SetShaderValue(shader, typeLoc, &typeValue, SHADER_UNIFORM_INT);
-            SetShaderValue(shader, positionLoc, _position.data(), SHADER_UNIFORM_VEC3);
-            SetShaderValue(shader, targetLoc, _target.data(), SHADER_UNIFORM_VEC3);
-            SetShaderValue(shader, colorLoc, _color.data(), SHADER_UNIFORM_VEC4);
-            SetShaderValue(shader, brightnessLoc, &brightness, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(shader, constantLoc, &constant, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(shader, linearLoc, &linear, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(shader, quadraticLoc, &quadratic, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(shader, locations.type, &typeValue, SHADER_UNIFORM_INT);
+            SetShaderValue(shader, locations.position, _position.data(), SHADER_UNIFORM_VEC3);
+            SetShaderValue(shader, locations.target, _target.data(), SHADER_UNIFORM_VEC3);
+            SetShaderValue(shader, locations.color, _color.data(), SHADER_UNIFORM_VEC4);
+            SetShaderValue(shader, locations.brightness, &brightness, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(shader, locations.constant, &constant, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(shader, locations.linear, &linear, SHADER_UNIFORM_FLOAT);
+            SetShaderValue(shader, locations.quadratic, &quadratic, SHADER_UNIFORM_FLOAT);
         }
 
         template <typename Archive>

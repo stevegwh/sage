@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <format>
+#include <unordered_set>
 
 namespace sage::editor
 {
@@ -148,21 +149,13 @@ namespace sage::editor
 
     void EditorHierarchyTree::syncRootOrder(std::vector<entt::entity>& roots) const
     {
-        auto isCurrentRoot = [&roots](const entt::entity entity) {
-            return std::ranges::find(roots, entity) != roots.end();
-        };
-
+        const std::unordered_set currentRoots(roots.begin(), roots.end());
         std::erase_if(rootOrder, [&](const entt::entity entity) {
-            return !registry.valid(entity) || !isCurrentRoot(entity);
+            return !registry.valid(entity) || !currentRoots.contains(entity);
         });
-
+        std::unordered_set orderedRoots(rootOrder.begin(), rootOrder.end());
         for (const auto root : roots)
-        {
-            if (std::ranges::find(rootOrder, root) == rootOrder.end())
-            {
-                rootOrder.push_back(root);
-            }
-        }
+            if (orderedRoots.insert(root).second) rootOrder.push_back(root);
 
         roots = rootOrder;
     }

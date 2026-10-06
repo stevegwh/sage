@@ -8,6 +8,8 @@
 #include "engine/raylib-cereal.hpp"
 
 #include <string>
+#include <string_view>
+#include <tuple>
 
 namespace sage
 {
@@ -39,6 +41,54 @@ namespace sage
         ParticleCurve opacityOverLifetime;
         ParticleCurve speedOverLifetime;
         ParticleGradient colorOverLifetime;
+
+        bool operator==(const ParticleEmitterComponent& other) const
+        {
+            const auto values = [](const ParticleEmitterComponent& settings) {
+                std::array<int, PARTICLE_LIFETIME_SAMPLE_COUNT> gradientColors{};
+                std::ranges::transform(settings.colorOverLifetime.colors, gradientColors.begin(), ColorToInt);
+                return std::tuple{
+                    std::string_view{settings.texture},
+                    settings.playOnAwake,
+                    settings.looping,
+                    settings.duration,
+                    settings.size,
+                    settings.direction.x,
+                    settings.direction.y,
+                    settings.direction.z,
+                    settings.speed.min,
+                    settings.speed.max,
+                    settings.spread.min,
+                    settings.spread.max,
+                    settings.velocityAngle.min,
+                    settings.velocityAngle.max,
+                    settings.offset.min,
+                    settings.offset.max,
+                    settings.originAcceleration.min,
+                    settings.originAcceleration.max,
+                    settings.gravity.x,
+                    settings.gravity.y,
+                    settings.gravity.z,
+                    settings.lifetime.min,
+                    settings.lifetime.max,
+                    ColorToInt(settings.startColor),
+                    ColorToInt(settings.endColor),
+                    settings.capacity,
+                    settings.emissionRate,
+                    settings.burst.min,
+                    settings.burst.max,
+                    settings.blendMode,
+                    settings.sizeOverLifetime.enabled,
+                    settings.sizeOverLifetime.values,
+                    settings.opacityOverLifetime.enabled,
+                    settings.opacityOverLifetime.values,
+                    settings.speedOverLifetime.enabled,
+                    settings.speedOverLifetime.values,
+                    settings.colorOverLifetime.enabled,
+                    gradientColors};
+            };
+            return values(*this) == values(other);
+        }
 
         template <class Archive>
         void serialize(Archive& archive)

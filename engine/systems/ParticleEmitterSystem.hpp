@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/components/ParticleEmitterComponent.hpp"
 #include "engine/ParticleSystem.hpp"
 #include "entt/entt.hpp"
 #include <functional>
@@ -12,7 +13,6 @@
 
 namespace sage
 {
-    struct ParticleEmitterComponent;
     EmitterConfig MakeParticleEmitterConfig(const ParticleEmitterComponent& settings, Vector3 origin);
 
     // Hierarchy order is shared by effect playback and editor previews.
@@ -25,14 +25,14 @@ namespace sage
         struct Instance
         {
             std::unique_ptr<Emitter> emitter;
-            std::string texture;
+            std::optional<ParticleEmitterComponent> settings;
             float elapsed = 0.0f;
             bool paused = false;
 
-            void Reset(const EmitterConfig& config, const std::string& texturePath, bool play)
+            void Reset(const EmitterConfig& config, const ParticleEmitterComponent& appliedSettings, bool play)
             {
                 emitter = std::make_unique<Emitter>(config);
-                texture = texturePath;
+                settings = appliedSettings;
                 elapsed = 0.0f;
                 paused = false;
                 if (play) emitter->Start();

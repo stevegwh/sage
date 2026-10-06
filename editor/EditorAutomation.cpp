@@ -125,7 +125,7 @@ namespace sage
             if (!gameRuntime->InspectionRegistry().valid(entity))
                 throw std::runtime_error("Runtime entity no longer exists");
             runtimeSelection = entity;
-            refreshRuntimeInspection();
+            refreshRuntimeInspection(true);
             return automationState();
         }
         if (command == "play")

@@ -5,11 +5,19 @@
 
 namespace sage
 {
-    void EditorScene::refreshRuntimeInspection() const
+    void EditorScene::refreshRuntimeInspection(const bool force) const
     {
         if (!gameRuntime || !runtimeHierarchy) return;
         auto& registry = gameRuntime->InspectionRegistry();
         if (runtimeSelection && !registry.valid(*runtimeSelection)) runtimeSelection.reset();
+        const auto now = std::chrono::steady_clock::now();
+        const bool paused = gameRuntime->IsPaused();
+        if (!force && runtimeSelection == inspectedRuntimeSelection && inspectedRuntimePaused == paused &&
+            now < nextRuntimeInspection)
+            return;
+        nextRuntimeInspection = now + std::chrono::milliseconds(100);
+        inspectedRuntimeSelection = runtimeSelection;
+        inspectedRuntimePaused = paused;
         gui->SetRuntimeInspection(true);
         const std::vector<entt::entity> selected =
             runtimeSelection ? std::vector{*runtimeSelection} : std::vector<entt::entity>{};

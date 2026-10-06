@@ -46,6 +46,7 @@ public static unsafe class ScriptRuntime
         internal bool Enabled { get; set; }
         internal bool Started { get; set; }
         internal bool Failed { get; set; }
+        internal byte[]? InspectionSnapshot { get; set; }
     }
 
     private static readonly Dictionary<uint, ScriptInstance> Instances = [];
@@ -174,14 +175,22 @@ public static unsafe class ScriptRuntime
         if (!Instances.TryGetValue(entity, out var instance)) return -1;
         try
         {
-            var snapshot = new
+            // The native caller first queries size, then copies the same snapshot.
+            if (buffer == null || instance.InspectionSnapshot == null)
             {
-                instance.Awakened, instance.Enabled, instance.Started, instance.Failed,
-                Root = RuntimeInspection.Capture(instance.Script)
-            };
-            var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(snapshot);
+                var snapshot = new
+                {
+                    instance.Awakened, instance.Enabled, instance.Started, instance.Failed,
+                    Root = RuntimeInspection.Capture(instance.Script)
+                };
+                instance.InspectionSnapshot = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(snapshot);
+            }
+            var bytes = instance.InspectionSnapshot;
             if (buffer != null && capacity >= bytes.Length)
+            {
                 bytes.CopyTo(new Span<byte>(buffer, capacity));
+                instance.InspectionSnapshot = null;
+            }
             return bytes.Length;
         }
         catch (Exception)

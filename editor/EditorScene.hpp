@@ -25,6 +25,7 @@
 
 #include "entt/entt.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <functional>
@@ -82,7 +83,10 @@ namespace sage
         mutable std::unique_ptr<IGameRuntime> gameRuntime;
         mutable std::unique_ptr<editor::EditorHierarchyTree> runtimeHierarchy;
         mutable std::optional<entt::entity> runtimeSelection;
-        void refreshRuntimeInspection() const;
+        mutable std::chrono::steady_clock::time_point nextRuntimeInspection{};
+        mutable std::optional<entt::entity> inspectedRuntimeSelection;
+        mutable std::optional<bool> inspectedRuntimePaused;
+        void refreshRuntimeInspection(bool force = false) const;
         void frameRuntimeObject() const;
         mutable content::AutomationInbox automation;
         json::Document automationState() const;
