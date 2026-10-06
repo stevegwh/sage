@@ -4,6 +4,7 @@
 #endif
 #include "raylib.h"
 #include "rlgl.h"
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
@@ -43,8 +44,8 @@ namespace sage
     {
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_43)
         if (!gpuAvailable) return;
-        for (auto& pass : queries)
-            for (auto& query : pass)
+        for (auto& pass : timings)
+            for (auto& query : pass.queries)
                 if (query.id != 0) glDeleteQueries(1, &query.id);
 #endif
     }
@@ -55,10 +56,10 @@ namespace sage
             draw();
             return;
         }
-        const auto index = static_cast<std::size_t>(pass);
+        auto& timing = timings.at(static_cast<std::size_t>(pass));
         rlDrawRenderBatchActive();
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_43)
-        auto& query = queries.at(index).at(frame % queries.at(index).size());
+        auto& query = timing.queries.at(frame % QUERY_BUFFER_FRAMES);
         if (gpuAvailable && query.pending)
         {
             int available = 0;
@@ -67,8 +68,8 @@ namespace sage
             {
                 GLuint64 elapsed = 0;
                 glGetQueryObjectui64v(query.id, GL_QUERY_RESULT, &elapsed);
-                gpuMilliseconds.at(index) += static_cast<double>(elapsed) / NANOSECONDS_PER_MILLISECOND;
-                ++gpuSamples.at(index);
+                timing.gpuMilliseconds += static_cast<double>(elapsed) / NANOSECONDS_PER_MILLISECOND;
+                ++timing.gpuSamples;
                 query.pending = false;
             }
         }
@@ -82,7 +83,7 @@ namespace sage
         const auto start = std::chrono::steady_clock::now();
         draw();
         rlDrawRenderBatchActive();
-        cpuMilliseconds.at(index) +=
+        timing.cpuMilliseconds +=
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
 #if defined(GRAPHICS_API_OPENGL_33) || defined(GRAPHICS_API_OPENGL_43)
         if (measureGpu)
@@ -109,16 +110,17 @@ namespace sage
                   << " (CPU/GPU ms):";
         for (std::size_t index = 0; index < PASS_COUNT; ++index)
         {
-            std::cout << ' ' << NAMES.at(index) << '=' << cpuMilliseconds.at(index) / REPORT_FRAMES << '/';
-            if (gpuSamples.at(index) != 0)
-                std::cout << gpuMilliseconds.at(index) / static_cast<double>(gpuSamples.at(index));
+            auto& timing = timings.at(index);
+            std::cout << ' ' << NAMES.at(index) << '=' << timing.cpuMilliseconds / REPORT_FRAMES << '/';
+            if (timing.gpuSamples != 0)
+                std::cout << timing.gpuMilliseconds / static_cast<double>(timing.gpuSamples);
             else
                 std::cout << "n/a";
+            timing.cpuMilliseconds = 0.0;
+            timing.gpuMilliseconds = 0.0;
+            timing.gpuSamples = 0;
         }
         std::cout << " swap/wait=" << waitMilliseconds / REPORT_FRAMES << '\n' << std::flush;
-        cpuMilliseconds.fill(0.0);
-        gpuMilliseconds.fill(0.0);
-        gpuSamples.fill(0);
         waitMilliseconds = 0.0;
     }
 } // namespace sage

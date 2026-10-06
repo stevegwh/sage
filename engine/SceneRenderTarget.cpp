@@ -1,4 +1,5 @@
 #include "SceneRenderTarget.hpp"
+#include "Colors.hpp"
 #include "engine/MathConstants.hpp"
 #include "Settings.hpp"
 
@@ -60,8 +61,21 @@ namespace sage
             UnloadRenderTexture(target);
             throw std::runtime_error("Could not create scene framebuffer with sampleable depth");
         }
-        SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
         return target;
+    }
+
+    void DrawRenderTexture(const Texture2D texture, const Rectangle destination)
+    {
+        DrawTexturePro(
+            texture,
+            {.x = 0,
+             .y = 0,
+             .width = static_cast<float>(texture.width),
+             .height = -static_cast<float>(texture.height)},
+            destination,
+            {.x = 0, .y = 0},
+            0.0f,
+            colors::WHITE_COLOR);
     }
 
     void SetSceneOcclusionUniforms(const Shader shader, const RenderTexture scene, const Camera3D camera)

@@ -11,6 +11,7 @@
 #include "engine/RenderProfiler.hpp"
 #include "engine/ResourceManager.hpp"
 #include "engine/ScenePostProcess.hpp"
+#include "engine/SceneRenderTarget.hpp"
 #include "engine/Serializer.hpp"
 #include "engine/Settings.hpp"
 #include "engine/systems/RenderSystem.hpp"
@@ -246,20 +247,12 @@ namespace sage
             const auto renderViewport = settings->GetRenderViewPort();
             const auto renderViewportOffset = settings->GetRenderViewportOffset();
 
-            const auto image = postProcess->Texture();
-            DrawTexturePro(
-                image,
-                {.x = 0,
-                 .y = 0,
-                 .width = static_cast<float>(image.width),
-                 .height = -static_cast<float>(image.height)},
+            DrawRenderTexture(
+                postProcess->Texture(),
                 {.x = appViewportOffset.x + renderViewportOffset.x,
                  .y = appViewportOffset.y + renderViewportOffset.y,
                  .width = renderViewport.x,
-                 .height = renderViewport.y},
-                {.x = 0, .y = 0},
-                0.0f,
-                sage::colors::WHITE_COLOR);
+                 .height = renderViewport.y});
 
             if (playing)
             {
@@ -335,16 +328,9 @@ namespace sage
         ConfigureEditorSceneViewport(*settings, dockLayout, viewportFullscreen);
 
         const auto renderViewport = settings->GetRenderViewPort();
-        ResizeSceneRenderTarget(
-            renderTexture,
-            static_cast<int>(renderViewport.x),
-            static_cast<int>(renderViewport.y),
-            settings->GetGraphicsSettings());
-
         UnloadRenderTexture(gameUiTexture);
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
-        bloomPass->Resize(renderTexture.texture.width, renderTexture.texture.height);
     }
 
     void EditorApplication::handleViewportFullscreenToggle()

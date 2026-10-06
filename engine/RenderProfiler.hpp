@@ -1,6 +1,5 @@
 #pragma once
 #include <array>
-#include <chrono>
 #include <cstddef>
 #include <functional>
 namespace sage
@@ -26,10 +25,14 @@ namespace sage
             unsigned int id = 0;
             bool pending = false;
         };
-        std::array<std::array<Query, QUERY_BUFFER_FRAMES>, PASS_COUNT> queries{};
-        std::array<double, PASS_COUNT> cpuMilliseconds{};
-        std::array<double, PASS_COUNT> gpuMilliseconds{};
-        std::array<std::size_t, PASS_COUNT> gpuSamples{};
+        struct PassTimings
+        {
+            std::array<Query, QUERY_BUFFER_FRAMES> queries{};
+            double cpuMilliseconds = 0.0;
+            double gpuMilliseconds = 0.0;
+            std::size_t gpuSamples = 0;
+        };
+        std::array<PassTimings, PASS_COUNT> timings{};
         std::size_t frame = 0;
         bool enabled;
         bool gpuAvailable;

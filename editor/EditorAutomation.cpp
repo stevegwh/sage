@@ -7,6 +7,7 @@
 #include "engine/Flatpack.hpp"
 #include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
+#include "engine/SceneRenderTarget.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include <set>
 
@@ -386,28 +387,20 @@ namespace sage
             composite = LoadRenderTexture(uiTexture.width, uiTexture.height);
             BeginTextureMode(composite);
             ClearBackground(sage::colors::BLANK_COLOR);
-            DrawTexturePro(
+            DrawRenderTexture(
                 sceneTexture,
                 {.x = 0,
                  .y = 0,
-                 .width = static_cast<float>(sceneTexture.width),
-                 .height = -static_cast<float>(sceneTexture.height)},
+                 .width = static_cast<float>(uiTexture.width),
+                 .height = static_cast<float>(uiTexture.height)});
+            DrawTextureRec(
+                uiTexture,
                 {.x = 0,
                  .y = 0,
                  .width = static_cast<float>(uiTexture.width),
-                 .height = static_cast<float>(uiTexture.height)},
+                 .height = -static_cast<float>(uiTexture.height)},
                 {.x = 0, .y = 0},
-                0.0f,
                 sage::colors::WHITE_COLOR);
-            if (uiTexture.id != 0)
-                DrawTextureRec(
-                    uiTexture,
-                    {.x = 0,
-                     .y = 0,
-                     .width = static_cast<float>(uiTexture.width),
-                     .height = -static_cast<float>(uiTexture.height)},
-                    {.x = 0, .y = 0},
-                    sage::colors::WHITE_COLOR);
             EndTextureMode();
             sceneTexture = composite.texture;
         }

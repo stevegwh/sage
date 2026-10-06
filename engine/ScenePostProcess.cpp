@@ -46,18 +46,6 @@ namespace sage
             const auto replacement = LoadColorRenderTarget(width, height);
             if (target.id != 0) UnloadRenderTexture(target);
             target = replacement;
-            SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
-        }
-        void DrawTexture(const Texture2D texture)
-        {
-            DrawTextureRec(
-                texture,
-                {.x = 0,
-                 .y = 0,
-                 .width = static_cast<float>(texture.width),
-                 .height = -static_cast<float>(texture.height)},
-                {.x = 0, .y = 0},
-                colors::WHITE_COLOR);
         }
     } // namespace
     ScenePostProcess::ScenePostProcess()
@@ -87,6 +75,8 @@ namespace sage
             profiler.Measure(RenderPass::Occlusion, [&] {
                 const int width = std::max(1, (scene.texture.width + 1) / 2);
                 const int height = std::max(1, (scene.texture.height + 1) / 2);
+                const Rectangle bounds{
+                    .x = 0, .y = 0, .width = static_cast<float>(width), .height = static_cast<float>(height)};
                 Resize(occlusion, width, height);
                 Resize(filteredOcclusion, width, height);
                 BeginTextureMode(occlusion);
@@ -94,16 +84,7 @@ namespace sage
                 BeginShaderMode(occlusionShader);
                 SetSceneGraphicsUniforms(occlusionShader, settings);
                 SetSceneOcclusionUniforms(occlusionShader, scene, camera);
-                DrawTexturePro(
-                    scene.texture,
-                    {.x = 0,
-                     .y = 0,
-                     .width = static_cast<float>(scene.texture.width),
-                     .height = -static_cast<float>(scene.texture.height)},
-                    {.x = 0, .y = 0, .width = static_cast<float>(width), .height = static_cast<float>(height)},
-                    {.x = 0, .y = 0},
-                    0.0f,
-                    colors::WHITE_COLOR);
+                DrawRenderTexture(scene.texture, bounds);
                 EndShaderMode();
                 EndTextureMode();
                 BeginTextureMode(filteredOcclusion);
@@ -111,7 +92,7 @@ namespace sage
                 BeginShaderMode(blurShader);
                 SetSceneGraphicsUniforms(blurShader, settings);
                 SetSceneOcclusionUniforms(blurShader, scene, camera);
-                DrawTexture(occlusion.texture);
+                DrawRenderTexture(occlusion.texture, bounds);
                 EndShaderMode();
                 EndTextureMode();
             });
@@ -129,7 +110,12 @@ namespace sage
                     filteredOcclusion.texture);
             if (settings.bloom)
                 SetShaderValueTexture(compositeShader, GetShaderLocation(compositeShader, "bloomTexture"), bloom);
-            DrawTexture(scene.texture);
+            DrawRenderTexture(
+                scene.texture,
+                {.x = 0,
+                 .y = 0,
+                 .width = static_cast<float>(scene.texture.width),
+                 .height = static_cast<float>(scene.texture.height)});
             EndShaderMode();
             rlEnableColorBlend();
             EndTextureMode();
