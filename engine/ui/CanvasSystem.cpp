@@ -2,6 +2,7 @@
 #include "CanvasRenderer.hpp"
 #include "engine/components/ScriptComponent.hpp"
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace sage
@@ -68,6 +69,11 @@ namespace sage
     {
         pendingDestroy.push_back(root);
     }
+    void CanvasSystem::BringToFront(entt::entity root)
+    {
+        const auto found = std::ranges::find(instances, root, &Instance::root);
+        if (found != instances.end()) std::rotate(found, std::next(found), instances.end());
+    }
     void CanvasSystem::flushDestroy()
     {
         auto pending = std::exchange(pendingDestroy, {});
@@ -84,6 +90,7 @@ namespace sage
         }
         if (!registry.get().valid(hovered)) hovered = entt::null;
         if (!registry.get().valid(pressed)) pressed = entt::null;
+        if (draggedWindow && !registry.get().valid(*draggedWindow)) draggedWindow = std::nullopt;
     }
     CanvasDocument CanvasSystem::snapshot(const Instance& instance) const
     {
@@ -144,12 +151,60 @@ namespace sage
             for (auto e : instance.nodes)
                 if (registry.get().get<UINode>(e).data.id == id) hovered = e;
         }
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) pressed = hovered;
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            pressed = hovered;
+            draggedWindow = std::nullopt;
+            dragging = false;
+            pressPosition = mouse;
+            if (registry.get().valid(pressed))
+            {
+                const auto& cell = registry.get().get<UINode>(pressed);
+                BringToFront(cell.canvas);
+                if (cell.data.dragsWindow)
+                {
+                    auto parent = cell.data.parent;
+                    const auto& instance = instances.back();
+                    while (parent)
+                    {
+                        const auto found = std::ranges::find_if(instance.nodes, [&](const auto entity) {
+                            return registry.get().get<UINode>(entity).data.id == parent;
+                        });
+                        if (found == instance.nodes.end()) break;
+                        const auto& node = registry.get().get<UINode>(*found).data;
+                        if (node.kind == UINodeKind::Window)
+                        {
+                            draggedWindow = *found;
+                            const auto bounds = node.WindowBounds(instance.size);
+                            windowPosition = {.x = bounds.x, .y = bounds.y};
+                            break;
+                        }
+                        parent = node.parent;
+                    }
+                }
+            }
+        }
+        if (draggedWindow && IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+        {
+            const float scale = std::min(
+                viewport.width / Settings::TARGET_SCREEN_WIDTH, viewport.height / Settings::TARGET_SCREEN_HEIGHT);
+            const Vector2 delta{.x = mouse.x - pressPosition.x, .y = mouse.y - pressPosition.y};
+            dragging = dragging || std::abs(delta.x) > 1 || std::abs(delta.y) > 1;
+            if (dragging && scale > 0)
+            {
+                auto& node = registry.get().get<UINode>(*draggedWindow).data;
+                node.windowHorizontal = WindowHorizontalAlignment::FREE;
+                node.windowVertical = WindowVerticalAlignment::FREE;
+                node.rectangle.x = windowPosition.x + delta.x / scale;
+                node.rectangle.y = windowPosition.y + delta.y / scale;
+            }
+        }
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
         {
             const auto target = pressed;
             pressed = entt::null;
-            if (target == hovered && registry.get().valid(target))
+            draggedWindow = std::nullopt;
+            if (!dragging && target == hovered && registry.get().valid(target))
             {
                 // Event-bearing components have stable storage; destruction is deferred until the next update.
                 auto& node = registry.get().get<UINode>(target);
@@ -161,6 +216,8 @@ namespace sage
     void CanvasSystem::CancelInput()
     {
         hovered = pressed = entt::null;
+        draggedWindow = std::nullopt;
+        dragging = false;
         flushDestroy();
     }
     void CanvasSystem::Draw(Rectangle viewport) const
@@ -171,7 +228,13 @@ namespace sage
                 const auto* n = registry.get().try_get<UINode>(e);
                 return n && n->canvas == instance.root ? n->data.id : 0u;
             };
-            RenderCanvas(snapshot(instance), viewport, id(hovered), id(pressed));
+            std::map<unsigned int, CellImage> images;
+            for (const auto entity : instance.nodes)
+            {
+                const auto& node = registry.get().get<UINode>(entity);
+                if (node.image) images.emplace(node.data.id, *node.image);
+            }
+            RenderCanvas(snapshot(instance), viewport, id(hovered), id(pressed), true, images);
         }
     }
     entt::entity CanvasSystem::ScriptInstantiate(entt::registry& registry, const std::string& path)

@@ -133,12 +133,18 @@ namespace sage
             // texture unit: mixing sampler types on unit zero invalidates the draw.
             constexpr int NO_SHADOW_LIGHT = -1;
             constexpr int SHADOW_TEXTURE_SLOT = 15;
-            SetShaderValue(
-                shader, GetShaderLocation(shader, "shadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
+            constexpr std::array<int, 3> NO_POINT_SHADOW_LIGHTS{-1, -1, -1};
+            SetShaderValueV(
+                shader,
+                GetShaderLocation(shader, "pointShadowLightIndices[0]"),
+                NO_POINT_SHADOW_LIGHTS.data(),
+                SHADER_UNIFORM_INT,
+                static_cast<int>(NO_POINT_SHADOW_LIGHTS.size()));
             SetShaderValue(
                 shader, GetShaderLocation(shader, "sunShadowLightIndex"), &NO_SHADOW_LIGHT, SHADER_UNIFORM_INT);
-            SetShaderValue(
-                shader, GetShaderLocation(shader, "pointShadowMap"), &SHADOW_TEXTURE_SLOT, SHADER_UNIFORM_INT);
+            for (const char* sampler : {"pointShadowMap0", "pointShadowMap1", "pointShadowMap2"})
+                SetShaderValue(
+                    shader, GetShaderLocation(shader, sampler), &SHADOW_TEXTURE_SLOT, SHADER_UNIFORM_INT);
             const std::array<float, 4> ambient = {0.6f, 0.2f, 0.8f, 1.0f};
             SetShaderValue(shader, GetShaderLocation(shader, "ambient"), ambient.data(), SHADER_UNIFORM_VEC4);
 

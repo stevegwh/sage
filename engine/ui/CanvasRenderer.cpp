@@ -36,6 +36,7 @@ namespace sage
         {
             std::reference_wrapper<const CanvasDocument> document;
             std::reference_wrapper<CanvasLayout> layout;
+            std::reference_wrapper<const std::map<unsigned int, CellImage>> images;
             unsigned int hovered;
             unsigned int pressed;
             bool draw;
@@ -69,7 +70,12 @@ namespace sage
                 if (node.id == pressed) pressedCell = std::cref(cell);
                 cell.padding = node.padding;
                 cell.style = cellStyle(node, draw);
-                if (draw && !node.image.empty())
+                if (draw && images.get().contains(node.id))
+                {
+                    const auto& image = images.get().at(node.id);
+                    cell.Image(image.texture, image.flipVertically);
+                }
+                else if (draw && !node.image.empty())
                     cell.Image(loadTexture(node.image));
                 else
                     cell.Text(node.text);
@@ -87,7 +93,12 @@ namespace sage
     }
 
     CanvasLayout RenderCanvas(
-        const CanvasDocument& document, Rectangle viewport, unsigned int hovered, unsigned int pressed, bool draw)
+        const CanvasDocument& document,
+        Rectangle viewport,
+        unsigned int hovered,
+        unsigned int pressed,
+        bool draw,
+        const std::map<unsigned int, CellImage>& images)
     {
         CanvasLayout layout;
         if (document.nodes.empty() ||
@@ -115,6 +126,7 @@ namespace sage
             CanvasTableBuilder builder{
                 .document = std::cref(document),
                 .layout = std::ref(layout),
+                .images = std::cref(images),
                 .hovered = hovered,
                 .pressed = pressed,
                 .draw = draw,

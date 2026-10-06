@@ -13,6 +13,8 @@ namespace sage
     {
         CanvasNode data;
         entt::entity canvas = entt::null;
+        // Non-owning runtime content, e.g. a generated building preview. The caller owns the texture.
+        std::optional<CellImage> image;
         Event<> clicked;
         template <class Inspector>
         void define_editor_options(Inspector& i)
@@ -73,6 +75,10 @@ namespace sage
         std::vector<Instance> instances;
         entt::entity hovered = entt::null;
         entt::entity pressed = entt::null;
+        std::optional<entt::entity> draggedWindow;
+        Vector2 pressPosition{};
+        Vector2 windowPosition{};
+        bool dragging = false;
         std::vector<entt::entity> pendingDestroy;
         void flushDestroy();
         [[nodiscard]] CanvasDocument snapshot(const Instance& instance) const;
@@ -86,6 +92,7 @@ namespace sage
         ~CanvasSystem();
         entt::entity Instantiate(const std::string& path);
         void Destroy(entt::entity root);
+        void BringToFront(entt::entity root);
         void LoadInitial();
         bool Update(Rectangle viewport, Vector2 mouse);
         void CancelInput();

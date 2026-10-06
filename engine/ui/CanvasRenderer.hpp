@@ -18,6 +18,7 @@ namespace sage
         Rectangle viewport,
         unsigned int hovered = 0,
         unsigned int pressed = 0,
-        bool draw = true);
+        bool draw = true,
+        const std::map<unsigned int, CellImage>& images = {});
 
 } // namespace sage

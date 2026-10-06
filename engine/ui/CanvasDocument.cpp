@@ -163,6 +163,7 @@ namespace sage
         for (auto& node : source["nodes"].GetArray())
         {
             if (!node.IsObject()) throw std::runtime_error("Canvas node must be an object");
+            if (!node.HasMember("dragsWindow")) json::Put(node, "dragsWindow", false, source.GetAllocator());
             for (const auto& [field, alignment] :
                  {std::pair{"windowHorizontal", static_cast<int>(WindowHorizontalAlignment::FREE)},
                   std::pair{"windowVertical", static_cast<int>(WindowVerticalAlignment::FREE)}})

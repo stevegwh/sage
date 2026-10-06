@@ -61,6 +61,7 @@ namespace sage
         WindowVerticalAlignment windowVertical = WindowVerticalAlignment::FREE;
         bool visible = true;
         bool enabled = true;
+        bool dragsWindow = false;
         // Resolves window placement in canvas coordinates. FREE uses rectangle.x/y.
         [[nodiscard]] Rectangle WindowBounds(Vector2 canvasSize) const;
         template <class Archive>
@@ -102,7 +103,8 @@ namespace sage
               cereal::make_nvp("windowHorizontal", windowHorizontal),
               cereal::make_nvp("windowVertical", windowVertical),
               cereal::make_nvp("visible", visible),
-              cereal::make_nvp("enabled", enabled));
+              cereal::make_nvp("enabled", enabled),
+              cereal::make_nvp("dragsWindow", dragsWindow));
         }
     };
 

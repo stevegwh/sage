@@ -146,6 +146,7 @@ namespace sage::editor
         if (ImGui::Combo("Vertical", &vertical, "Top\0Middle\0Bottom\0"))
             node.vertical = static_cast<VerticalAlignment>(vertical);
         ImGui::SeparatorText("Interaction and border");
+        ImGui::Checkbox("Drag window", &node.dragsWindow);
         editColor("Hover", node.hover);
         editColor("Pressed", node.pressed);
         editColor("Border", node.border);
