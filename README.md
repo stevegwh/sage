@@ -101,7 +101,3 @@ if (other.GetScript<DoorController>() is { } door)
 `GetScript<T>()` returns the live script instance for that entity and Play session,
 or `null` when the entity does not have a script of that type.
 
-## Particle editor
-
-See [Particle editing](docs/particle-editor.md) for the isolated preview, repeatable
-playback controls, and lifetime curve/gradient authoring.
