@@ -4,6 +4,8 @@
 
 #include "entt/entt.hpp"
 #include "raylib.h"
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -17,7 +19,8 @@ namespace sage
 
     class LightManager
     {
-        static constexpr int MAX_LIGHT_COUNT = 50; // Must match the shader light array.
+        static constexpr int MAX_LIGHT_COUNT = 50;          // Must match the shader light array.
+        static constexpr std::size_t MAX_POINT_SHADOWS = 3; // Must match the explicit GLSL samplers.
         entt::registry* registry;
         Camera* camera;
         Shader defaultShader{};
@@ -34,7 +37,7 @@ namespace sage
             int bloomLocation;
             std::optional<std::array<float, 5>> ambientValues;
             std::optional<std::vector<Light>> lightValues;
-            std::optional<std::pair<int, int>> shadowIndices;
+            std::optional<std::array<int, MAX_POINT_SHADOWS + 1>> shadowIndices;
             std::optional<std::array<float, 16>> sunMatrix;
             std::optional<std::array<float, 3>> cameraPosition;
 
@@ -48,9 +51,13 @@ namespace sage
         Shader shadowShader{};
         int shadowPositionLocation = -1;
         int shadowSkinnedLocation = -1;
-        unsigned int shadowFramebuffer = 0;
-        unsigned int shadowCubemap = 0;
-        int shadowLightIndex = -1;
+        struct PointShadowMap
+        {
+            unsigned int framebuffer = 0;
+            unsigned int cubemap = 0;
+            std::optional<std::size_t> lightIndex;
+        };
+        std::array<PointShadowMap, MAX_POINT_SHADOWS> pointShadows{};
         Shader sunShadowShader{};
         int sunSkinnedLocation = -1;
         unsigned int sunShadowFramebuffer = 0;
@@ -60,7 +67,7 @@ namespace sage
         Matrix sunLightMatrix{};
         void updateShaderLights(ShaderState& state);
         void onLightAdded(entt::entity entity);
-        void drawPointShadowMap(const RenderSystem& renderer, const Light& light);
+        void drawPointShadowMap(const RenderSystem& renderer, const Light& light, PointShadowMap& shadow);
         void drawSunShadowMap(const RenderSystem& renderer, const Light& sun);
 
       public:

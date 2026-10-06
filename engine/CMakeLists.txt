@@ -142,6 +142,9 @@ configure_file(ShaderPaths.hpp.in generated/ShaderPaths.hpp @ONLY)
 target_include_directories(engine PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 if (BUILD_TESTING)
+    # Run explicitly on a machine with an OpenGL context; ordinary CTest runs remain display-independent.
+    add_executable(point_shadow_render_smoke "${SAGE_ROOT_DIR}/tests/PointShadowRenderSmoke.cpp")
+    target_link_libraries(point_shadow_render_smoke PRIVATE engine)
     add_executable(render_culling_tests "${SAGE_ROOT_DIR}/tests/RenderCullingTests.cpp")
     target_link_libraries(render_culling_tests PRIVATE engine)
     add_test(NAME render_culling_tests COMMAND render_culling_tests)

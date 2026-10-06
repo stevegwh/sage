@@ -24,8 +24,11 @@ uniform Light lights[MAX_LIGHTS];
 uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform float gamma;
-uniform samplerCube pointShadowMap;
-uniform int shadowLightIndex;
+// Separate samplers keep this compatible with GLSL 330 (no dynamically indexed sampler array).
+uniform samplerCube pointShadowMap0;
+uniform samplerCube pointShadowMap1;
+uniform samplerCube pointShadowMap2;
+uniform int pointShadowLightIndices[3];
 uniform float shadowFarPlane;
 uniform sampler2D sunShadowMap;
 uniform int sunShadowLightIndex;
@@ -65,10 +68,18 @@ vec4 Lighting_CalculateLighting(vec4 texelColor)
 
             float NdotL = max(dot(normal, light), 0.0);
             float visibility = 1.0;
-            if (i == shadowLightIndex && length(fragPosition - lights[i].position) < shadowFarPlane)
+            bool shadowedPoint = i == pointShadowLightIndices[0] || i == pointShadowLightIndices[1]
+                || i == pointShadowLightIndices[2];
+            if (shadowedPoint && length(fragPosition - lights[i].position) < shadowFarPlane)
             {
                 vec3 fromLight = fragPosition - lights[i].position;
-                float nearest = texture(pointShadowMap, fromLight).r * shadowFarPlane;
+                float nearest = shadowFarPlane;
+                if (i == pointShadowLightIndices[0])
+                    nearest = texture(pointShadowMap0, fromLight).r * shadowFarPlane;
+                else if (i == pointShadowLightIndices[1])
+                    nearest = texture(pointShadowMap1, fromLight).r * shadowFarPlane;
+                else if (i == pointShadowLightIndices[2])
+                    nearest = texture(pointShadowMap2, fromLight).r * shadowFarPlane;
                 float bias = max(0.05, 0.05 * (1.0 - NdotL));
                 if (length(fromLight) > nearest + bias) visibility = 0.0;
             }

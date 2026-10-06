@@ -1,8 +1,6 @@
 #include "engine/Colors.hpp"
 #include "engine/components/EntityVisibility.hpp"
 #include "engine/MathConstants.hpp"
-#include <functional>
-#include <optional>
 
 #include "LightManager.hpp"
 
@@ -18,6 +16,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <iostream>
 #include <unordered_map>
 #include <vector>
 
@@ -27,7 +26,10 @@ namespace sage
     {
         constexpr int SHADOW_MAP_SIZE = 512;
         constexpr float SHADOW_FAR_PLANE = 100.0f;
-        constexpr int SHADOW_TEXTURE_SLOT = 15;
+        // Material maps occupy slots 0..11; keep the sun in 14 and point maps in the remaining slots.
+        constexpr std::array<int, 3> POINT_SHADOW_TEXTURE_SLOTS{12, 13, 15};
+        constexpr std::array<const char*, 3> POINT_SHADOW_SAMPLERS{
+            "pointShadowMap0", "pointShadowMap1", "pointShadowMap2"};
         constexpr int SUN_SHADOW_MAP_SIZE = 2048;
         constexpr float SUN_SHADOW_RADIUS = 100.0f;
         constexpr float SUN_SHADOW_FAR_PLANE = 300.0f;
@@ -53,15 +55,19 @@ namespace sage
           ambientLocation(GetShaderLocation(source, "ambient")),
           gammaLocation(GetShaderLocation(source, "gamma")),
           lightsCountLocation(GetShaderLocation(source, "lightsCount")),
-          pointShadowIndexLocation(GetShaderLocation(source, "shadowLightIndex")),
+          pointShadowIndexLocation(GetShaderLocation(source, "pointShadowLightIndices[0]")),
           sunShadowIndexLocation(GetShaderLocation(source, "sunShadowLightIndex")),
           sunMatrixLocation(GetShaderLocation(source, "sunLightMatrix")),
           bloomLocation(GetShaderLocation(source, "bloomMask"))
     {
-        const int pointSlot = SHADOW_TEXTURE_SLOT;
         const int sunSlot = SUN_SHADOW_TEXTURE_SLOT;
         const float farPlane = SHADOW_FAR_PLANE;
-        SetShaderValue(source, GetShaderLocation(source, "pointShadowMap"), &pointSlot, SHADER_UNIFORM_INT);
+        for (std::size_t index = 0; index < MAX_POINT_SHADOWS; ++index)
+            SetShaderValue(
+                source,
+                GetShaderLocation(source, POINT_SHADOW_SAMPLERS.at(index)),
+                &POINT_SHADOW_TEXTURE_SLOTS.at(index),
+                SHADER_UNIFORM_INT);
         SetShaderValue(source, GetShaderLocation(source, "sunShadowMap"), &sunSlot, SHADER_UNIFORM_INT);
         SetShaderValue(source, GetShaderLocation(source, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
     }
@@ -87,10 +93,21 @@ namespace sage
             SetShaderValue(shader, state.lightsCountLocation, &lightsCount, SHADER_UNIFORM_INT);
             state.lightValues = activeLights;
         }
-        const std::pair shadowIndices{shadowLightIndex, sunShadowLightIndex};
+        std::array<int, MAX_POINT_SHADOWS + 1> shadowIndices{};
+        for (std::size_t index = 0; index < pointShadows.size(); ++index)
+        {
+            const auto lightIndex = pointShadows.at(index).lightIndex;
+            shadowIndices.at(index) = lightIndex ? static_cast<int>(*lightIndex) : -1;
+        }
+        shadowIndices.back() = sunShadowLightIndex;
         if (state.shadowIndices != shadowIndices)
         {
-            SetShaderValue(shader, state.pointShadowIndexLocation, &shadowLightIndex, SHADER_UNIFORM_INT);
+            SetShaderValueV(
+                shader,
+                state.pointShadowIndexLocation,
+                shadowIndices.data(),
+                SHADER_UNIFORM_INT,
+                static_cast<int>(MAX_POINT_SHADOWS));
             SetShaderValue(shader, state.sunShadowIndexLocation, &sunShadowLightIndex, SHADER_UNIFORM_INT);
             state.shadowIndices = shadowIndices;
         }
@@ -227,45 +244,44 @@ namespace sage
     void LightManager::DrawShadowMap(const RenderSystem& renderer)
     {
         sunShadowLightIndex = -1;
-        shadowLightIndex = -1;
-        if (!shadowsEnabled)
-        {
-            RefreshLights();
-            return;
-        }
-        std::optional<std::reference_wrapper<const Light>> sun;
-        std::optional<std::reference_wrapper<const Light>> point;
-        int index = 0;
-        for (const auto entity : registry->view<Light>())
-        {
-            const auto& light = registry->get<Light>(entity);
-            if (!light.enabled || !IsEntityVisible(*registry, entity)) continue;
-            if (index >= MAX_LIGHT_COUNT) break;
-            if (light.castsShadows)
-            {
-                if (light.type == LightType::Sun && !sun)
-                {
-                    sun = std::cref(light);
-                    sunShadowLightIndex = index;
-                }
-                else if (light.type == LightType::Point && !point)
-                {
-                    point = std::cref(light);
-                    shadowLightIndex = index;
-                }
-            }
-            ++index;
-            if (sun.has_value() && point.has_value()) break;
-        }
-
-        if (sun.has_value()) drawSunShadowMap(renderer, sun->get());
-        if (point.has_value()) drawPointShadowMap(renderer, point->get());
+        for (auto& shadow : pointShadows)
+            shadow.lightIndex.reset();
+        // Selection and shader light indices must use the same enabled/visible light list.
         RefreshLights();
+        if (!shadowsEnabled) return;
+
+        std::vector<std::size_t> pointCandidates;
+        for (std::size_t index = 0; index < activeLights.size(); ++index)
+        {
+            const auto& light = activeLights.at(index);
+            if (!light.castsShadows || light.brightness <= 0.0f) continue;
+            if (light.type == LightType::Sun && sunShadowLightIndex < 0)
+                sunShadowLightIndex = static_cast<int>(index);
+            else if (light.type == LightType::Point)
+                pointCandidates.push_back(index);
+        }
+        const Vector3 focus = camera->getRaylibCam()->target;
+        std::ranges::stable_sort(pointCandidates, [&](const auto left, const auto right) {
+            return Vector3DistanceSqr(activeLights.at(left).position, focus) <
+                   Vector3DistanceSqr(activeLights.at(right).position, focus);
+        });
+
+        if (sunShadowLightIndex >= 0)
+            drawSunShadowMap(renderer, activeLights.at(static_cast<std::size_t>(sunShadowLightIndex)));
+        const auto count = std::min(pointCandidates.size(), pointShadows.size());
+        for (std::size_t slot = 0; slot < count; ++slot)
+        {
+            auto& shadow = pointShadows.at(slot);
+            shadow.lightIndex = pointCandidates.at(slot);
+            drawPointShadowMap(renderer, activeLights.at(*shadow.lightIndex), shadow);
+        }
+        for (auto& state : shaders)
+            updateShaderLights(*state);
     }
 
-    void LightManager::drawPointShadowMap(const RenderSystem& renderer, const Light& light)
+    void LightManager::drawPointShadowMap(const RenderSystem& renderer, const Light& light, PointShadowMap& shadow)
     {
-        if (shadowFramebuffer == 0)
+        if (shadowShader.id == 0)
         {
             shadowShader = ResourceManager::GetInstance().ShaderLoad(
                 ShaderPath("custom/point_shadow.vs"), ShaderPath("custom/point_shadow.fs"));
@@ -274,26 +290,30 @@ namespace sage
             const float farPlane = SHADOW_FAR_PLANE;
             SetShaderValue(
                 shadowShader, GetShaderLocation(shadowShader, "shadowFarPlane"), &farPlane, SHADER_UNIFORM_FLOAT);
+        }
+        if (shadow.framebuffer == 0)
+        {
             const std::vector<float> clearData(6 * SHADOW_MAP_SIZE * SHADOW_MAP_SIZE, 1.0f);
-            shadowCubemap =
+            shadow.cubemap =
                 rlLoadTextureCubemap(clearData.data(), SHADOW_MAP_SIZE, RL_PIXELFORMAT_UNCOMPRESSED_R32, 1);
-            shadowFramebuffer = rlLoadFramebuffer();
+            shadow.framebuffer = rlLoadFramebuffer();
             const unsigned int depthBuffer = rlLoadTextureDepth(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE, true);
             rlFramebufferAttach(
-                shadowFramebuffer,
-                shadowCubemap,
+                shadow.framebuffer,
+                shadow.cubemap,
                 RL_ATTACHMENT_COLOR_CHANNEL0,
                 RL_ATTACHMENT_CUBEMAP_POSITIVE_X,
                 0);
             rlFramebufferAttach(
-                shadowFramebuffer, depthBuffer, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
-            if (!rlFramebufferComplete(shadowFramebuffer))
+                shadow.framebuffer, depthBuffer, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_RENDERBUFFER, 0);
+            if (!rlFramebufferComplete(shadow.framebuffer))
             {
-                rlUnloadTexture(shadowCubemap);
-                rlUnloadFramebuffer(shadowFramebuffer);
-                shadowCubemap = 0;
-                shadowFramebuffer = 0;
-                shadowLightIndex = -1;
+                rlUnloadTexture(shadow.cubemap);
+                rlUnloadFramebuffer(shadow.framebuffer);
+                shadow.cubemap = 0;
+                shadow.framebuffer = 0;
+                shadow.lightIndex.reset();
+                std::cerr << "LIGHTING: Could not allocate point-light shadow map\n";
                 return;
             }
         }
@@ -306,8 +326,8 @@ namespace sage
         const int previousHeight = rlGetFramebufferHeight();
         for (int face = 0; face < 6; ++face)
         {
-            rlFramebufferAttach(shadowFramebuffer, shadowCubemap, RL_ATTACHMENT_COLOR_CHANNEL0, face, 0);
-            rlEnableFramebuffer(shadowFramebuffer);
+            rlFramebufferAttach(shadow.framebuffer, shadow.cubemap, RL_ATTACHMENT_COLOR_CHANNEL0, face, 0);
+            rlEnableFramebuffer(shadow.framebuffer);
             rlViewport(0, 0, SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
             rlSetFramebufferWidth(SHADOW_MAP_SIZE);
             rlSetFramebufferHeight(SHADOW_MAP_SIZE);
@@ -402,10 +422,12 @@ namespace sage
             rlActiveTextureSlot(SUN_SHADOW_TEXTURE_SLOT);
             rlEnableTexture(sunShadowTexture);
         }
-        if (shadowLightIndex >= 0 && shadowCubemap != 0)
+        for (std::size_t index = 0; index < pointShadows.size(); ++index)
         {
-            rlActiveTextureSlot(SHADOW_TEXTURE_SLOT);
-            rlEnableTextureCubemap(shadowCubemap);
+            const auto& shadow = pointShadows.at(index);
+            if (!shadow.lightIndex || shadow.cubemap == 0) continue;
+            rlActiveTextureSlot(POINT_SHADOW_TEXTURE_SLOTS.at(index));
+            rlEnableTextureCubemap(shadow.cubemap);
         }
         rlActiveTextureSlot(0);
     }
@@ -417,9 +439,11 @@ namespace sage
             rlActiveTextureSlot(SUN_SHADOW_TEXTURE_SLOT);
             rlDisableTexture();
         }
-        if (shadowLightIndex >= 0 && shadowCubemap != 0)
+        for (std::size_t index = 0; index < pointShadows.size(); ++index)
         {
-            rlActiveTextureSlot(SHADOW_TEXTURE_SLOT);
+            const auto& shadow = pointShadows.at(index);
+            if (!shadow.lightIndex || shadow.cubemap == 0) continue;
+            rlActiveTextureSlot(POINT_SHADOW_TEXTURE_SLOTS.at(index));
             rlDisableTextureCubemap();
         }
         rlActiveTextureSlot(0);
@@ -439,8 +463,12 @@ namespace sage
 
     LightManager::~LightManager()
     {
-        if (shadowCubemap != 0) rlUnloadTexture(shadowCubemap);
-        if (shadowFramebuffer != 0) rlUnloadFramebuffer(shadowFramebuffer);
+        registry->on_construct<Light>().disconnect<&LightManager::onLightAdded>(this);
+        for (const auto& shadow : pointShadows)
+        {
+            if (shadow.cubemap != 0) rlUnloadTexture(shadow.cubemap);
+            if (shadow.framebuffer != 0) rlUnloadFramebuffer(shadow.framebuffer);
+        }
         if (sunShadowTexture != 0) rlUnloadTexture(sunShadowTexture);
         if (sunShadowFramebuffer != 0) rlUnloadFramebuffer(sunShadowFramebuffer);
     }
