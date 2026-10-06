@@ -8,8 +8,9 @@
 #include "engine/Camera.hpp"
 #include "engine/EngineSystems.hpp"
 #include "engine/KeyMapping.hpp"
+#include "engine/RenderProfiler.hpp"
 #include "engine/ResourceManager.hpp"
-#include "engine/SceneRenderTarget.hpp"
+#include "engine/ScenePostProcess.hpp"
 #include "engine/Serializer.hpp"
 #include "engine/Settings.hpp"
 #include "engine/systems/RenderSystem.hpp"
@@ -18,7 +19,6 @@
 #include "imgui.h"
 #include "raylib.h"
 #include "rlImGui.h"
-#include "ShaderPaths.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -77,7 +77,7 @@ namespace sage
 
     void EditorApplication::initWindow()
     {
-        SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+        SetConfigFlags(WindowMsaaFlags() | FLAG_WINDOW_RESIZABLE);
         const auto screenSize = settings->GetScreenSize();
         InitWindow(static_cast<int>(screenSize.x), static_cast<int>(screenSize.y), "BG Raylib Editor");
         windowReady = true;
@@ -136,10 +136,8 @@ namespace sage
         serializer::LoadAssetBinFile(
             registry.get(), "resources/assets.bin", [this]() { drawLoadingScreen("Loading packed assets..."); });
         drawLoadingScreen("Preparing scene...");
-        colorGradeShader =
-            ResourceManager::GetInstance().ShaderLoad(std::nullopt, ShaderPath("custom/color_grade.fs"));
-        bloomTextureLocation = GetShaderLocation(colorGradeShader, "bloomTexture");
-        SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
+        postProcess = std::make_unique<ScenePostProcess>();
+        renderProfiler = std::make_unique<RenderProfiler>();
         if (!skyboxImageKey.empty()) systems->renderSystem->SetSkybox(skyboxImageKey);
         auto lastMapUpdate = std::chrono::steady_clock::now();
         scene = std::make_unique<EditorScene>(
@@ -157,14 +155,16 @@ namespace sage
             });
 
         const auto renderViewport = settings->GetRenderViewPort();
-        renderTexture =
-            LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        ResizeSceneRenderTarget(
+            renderTexture,
+            static_cast<int>(renderViewport.x),
+            static_cast<int>(renderViewport.y),
+            settings->GetGraphicsSettings());
         // Game UI shares the (docked) render viewport so it scales to and centres
         // in the same area as the game's 3D view.
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
-        bloomPass =
-            std::make_unique<BloomPass>(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        bloomPass = std::make_unique<BloomPass>(renderTexture.texture.width, renderTexture.texture.height);
         rlImGuiSetup(true);
         imguiReady = true;
 
@@ -184,27 +184,37 @@ namespace sage
     {
         const bool playing = scene->IsPlaying();
 
-        scene->DrawShadowMap();
+        const auto displayViewport = settings->GetRenderViewPort();
+        if (ResizeSceneRenderTarget(
+                renderTexture,
+                static_cast<int>(displayViewport.x),
+                static_cast<int>(displayViewport.y),
+                settings->GetGraphicsSettings()))
+            bloomPass->Resize(renderTexture.texture.width, renderTexture.texture.height);
+        renderProfiler->Measure(RenderPass::Shadows, [&] { scene->DrawShadowMap(); });
 
-        BeginTextureMode(renderTexture);
-        ClearBackground(sage::colors::BLANK_COLOR);
-        // ActiveCamera() is the running game's camera during play, the editor's
-        // otherwise.
-        BeginMode3D(*scene->ActiveCamera());
-        scene->Draw3D();
-        EndMode3D();
-        if (!playing) DrawViewportFpsCounter(*settings);
-        EndTextureMode();
+        renderProfiler->Measure(RenderPass::Scene, [&] {
+            BeginTextureMode(renderTexture);
+            ClearBackground(sage::colors::BLANK_COLOR);
+            // ActiveCamera() is the running game's camera during play, the editor's
+            // otherwise.
+            BeginMode3D(*scene->ActiveCamera());
+            scene->Draw3D();
+            EndMode3D();
+            EndTextureMode();
+        });
 
         if (settings->GetGraphicsSettings().bloom)
         {
-            BeginTextureMode(bloomPass->MaskTarget());
-            ClearBackground(sage::colors::BLACK_COLOR);
-            BeginMode3D(*scene->ActiveCamera());
-            scene->DrawBloomMask();
-            EndMode3D();
-            EndTextureMode();
-            bloomPass->Blur();
+            renderProfiler->Measure(RenderPass::Bloom, [&] {
+                BeginTextureMode(bloomPass->MaskTarget());
+                ClearBackground(sage::colors::BLACK_COLOR);
+                BeginMode3D(*scene->ActiveCamera());
+                scene->DrawBloomMask();
+                EndMode3D();
+                EndTextureMode();
+                bloomPass->Blur();
+            });
         }
 
         if (playing)
@@ -212,48 +222,69 @@ namespace sage
             // Render the game UI into a viewport-sized texture at viewport-local
             // coords (so its scissor clipping stays consistent), then blit it at
             // the viewport offset where the game's mouse mapping expects it.
-            BeginTextureMode(gameUiTexture);
-            ClearBackground(sage::colors::BLANK_COLOR);
-            scene->DrawGame2D();
-            DrawViewportFpsCounter(*settings);
-            EndTextureMode();
+            renderProfiler->Measure(RenderPass::Ui, [&] {
+                BeginTextureMode(gameUiTexture);
+                ClearBackground(sage::colors::BLANK_COLOR);
+                scene->DrawGame2D();
+                DrawViewportFpsCounter(*settings);
+                EndTextureMode();
+            });
         }
+        postProcess->Process(
+            renderTexture,
+            *scene->ActiveCamera(),
+            settings->GetGraphicsSettings(),
+            bloomPass->Texture(),
+            *renderProfiler);
+        scene->CaptureAutomationFrame(postProcess->Texture(), playing ? gameUiTexture.texture : Texture2D{});
 
-        SetSceneGraphicsUniforms(colorGradeShader, settings->GetGraphicsSettings());
-        scene->CaptureAutomationFrame(
-            renderTexture, playing ? gameUiTexture.texture : Texture2D{}, colorGradeShader, bloomPass->Texture());
+        renderProfiler->Measure(RenderPass::Present, [&] {
+            BeginDrawing();
+            ClearBackground(sage::colors::BLACK_COLOR);
 
-        BeginDrawing();
-        ClearBackground(sage::colors::BLACK_COLOR);
+            const auto appViewportOffset = settings->GetViewportOffset();
+            const auto renderViewport = settings->GetRenderViewPort();
+            const auto renderViewportOffset = settings->GetRenderViewportOffset();
 
-        const auto appViewportOffset = settings->GetViewportOffset();
-        const auto renderViewport = settings->GetRenderViewPort();
-        const auto renderViewportOffset = settings->GetRenderViewportOffset();
-
-        BeginShaderMode(colorGradeShader);
-        SetSceneOcclusionUniforms(colorGradeShader, renderTexture, *scene->ActiveCamera());
-        SetShaderValueTexture(colorGradeShader, bloomTextureLocation, bloomPass->Texture());
-        DrawTextureRec(
-            renderTexture.texture,
-            {.x = 0, .y = 0, .width = renderViewport.x, .height = -renderViewport.y},
-            {.x = appViewportOffset.x + renderViewportOffset.x, .y = appViewportOffset.y + renderViewportOffset.y},
-            sage::colors::WHITE_COLOR);
-        EndShaderMode();
-
-        if (playing)
-        {
-            DrawTextureRec(
-                gameUiTexture.texture,
-                {.x = 0, .y = 0, .width = renderViewport.x, .height = -renderViewport.y},
+            const auto image = postProcess->Texture();
+            DrawTexturePro(
+                image,
+                {.x = 0,
+                 .y = 0,
+                 .width = static_cast<float>(image.width),
+                 .height = -static_cast<float>(image.height)},
                 {.x = appViewportOffset.x + renderViewportOffset.x,
-                 .y = appViewportOffset.y + renderViewportOffset.y},
+                 .y = appViewportOffset.y + renderViewportOffset.y,
+                 .width = renderViewport.x,
+                 .height = renderViewport.y},
+                {.x = 0, .y = 0},
+                0.0f,
                 sage::colors::WHITE_COLOR);
-        }
 
-        scene->DrawOverlay2D();
-        scene->DrawImGui(exitWindowRequested, exitWindow);
+            if (playing)
+            {
+                DrawTextureRec(
+                    gameUiTexture.texture,
+                    {.x = 0, .y = 0, .width = renderViewport.x, .height = -renderViewport.y},
+                    {.x = appViewportOffset.x + renderViewportOffset.x,
+                     .y = appViewportOffset.y + renderViewportOffset.y},
+                    sage::colors::WHITE_COLOR);
+            }
 
-        EndDrawing();
+            if (!playing)
+            {
+                rlPushMatrix();
+                rlTranslatef(
+                    appViewportOffset.x + renderViewportOffset.x,
+                    appViewportOffset.y + renderViewportOffset.y,
+                    0.0f);
+                DrawViewportFpsCounter(*settings);
+                rlPopMatrix();
+            }
+            scene->DrawOverlay2D();
+            scene->DrawImGui(exitWindowRequested, exitWindow);
+        });
+        renderProfiler->FinishFrame(renderTexture.texture.width, renderTexture.texture.height);
     }
 
     void EditorApplication::handleScreenUpdate()
@@ -303,15 +334,17 @@ namespace sage
         settings->SetScreenSize(GetScreenWidth(), GetScreenHeight());
         ConfigureEditorSceneViewport(*settings, dockLayout, viewportFullscreen);
 
-        UnloadRenderTexture(renderTexture);
         const auto renderViewport = settings->GetRenderViewPort();
-        renderTexture =
-            LoadSceneRenderTarget(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        ResizeSceneRenderTarget(
+            renderTexture,
+            static_cast<int>(renderViewport.x),
+            static_cast<int>(renderViewport.y),
+            settings->GetGraphicsSettings());
 
         UnloadRenderTexture(gameUiTexture);
         gameUiTexture =
             LoadFilteredRenderTexture(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
-        bloomPass->Resize(static_cast<int>(renderViewport.x), static_cast<int>(renderViewport.y));
+        bloomPass->Resize(renderTexture.texture.width, renderTexture.texture.height);
     }
 
     void EditorApplication::handleViewportFullscreenToggle()
@@ -394,6 +427,8 @@ namespace sage
         if (renderTexture.id != 0) UnloadRenderTexture(renderTexture);
         if (gameUiTexture.id != 0) UnloadRenderTexture(gameUiTexture);
         bloomPass.reset();
+        postProcess.reset();
+        renderProfiler.reset();
         scene.reset();
         systems.reset();
         if (windowReady) CloseWindow();

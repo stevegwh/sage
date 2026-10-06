@@ -10,7 +10,11 @@
 
 namespace sage
 {
-    RenderTexture LoadSceneRenderTarget(const int width, const int height)
+    namespace
+    {
+        constexpr int DEPTH_TEXTURE_FORMAT = 19;
+    }
+    RenderTexture LoadColorRenderTarget(const int width, const int height)
     {
         const int targetWidth = std::max(1, width);
         const int targetHeight = std::max(1, height);
@@ -24,14 +28,30 @@ namespace sage
             .height = targetHeight,
             .mipmaps = 1,
             .format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+        rlFramebufferAttach(
+            target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        const bool complete = target.texture.id != 0 && rlFramebufferComplete(target.id);
+        rlDisableFramebuffer();
+        if (!complete)
+        {
+            UnloadRenderTexture(target);
+            throw std::runtime_error("Could not create color framebuffer");
+        }
+        SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
+        return target;
+    }
+
+    RenderTexture LoadSceneRenderTarget(const int width, const int height)
+    {
+        auto target = LoadColorRenderTarget(width, height);
+        const int targetWidth = target.texture.width;
+        const int targetHeight = target.texture.height;
         target.depth = {
             .id = rlLoadTextureDepth(targetWidth, targetHeight, false),
             .width = targetWidth,
             .height = targetHeight,
             .mipmaps = 1,
-            .format = 19};
-        rlFramebufferAttach(
-            target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+            .format = DEPTH_TEXTURE_FORMAT};
         rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
         const bool complete = target.texture.id != 0 && target.depth.id != 0 && rlFramebufferComplete(target.id);
         rlDisableFramebuffer();

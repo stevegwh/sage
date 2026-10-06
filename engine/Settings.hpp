@@ -48,6 +48,8 @@ namespace sage
         float focusDistance = 12.0f;
         float focusRange = 5.0f;
         float maxBlurRadius = 6.0f;
+        float renderScale = 1.0f;
+        int maxRenderHeight = 1080;
 
         template <class Archive>
         void save(Archive& archive) const
@@ -67,7 +69,9 @@ namespace sage
                 cereal::make_nvp("depth_of_field", depthOfField),
                 cereal::make_nvp("focus_distance", focusDistance),
                 cereal::make_nvp("focus_range", focusRange),
-                cereal::make_nvp("max_blur_radius", maxBlurRadius));
+                cereal::make_nvp("max_blur_radius", maxBlurRadius),
+                cereal::make_nvp("render_scale", renderScale),
+                cereal::make_nvp("max_render_height", maxRenderHeight));
         }
 
         template <class Archive>
@@ -107,6 +111,22 @@ namespace sage
             catch (const cereal::Exception&)
             {
                 focusCameraTarget = true;
+            }
+            try
+            {
+                archive(cereal::make_nvp("render_scale", renderScale));
+            }
+            catch (const cereal::Exception&)
+            {
+                renderScale = 1.0f;
+            }
+            try
+            {
+                archive(cereal::make_nvp("max_render_height", maxRenderHeight));
+            }
+            catch (const cereal::Exception&)
+            {
+                maxRenderHeight = 1080;
             }
         }
     };

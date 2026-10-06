@@ -7,7 +7,6 @@
 #include "engine/Flatpack.hpp"
 #include "engine/IGameRuntime.hpp"
 #include "engine/Light.hpp"
-#include "engine/SceneRenderTarget.hpp"
 #include "engine/systems/TransformSystem.hpp"
 #include <set>
 
@@ -375,35 +374,31 @@ namespace sage
         }
         return automationState();
     }
-    void EditorScene::CaptureAutomationFrame(
-        RenderTexture sceneTarget, Texture2D uiTexture, Shader sceneShader, Texture2D bloomTexture) const
+    void EditorScene::CaptureAutomationFrame(Texture2D sceneTexture, Texture2D uiTexture) const
     {
         if (!automationCapture) return;
-        auto sceneTexture = sceneTarget.texture;
         const auto path = *automationCapture;
         automationCapture.reset();
         if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
         RenderTexture2D composite{};
-        if (uiTexture.id != 0 || sceneShader.id != 0)
+        if (uiTexture.id != 0)
         {
-            composite = LoadRenderTexture(sceneTexture.width, sceneTexture.height);
+            composite = LoadRenderTexture(uiTexture.width, uiTexture.height);
             BeginTextureMode(composite);
             ClearBackground(sage::colors::BLANK_COLOR);
-            if (sceneShader.id != 0)
-            {
-                BeginShaderMode(sceneShader);
-                SetSceneOcclusionUniforms(sceneShader, sceneTarget, *ActiveCamera());
-                SetShaderValueTexture(sceneShader, GetShaderLocation(sceneShader, "bloomTexture"), bloomTexture);
-            }
-            DrawTextureRec(
+            DrawTexturePro(
                 sceneTexture,
                 {.x = 0,
                  .y = 0,
                  .width = static_cast<float>(sceneTexture.width),
                  .height = -static_cast<float>(sceneTexture.height)},
+                {.x = 0,
+                 .y = 0,
+                 .width = static_cast<float>(uiTexture.width),
+                 .height = static_cast<float>(uiTexture.height)},
                 {.x = 0, .y = 0},
+                0.0f,
                 sage::colors::WHITE_COLOR);
-            if (sceneShader.id != 0) EndShaderMode();
             if (uiTexture.id != 0)
                 DrawTextureRec(
                     uiTexture,

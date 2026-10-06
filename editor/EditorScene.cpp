@@ -2316,6 +2316,11 @@ namespace sage
             ImGui::TextUnformatted("Changes preview immediately. Save keeps them for this project.");
             ImGui::TextUnformatted("The scene viewport previews these effects.");
             bool changed = false;
+            ImGui::SeparatorText("Resolution");
+            ImGui::TextDisabled("Scene resolution only; UI keeps its full resolution.");
+            changed |=
+                ImGui::SliderFloat("Scene Render Scale", &graphicsSettingsDraft.renderScale, 0.25f, 1.0f, "%.2f");
+            changed |= ImGui::SliderInt("Maximum Scene Height", &graphicsSettingsDraft.maxRenderHeight, 360, 2160);
             ImGui::SeparatorText("Lighting");
             changed |= ImGui::ColorEdit3("Ambient Color", &lightSettingsDraft.ambient.x);
             changed |= ImGui::SliderFloat("Gamma", &lightSettingsDraft.gamma, 0.1f, 4.0f, "%.2f");
